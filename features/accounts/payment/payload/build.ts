@@ -1,5 +1,6 @@
 /**
- * `/payments/create`, `/payments/post` and `/payments/amend` — the bodies.
+ * `/payments/create` (a draft, or with `post: true` a posted payment) and
+ * `/payments/amend` — the bodies.
  *
  * The receipt's builders, with what a payment does differently:
  *
@@ -39,7 +40,9 @@ import type {
   PaymentHeaderDraft,
   PaymentLineRow,
   PaymentTenderRow,
+  PaymentSettlementKey,
   PostPaymentBody,
+  SaveAndPostPaymentBody,
   SaveDraftPaymentBody,
   SavePaymentOtherLineBody,
   SavePaymentTenderBody,
@@ -245,6 +248,49 @@ export function buildPaymentPostPayload(input: PaymentPostInput): PostPaymentBod
     otherLineBills: buildOtherLinePins(input.lines, paymentLinesThatTravel),
     onAccount: identity.onAccount,
   };
+}
+
+/** The four keys `/post` settles by — and nothing else of its body. */
+const SETTLEMENT_KEYS: readonly PaymentSettlementKey[] = [
+  "allocations",
+  "creditsApplied",
+  "otherLineBills",
+  "onAccount",
+];
+
+/**
+ * A draft body turned into a posting one: each settlement key the post shape
+ * has is copied over the draft's, each it lacks is REMOVED — the remembered
+ * memo (a draft's `creditsApplied`, say) must never ride along as if applied.
+ * Never the post shape's `avhVoucherId`: a new payment has none, and a
+ * reopened draft already carries its own.
+ */
+export function withAppliedSettlement(
+  draft: SaveDraftPaymentBody,
+  settle: Partial<Pick<PostPaymentBody, PaymentSettlementKey>>,
+): SaveAndPostPaymentBody {
+  const body: Record<string, unknown> = { ...draft };
+  for (const key of SETTLEMENT_KEYS) {
+    if (settle[key] === undefined) {
+      delete body[key];
+    } else {
+      body[key] = settle[key];
+    }
+  }
+  body.post = true;
+  return body as SaveAndPostPaymentBody;
+}
+
+/**
+ * Post is ONE call (notes 106): `/payments/create` with `post: true` saves and
+ * posts in one transaction, and a refusal leaves nothing behind — no draft, no
+ * number. The body is the draft's (header, instruments, other lines; a
+ * reopened draft's `avhVoucherId`, so that draft is the one posted) with the
+ * settlement APPLIED: the same allocations, held debits spent, pins and
+ * on-account figure `/payments/post` takes.
+ */
+export function buildPaymentSaveAndPostPayload(input: PaymentDraftInput): SaveAndPostPaymentBody {
+  return withAppliedSettlement(buildPaymentDraftPayload(input), buildPaymentPostPayload(input));
 }
 
 export type PaymentAmendInput = PaymentDraftInput & {

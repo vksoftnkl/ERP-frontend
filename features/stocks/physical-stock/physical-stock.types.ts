@@ -96,9 +96,13 @@ export type PhysicalStockDocument = {
   lines: PhysicalStockWireLine[];
 };
 
-export type PhysicalStockPostResult = PhysicalStockDocument & {
-  rowsPosted: number;
-  status: string;
+/**
+ * `/stock/physical/create`'s answer. `rowsPosted` is null for a draft; on a
+ * save that posted (header.status POSTED) it is one ledger row per VARYING
+ * line — 0 is a success, every line agreed.
+ */
+export type PhysicalStockSaveResult = PhysicalStockDocument & {
+  rowsPosted?: number | null;
 };
 
 export type PhysicalStockCancelResult = PhysicalStockDocument & {
@@ -168,6 +172,11 @@ export type SavePhysicalStockHeader = {
   totalValueWot: number;
   usrRefno?: string;
   remarks?: string;
+  /**
+   * Omitted saves a DRAFT. "POSTED" saves AND posts in one transaction (notes
+   * 106) — a refused line fails the save too and leaves no document behind.
+   */
+  status?: "DRAFT" | "POSTED";
 };
 
 export type SavePhysicalStockPayload = {

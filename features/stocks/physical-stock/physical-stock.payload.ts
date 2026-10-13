@@ -2,7 +2,7 @@
  * Translations between the screen and `/stock/physical/*` — what goes out on a
  * save, and how the answers are read back. Pure.
  */
-import { parseCounted, toWireInstant } from "./physical-stock.format";
+import { formatNetQty, parseCounted, toWireInstant } from "./physical-stock.format";
 import type {
   CountLine,
   CountSheetRow,
@@ -105,6 +105,37 @@ export function buildPayload(
   return { header, lines: buildLines(draft.lines) };
 }
 
+/**
+ * Post = the save payload with header.status "POSTED" — ONE /create call that
+ * saves and posts in one transaction (notes 106). A refused line fails the save
+ * as well, so a refusal leaves no document and no number behind; with svhId
+ * set (a reopened draft) the same call replaces its lines and posts it.
+ */
+export function buildPostPayload(
+  draft: PhysicalStockDraft,
+  totals: CountTotals,
+): SavePhysicalStockPayload {
+  const payload = buildPayload(draft, totals);
+  return { ...payload, header: { ...payload.header, status: "POSTED" } };
+}
+
+/**
+ * The question Post asks BEFORE the call — once it is sent the sheet is posted
+ * or it does not exist. Uncounted holdings are not sent, so they move nothing.
+ */
+export function postConfirmMessage(totals: CountTotals): string {
+  const unwalked = totals.lines - totals.counted;
+  return (
+    "Posting writes the stock ledger for the lines that DISAGREE and freezes this sheet. " +
+    "A line that matches writes nothing.\n\n" +
+    `${totals.counted} / ${totals.lines} counted · ${totals.varianceLines} with a variance · ` +
+    `net ${formatNetQty(totals.netQty)}` +
+    (unwalked > 0
+      ? `\n\n${unwalked} holdings on screen are not counted and are left off the document.`
+      : "")
+  );
+}
+
 // ---------------------------------------------------------------------------
 // In
 // ---------------------------------------------------------------------------
@@ -151,6 +182,40 @@ export function lineProblemsMessage(rows: readonly PhysicalStockLineProblem[]): 
     (row) => `Line ${Math.trunc(Number(row.lineNo) || 0)}: ${row.itemName ?? ""} — ${row.problem}`,
   );
   return `${problems.length} of the lines have to be fixed first:\n\n${problems.join("\n")}`;
+}
+
+/**
+ * A refused post's per-line answer — the preflight rows, when the refusal
+ * carries them in `data` — or nothing, and the caller shows the server's
+ * message instead. RTK's error is `{ status, data: body }`.
+ */
+export function refusalLineProblems(error: unknown): PhysicalStockLineProblem[] {
+  const body = asRecord(asRecord(error)?.data);
+  const rows = body?.data;
+  if (!Array.isArray(rows)) {
+    return [];
+  }
+  return failingLines(
+    rows.filter(
+      (row): row is PhysicalStockLineProblem => typeof asRecord(row)?.problem === "string",
+    ),
+  );
+}
+
+/**
+ * The posted answer's message. `rowsPosted` is one ledger row per VARYING
+ * line, so 0 is a success (everything matched); not a number at all says only
+ * that it posted.
+ */
+export function postedMessage(refno: string, rowsPosted: unknown): string {
+  if (typeof rowsPosted !== "number" || !Number.isFinite(rowsPosted)) {
+    return `${refno} posted.`;
+  }
+  const rows = Math.trunc(rowsPosted);
+  return rows === 0
+    ? `${refno} posted — every holding counted matched the book, so no ledger row was ` +
+        "written. Nothing was wrong."
+    : `${refno} posted — ${rows} variance rows written.`;
 }
 
 /**

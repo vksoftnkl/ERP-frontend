@@ -23,7 +23,9 @@
  *
  * F5 saves a DRAFT, Ctrl+Enter posts it (create, then post by key): the number
  * is issued at post, and either way the screen clears for the next one (Qt
- * 5e25760; the draft reopens from the list). A POSTED voucher can be cancelled,
+ * 5e25760; the draft reopens from the list). F8 opens the register (grid 137,
+ * the menu's own list) as a picker over the screen, and the voucher picked is
+ * read into it (Qt 6f15977). A POSTED voucher can be cancelled,
  * or cancelled and re-entered — its copy opens as a new voucher to correct and
  * post. A POSTED voucher can be cancelled (a mirror in the Rev
  * series) while its till session still takes money. The approval the EXPENSE
@@ -57,6 +59,7 @@ import { useShareResize } from "./components/use-share-resize";
 import { resolveLineLayout, resolveTenderLayout, visibleLineColumns, visibleTenderColumns } from "./columns";
 import { DateInput } from "./components/date-input";
 import { CancelReasonDialog, ConfirmDialog, type ConfirmRequest } from "./components/expense-dialogs";
+import { ExpenseRegisterModal } from "./components/expense-register-modal";
 import {
   advanceHead,
   focusCellSoon,
@@ -68,7 +71,8 @@ import { LinesGrid, type PopupColumn } from "./components/lines-grid";
 import { TendersGrid } from "./components/tenders-grid";
 import { EXPENSE_ROUTE } from "./constants";
 import type { ExpenseKeys, ExpenseScope } from "./expense.types";
-import { isBlankLine, isBlankTender } from "./domain/draft";
+import { asksBeforeOpeningAnother, isBlankLine, isBlankTender } from "./domain/draft";
+import { defaultRegisterFilters, type RegisterFilters } from "./domain/register";
 import { statusPill, TENDER_NOTE, type Tone } from "./domain/view";
 import { useExpenseVoucher } from "./state/use-expense-voucher";
 import { useExpenseTillSession } from "./till-session";
@@ -78,7 +82,7 @@ import styles from "./expense.module.scss";
  * The keys, as Qt binds them (d97cdd4) — with two the browser keeps for itself:
  *
  *   F5  Save draft     Ctrl+Enter  Post     F2  New (in a grid: the cell's own)
- *   F8  List           Alt+N  + line        Alt+T  + tender      Esc  Close
+ *   F8  List (picker)  Alt+N  + line        Alt+T  + tender      Esc  Close
  *   Enter walks the header like Tab, then on into the lines (Reason)
  *   in a grid: Enter next cell · + / − add / remove a line · F2 the picker
  *
@@ -102,6 +106,13 @@ const LEDGER_PICKER_COLUMNS: PickerFallbackColumn[] = [
 ];
 
 type PickerState = { lineKey: string; column: PopupColumn; query: string };
+
+/*
+ * The posting legs (Dr / Cr) are not shown for now (Qt 6f15977 hides the
+ * Posts caption, hint, balance and legs). Validate still fills `view.legs`;
+ * only the panel is off.
+ */
+const SHOW_POSTING_LEGS = false;
 
 /*
  * What the Admin-settings dialog's Focus column means here. The entry grids'
@@ -215,6 +226,9 @@ export default function ExpenseScreen({ initialKeys, onBackToList }: ExpenseScre
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
   /** The reason dialog: a plain cancel, or Cancel & re-enter. */
   const [cancelMode, setCancelMode] = useState<"cancel" | "reenter" | null>(null);
+  /** F8: the register as a picker; its window is kept for the next F8. */
+  const [registerOpen, setRegisterOpen] = useState(false);
+  const [registerFilters, setRegisterFilters] = useState<RegisterFilters>(() => defaultRegisterFilters(today));
   const cancelOpen = cancelMode !== null;
   const pickerParams = useMemo(() => ({ icompany_id: api.docCompanyId }), [api.docCompanyId]);
 
@@ -251,15 +265,33 @@ export default function ExpenseScreen({ initialKeys, onBackToList }: ExpenseScre
     });
   }, [api, busy, guardDiscard, rights.mayStartNew]);
 
-  const goList = useCallback(() => {
-    guardDiscard("Go to the list?", "Go to the list", () => {
-      if (onBackToList) {
-        onBackToList();
-      } else {
-        router.push(EXPENSE_ROUTE);
-      }
-    });
-  }, [guardDiscard, onBackToList, router]);
+  // F8 / List: the register as a picker over this screen (Qt `showList`).
+  // Typed lines on a voucher that can still change are not dropped unasked.
+  const { openVoucher } = api;
+  const showList = useCallback(() => {
+    if (busy) return;
+    const open = () => setRegisterOpen(true);
+    if (asksBeforeOpeningAnother(draft.lines, editable)) {
+      setConfirmRequest({
+        title: "Open an expense",
+        message: "This expense has not been saved. Discard it and open another?",
+        confirmLabel: "Discard and open",
+        onConfirm: open,
+      });
+      return;
+    }
+    open();
+  }, [busy, draft.lines, editable]);
+
+  const onRegisterPick = useCallback(
+    (keys: ExpenseKeys) => {
+      setRegisterOpen(false);
+      setActiveLineKey(null);
+      setActiveTenderKey(null);
+      openVoucher(keys);
+    },
+    [openVoucher],
+  );
 
   const close = useCallback(() => {
     guardDiscard("Close this voucher?", "Close", () => {
@@ -360,12 +392,17 @@ export default function ExpenseScreen({ initialKeys, onBackToList }: ExpenseScre
     saveDraft,
     post,
     startNew,
-    goList,
+    showList,
     close,
     addLine,
     addTender,
     dialogOpen:
-      confirmRequest !== null || cancelOpen || picker !== null || lineSettings.active || tenderSettings.active,
+      confirmRequest !== null ||
+      cancelOpen ||
+      picker !== null ||
+      registerOpen ||
+      lineSettings.active ||
+      tenderSettings.active,
   };
   const keyTargetsRef = useRef(keyTargets);
   useEffect(() => {
@@ -409,7 +446,7 @@ export default function ExpenseScreen({ initialKeys, onBackToList }: ExpenseScre
       }
       if (event.key === "F8") {
         event.preventDefault();
-        current.goList();
+        current.showList();
         return;
       }
       if (chord && letter === "n") {
@@ -433,6 +470,16 @@ export default function ExpenseScreen({ initialKeys, onBackToList }: ExpenseScre
   }, []);
 
   // ── render ──────────────────────────────────────────────────────────────
+  const registerModal = registerOpen ? (
+    <ExpenseRegisterModal
+      scope={scope}
+      filters={registerFilters}
+      onFiltersChange={setRegisterFilters}
+      onClose={() => setRegisterOpen(false)}
+      onPick={onRegisterPick}
+    />
+  ) : null;
+
   if (api.loadError && draft.keys === null) {
     return (
       <div className={styles.page}>
@@ -443,10 +490,17 @@ export default function ExpenseScreen({ initialKeys, onBackToList }: ExpenseScre
         </header>
         <p className={styles.loadError}>{api.loadError}</p>
         <div className={styles.buttons}>
-          <button type="button" className={styles.button} onClick={goList}>
-            F8  List
-          </button>
+          <div className={styles.verbs}>
+            <button type="button" className={styles.button} onClick={showList}>
+              F8  List
+            </button>
+            <button type="button" className={styles.button} onClick={close}>
+              Close
+            </button>
+          </div>
         </div>
+        {registerModal}
+        <ConfirmDialog request={confirmRequest} onClose={() => setConfirmRequest(null)} />
       </div>
     );
   }
@@ -770,8 +824,8 @@ export default function ExpenseScreen({ initialKeys, onBackToList }: ExpenseScre
           </ul>
         ) : null}
 
-        {/* ── POSTS: the legs, once the server has worked them out ─────── */}
-        {view.legs.columns.length > 0 ? (
+        {/* ── POSTS: the legs, once the server has worked them out — off for now ── */}
+        {SHOW_POSTING_LEGS && view.legs.columns.length > 0 ? (
           <section className={styles.posts} aria-label="Posts">
             <div className={styles.blockHead}>
               <h2 className={styles.formCap}>Posts</h2>
@@ -851,7 +905,7 @@ export default function ExpenseScreen({ initialKeys, onBackToList }: ExpenseScre
               Cancel &amp; re-enter…
             </button>
           ) : null}
-          <button type="button" className={styles.button} onClick={goList}>
+          <button type="button" className={styles.button} disabled={busy} onClick={showList}>
             F8  List
           </button>
           <button type="button" className={styles.button} onClick={close}>
@@ -874,6 +928,8 @@ export default function ExpenseScreen({ initialKeys, onBackToList }: ExpenseScre
           onPick={onPicked}
         />
       ) : null}
+
+      {registerModal}
 
       {lineSettings.overlays}
       {tenderSettings.overlays}

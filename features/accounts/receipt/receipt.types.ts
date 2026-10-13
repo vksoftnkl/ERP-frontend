@@ -588,6 +588,12 @@ export type SaveReceiptTenderBody = {
   tdReceivedAmt?: number;
   tdChangeAmt?: number;
   tdMdrAmt?: number;
+  /**
+   * Sent only when the master has `tnd_edit_surcharge`: otherwise the server
+   * computes the surcharge from the master and ignores this. `tdSurchargePerc`
+   * is never sent — the amount is the figure that posts.
+   */
+  tdSurchargeAmt?: number;
   tdRefNo?: string | null;
   tdBankName?: string | null;
   tdPayerVpa?: string | null;
@@ -682,6 +688,22 @@ export type PostReceiptBody = ReceiptKeys & {
   /** The one figure that proves client and server read the same receipt. */
   onAccount: number;
 };
+
+/**
+ * `POST /receipts/create` with `post: true` — save AND post in ONE transaction
+ * (server notes 106). The draft body with the POST-shape settlement on top:
+ * `allocations` / `creditsApplied` are APPLIED here, not remembered, and
+ * `onAccount` is required. A refusal rolls everything back — no draft, no
+ * number — and answers exactly what `/receipts/post` would have.
+ *
+ * Not the post body's voucher key: on a new receipt its `avhVoucherId` is ""
+ * and would be refused as "not a valid UUID". The draft body already carries
+ * the id when a reopened draft is being posted.
+ */
+export type SaveAndPostReceiptBody = SaveDraftReceiptBody &
+  Pick<PostReceiptBody, "allocations" | "creditsApplied" | "otherLineBills" | "onAccount"> & {
+    post: true;
+  };
 
 export type AmendReceiptBody = SaveDraftReceiptBody &
   Omit<PostReceiptBody, "avhVoucherId"> & {
@@ -786,7 +808,28 @@ export type TenderRow = {
   tenderTypeId: number;
   tenderName: string;
   tenderLedgerId: string | null;
+  /**
+   * The GROSS — what the customer handed over and what `tdAmount` carries.
+   * On a tender with a surcharge it is `forBills + surchargeAmt`, so it is
+   * changed only through `domain/surcharge.ts` (`SET_TENDER_AMOUNT`).
+   */
   amount: number;
+  /*
+   * The tender surcharge (Qt 6f15977), owned by `domain/surcharge.ts`.
+   * OPTIONAL because Bill-wise Payment shares this row shape and has no
+   * surcharge: absent reads as a tender that charges nothing. Every receipt
+   * row sets all three.
+   */
+  /**
+   * Client only: the figure the operator typed, which is what goes to the
+   * BILLS. The surcharge is paid ON TOP of it. Equal to `amount` on a tender
+   * that charges nothing.
+   */
+  forBills?: number;
+  /** The tender master's surcharge on `amount` — the server's own figure. */
+  surchargeAmt?: number;
+  /** `tdSurchargeAmt` travels — only where the server would take it. */
+  sendSurcharge?: boolean;
   receivedAmt: number;
   changeAmt: number;
   /** What the acquirer kept. A SPLIT OF THE BANK LEG, not a deduction (§7.4). */

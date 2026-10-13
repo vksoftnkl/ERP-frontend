@@ -117,6 +117,9 @@ describe("PICKABLE_ROLES", () => {
     for (const role of PICKABLE_ROLES) {
       expect(roleIsMirroredByBillColumn(role)).toBe(false);
       expect(roleIsLegSplit(role)).toBe(false);
+      // Derived from the tender master since Qt 6f15977, and the server
+      // refuses a hand-keyed one that disagrees with the instruments.
+      expect(role).not.toBe("SURCHARGE_RECOVERED");
     }
   });
 

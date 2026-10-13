@@ -33,7 +33,6 @@ import {
   BILL_LIST_GRID_KEY,
   BILL_OPEN_SOURCES_ENDPOINT,
   BILL_PARTY_CONTEXT_ENDPOINT,
-  BILL_POST_ENDPOINT,
   BILL_RETENDER_ENDPOINT,
   BILL_SAVE_ENDPOINT,
   BILL_TENDER_CONTEXT_ENDPOINT,
@@ -61,7 +60,6 @@ import type {
   CancelOrderResult,
   DeleteBillDto,
   PartyContext,
-  PostBillDto,
   SaleBillDocKey,
   SaveBillDto,
   ValidateBillDto,
@@ -328,6 +326,11 @@ export const saleBillApi = baseApi.injectEndpoints({
       keepUnusedDataFor: 0,
     }),
 
+    /**
+     * `POST /bills/create` — a DRAFT, or with `post: true` the save and the post
+     * in one transaction (notes 106): stock moves, the party owes, the order
+     * draws down. A refused post is a 422 with the notes and writes nothing.
+     */
     saveBill: builder.mutation<BillPayload, SaveBillDto>({
       query: (body) => ({ url: BILL_SAVE_ENDPOINT, method: "POST", body }),
       transformResponse: (payload: ApiSuccessResponse<BillPayload>) => payload.data,
@@ -338,7 +341,7 @@ export const saleBillApi = baseApi.injectEndpoints({
 
     // -- the lifecycle (§4.1, §17) -------------------------------------------
     //
-    // All five are MUTATIONS, including the dry run: a query would be cached
+    // All of them are MUTATIONS, including the dry run: a query would be cached
     // and de-duplicated by its arguments, and a second validate of the same
     // payload must go to the server again — the party's credit may have moved.
 
@@ -349,14 +352,6 @@ export const saleBillApi = baseApi.injectEndpoints({
     validateBill: builder.mutation<ValidateBillResult, ValidateBillDto>({
       query: (body) => ({ url: BILL_VALIDATE_ENDPOINT, method: "POST", body }),
       transformResponse: (payload: ApiSuccessResponse<ValidateBillResult>) => payload.data,
-    }),
-
-    /** `POST /bills/post` — the one-way door. Idempotent on a POSTED id. */
-    postBill: builder.mutation<BillPayload, PostBillDto>({
-      query: (body) => ({ url: BILL_POST_ENDPOINT, method: "POST", body }),
-      transformResponse: (payload: ApiSuccessResponse<BillPayload>) => payload.data,
-      // Stock moved, the party owes, credits were spent, the order drew down.
-      invalidatesTags: ["SaleBill", "PartyCredit", "SaleOrder"],
     }),
 
     /** `POST /bills/amend` — restates the voucher in place, revision + 1. */
@@ -573,7 +568,6 @@ export const {
   useLazyGetBillQuery,
   useSaveBillMutation,
   useValidateBillMutation,
-  usePostBillMutation,
   useAmendBillMutation,
   useCancelBillMutation,
   useDeleteBillMutation,

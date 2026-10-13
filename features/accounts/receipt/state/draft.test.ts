@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { draftReducer, initialDraft, receivedTotal, type ReceiptDraft } from "./draft";
+import { draftReducer, initialDraft, receivedTotal, type DraftAction, type ReceiptDraft } from "./draft";
 import { aBill, aCredit, aLine, aParty, aTender } from "../domain/fixtures";
+import { computeIdentity } from "../domain/identity";
+import { buildSaveAndPostPayload } from "../payload/build-save-and-post";
 import type { OpenItemsPayload, ReceiptScope } from "../receipt.types";
 import type { TenderMasterRow } from "@/features/sales/sale-order/sale-order.types";
 
@@ -258,5 +260,147 @@ describe("receivedTotal", () => {
   it("is the sum of every instrument — what the duplicate guard asks about", () => {
     const draft = start({ tenders: [aTender({ amount: 500 }), aTender({ amount: 500 })] });
     expect(receivedTotal(draft)).toBe(1000);
+  });
+});
+
+describe("the tender surcharge (Qt 6f15977)", () => {
+  const cash = master();
+  const upi = master({
+    tndId: "tnd-upi",
+    tndTypeId: "3",
+    tndName: "UPI",
+    tndLedgerId: "led-upi",
+    tndIsDefault: false,
+    tndSurchargePerc: 1,
+  });
+  const cheque = master({
+    tndId: "tnd-chq",
+    tndTypeId: "5",
+    tndName: "Cheque",
+    tndLedgerId: "led-chq",
+    tndIsDefault: false,
+  });
+
+  function run(state: ReceiptDraft, ...actions: DraftAction[]): ReceiptDraft {
+    return actions.reduce((draft, action) => draftReducer(draft, action).draft, state);
+  }
+
+  /** The user's case, 2026-10-12: 1,000 as CASH 100 + UPI 200 + CHEQUE 700. */
+  function theSplit(): ReceiptDraft {
+    let draft = start({
+      header: { ...start().header, partyId: "deepan", partyName: "Deepan" },
+      party: aParty({ isBillByBill: true }),
+      itemsLoaded: true,
+      bills: [aBill({ billId: "seed-1", docRefno: "SEED-DEEPAN-1", pendingAmount: 5000 })],
+    });
+    draft = run(draft, { type: "ADD_TENDER", master: cash, amount: 100 });
+    draft = run(draft, { type: "ADD_TENDER", master: upi });
+    draft = run(draft, {
+      type: "SET_TENDER_AMOUNT",
+      rowKey: draft.tenders[1].key,
+      amount: 200,
+      master: upi,
+    });
+    return run(
+      draft,
+      { type: "ADD_TENDER", master: cheque, amount: 700 },
+      { type: "SET_BILL_CELL", billId: "seed-1", column: "receive", value: 1000 },
+    );
+  }
+
+  it("collects 202.02 on the UPI row for the 200 typed", () => {
+    const draft = theSplit();
+    expect(draft.tenders.map((tender) => tender.amount)).toEqual([100, 202.02, 700]);
+    expect(draft.tenders[1]).toMatchObject({ forBills: 200, surchargeAmt: 2.02 });
+  });
+
+  it("seeds SURCHARGE_RECOVERED — CR, settling nothing — for the 2.02", () => {
+    const line = theSplit().otherLines.find((entry) => entry.role === "SURCHARGE_RECOVERED");
+    expect(line).toMatchObject({ amount: 2.02, drCr: "CR", settlesBill: false, seeded: true });
+  });
+
+  it("balances: 1,002.02 received = 1,000 allocated + 2.02 surcharge", () => {
+    const identity = computeIdentity(theSplit());
+    expect(identity).toMatchObject({
+      received: 1002.02,
+      allocated: 1000,
+      additions: 2.02,
+      onAccount: 0,
+      balances: true,
+    });
+  });
+
+  it("sends the surcharge line in the ONE call that saves and posts", () => {
+    const draft = theSplit();
+    const body = buildSaveAndPostPayload({ ...draft, userId: "user" });
+    expect(body.post).toBe(true);
+    expect(body.onAccount).toBe(0);
+    expect(body.otherLines).toContainEqual(
+      expect.objectContaining({ role: "SURCHARGE_RECOVERED", drCr: "CR", amount: 2.02 }),
+    );
+    expect(body.tenders[1]).toMatchObject({ tdAmount: 202.02 });
+    // The master does not let it be edited, so the server computes it.
+    expect(body.tenders[1]).not.toHaveProperty("tdSurchargeAmt");
+  });
+
+  it("moves with the row's tender, keeping the figure for the bills", () => {
+    let draft = run(start(), { type: "ADD_TENDER", master: cash, amount: 200 });
+    const rowKey = draft.tenders[0].key;
+    draft = run(draft, { type: "RETARGET_TENDER", rowKey, master: upi });
+    expect(draft.tenders[0].amount).toBe(202.02);
+    expect(draft.otherLines.map((line) => line.role)).toEqual(["SURCHARGE_RECOVERED"]);
+    draft = run(draft, { type: "RETARGET_TENDER", rowKey, master: cash });
+    expect(draft.tenders[0].amount).toBe(200);
+    expect(draft.otherLines).toHaveLength(0);
+  });
+
+  it("grosses up an amount the Amount box adds with the row", () => {
+    const { draft } = draftReducer(start(), { type: "ADD_TENDER", master: upi, amount: 200 });
+    expect(draft.tenders[0].amount).toBe(202.02);
+    expect(draft.otherLines[0]).toMatchObject({ role: "SURCHARGE_RECOVERED", amount: 2.02 });
+  });
+
+  it("marks the figure to travel when the master lets it be edited", () => {
+    const editable = { ...upi, tndEditSurcharge: true };
+    let draft = run(start(), { type: "ADD_TENDER", master: editable });
+    draft = run(draft, {
+      type: "SET_TENDER_AMOUNT",
+      rowKey: draft.tenders[0].key,
+      amount: 200,
+      master: editable,
+    });
+    expect(draft.tenders[0].sendSurcharge).toBe(true);
+  });
+
+  it("auto-allocates what goes to the bills, not the surcharge", () => {
+    let draft = start({
+      party: aParty({ isBillByBill: true }),
+      itemsLoaded: true,
+      bills: [aBill({ billId: "b1", pendingAmount: 5000 })],
+    });
+    draft = run(draft, { type: "ADD_TENDER", master: upi, amount: 1000 }, { type: "AUTO_ALLOCATE" });
+    expect(draft.tenders[0].amount).toBe(1010.1);
+    expect(draft.bills[0].receive).toBe(1000);
+    expect(computeIdentity(draft).balances).toBe(true);
+  });
+
+  it("turns a surcharged row into a line at the figure that was typed", () => {
+    let draft = run(start(), { type: "ADD_TENDER", master: upi, amount: 1400 });
+    draft = run(draft, {
+      type: "CONVERT_TO_LINE",
+      rowKey: draft.tenders[0].key,
+      role: "TDS_RECEIVABLE",
+    });
+    expect(draft.otherLines).toEqual([
+      expect.objectContaining({ role: "TDS_RECEIVABLE", amount: 1400 }),
+    ]);
+  });
+
+  it("refuses to remove the surcharge line, and says where it comes from", () => {
+    const draft = theSplit();
+    const line = draft.otherLines.find((entry) => entry.role === "SURCHARGE_RECOVERED");
+    const result = draftReducer(draft, { type: "REMOVE_ROW", rowKey: line!.key });
+    expect(result.draft.otherLines).toContain(line);
+    expect(result.refusal?.message).toContain("surcharge");
   });
 });

@@ -39,6 +39,8 @@ export const SAVE_BILL_DTO_KEYS = new Set<string>([
   "sbDistanceKm", "sbCustPan", "sbForm60Ref", "sbLoyaltyMemberId", "sbTcsPerc", "sbTcsAmt",
   "sbHasDc", "sbRevisionNo", "sbDocRegisterId", "sbCogsAmt", "sbDeliveryStatus",
   "sbLoyaltyEarned", "sbLoyaltyRedeemed", "items", "charges", "tenders", "adjustments",
+  // 2026-10-13, notes 106: save and post in one call, with the overrides the post reads.
+  "post", "overrides",
 ]);
 
 export const SAVE_BILL_ITEM_DTO_KEYS = new Set<string>([
@@ -97,10 +99,6 @@ export const SAVE_BILL_ADJUSTMENT_DTO_KEYS = new Set<string>([
 
 /** `ValidateBillDto extends SaveBillDto` + `overrides`. */
 export const VALIDATE_BILL_DTO_KEYS = new Set<string>([...SAVE_BILL_DTO_KEYS, "overrides"]);
-
-export const POST_BILL_DTO_KEYS = new Set<string>([
-  "sbId", "sbCompanyId", "sbBranchId", "sbAccYear", "overrides", "printAfter", "adjustments",
-]);
 
 /** `AmendBillDto extends ValidateBillDto` + the lock, the remark and the print flag. */
 export const AMEND_BILL_DTO_KEYS = new Set<string>([

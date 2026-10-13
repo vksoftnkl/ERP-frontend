@@ -410,8 +410,21 @@ export type SaveDraftPaymentBody = {
   replace: true;
 };
 
-/** `POST /payments/post` — field for field the receipt's. */
+/**
+ * The settlement `/payments/post` takes. `/create` with `post: true` reads the
+ * same four keys off its own body — APPLIED there, not remembered.
+ */
 export type PostPaymentBody = PostReceiptBody;
+
+export type PaymentSettlementKey = "allocations" | "creditsApplied" | "otherLineBills" | "onAccount";
+
+/**
+ * `POST /payments/create` with `post: true` (notes 106): saves AND posts in
+ * one transaction. The draft's body with its remembered settlement replaced by
+ * the applied one; `onAccount` is the server's 400 without it.
+ */
+export type SaveAndPostPaymentBody = Omit<SaveDraftPaymentBody, PaymentSettlementKey> &
+  Partial<Pick<PostPaymentBody, PaymentSettlementKey>> & { post: true };
 
 export type AmendPaymentBody = SaveDraftPaymentBody &
   Omit<PostPaymentBody, "avhVoucherId"> & {

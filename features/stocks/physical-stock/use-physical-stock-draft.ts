@@ -4,7 +4,7 @@
  * Physical Stock Update — the count sheet's network half. The draft is a
  * local reducer (`physical-stock.state.ts`, pure); this hook does what the Qt
  * `PhysicalStockEntry` does over the wire — draw the sheet, resolve a pick or a
- * scan into holdings, save, validate, post, cancel, load — and speaks to the
+ * scan into holdings, save, post, cancel, load — and speaks to the
  * operator in the Qt screen's own words.
  */
 import {
@@ -28,7 +28,6 @@ import { askYesNo, say } from "./components/notice";
 import {
   physicalStockApi,
   usePhysicalStockCancelMutation,
-  usePhysicalStockPostMutation,
   usePhysicalStockSaveMutation,
 } from "./physical-stock.api";
 import {
@@ -45,10 +44,17 @@ import {
   STATUS_DRAFT,
   STATUS_POSTED,
 } from "./physical-stock.constants";
-import { formatNetQty, toLocalDateTime } from "./physical-stock.format";
-import { apiErrorText, buildPayload, failingLines, lineProblemsMessage } from "./physical-stock.payload";
+import { toLocalDateTime } from "./physical-stock.format";
 import {
-  applyWireLines,
+  apiErrorText,
+  buildPayload,
+  buildPostPayload,
+  lineProblemsMessage,
+  postConfirmMessage,
+  postedMessage,
+  refusalLineProblems,
+} from "./physical-stock.payload";
+import {
   computeTotals,
   createDraft,
   hasHoldings,
@@ -107,13 +113,6 @@ function scopeOfDraft(draft: PhysicalStockDraft): PhysicalStockScope {
   return { companyId: draft.companyId, branchId: draft.branchId, accYear: draft.accYear };
 }
 
-type PostTarget = {
-  key: PhysicalStockDocKey;
-  refno: string;
-  status: string;
-  totals: CountTotals;
-};
-
 export type PhysicalStockDraftApi = {
   draft: PhysicalStockDraft;
   totals: CountTotals;
@@ -141,7 +140,10 @@ export type PhysicalStockDraftApi = {
   pickReason: (rowKey: string, id: string, name: string) => void;
   loadCountSheet: () => void;
   newDocument: () => void;
-  saveDraft: (postAfterwards: boolean) => void;
+  /** Save Draft — writes the sheet and nothing else. No stock moves. */
+  saveDraft: () => void;
+  /** Post — saves AND posts in one call; asks first. */
+  postDocument: () => void;
   cancelVoucher: () => void;
   confirmCancel: (reason: string) => void;
   dismissCancel: () => void;
@@ -173,7 +175,6 @@ export function usePhysicalStockDraft(): PhysicalStockDraftApi {
   const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
   const [cancelPrompt, setCancelPrompt] = useState<{ title: string } | null>(null);
   const [saveDocument] = usePhysicalStockSaveMutation();
-  const [postDocumentMutation] = usePhysicalStockPostMutation();
   const [cancelDocument] = usePhysicalStockCancelMutation();
   const { permissions } = usePagePermissions();
   const rights = useMemo(() => documentRights(permissions), [permissions]);
@@ -433,131 +434,110 @@ export function usePhysicalStockDraft(): PhysicalStockDraftApi {
   // Save / Post / Cancel
   // -------------------------------------------------------------------------
 
-  const postDocument = useCallback(
-    async (target: PostTarget) => {
-      if (!target.key.svhId) {
-        say.warn("Save first", "Save the sheet before posting it.");
+  const saveDraft = useCallback(() => {
+    void (async () => {
+      if (busyRef.current !== "idle") {
         return;
       }
-      setBusy("posting");
-      let problems;
+      const current = draftRef.current;
+      if (current.status !== STATUS_DRAFT) {
+        say.warn("Not a draft", `${current.refno} is ${current.status} and cannot be saved again.`);
+        return;
+      }
+      const refusal = validateBeforeSave(current);
+      if (refusal) {
+        say.warn(refusal.title, refusal.message);
+        focusHeader(refusal.focus);
+        return;
+      }
+      // Both taken NOW: the repaint from the answer holds only the saved
+      // (counted) lines.
+      const before = computeTotals(current.lines);
+      const unwalked = before.lines - before.counted;
+      const onScreen = before.lines;
+      setBusy("saving");
+      let saved;
       try {
-        problems = await appDispatch(
-          physicalStockApi.endpoints.physicalStockValidate.initiate(target.key, {
-            subscribe: false,
-            forceRefetch: true,
-          }),
-        ).unwrap();
+        saved = await saveDocument(buildPayload(current, before)).unwrap();
       } catch (error) {
         setBusy("idle");
         say.error(apiErrorText(error));
         return;
       }
       setBusy("idle");
-      if (failingLines(problems).length > 0) {
-        say.warn("This count cannot be posted", lineProblemsMessage(problems));
-        // Being told to fix the sheet has to leave it fixable.
-        if (target.status === STATUS_DRAFT) {
-          dispatch({ type: "modeSet", mode: "entry" });
-        }
+      dispatch({ type: "documentSaved", document: saved });
+      const refno = saved?.header?.refno || current.refno;
+      say.info(
+        "Saved",
+        unwalked > 0
+          ? `${refno} saved as a draft. No stock has moved.\n\n${unwalked} of ${onScreen} ` +
+              "holdings on screen have not been counted yet, so they are NOT on the saved " +
+              "document — count them and save again to add them. A blank is not the same as " +
+              "counting zero."
+          : `${refno} saved as a draft. No stock has moved.`,
+      );
+      startNext();
+    })();
+  }, [saveDocument, setBusy, startNext]);
+
+  /**
+   * Post = ONE `/stock/physical/create` with header.status "POSTED" (notes
+   * 106): the server saves and posts in one transaction — preflight, lots,
+   * ledger, balance, status trail — so a refused line fails the save too and
+   * leaves NO document behind. Nothing to clean up on a refusal, and no draft
+   * right is needed: a Post-only user posts a new sheet.
+   */
+  const postDocument = useCallback(() => {
+    void (async () => {
+      if (busyRef.current !== "idle") {
         return;
       }
-      const { totals } = target;
+      const current = draftRef.current;
+      if (current.status !== STATUS_DRAFT) {
+        say.warn("Not a draft", `${current.refno} is ${current.status} and cannot be posted again.`);
+        return;
+      }
+      const refusal = validateBeforeSave(current);
+      if (refusal) {
+        say.warn(refusal.title, refusal.message);
+        focusHeader(refusal.focus);
+        return;
+      }
+      // Asked BEFORE the call now — once it is sent the sheet is posted or it
+      // does not exist.
+      const totals = computeTotals(current.lines);
       const confirmed = await askYesNo(
-        `Post ${target.refno}?`,
-        "Posting writes the stock ledger for the lines that DISAGREE and freezes this sheet. " +
-          "A line that matches writes nothing.\n\n" +
-          `${totals.counted} / ${totals.lines} counted · ${totals.varianceLines} with a variance · ` +
-          `net ${formatNetQty(totals.netQty)}`,
+        `Post ${current.refno || "this count"}?`,
+        postConfirmMessage(totals),
       );
       if (!confirmed) {
         return;
       }
       setBusy("posting");
+      let posted;
       try {
-        const result = await postDocumentMutation(target.key).unwrap();
-        dispatch({
-          type: "statusApplied",
-          status: result?.header?.status || result?.status || STATUS_POSTED,
-        });
-        const rows = Math.trunc(Number(result?.rowsPosted) || 0);
-        say.info(
-          "Posted",
-          rows === 0
-            ? `${target.refno} posted — every holding counted matched the book, so no ledger ` +
-                "row was written. Nothing was wrong."
-            : `${target.refno} posted — ${rows} variance rows written.`,
-        );
-        startNext();
+        posted = await saveDocument(buildPostPayload(current, totals)).unwrap();
       } catch (error) {
-        say.error(apiErrorText(error));
-      } finally {
         setBusy("idle");
-      }
-    },
-    [appDispatch, postDocumentMutation, setBusy, startNext],
-  );
-
-  const saveDraft = useCallback(
-    (postAfterwards: boolean) => {
-      void (async () => {
-        if (busyRef.current !== "idle") {
-          return;
-        }
-        const current = draftRef.current;
-        if (current.status !== STATUS_DRAFT) {
-          say.warn("Not a draft", `${current.refno} is ${current.status} and cannot be saved again.`);
-          return;
-        }
-        const refusal = validateBeforeSave(current);
-        if (refusal) {
-          say.warn(refusal.title, refusal.message);
-          focusHeader(refusal.focus);
-          return;
-        }
-        // Both taken NOW: the repaint from the answer holds only the saved
-        // (counted) lines.
-        const before = computeTotals(current.lines);
-        const unwalked = before.lines - before.counted;
-        const onScreen = before.lines;
-        setBusy("saving");
-        let saved;
-        try {
-          saved = await saveDocument(buildPayload(current, before)).unwrap();
-        } catch (error) {
-          setBusy("idle");
+        // The preflight's per-line answer when the refusal carries one;
+        // otherwise the server's message.
+        const problems = refusalLineProblems(error);
+        if (problems.length > 0) {
+          say.warn("This count cannot be posted", lineProblemsMessage(problems));
+        } else {
           say.error(apiErrorText(error));
-          return;
         }
-        setBusy("idle");
-        dispatch({ type: "documentSaved", document: saved });
-        const svhId = saved?.header?.svhId || current.svhId;
-        const refno = saved?.header?.refno || current.refno;
-        const status = (saved?.header?.status ?? "").trim() || STATUS_DRAFT;
-        if (postAfterwards) {
-          const repainted = applyWireLines(saved?.lines ?? [], current.lines, current.seq).lines;
-          await postDocument({
-            key: { ...scopeOfDraft(current), svhId },
-            refno,
-            status,
-            totals: computeTotals(repainted),
-          });
-          return;
-        }
-        say.info(
-          "Saved",
-          unwalked > 0
-            ? `${refno} saved as a draft. No stock has moved.\n\n${unwalked} of ${onScreen} ` +
-                "holdings on screen have not been counted yet, so they are NOT on the saved " +
-                "document — count them and save again to add them. A blank is not the same as " +
-                "counting zero."
-            : `${refno} saved as a draft. No stock has moved.`,
-        );
-        startNext();
-      })();
-    },
-    [postDocument, saveDocument, setBusy, startNext],
-  );
+        // Being told to fix the sheet has to leave it fixable.
+        dispatch({ type: "modeSet", mode: "entry" });
+        return;
+      }
+      setBusy("idle");
+      dispatch({ type: "documentSaved", document: posted });
+      dispatch({ type: "statusApplied", status: posted?.header?.status || STATUS_POSTED });
+      say.info("Posted", postedMessage(posted?.header?.refno || current.refno, posted?.rowsPosted));
+      startNext();
+    })();
+  }, [saveDocument, setBusy, startNext]);
 
   const cancelVoucher = useCallback(() => {
     const current = draftRef.current;
@@ -756,6 +736,7 @@ export function usePhysicalStockDraft(): PhysicalStockDraftApi {
     loadCountSheet,
     newDocument,
     saveDraft,
+    postDocument,
     cancelVoucher,
     confirmCancel,
     dismissCancel,

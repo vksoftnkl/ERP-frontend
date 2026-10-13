@@ -30,6 +30,12 @@ import type { ConfiguredGridKey } from "@/lib/configured-grids";
 // ---------------------------------------------------------------------------
 
 /** `/api/v1` is already part of `API_BASE` — never write it in a path. */
+/**
+ * A DRAFT — or, with `post: true` (+ `overrides[]?`), saved AND posted in one
+ * transaction (notes 106). That is how a bill is posted: `/bills/post` (the
+ * keys of a stored draft) is no longer called, so a refused post leaves no
+ * draft behind.
+ */
 export const BILL_SAVE_ENDPOINT = "/bills/create";
 export const BILL_GET_ENDPOINT = "/bills/get";
 
@@ -37,8 +43,6 @@ export const BILL_GET_ENDPOINT = "/bills/get";
 // `forbidNonWhitelisted`, so the bodies are built from state, never echoed.
 /** Dry run: `{ok, refusals[], warnings[], rights, proposals}`, or 422 with the refusals. */
 export const BILL_VALIDATE_ENDPOINT = "/bills/validate";
-/** Keys + `overrides[]?` + `adjustments[]?` + `printAfter?`. Posts what the SERVER holds. */
-export const BILL_POST_ENDPOINT = "/bills/post";
 /** The whole payload + `baseRevision` + `editRemark`. Restates the voucher in place. */
 export const BILL_AMEND_ENDPOINT = "/bills/amend";
 /** POSTED only, by reversal, reason mandatory. The bill keeps its number. */
@@ -196,8 +200,8 @@ export const DEFAULT_BILL_TYPE: BillType = "CASH";
 
 /**
  * The lifecycle: DRAFT → POSTED → (amend → POSTED rev+1) → CANCELLED (§1). A
- * save is ALWAYS a draft — the server ignores whatever status is sent — and only
- * `/bills/post` moves it. A cancelled bill keeps its number and stays on the
+ * save is a draft unless it carries `post: true` (notes 106), which saves and
+ * posts in one transaction. A cancelled bill keeps its number and stays on the
  * list.
  */
 export const BILL_STATUSES = ["DRAFT", "POSTED", "CANCELLED"] as const;

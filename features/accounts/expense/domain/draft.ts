@@ -91,6 +91,15 @@ export function isEditable(status: ExpenseStatus | null): boolean {
   return status === null || status === "DRAFT";
 }
 
+/**
+ * F8 over a voucher (Qt `showList`, 6f15977): opening another one asks first
+ * only while this one can still change and has a line typed into it — a
+ * blank voucher, or one that can only be read, is simply replaced.
+ */
+export function asksBeforeOpeningAnother(lines: readonly ExpenseLineDraft[], editable: boolean): boolean {
+  return editable && lines.some((line) => !isBlankLine(line));
+}
+
 /** Both grids end in exactly one blank row while the voucher can be edited. */
 export function withTrailingRows(draft: ExpenseDraft): ExpenseDraft {
   if (!isEditable(draft.status)) {

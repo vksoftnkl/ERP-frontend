@@ -36,6 +36,8 @@ export function overlayOpen(): boolean {
 
 export type TillDialogProps = {
   title: ReactNode;
+  /** A muted line under the title (whose session …). */
+  subtitle?: ReactNode;
   /** Shown beside the title — a pill, a status. */
   headExtra?: ReactNode;
   open: boolean;
@@ -46,13 +48,13 @@ export type TillDialogProps = {
   /** Escape is refused (a request in flight): the dialog stays. */
   busy?: boolean;
   /**
-   * The dialog's own keys (F10 post …), called only while it is the topmost
+   * The dialog's own keys (Ctrl+Enter post …), called only while it is the topmost
    * surface and no confirmation or message is up. Escape is the shell's.
    */
   onKey?: (event: KeyboardEvent) => void;
 };
 
-export function TillDialog({ title, headExtra, open, size = "normal", footer, children, onClose, busy, onKey }: TillDialogProps) {
+export function TillDialog({ title, subtitle, headExtra, open, size = "normal", footer, children, onClose, busy, onKey }: TillDialogProps) {
   const id = useId();
   const latest = useRef({ onClose, busy, onKey });
   useEffect(() => {
@@ -94,9 +96,18 @@ export function TillDialog({ title, headExtra, open, size = "normal", footer, ch
           aria-labelledby={`${id}-title`}
         >
           <header className={styles.panelHead}>
-            <h2 id={`${id}-title`} className={styles.panelTitle}>
-              {title}
-            </h2>
+            {subtitle ? (
+              <div className={styles.panelTitleBlock}>
+                <h2 id={`${id}-title`} className={styles.panelTitle}>
+                  {title}
+                </h2>
+                <p className={styles.muted}>{subtitle}</p>
+              </div>
+            ) : (
+              <h2 id={`${id}-title`} className={styles.panelTitle}>
+                {title}
+              </h2>
+            )}
             {headExtra}
             <button
               type="button"

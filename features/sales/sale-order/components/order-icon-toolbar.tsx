@@ -28,6 +28,8 @@ import styles from "../page.module.scss";
 export type OrderIconAction = {
   key: string;
   label: string;
+  /** The tooltip when it is not the label — why a disabled verb is disabled. */
+  title?: string;
   icon: ReactNode;
   onClick: () => void;
   disabled?: boolean;
@@ -51,16 +53,23 @@ export type OrderIconToolbarProps = {
   canDelete: boolean;
   canCopy: boolean;
   editable: boolean;
+  /**
+   * Set when this order may not be saved (`saveAllowed`): Tender and Save &
+   * Print both write it, so both are disabled, with this as the tooltip.
+   */
+  saveBlockedReason?: string;
 };
 
 export function OrderIconToolbar(props: OrderIconToolbarProps) {
+  const blocked = props.saveBlockedReason || undefined;
   const actions: OrderIconAction[] = [
     {
       key: "tender",
       label: "Advance / tender (F5)",
+      title: blocked,
       icon: <FiCreditCard />,
       onClick: props.onOpenTender,
-      disabled: !props.canTender,
+      disabled: !props.canTender || Boolean(blocked),
     },
     {
       key: "import",
@@ -97,7 +106,14 @@ export function OrderIconToolbar(props: OrderIconToolbarProps) {
       icon: <FiInfo />,
       onClick: props.onShowCost,
     },
-    { key: "print", label: "Save & print (F6)", icon: <FiPrinter />, onClick: props.onPrint },
+    {
+      key: "print",
+      label: "Save & print (F6)",
+      title: blocked,
+      icon: <FiPrinter />,
+      onClick: props.onPrint,
+      disabled: Boolean(blocked),
+    },
     {
       key: "clear",
       label: "Clear (F7)",
@@ -121,7 +137,7 @@ export function OrderIconToolbar(props: OrderIconToolbarProps) {
           key={action.key}
           type="button"
           className={cx(styles.iconButton, action.disabled && styles.iconButtonDisabled)}
-          title={action.label}
+          title={action.title ?? action.label}
           aria-label={action.label}
           disabled={action.disabled}
           onClick={action.onClick}

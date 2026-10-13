@@ -24,7 +24,7 @@ import {
   useAmendReceiptMutation,
   useCancelReceiptMutation,
   useDeleteReceiptDraftMutation,
-  usePostReceiptMutation,
+  useSaveAndPostReceiptMutation,
   useSaveReceiptDraftMutation,
 } from "@/store/api/receiptApi";
 import { receiptError, statusOf } from "../api-errors";
@@ -36,7 +36,7 @@ import { netAllocations } from "../domain/net-allocations";
 import { defaultTender, offerableTenders, tenderRowFrom } from "../domain/tenders";
 import { buildAmendPayload } from "../payload/build-amend";
 import { buildDraftPayload } from "../payload/build-draft";
-import { buildPostPayload } from "../payload/build-post";
+import { buildSaveAndPostPayload } from "../payload/build-save-and-post";
 import {
   applyCheques,
   parseDraftCreditMemo,
@@ -67,6 +67,10 @@ import {
   type DraftAction,
   type ReceiptDraft,
 } from "./draft";
+
+/** Save draft's refusal, and its greyed button's tooltip (Qt 6f15977). */
+export const NO_DRAFT_RIGHT_MESSAGE =
+  "You may post receipts but not keep drafts (no Create / Edit right).";
 
 /** `useReducer` over a reducer that also returns refusals. */
 function reducerWithRefusal(state: ReceiptDraft, action: DraftAction): ReceiptDraft {
@@ -99,7 +103,16 @@ export type UseReceiptDraftOptions = {
   /** The session's APP date, not `new Date()`. */
   appDate: string;
   settings: ReceiptSettings;
+  /**
+   * Any writing right at all — Create, Edit OR Post. Post alone is a writing
+   * right since notes 106: "Post without Create" means no DRAFTS, not no
+   * receipts (Qt `m_writeDenied`).
+   */
   canWrite: boolean;
+  /** `documentRights().mayPost` — Post, and Save & Post on a new receipt. */
+  mayPost: boolean;
+  /** `documentRights().maySaveDraft` — Create for a new draft, Edit for a saved one. */
+  maySaveDraft: (saved: boolean) => boolean;
   confirm: (request: ConfirmRequest) => Promise<boolean>;
   /** Returns the typed text, or null when the operator backed out. */
   prompt: (request: PromptRequest) => Promise<string | null>;
@@ -108,7 +121,7 @@ export type UseReceiptDraftOptions = {
 export type UseReceiptDraft = ReturnType<typeof useReceiptDraft>;
 
 export function useReceiptDraft(options: UseReceiptDraftOptions) {
-  const { scope, appDate, settings, canWrite, confirm, prompt } = options;
+  const { scope, appDate, settings, canWrite, mayPost, maySaveDraft, confirm, prompt } = options;
   const [draft, dispatch] = useReducer(
     reducerWithRefusal,
     undefined,
@@ -192,7 +205,7 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
     [storeDispatch],
   );
   const [saveDraftMutation] = useSaveReceiptDraftMutation();
-  const [postMutation] = usePostReceiptMutation();
+  const [saveAndPostMutation] = useSaveAndPostReceiptMutation();
   const [amendMutation] = useAmendReceiptMutation();
   const [cancelMutation] = useCancelReceiptMutation();
   const [deleteMutation] = useDeleteReceiptDraftMutation();
@@ -204,6 +217,35 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
   const masters = useMemo(
     () => offerableTenders(tenderMasters ?? [], draft.header.voucherDate || appDate),
     [tenderMasters, draft.header.voucherDate, appDate],
+  );
+
+  /**
+   * A row's master, for its surcharge. From EVERY master, not only the ones on
+   * offer today: a reopened draft's tender may have lapsed since, and its
+   * surcharge terms still describe the row it made.
+   */
+  const masterOf = useCallback(
+    (tenderId: string) => (tenderMasters ?? []).find((master) => master.tndId === tenderId) ?? null,
+    [tenderMasters],
+  );
+
+  /**
+   * The operator typed `amount` into an instrument — the figure for the BILLS.
+   * A UPI or card master with a surcharge makes the gross of it (200 at 1% →
+   * 202.02), so every amount reaches the row through here and never through
+   * a plain `SET_TENDER` (Qt `onTenderCellEdited`, 6f15977).
+   */
+  const setTenderAmount = useCallback(
+    (rowKey: string, amount: number) => {
+      const row = latest.current.tenders.find((tender) => tender.key === rowKey);
+      dispatch({
+        type: "SET_TENDER_AMOUNT",
+        rowKey,
+        amount,
+        master: row ? masterOf(row.tenderId) : null,
+      });
+    },
+    [masterOf],
   );
 
   const identity = useMemo(
@@ -245,7 +287,7 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
     const amount = pendingCollectAmount.current;
     if (amount !== null) {
       pendingCollectAmount.current = null;
-      dispatch({ type: "SET_TENDER", rowKey: row.key, patch: { amount } });
+      dispatch({ type: "SET_TENDER_AMOUNT", rowKey: row.key, amount, master });
     }
   }, [masters, draft.tenders.length, draft.header.voucherId]);
 
@@ -418,13 +460,13 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
       // writes — or held for the instrument the seeding effect is about to add.
       const first = latest.current.tenders[0];
       if (first) {
-        dispatch({ type: "SET_TENDER", rowKey: first.key, patch: { amount: receive } });
+        setTenderAmount(first.key, receive);
       } else {
         pendingCollectAmount.current = receive;
       }
       return receive;
     },
-    [appDate, confirm, loadParty, scope],
+    [appDate, confirm, loadParty, scope, setTenderAmount],
   );
 
   /** F5 — somebody may have posted against these bills meanwhile. */
@@ -611,8 +653,7 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
       userId: getAuthUserId() ?? "",
     });
     const payload = await saveDraftMutation(body).unwrap();
-    // `data.header.avhVoucherId`. Read one level shallower it is empty, and
-    // /post then complains about a UUID — pointing at the wrong route.
+    // `data.header.avhVoucherId` — read one level shallower it is empty.
     const voucherId = payload.header?.avhVoucherId ?? null;
     if (voucherId) {
       dispatch({ type: "SAVED", voucherId, status: payload.header.avhVoucherStatus });
@@ -655,6 +696,12 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
       toast.error("You do not have rights to save on this screen.");
       return false;
     }
+    // A draft on purpose needs Create (new) / Edit (saved). F5 reaches here
+    // past a greyed button, so the right is checked again.
+    if (!maySaveDraft(Boolean(latest.current.header.voucherId))) {
+      toast.warn(NO_DRAFT_RIGHT_MESSAGE);
+      return false;
+    }
     if (!reportProblems(validateBeforeSave(validationInput()))) {
       return false;
     }
@@ -671,12 +718,14 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
     } finally {
       setBusy("idle");
     }
-  }, [appDate, canWrite, persistDraft, reportProblems, scope, validationInput]);
+  }, [appDate, canWrite, maySaveDraft, persistDraft, reportProblems, scope, validationInput]);
 
   // ── Post ──────────────────────────────────────────────────────────────────
   const post = useCallback(async (): Promise<boolean> => {
-    if (!canWrite) {
-      toast.error("You do not have rights to post on this screen.");
+    // Ctrl+Enter reaches here past a greyed button, so the right is checked
+    // again. Post alone is enough — no Create needed (notes 106).
+    if (!canWrite || !mayPost) {
+      toast.error("You do not have the right to post receipts on this screen.");
       return false;
     }
     if (!reportProblems(validateBeforePost(validationInput()))) {
@@ -700,33 +749,29 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
       }
     }
 
+    // ── Post is ONE gesture and ONE call (notes 106) ─────────────────────────
+    // The draft body with the settlement APPLIED on top, plus `post: true`, to
+    // `/create`: saved and posted in one transaction. A reopened draft goes with
+    // its id and is updated AND posted. There is no approval in between — a
+    // DRAFT is already the unapproved state.
     setBusy("posting");
     try {
-      let voucherId = latest.current.header.voucherId;
-      if (latest.current.dirty || !voucherId) {
-        voucherId = await persistDraft();
-      }
-      if (!voucherId) {
-        // Refused HERE rather than letting /post say it: the fault is in the
-        // save, and a message naming `avhVoucherId` sends everyone to the
-        // wrong route.
-        toast.error("The draft has no id yet, so there is nothing to post. Save it again.");
-        return false;
-      }
       const after = latest.current;
-      const payload = await postMutation(
-        buildPostPayload({
-          header: { ...after.header, voucherId },
-          bills: after.bills,
-          credits: after.credits,
+      const payload = await saveAndPostMutation(
+        buildSaveAndPostPayload({
+          header: after.header,
           tenders: after.tenders,
           otherLines: after.otherLines,
+          bills: after.bills,
+          credits: after.credits,
+          userId: getAuthUserId() ?? "",
         }),
       ).unwrap();
 
-      // `data.header.avhVoucherRefno`. Read shallow, a receipt that HAD posted
-      // showed "Receipt  posted." and looked exactly like a failure.
-      const refno = payload.header?.avhVoucherRefno ?? "";
+      // The /post shape: the number is under `data.header`. Read shallow, a
+      // receipt that HAD posted showed "Receipt  posted." and looked exactly
+      // like a failure. `pdcVouchers` really is at data level.
+      const refno = payload.header?.avhVoucherRefno || payload.header?.avhVoucherNo || "";
       const pdcVouchers = payload.pdcVouchers ?? [];
       const notes: string[] = [`Receipt ${refno || "(unnumbered)"} posted.`];
       if (pdcVouchers.length > 0) {
@@ -740,17 +785,21 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
         notes.push(`${formatTotal(payload.totalOnAccount)} is on account as an advance.`);
       }
       toast.success(notes.join(" "));
+      // Then CLEAR, ready for the next one — the message has already named it.
       seededTender.current = false;
       dispatch({ type: "NEW_DOCUMENT", scope, voucherDate: appDate });
       return true;
     } catch (error) {
+      // Nothing to undo: the one transaction rolled back, so there is no draft
+      // to delete and the screen keeps everything keyed — a reopened draft
+      // keeps its id, a new receipt stays unsaved.
       if (statusOf(error) === 409) {
         // The server computed a different split. Showing BOTH is the
         // difference between a fixable disagreement and an argument with
         // support.
         toast.error(
           `${receiptError(error)} This screen made it ${formatTotal(figures.allocated)} ` +
-            `allocated and ${formatTotal(figures.onAccount)} on account. Press F5 to re-read ` +
+            `allocated and ${formatTotal(figures.onAccount)} on account. Press F6 to re-read ` +
             "the bills and try again.",
         );
       } else {
@@ -760,7 +809,16 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
     } finally {
       setBusy("idle");
     }
-  }, [appDate, canWrite, confirm, persistDraft, postMutation, reportProblems, scope, validationInput]);
+  }, [
+    appDate,
+    canWrite,
+    confirm,
+    mayPost,
+    reportProblems,
+    saveAndPostMutation,
+    scope,
+    validationInput,
+  ]);
 
   // ── Amend (R20) ───────────────────────────────────────────────────────────
   const beginAmend = useCallback(async () => {
@@ -1008,6 +1066,7 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
     setTempCreditMobile,
     setVoucherDate,
     reloadItems,
+    setTenderAmount,
     openByKeys,
     newDocument,
     runDuplicateCheck,

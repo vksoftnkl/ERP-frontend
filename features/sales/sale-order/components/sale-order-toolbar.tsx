@@ -13,6 +13,10 @@
  *    there.
  *  - **There is no Hold.** An order is saved, not parked; the quotation screen's
  *    F9/F10 have no counterpart here.
+ *
+ * Tender, Save and Save & Print answer to the document rights (`saveAllowed`):
+ * disabled, never hidden, with what is missing as the tooltip — the operator
+ * sees the verb exists and why it is not theirs.
  */
 import { cx } from "@/components/design-system/cx";
 import styles from "@/features/sales/quotation/page.module.scss";
@@ -29,6 +33,10 @@ export type SaleOrderToolbarProps = {
   canDelete: boolean;
   canCopyAsNew: boolean;
   canTender: boolean;
+  /** Whether this order may be saved at all — `saveAllowed`. */
+  saveAllowed: boolean;
+  /** Why not, when it may not; the three save verbs' tooltip. */
+  saveBlockedReason: string;
   onOpenTender: () => void;
   onSave: () => void;
   onSaveAndPrint: () => void;
@@ -51,6 +59,8 @@ export function SaleOrderToolbar(props: SaleOrderToolbarProps) {
     canDelete,
     canCopyAsNew,
     canTender,
+    saveAllowed,
+    saveBlockedReason,
     onOpenTender,
     onSave,
     onSaveAndPrint,
@@ -64,14 +74,15 @@ export function SaleOrderToolbar(props: SaleOrderToolbarProps) {
   } = props;
   const working = busy !== "idle";
   const editable = mode === "entry";
+  const blockedTitle = saveAllowed ? undefined : saveBlockedReason;
   return (
     <div className={styles.buttonBar}>
       {saveRoute === "tender" ? (
         <button
           type="button"
           className={styles.button}
-          disabled={working || !canTender}
-          title="Record the advance the customer is handing over, then save"
+          disabled={working || !canTender || !saveAllowed}
+          title={blockedTitle ?? "Record the advance the customer is handing over, then save"}
           onClick={onOpenTender}
         >
           Tender <span className={styles.buttonHint}>F5</span>
@@ -80,7 +91,8 @@ export function SaleOrderToolbar(props: SaleOrderToolbarProps) {
         <button
           type="button"
           className={styles.button}
-          disabled={working || !editable}
+          disabled={working || !editable || !saveAllowed}
+          title={blockedTitle}
           onClick={onSave}
         >
           {busy === "saving" ? "Saving…" : "Save"} <span className={styles.buttonHint}>F5</span>
@@ -89,7 +101,8 @@ export function SaleOrderToolbar(props: SaleOrderToolbarProps) {
       <button
         type="button"
         className={cx(styles.button, styles.buttonPrimary)}
-        disabled={working || !editable}
+        disabled={working || !editable || !saveAllowed}
+        title={blockedTitle}
         onClick={onSaveAndPrint}
       >
         {busy === "saving" ? "Saving…" : "Save & Print"} <span className={styles.buttonHint}>F6</span>

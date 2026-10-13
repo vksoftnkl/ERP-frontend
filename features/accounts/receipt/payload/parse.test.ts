@@ -285,6 +285,20 @@ describe("parseTenders", () => {
     parseTenders(wire);
     expect(wire.map((row) => row.tdRowNo)).toEqual([2, 1]);
   });
+
+  it("takes the server's surcharge, and what went to the bills is the gross less it", () => {
+    const [row] = parseTenders([tenderWire({ tdAmount: 202.02, tdSurchargeAmt: 2.02 })]);
+    expect(row).toMatchObject({ amount: 202.02, surchargeAmt: 2.02, forBills: 200 });
+    // Sent back as it came: on an editable master, leaving it out would let
+    // the server fall back to the master's flat amount.
+    expect(row.sendSurcharge).toBe(true);
+  });
+
+  it("reads a tender with no surcharge as one that sends none", () => {
+    const [row] = parseTenders([tenderWire({ tdAmount: 1000 })]);
+    expect(row).toMatchObject({ amount: 1000, forBills: 1000, surchargeAmt: 0 });
+    expect(row.sendSurcharge).toBe(false);
+  });
 });
 
 describe("applyCheques", () => {

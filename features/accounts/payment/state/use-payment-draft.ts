@@ -12,6 +12,7 @@
  */
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { getAuthUserId } from "@/lib/auth/session";
+import type { DocumentRights } from "@/lib/permissions/document-rights";
 import { useAppDispatch } from "@/store/hooks";
 import { toast } from "@/lib/notify";
 import { useGetTenderMastersQuery } from "@/store/api/saleOrderApi";
@@ -20,7 +21,7 @@ import {
   useAmendPaymentMutation,
   useCancelPaymentMutation,
   useDeletePaymentDraftMutation,
-  usePostPaymentMutation,
+  useSaveAndPostPaymentMutation,
   useSavePaymentDraftMutation,
 } from "@/store/api/paymentApi";
 import { receiptError as paymentError, statusOf } from "@/features/accounts/receipt/api-errors";
@@ -39,7 +40,7 @@ import { defaultPaymentTender, payableTenders, paymentTenderRowFrom } from "../d
 import {
   buildPaymentAmendPayload,
   buildPaymentDraftPayload,
-  buildPaymentPostPayload,
+  buildPaymentSaveAndPostPayload,
 } from "../payload/build";
 import {
   billSideOfApplied,
@@ -47,6 +48,7 @@ import {
   linesFromLegs,
   parsePaymentLines,
   parsePaymentTenders,
+  postedPaymentNotes,
 } from "../payload/parse";
 import type { PaymentKeys, PaymentPayload, PaymentScope, PaymentSettings } from "../payment.types";
 import {
@@ -60,6 +62,7 @@ import {
   isPaymentEditable,
   paidTotal,
   paymentDraftReducer,
+  saveDraftDenial,
   withSeeded,
   type PaymentDraft,
   type PaymentDraftAction,
@@ -87,7 +90,10 @@ export type UsePaymentDraftOptions = {
   scope: PaymentScope;
   appDate: string;
   settings: PaymentSettings;
+  /** Create, Edit or Post — any writing right opens the entry (Qt `m_writeDenied`). */
   canWrite: boolean;
+  /** Which verbs those rights allow: Save Draft and Post re-check them here. */
+  rights: DocumentRights;
   confirm: (request: ConfirmRequest) => Promise<boolean>;
   prompt: (request: PromptRequest) => Promise<string | null>;
 };
@@ -95,11 +101,15 @@ export type UsePaymentDraftOptions = {
 export type UsePaymentDraft = ReturnType<typeof usePaymentDraft>;
 
 export function usePaymentDraft(options: UsePaymentDraftOptions) {
-  const { scope, appDate, settings, canWrite, confirm, prompt } = options;
+  const { scope, appDate, settings, canWrite, rights, confirm, prompt } = options;
   const [draft, dispatch] = useReducer(reducerWithRefusal, undefined, () =>
     initialPaymentDraft(scope, appDate),
   );
   const [busy, setBusy] = useState<PaymentBusy>("idle");
+  // A write in flight (Qt `m_saving`). The keyboard reaches Save and Post
+  // without the buttons' busy gate, and a second post of a NEW payment while
+  // the first is out would be a second payment.
+  const writing = useRef(false);
 
   const latest = useRef(draft);
   useEffect(() => {
@@ -156,7 +166,7 @@ export function usePaymentDraft(options: UsePaymentDraftOptions) {
     [storeDispatch],
   );
   const [saveDraftMutation] = useSavePaymentDraftMutation();
-  const [postMutation] = usePostPaymentMutation();
+  const [saveAndPostMutation] = useSaveAndPostPaymentMutation();
   const [amendMutation] = useAmendPaymentMutation();
   const [cancelMutation] = useCancelPaymentMutation();
   const [deleteMutation] = useDeletePaymentDraftMutation();
@@ -486,16 +496,27 @@ export function usePaymentDraft(options: UsePaymentDraftOptions) {
 
   /** Save the draft and PUT IT DOWN — the next payment is not keyed on top of it. */
   const saveDraft = useCallback(async (): Promise<boolean> => {
+    if (writing.current) {
+      return false;
+    }
     if (!canWrite) {
       toast.error("You do not have rights to save on this screen.");
       return false;
     }
-    if (!isPaymentEditable(latest.current)) {
+    // A posted payment being corrected has no draft to go back to.
+    if (!isPaymentEditable(latest.current) || latest.current.amending) {
+      return false;
+    }
+    // Create is the draft right, Edit for a saved one — F5 too, not just the button.
+    const denied = saveDraftDenial(rights, Boolean(latest.current.header.voucherId));
+    if (denied) {
+      toast.warn(`${denied}.`);
       return false;
     }
     if (!reportProblems(validatePaymentBeforeSave(validationInput()))) {
       return false;
     }
+    writing.current = true;
     setBusy("saving");
     try {
       await persistDraft();
@@ -506,14 +527,34 @@ export function usePaymentDraft(options: UsePaymentDraftOptions) {
       toast.error(paymentError(error));
       return false;
     } finally {
+      writing.current = false;
       setBusy("idle");
     }
-  }, [canWrite, persistDraft, reportProblems, resetToNew, validationInput]);
+  }, [canWrite, persistDraft, reportProblems, resetToNew, rights, validationInput]);
 
   // ── Post ──────────────────────────────────────────────────────────────────
+  /**
+   * Post is ONE call (notes 106): `/payments/create` with `post: true` saves
+   * and posts in one transaction, judged on the Post right alone — so a
+   * Post-only user posts a NEW payment this way too. A refusal rolls the whole
+   * thing back and leaves NOTHING on the server (no draft to delete again, no
+   * id to forget), so the screen keeps every line as keyed for the operator
+   * to correct.
+   */
   const post = useCallback(async (): Promise<boolean> => {
+    if (writing.current) {
+      return false;
+    }
     if (!canWrite) {
       toast.error("You do not have rights to post on this screen.");
+      return false;
+    }
+    if (!isPaymentEditable(latest.current) || latest.current.amending) {
+      return false;
+    }
+    // Post is the Post right (Qt, 2026-10-12); the amend has its own verb below.
+    if (!rights.mayPost) {
+      toast.warn("You may not post payments on this screen (no Post right).");
       return false;
     }
     if (!reportProblems(validatePaymentBeforePost(validationInput()))) {
@@ -542,48 +583,33 @@ export function usePaymentDraft(options: UsePaymentDraftOptions) {
         return false;
       }
     }
+    // The dialog awaited: a second Post may have gone out meanwhile.
+    if (writing.current) {
+      return false;
+    }
 
+    writing.current = true;
     setBusy("posting");
     try {
-      let voucherId = latest.current.header.voucherId;
-      if (latest.current.dirty || !voucherId) {
-        voucherId = await persistDraft();
-      }
-      if (!voucherId) {
-        toast.error("The draft has no id yet, so there is nothing to post. Save it again.");
-        return false;
-      }
-      const after = latest.current;
-      const payload = await postMutation(
-        buildPaymentPostPayload({
-          header: { ...after.header, voucherId },
-          bills: after.bills,
-          credits: after.credits,
-          tenders: after.tenders,
-          lines: after.lines,
+      // What was validated and confirmed is what is sent.
+      const payload = await saveAndPostMutation(
+        buildPaymentSaveAndPostPayload({
+          header: current.header,
+          tenders: current.tenders,
+          lines: current.lines,
+          bills: current.bills,
+          credits: current.credits,
           userId: getAuthUserId() ?? "",
         }),
       ).unwrap();
 
-      const refno = payload.header?.avhVoucherRefno ?? "";
-      const notes: string[] = [`Payment ${refno || "(unnumbered)"} posted.`];
-      for (const cheque of payload.cheques ?? []) {
-        notes.push(
-          `Row ${cheque.tdRowNo}: cheque leaf ${cheque.leaf}` +
-            `${cheque.bookNo ? ` from book ${cheque.bookNo}` : ""}.`,
-        );
+      // The id is adopted (a NEW payment got one only now), though the screen
+      // is cleared straight after: the message below has already named it.
+      const voucherId = payload.header?.avhVoucherId;
+      if (voucherId) {
+        dispatch({ type: "SAVED", voucherId, status: "POSTED" });
       }
-      const pdcCount = (payload.pdcVouchers ?? []).length;
-      if (pdcCount > 0) {
-        notes.push(
-          `${pdcCount} post-dated cheque(s) got their own voucher — the bills they cover settle ` +
-            "on the cheque's date.",
-        );
-      }
-      if (payload.totalOnAccount > 0) {
-        notes.push(`${formatTotal(payload.totalOnAccount)} is on account as an advance.`);
-      }
-      toast.success(notes.join(" "));
+      toast.success(postedPaymentNotes(payload).join(" "));
       resetToNew();
       return true;
     } catch (error) {
@@ -600,9 +626,18 @@ export function usePaymentDraft(options: UsePaymentDraftOptions) {
       }
       return false;
     } finally {
+      writing.current = false;
       setBusy("idle");
     }
-  }, [canWrite, confirm, persistDraft, postMutation, reportProblems, resetToNew, validationInput]);
+  }, [
+    canWrite,
+    confirm,
+    reportProblems,
+    resetToNew,
+    rights,
+    saveAndPostMutation,
+    validationInput,
+  ]);
 
   // ── Amend ─────────────────────────────────────────────────────────────────
   const beginAmend = useCallback(async () => {
@@ -654,6 +689,9 @@ export function usePaymentDraft(options: UsePaymentDraftOptions) {
   }, [confirm, fetchOpenItems]);
 
   const saveAmend = useCallback(async (): Promise<boolean> => {
+    if (writing.current || !latest.current.amending) {
+      return false;
+    }
     if (!reportProblems(validatePaymentBeforePost(validationInput()))) {
       return false;
     }
@@ -664,9 +702,10 @@ export function usePaymentDraft(options: UsePaymentDraftOptions) {
         "It goes on the status log and on every audit row the correction writes.",
       placeholder: "e.g. cheque number keyed wrong",
     });
-    if (!remark || !remark.trim()) {
+    if (!remark || !remark.trim() || writing.current) {
       return false;
     }
+    writing.current = true;
     setBusy("saving");
     try {
       const current = latest.current;
@@ -698,6 +737,7 @@ export function usePaymentDraft(options: UsePaymentDraftOptions) {
       }
       return false;
     } finally {
+      writing.current = false;
       setBusy("idle");
     }
   }, [amendMutation, prompt, reportProblems, resetToNew, validationInput]);

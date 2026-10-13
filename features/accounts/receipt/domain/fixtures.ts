@@ -69,6 +69,10 @@ export function aCredit(partial: Partial<CreditRow> = {}): CreditRow {
 }
 
 export function aTender(partial: Partial<TenderRow> = {}): TenderRow {
+  // A tender that charges nothing unless told otherwise: what went to the bills
+  // is the amount less whatever surcharge the test put on it.
+  const amount = partial.amount ?? 0;
+  const surchargeAmt = partial.surchargeAmt ?? 0;
   return {
     key: nextId("tender"),
     tdId: null,
@@ -76,7 +80,10 @@ export function aTender(partial: Partial<TenderRow> = {}): TenderRow {
     tenderTypeId: 1,
     tenderName: "Cash",
     tenderLedgerId: "led-cash",
-    amount: 0,
+    amount,
+    forBills: Math.round((amount - surchargeAmt) * 100) / 100,
+    surchargeAmt,
+    sendSurcharge: false,
     receivedAmt: 0,
     changeAmt: 0,
     mdrAmt: 0,

@@ -27,6 +27,7 @@ import {
 } from "@/features/sales/sale-order/tender/instruments";
 import { isTenderUsable, typeDefaultsOf } from "@/features/sales/sale-order/tender/rows";
 import type { TenderRow } from "../receipt.types";
+import { applySurcharge, surchargeTermsOf } from "./surcharge";
 
 export { isPdc };
 
@@ -104,6 +105,9 @@ export function tenderRowFrom(master: TenderMasterRow): TenderRow {
     tenderName: master.tndName,
     tenderLedgerId: master.tndLedgerId || null,
     amount: 0,
+    forBills: 0,
+    surchargeAmt: 0,
+    sendSurcharge: false,
     receivedAmt: 0,
     changeAmt: 0,
     mdrAmt: 0,
@@ -123,12 +127,15 @@ export function tenderRowFrom(master: TenderMasterRow): TenderRow {
  * tender that hands out no change loses received/change. Carrying them over
  * would send a cheque date on a cash row, which the server has every right to
  * refuse and which nobody typed.
+ *
+ * The figure for the BILLS moves with it and the gross is re-derived: 200 on
+ * cash becomes 202.02 on a 1% UPI, and back to 200 on cash again.
  */
 export function retargetTender(row: TenderRow, master: TenderMasterRow): TenderRow {
   const typeId = Number.parseInt(master.tndTypeId, 10) || 0;
   const cheque = isChequeTender(typeId);
   const change = givesChangeOn(master);
-  return {
+  const moved: TenderRow = {
     ...row,
     tenderId: master.tndId,
     tenderTypeId: typeId,
@@ -140,4 +147,13 @@ export function retargetTender(row: TenderRow, master: TenderMasterRow): TenderR
     receivedAmt: change ? row.receivedAmt : 0,
     changeAmt: change ? row.changeAmt : 0,
   };
+  return applySurcharge(moved, surchargeTermsOf(master));
+}
+
+/**
+ * A row on `master` carrying `typed` for the bills — the Amount box's first
+ * instrument, and a role line converted back into an instrument.
+ */
+export function tenderRowWithAmount(master: TenderMasterRow, typed: number): TenderRow {
+  return applySurcharge(tenderRowFrom(master), surchargeTermsOf(master), typed);
 }

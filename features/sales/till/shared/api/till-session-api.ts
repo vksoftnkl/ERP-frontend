@@ -30,6 +30,9 @@ import type {
   TillSessionPayload,
   TillSlipCheckPayload,
   TillSlipCheckResult,
+  TillApprovableTreatment,
+  TillVarianceDecision,
+  TillVarianceDecisionResult,
 } from "../wire/types";
 
 type Params = Record<string, string | number | boolean | undefined>;
@@ -112,7 +115,26 @@ export type TillMovementBody = TillSessionKey & {
   partyName?: string | null;
   bagNo?: string | null;
   sealNo?: string | null;
+  /**
+   * Notes 108 — PICKUP, and a TOP_UP the session's own cashier does not bring:
+   * the session cashier's till PIN, typed by them on this screen (they witness
+   * it). Sent only when there is a witness.
+   */
+  witnessPin?: string;
   notes: string | null;
+};
+
+/** `DecideTillVarianceDto`: on a PENDING_APPROVAL session, by an approver who is not its cashier. */
+export type TillDecideVarianceBody = TillSessionKey & {
+  decision: TillVarianceDecision;
+  /** APPROVE only. */
+  treatment?: TillApprovableTreatment | null;
+  /** APPROVE only: a till_reason of category VARIANCE (cash gap) or NONCASH (slip gap). */
+  reasonId?: string | null;
+  /** Required (trimmed, ≤ 500). */
+  note: string;
+  /** The approver's till PIN — required on a COUNTER channel rule; on EITHER it stands in for remote authority. */
+  approverPin?: string | null;
 };
 
 export type TillSessionClient = {
@@ -126,6 +148,8 @@ export type TillSessionClient = {
   endBilling: (key: TillSessionKey) => Promise<TillSessionPayload>;
   count: (body: TillCountBody) => Promise<TillCountResult>;
   close: (body: TillCloseBody) => Promise<TillSessionPayload>;
+  /** Notes 105 A: APPROVE the PENDING variances with a treatment, or send the session back for a RECOUNT. */
+  decideVariance: (body: TillDecideVarianceBody) => Promise<TillVarianceDecisionResult>;
   slipCheckRows: (key: TillSessionKey, tenderId: string) => Promise<TillSlipCheckPayload>;
   slipCheckRecord: (body: TillSlipCheckBody) => Promise<TillSlipCheckResult>;
   createMovement: (body: TillMovementBody) => Promise<TillMovementDetail>;
@@ -147,6 +171,7 @@ export function createTillSessionClient(dispatch: AppDispatch): TillSessionClien
     endBilling: (key) => write(dispatch, "/till/sessions/end-billing", { ...key, outboxCount: 0 }),
     count: (body) => write(dispatch, "/till/sessions/count", body),
     close: (body) => write(dispatch, "/till/sessions/close", body),
+    decideVariance: (body) => write(dispatch, "/till/sessions/decide-variance", body),
     slipCheckRows: (key, tenderId) => read(dispatch, "/till/sessions/slip-check", { ...keyParams(key), tenderId }),
     slipCheckRecord: (body) => write(dispatch, "/till/sessions/slip-check", body),
     createMovement: (body) => write(dispatch, "/till/movements/create", body),

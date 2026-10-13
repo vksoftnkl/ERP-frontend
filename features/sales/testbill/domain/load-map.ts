@@ -328,7 +328,6 @@ export function parseLoadedBill(
     isNewEntry: false,
     isDeleted: payload.sbIsDeleted === true || Boolean(payload.sbCancelledOn),
     amending: false,
-    draftFromAutoPost: false,
     // Read, never computed (§17.2). A save response of an older build carries
     // none of these; the screen then treats the bill as it would a new one.
     rights: rightsOf(payload.rights),

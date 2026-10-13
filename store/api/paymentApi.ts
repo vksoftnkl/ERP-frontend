@@ -8,6 +8,10 @@
  * is corrected by `/amend` under its optimistic lock, and the PDC sweep, which
  * the receipt's sweep already runs for payments too.
  *
+ * Post is ONE call (notes 106): `/payments/create` with `post: true` saves
+ * and posts in one transaction and answers what `/payments/post` answers, so
+ * `/payments/post` itself is not called — a refusal leaves no draft behind.
+ *
  * Two reads are shared with the receipt rather than repeated: the party's
  * contact (`/account-ledger-masters/get`) and F7's settlement history (grid
  * 112, which reads `acc_bill_adjustment` whichever side the bill is on).
@@ -36,7 +40,7 @@ import type {
   PaymentPartyContextPayload,
   PaymentPayload,
   PaymentPostPayload,
-  PostPaymentBody,
+  SaveAndPostPaymentBody,
   SaveDraftPaymentBody,
 } from "@/features/accounts/payment/payment.types";
 
@@ -44,7 +48,6 @@ const OPEN_ITEMS_ENDPOINT = "/payments/open-items";
 const PARTY_CONTEXT_ENDPOINT = "/payments/party-context";
 const GET_ENDPOINT = "/payments/get";
 const CREATE_ENDPOINT = "/payments/create";
-const POST_ENDPOINT = "/payments/post";
 const AMEND_ENDPOINT = "/payments/amend";
 const CANCEL_ENDPOINT = "/payments/cancel";
 const DELETE_ENDPOINT = "/payments/delete";
@@ -131,9 +134,13 @@ export const paymentApi = baseApi.injectEndpoints({
       invalidatesTags: ["Payment"],
     }),
 
-    /** Post it. The number is at `data.header`; `cheques[]` is the leaves taken. */
-    postPayment: builder.mutation<PaymentPostPayload, PostPaymentBody>({
-      query: (body) => ({ url: POST_ENDPOINT, method: "POST", body }),
+    /**
+     * Save AND post in one transaction — `/create` with `post: true`. Answers
+     * the `/post` shape: the number at `data.header`, `cheques[]` the leaves
+     * taken. A refusal writes nothing.
+     */
+    saveAndPostPayment: builder.mutation<PaymentPostPayload, SaveAndPostPaymentBody>({
+      query: (body) => ({ url: CREATE_ENDPOINT, method: "POST", body }),
       transformResponse: (payload: ApiSuccessResponse<PaymentPostPayload>) => payload.data,
       invalidatesTags: ["Payment"],
     }),
@@ -259,7 +266,7 @@ export const paymentApi = baseApi.injectEndpoints({
 
 export const {
   useSavePaymentDraftMutation,
-  usePostPaymentMutation,
+  useSaveAndPostPaymentMutation,
   useAmendPaymentMutation,
   useCancelPaymentMutation,
   useDeletePaymentDraftMutation,

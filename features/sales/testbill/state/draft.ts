@@ -307,40 +307,6 @@ const saleBillSlice = createSlice({
       return applyBillLifecycle(state as SaleBillDraft, action.payload);
     },
     /**
-     * A NEW bill's first `/create` answered (§17.5 step 4): adopt the key and
-     * the number so a retry UPDATES instead of duplicating — the missing id was
-     * the duplicate-bill cause. `draftFromAutoPost` marks the draft as one a
-     * refused post must delete again.
-     */
-    draftAdopted(
-      state,
-      action: PayloadAction<{ payload: BillPayload; fromAutoPost: boolean }>,
-    ) {
-      const { payload, fromAutoPost } = action.payload;
-      state.docId = payload.sbId;
-      state.billRefno = payload.sbBillRefno ?? state.billRefno;
-      state.billSlno = payload.sbBillSlno ?? state.billSlno;
-      state.status = "DRAFT";
-      state.versionNo = payload.sbVersionNo ?? state.versionNo;
-      state.revisionNo = payload.sbRevisionNo ?? state.revisionNo;
-      state.isNewEntry = false;
-      state.draftFromAutoPost = fromAutoPost;
-    },
-    /** A refused auto-post deleted its draft (§17.6): an unsaved bill again. */
-    draftDisowned(state) {
-      state.docId = null;
-      state.billRefno = "";
-      state.billSlno = "";
-      state.status = "DRAFT";
-      state.versionNo = 0;
-      state.revisionNo = 0;
-      state.isNewEntry = true;
-      state.draftFromAutoPost = false;
-      state.lines = state.lines.map((line) => ({ ...line, sbiId: null }));
-      state.charges = state.charges.map((row) => ({ ...row, cdId: null }));
-      state.tenders = state.tenders.map((row) => ({ ...row, tdId: null }));
-    },
-    /**
      * What the server said (§16). Replaced whole; the override ticks are kept
      * only for codes the NEW answer still raises as overridable, and only while
      * the user holds the right (rule 4).
@@ -960,8 +926,6 @@ export const {
   termsFieldSet,
   statusSet,
   lifecycleApplied,
-  draftAdopted,
-  draftDisowned,
   notesSet,
   notesCleared,
   overrideToggled,
@@ -1026,11 +990,8 @@ const NON_EDIT_ACTIONS = new Set<string>([
   // below would otherwise stamp it back to dirty on every successful save.
   saveResponseApplied.type,
   // None of the lifecycle bookkeeping is an operator edit: what the server said
-  // about the bill, and adopting the id it handed back, leave the document as
-  // the operator keyed it.
+  // about the bill leaves the document as the operator keyed it.
   lifecycleApplied.type,
-  draftAdopted.type,
-  draftDisowned.type,
   notesSet.type,
   notesCleared.type,
   overrideToggled.type,

@@ -443,6 +443,21 @@ export function buildSavePayload(
   };
 }
 
+/**
+ * The save's success message. CONFIRMED in the answer is the one-call confirm
+ * (notes 106): a refusal saves nothing, so success there means confirmed, not
+ * saved — and the operator hears that.
+ */
+export function savedOrderMessage(
+  saved: Pick<SaleOrderPayload, "soOrderRefno" | "soStatus">,
+): string {
+  const refno = (saved.soOrderRefno ?? "").trim();
+  if ((saved.soStatus ?? "").trim().toUpperCase() === "CONFIRMED") {
+    return refno ? `Order ${refno} confirmed.` : "Order confirmed.";
+  }
+  return refno ? `Order ${refno} saved successfully.` : "Order saved successfully.";
+}
+
 // ---------------------------------------------------------------------------
 // Load
 // ---------------------------------------------------------------------------

@@ -88,6 +88,7 @@ import {
 import { rateWarning } from "@/features/sales/quotation/quotation.validate";
 import quotationStyles from "@/features/sales/quotation/page.module.scss";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
+import { documentRights } from "@/lib/permissions/document-rights";
 import {
   chargeFieldSet,
   chargeMasterApplied,
@@ -148,7 +149,7 @@ import {
 import { SaleBillToolbar } from "@/features/sales/testbill/components/verb-bar";
 import { AmendRemarkPrompt, CancelBillPrompt, CancelLinePrompt } from "@/features/sales/testbill/components/cancel-prompts";
 import { ValidationPopup, WarningStrip } from "@/features/sales/testbill/components/warning-strip";
-import { verbState } from "@/features/sales/testbill/state/verbs";
+import { NO_DRAFTS_MESSAGE, draftSaveRefused, verbState } from "@/features/sales/testbill/state/verbs";
 import styles from "@/features/sales/testbill/page.module.scss";
 import { useUiTableId } from "@/lib/ui-tables";
 
@@ -240,7 +241,13 @@ export function SaleBillScreen({
   );
 
   const { permissions: menuPermissions } = usePagePermissions();
-  const canSaveDoc = draft.docId ? menuPermissions.canEdit : menuPermissions.canCreate;
+  const rights = useMemo(() => documentRights(menuPermissions), [menuPermissions]);
+  // A saved bill opens for change with Edit; a new one is keyed with Create OR
+  // Post — a user who only posts still bills, through Post ("Post without
+  // Create = no drafts").
+  const canSaveDoc = draft.docId ? menuPermissions.canEdit : rights.mayStartNew;
+  /** A plain Save writes a DRAFT: Create for a new bill, Edit for a saved one. */
+  const maySaveDraft = rights.maySaveDraft(Boolean(draft.docId));
   const editable = draft.mode === "entry" && !draft.isDeleted && canSaveDoc;
   /** Import lock (§7.7): a bill with a source document, unless the setting allows the change. */
   const customerLocked = Boolean(draft.source) && !api.settings.allowCustomerChangeOnImport;
@@ -795,14 +802,20 @@ export function SaleBillScreen({
         toast.error("You do not have permission to save bills on this screen.");
         return;
       }
+      // A plain Save is a DRAFT, only for a user who may keep one. F5 and the
+      // tender dialog's OK reach here without the (greyed) button.
+      if (draftSaveRefused({ autoPost: api.autoPost, amending: draft.amending, maySaveDraft })) {
+        toast.warn(NO_DRAFTS_MESSAGE);
+        return;
+      }
       const print = options.print === true;
       const outcome = await api.save({ confirmed: options.confirmed, print });
       handleOutcome(outcome, () => void runSave({ confirmed: true, print }), print);
     },
-    [api, canSaveDoc, handleOutcome],
+    [api, canSaveDoc, draft.amending, handleOutcome, maySaveDraft],
   );
 
-  /** Post (F6, Ctrl+Enter, Ctrl+Shift+Enter): create → validate → confirm → post (§17.5). */
+  /** Post (F6, Ctrl+Enter, Ctrl+Shift+Enter): validate → confirm → save and post in one call (§17.5). */
   const runPost = useCallback(
     async (options: { confirmed?: boolean; print: boolean }) => {
       if (!canSaveDoc) {
@@ -946,6 +959,7 @@ export function SaleBillScreen({
         locks: draft.locks,
         canEditScreen: !draft.isDeleted && menuPermissions.canEdit,
         canDeleteScreen: menuPermissions.canDelete,
+        maySaveDraft,
       }),
     [
       api.autoPost,
@@ -956,6 +970,7 @@ export function SaleBillScreen({
       draft.rights,
       draft.status,
       editable,
+      maySaveDraft,
       menuPermissions.canDelete,
       menuPermissions.canEdit,
       tenderRoute,

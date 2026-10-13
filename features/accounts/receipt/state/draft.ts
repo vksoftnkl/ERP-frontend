@@ -31,7 +31,8 @@ import {
 import { toPaise } from "../domain/money";
 import { rebuildSeededLines, seededRemovalMessage } from "../domain/seeded-lines";
 import { defaultsForRole } from "../domain/roles";
-import { retargetTender, tenderRowFrom } from "../domain/tenders";
+import { applySurcharge, surchargeTermsOf, typedAmountOf } from "../domain/surcharge";
+import { retargetTender, tenderRowFrom, tenderRowWithAmount } from "../domain/tenders";
 import {
   emptyPartyFacts,
   parseOpenBills,
@@ -54,6 +55,15 @@ import type {
 import type { Problem } from "../validate";
 
 export type BillMoneyColumn = "receive" | "discount" | "writeOff" | "roundOff";
+
+/**
+ * The four fields `domain/surcharge.ts` keeps in step with each other. A plain
+ * `SET_TENDER` may not touch them: an amount written past the surcharge would
+ * leave the gross, the figure for the bills and the SURCHARGE_RECOVERED line
+ * disagreeing — and the server refuses that receipt.
+ */
+type TenderMoneyField = "amount" | "forBills" | "surchargeAmt" | "sendSurcharge";
+export type TenderPatch = Partial<Omit<TenderRow, TenderMoneyField>>;
 
 export type ReceiptDraft = {
   header: ReceiptHeaderDraft;
@@ -140,7 +150,13 @@ export type DraftAction =
    * one gesture — the row would not exist yet for a second action to find. */
   | { type: "ADD_TENDER"; master: TenderMasterRow; amount?: number }
   | { type: "REMOVE_ROW"; rowKey: string }
-  | { type: "SET_TENDER"; rowKey: string; patch: Partial<TenderRow> }
+  | { type: "SET_TENDER"; rowKey: string; patch: TenderPatch }
+  /**
+   * The operator typed `amount` into an instrument — the figure for the BILLS.
+   * `master` is the row's tender master (null if it is not on offer), whose
+   * surcharge is added ON TOP to make the gross (Qt 6f15977).
+   */
+  | { type: "SET_TENDER_AMOUNT"; rowKey: string; amount: number; master: TenderMasterRow | null }
   | { type: "RETARGET_TENDER"; rowKey: string; master: TenderMasterRow }
   /** The Type picker chose the other kind of row. */
   | { type: "CONVERT_TO_LINE"; rowKey: string; role: ReceiptRole }
@@ -385,16 +401,17 @@ export function draftReducer(state: ReceiptDraft, action: DraftAction): DraftRes
       if (!isEditable(state)) {
         return { draft: state };
       }
-      const row = tenderRowFrom(action.master);
+      const row =
+        action.amount === undefined
+          ? tenderRowFrom(action.master)
+          : tenderRowWithAmount(action.master, action.amount);
+      // Seeded: a row added WITH an amount may carry a surcharge already.
       return {
-        draft: {
+        draft: withSeeded({
           ...state,
-          tenders: [
-            ...state.tenders,
-            action.amount === undefined ? row : { ...row, amount: action.amount },
-          ],
+          tenders: [...state.tenders, row],
           dirty: true,
-        },
+        }),
       };
     }
 
@@ -439,6 +456,18 @@ export function draftReducer(state: ReceiptDraft, action: DraftAction): DraftRes
       return { draft: withSeeded({ ...state, tenders, dirty: true }) };
     }
 
+    case "SET_TENDER_AMOUNT": {
+      if (!isEditable(state)) {
+        return { draft: state };
+      }
+      const terms = surchargeTermsOf(action.master);
+      const tenders = state.tenders.map((tender) =>
+        tender.key === action.rowKey ? applySurcharge(tender, terms, action.amount) : tender,
+      );
+      // The surcharge moves SURCHARGE_RECOVERED with the amount.
+      return { draft: withSeeded({ ...state, tenders, dirty: true }) };
+    }
+
     case "RETARGET_TENDER": {
       if (!isEditable(state)) {
         return { draft: state };
@@ -459,14 +488,16 @@ export function draftReducer(state: ReceiptDraft, action: DraftAction): DraftRes
       }
       const defaults = defaultsForRole(action.role);
       // The amount follows the row: the operator has said "this 1,400 is a
-      // TDS, not a cheque", not "start again".
+      // TDS, not a cheque", not "start again". The figure they TYPED, not the
+      // gross a surcharged tender made of it — the surcharge goes with the
+      // instrument.
       const line: OtherLineRow = {
         key: `${tender.key}-as-line`,
         role: action.role,
         ledgerId: null,
         ledgerName: "",
         drCr: defaults.drCr,
-        amount: tender.amount,
+        amount: typedAmountOf(tender),
         settlesBill: defaults.settlesBill,
         narration: "",
         seeded: false,
@@ -497,7 +528,7 @@ export function draftReducer(state: ReceiptDraft, action: DraftAction): DraftRes
           refusal: { message: seededRemovalMessage(line.role ?? "TDS_RECEIVABLE") },
         };
       }
-      const tender = { ...tenderRowFrom(action.master), amount: line.amount };
+      const tender = tenderRowWithAmount(action.master, line.amount);
       return {
         draft: withSeeded({
           ...state,

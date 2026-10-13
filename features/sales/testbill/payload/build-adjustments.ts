@@ -36,8 +36,9 @@ export function adjustmentDto(
  * The `adjustments[]` the lifecycle verbs carry, or `undefined` when the key
  * must be OMITTED (§14.4): absent means "leave them", `[]` means "reverse every
  * set-off". Draft set-offs are not stored server-side, so they ride again on
- * `/post` and `/amend` — without them the server picks the party's oldest
- * credits instead of the ones the operator chose.
+ * the post (`/create` with `post: true`) and `/amend` — without them the
+ * server picks the party's oldest credits instead of the ones the operator
+ * chose.
  */
 export function adjustmentsForWire(draft: SaleBillDraft): SaveBillAdjustmentDto[] | undefined {
   if (!draft.adjustmentsTouched) {

@@ -218,7 +218,6 @@ export function createBillDraft(context: BillDraftContext): SaleBillDraft {
     isNewEntry: true,
     isDeleted: false,
     amending: false,
-    draftFromAutoPost: false,
     rights: null,
     locks: null,
     posting: null,
@@ -674,7 +673,6 @@ export function copyBillDraftAsNew(
     // A copy is a NEW bill: nothing the server said about the old one — its
     // rights, its locks, its posting, its notes — applies (§17.10).
     amending: false,
-    draftFromAutoPost: false,
     rights: null,
     locks: null,
     posting: null,

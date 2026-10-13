@@ -24,6 +24,7 @@ import { useBusinessContext } from "@/components/layout/business-context";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { toast } from "@/lib/notify";
+import { documentRights } from "@/lib/permissions/document-rights";
 import { useUiTableId } from "@/lib/ui-tables";
 import { todayIso } from "@/features/sales/quotation/quotation.utils";
 import { useGetQuotationGridLayoutQuery } from "@/store/api/quotationApi";
@@ -42,12 +43,19 @@ import {
 } from "@/store/api/receiptApi";
 import { resolveBillColumns, resolveTenderColumns } from "./columns";
 import { RECEIPT_FIELD_ATTR, advanceReceiptField, focusReceiptField } from "./focus-walk";
+import { forBillsTotal } from "./domain/surcharge";
 import { defaultTender } from "./domain/tenders";
 import type { ChequeExtras, ReceiptKeys, ReceiptScope } from "./receipt.types";
 import { receivedTotal } from "./state/draft";
+import { AmountInput } from "./components/amount-input";
 import type { TempCreditCollect } from "./domain/collect";
 import type { PartyHandoff } from "@/lib/navigation/party-handoff";
-import { useReceiptDraft, type ConfirmRequest, type PromptRequest } from "./state/use-receipt-draft";
+import {
+  NO_DRAFT_RIGHT_MESSAGE,
+  useReceiptDraft,
+  type ConfirmRequest,
+  type PromptRequest,
+} from "./state/use-receipt-draft";
 import { useReceiptSettings } from "./state/use-receipt-settings";
 import { ApproverDialog } from "./components/approver-dialog";
 import { BillsGrid } from "./components/bills-grid";
@@ -139,8 +147,19 @@ export default function ReceiptScreen({ initialKeys, onBackToList, collect, open
    * right because its dialog had no menu id yet, so while the menu is loading
    * the screen renders read-only rather than locked, and the server stays the
    * authority.
+   *
+   * Post counts as a write (Qt 6f15977): Post without Create is "no drafts",
+   * not "no receipts" — Save & Post makes a new receipt in one call (notes 106)
+   * and Save Draft greys on its own. The rule itself is `documentRights`'.
    */
-  const canWrite = !permissionsLoading && permissions.canEdit;
+  const rights = useMemo(() => documentRights(permissions), [permissions]);
+  const canWrite =
+    !permissionsLoading && (permissions.canCreate || permissions.canEdit || rights.mayPost);
+  const mayPost = !permissionsLoading && rights.mayPost;
+  const maySaveDraft = useCallback(
+    (saved: boolean) => !permissionsLoading && rights.maySaveDraft(saved),
+    [permissionsLoading, rights],
+  );
 
   const settings = useReceiptSettings(scope.companyId, scope.branchId);
 
@@ -165,6 +184,8 @@ export default function ReceiptScreen({ initialKeys, onBackToList, collect, open
     appDate: todayIso(),
     settings,
     canWrite,
+    mayPost,
+    maySaveDraft,
     confirm,
     prompt,
   });
@@ -312,11 +333,14 @@ export default function ReceiptScreen({ initialKeys, onBackToList, collect, open
    * a tender, and `td_tender_ledger_id` is what the posting engine debits.
    * Splitting it across cash and a cheque is done in the grid below.
    */
+  const setTenderAmount = api.setTenderAmount;
   const setReceivedAmount = useCallback(
     (amount: number) => {
       const first = draft.tenders[0];
       if (first) {
-        dispatch({ type: "SET_TENDER", rowKey: first.key, patch: { amount } });
+        // Through the surcharge, as a typed cell is: the figure is what goes
+        // to the bills, and a UPI / card surcharge is added on top.
+        setTenderAmount(first.key, amount);
         return;
       }
       const master = defaultTender(masters);
@@ -328,7 +352,7 @@ export default function ReceiptScreen({ initialKeys, onBackToList, collect, open
       // does not exist until this one has been applied.
       dispatch({ type: "ADD_TENDER", master, amount });
     },
-    [dispatch, draft.tenders, masters],
+    [dispatch, draft.tenders, masters, setTenderAmount],
   );
 
   // ── Opened by the Temp Credits register, to collect one ──────────────────
@@ -394,13 +418,26 @@ export default function ReceiptScreen({ initialKeys, onBackToList, collect, open
    * Post, then print. There IS no print pipeline for a receipt yet, so it
    * posts and says so: a button that silently does half of what it promises is
    * worse than one that reports the half it did.
+   *
+   * Restating a posted receipt is a different verb behind the same key: while
+   * amending, Ctrl+Enter saves the amend (Qt `post()` → `sendAmend()`) rather
+   * than sending a POSTED receipt to `/create`, which refuses it.
    */
+  const amending = draft.amending;
   const postAndPrint = useCallback(async () => {
+    // Ctrl+Enter reaches here past a greyed button: one send at a time.
+    if (busy !== "idle") {
+      return;
+    }
+    if (amending) {
+      await api.saveAmend();
+      return;
+    }
     const posted = await api.post();
     if (posted) {
       toast.info("Printing is not available from this screen yet.");
     }
-  }, [api]);
+  }, [amending, api, busy]);
 
   const closeScreen = useCallback(() => {
     void (async () => {
@@ -595,8 +632,16 @@ export default function ReceiptScreen({ initialKeys, onBackToList, collect, open
   const canAmend =
     settings.allowPostedAmend && draft.header.status === "POSTED" && !draft.amending && canWrite;
 
+  // Post itself needs the Post right; the amend is its own verb, untouched.
   const postDisabled =
-    !canWrite || !identity.balances || busy !== "idle" || (!editable && !draft.amending);
+    !canWrite ||
+    !identity.balances ||
+    busy !== "idle" ||
+    (!editable && !draft.amending) ||
+    !(draft.amending || mayPost);
+  // Create saves a draft, Edit changes one; Post alone means "no drafts" —
+  // Save Draft greys, Post stays.
+  const draftRight = maySaveDraft(Boolean(draft.header.voucherId));
 
   return (
     <div
@@ -717,19 +762,20 @@ export default function ReceiptScreen({ initialKeys, onBackToList, collect, open
           <h2 className={styles.sectionCaption}>What the party owes — and what it holds</h2>
           <div className={styles.amountBox}>
             <span className={styles.amountLabel}>Amount</span>
-            <input
+            <AmountInput
               className={styles.amountInput}
-              {...{ [RECEIPT_FIELD_ATTR]: "amount" }}
-              type="number"
-              min={0}
-              step="0.01"
+              fieldAttr={{ [RECEIPT_FIELD_ATTR]: "amount" }}
               // The quick way in: what the customer handed over, onto the one
               // instrument row. Everything else on the screen follows from it.
-              value={receivedTotal(draft) === 0 ? "" : receivedTotal(draft)}
+              // At rest it shows what is COLLECTED; while typed into, what goes
+              // to the bills — a UPI / card surcharge is added on top of that.
+              value={receivedTotal(draft)}
+              editValue={forBillsTotal(draft.tenders)}
+              resetKey={draft.tenders[0]?.key ?? ""}
               disabled={!editable || !canWrite}
               placeholder="0.00"
               title="What was received, on the first instrument. Split it across rows in the grid below."
-              onChange={(event) => setReceivedAmount(Number(event.target.value))}
+              onValueChange={setReceivedAmount}
               onBlur={() => void api.runDuplicateCheck()}
             />
           </div>
@@ -857,6 +903,7 @@ export default function ReceiptScreen({ initialKeys, onBackToList, collect, open
             receiptDate={draft.header.voucherDate}
             editable={editable && canWrite}
             onSetTender={(rowKey, patch) => dispatch({ type: "SET_TENDER", rowKey, patch })}
+            onSetTenderAmount={setTenderAmount}
             onRetarget={(rowKey, master) => dispatch({ type: "RETARGET_TENDER", rowKey, master })}
             onConvertToLine={(rowKey, role) => dispatch({ type: "CONVERT_TO_LINE", rowKey, role })}
             onConvertToTender={(rowKey, master) =>
@@ -968,7 +1015,8 @@ export default function ReceiptScreen({ initialKeys, onBackToList, collect, open
             <button
               type="button"
               className={styles.button}
-              disabled={!canWrite || !editable || busy !== "idle"}
+              disabled={!canWrite || !editable || busy !== "idle" || !draftRight}
+              title={draftRight ? undefined : NO_DRAFT_RIGHT_MESSAGE}
               onClick={() => void api.saveDraft()}
             >
               Save Draft

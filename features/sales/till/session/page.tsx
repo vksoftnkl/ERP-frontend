@@ -5,7 +5,7 @@
  *
  * One read, `GET /till/sessions/open-check`, says everything (the business
  * day, the counter, a session this device already holds, this cashier's
- * session elsewhere, the carried float). F10 posts `/till/sessions/open`; a
+ * session elsewhere, the carried float). Ctrl+Enter posts `/till/sessions/open`; a
  * session this device already holds is offered for Resume on the right (a
  * SUSPENDED one through `/sessions/resume`). Either way the till session
  * store is set (Qt `AppSession::setTillSession` + `tillSessionChanged`) and the
@@ -13,9 +13,13 @@
  *
  * The live panel also carries this cashier's End shift (S4), Cash movement
  * (S3) and — the Qt Till menu's line 8, whose strip is placed on no screen —
- * Suspend.
+ * Suspend — and, on this cashier's own session, what a supervisor took out
+ * of or put into the drawer (Qt 2026-10-12), so it is questioned before the
+ * count.
  *
- * Keys: Enter = next field · F10 = open · F5 = reload · Esc = not now.
+ * Keys: Enter = next field · Ctrl+Enter = open (from any field; Qt
+ * 2026-10-12, was F10) · F5 = reload · Esc = not now. Every figure box
+ * selects its text on focus.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -30,6 +34,7 @@ import { tillErrorOf } from "../shared/errors";
 import { OPEN_TILL_HREF } from "../shared/format";
 import { amountInputPaise, formatMoney, isAmountDraft, paiseOf, paiseToInput } from "../shared/money";
 import { reasonGridParams, reasonsOf, toReasons, type TillReason } from "../shared/reasons";
+import { selectOnFocus } from "../shared/select-on-focus";
 import { getTillSession, patchTillSessionStatus, setTillSession } from "../shared/session-store";
 import { TonePill, overlayOpen } from "../shared/till-dialog";
 import { refFromPayload, revalidateTillSession, useTillSession } from "../shared/use-till-session";
@@ -38,6 +43,7 @@ import styles from "../shared/till.module.scss";
 import { CashMovementDialog } from "./cash-movement-dialog";
 import { DenomCount, focusFirstQty } from "./denom-count";
 import { EndShiftDialog } from "./end-shift-dialog";
+import { SupervisorMoves } from "./supervisor-moves";
 import {
   FORCE_CLOSE_TIP,
   MISMATCH_NOTE,
@@ -94,6 +100,8 @@ export default function OpenTillScreen() {
   const [busy, setBusy] = useState(false);
   const [endShiftKey, setEndShiftKey] = useState<TillSessionKey | null>(null);
   const [movementKey, setMovementKey] = useState<TillSessionKey | null>(null);
+  /** Bumped on every open-check answer: the supervisor's movements re-read with it (Qt showLivePanel). */
+  const [checkTick, setCheckTick] = useState(0);
   /** The picked counter, as the last open-check was asked with. */
   const pickedRef = useRef("");
   const generation = useRef(0);
@@ -117,6 +125,7 @@ export default function OpenTillScreen() {
     (data: TillOpenCheck) => {
       setCheck(data);
       setCheckError("");
+      setCheckTick((tick) => tick + 1);
       const counter = chosenCounter(data, pickedRef.current);
       setForm((current) => {
         const next = { ...current, pickedCounterId: chosenCounterId(data, pickedRef.current) };
@@ -286,11 +295,16 @@ export default function OpenTillScreen() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || overlayOpen()) return;
-      if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
-      if (event.key === "F10") {
-        event.preventDefault();
-        if (keys.current.canOpen) void keys.current.openSession();
-      } else if (event.key === "F5") {
+      if (event.altKey || event.metaKey || event.shiftKey) return;
+      if (event.ctrlKey) {
+        // Ctrl+Enter opens from every field (the boxes' own Enter handlers let it pass).
+        if (event.key === "Enter") {
+          event.preventDefault();
+          if (keys.current.canOpen) void keys.current.openSession();
+        }
+        return;
+      }
+      if (event.key === "F5") {
         // Never the browser's reload: it would drop the count on screen.
         event.preventDefault();
         keys.current.reload();
@@ -319,10 +333,7 @@ export default function OpenTillScreen() {
             {held ? `This tab holds session ${held.sessionNo} (${held.status}).` : "Count the float into the drawer and open the till on this device."}
           </p>
         </div>
-        <div className={styles.inlineRow}>
-          <span className={styles.keys}>Enter = next field · F10 = open · F5 = reload</span>
-          {!live ? <TonePill tone="blue">NEW SESSION</TonePill> : null}
-        </div>
+        {!live ? <TonePill tone="blue">NEW SESSION</TonePill> : null}
       </div>
 
       {noScope ? <p className={cx(styles.warn, styles.warnDanger)}>Choose a company and a branch in the header first.</p> : null}
@@ -349,7 +360,7 @@ export default function OpenTillScreen() {
                         void loadCheck(event.target.value);
                       }}
                       onKeyDown={(event) => {
-                        if (event.key === "Enter") {
+                        if (event.key === "Enter" && !event.ctrlKey) {
                           event.preventDefault();
                           document.getElementById(`${ID_PREFIX}-issued`)?.focus();
                         }
@@ -420,6 +431,7 @@ export default function OpenTillScreen() {
                   readOnly={carried}
                   value={carried ? paiseToInput(figures.issued) || "0" : issuedText}
                   autoFocus={!live && counterView.kind === "text"}
+                  onFocus={selectOnFocus}
                   onChange={(event) => {
                     const text = event.target.value.trim();
                     if (!isAmountDraft(text)) return;
@@ -427,7 +439,7 @@ export default function OpenTillScreen() {
                     setForm((current) => ({ ...current, issuedPaise: amountInputPaise(text) }));
                   }}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter") {
+                    if (event.key === "Enter" && !event.ctrlKey) {
                       event.preventDefault();
                       focusFirstQty(ID_PREFIX);
                     }
@@ -501,7 +513,7 @@ export default function OpenTillScreen() {
                       value={form.reasonId}
                       onChange={(event) => setForm((current) => ({ ...current, reasonId: event.target.value }))}
                       onKeyDown={(event) => {
-                        if (event.key === "Enter") {
+                        if (event.key === "Enter" && !event.ctrlKey) {
                           event.preventDefault();
                           openButton.current?.focus();
                         }
@@ -534,7 +546,7 @@ export default function OpenTillScreen() {
                 title={!permissions.canCreate ? "No create right on Open Till" : problem}
                 onClick={() => void openSession()}
               >
-                {busy ? "Opening…" : "F10  Open"}
+                {busy ? "Opening…" : "Open - Ctrl+Enter"}
               </button>
             </div>
           </section>
@@ -606,6 +618,7 @@ export default function OpenTillScreen() {
                   </button>
                 ) : null}
               </div>
+              <SupervisorMoves tssId={live.supervisorMovesTssId} reloadKey={checkTick} />
               {live.note ? <p className={styles.muted}>{live.note}</p> : null}
             </section>
           ) : null}

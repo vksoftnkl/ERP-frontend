@@ -90,7 +90,12 @@ import {
   SALES_ITEM_COLUMN_MEANINGS,
   SALE_ORDER_ITEM_GRID_UI_TABLE_KEY,
 } from "./sale-order.constants";
-import { buildSavePayload, importQuotationAsOrder, parseLoadedDocument } from "./sale-order.payload";
+import {
+  buildSavePayload,
+  importQuotationAsOrder,
+  parseLoadedDocument,
+  savedOrderMessage,
+} from "./sale-order.payload";
 import {
   copyOrderDraftAsNew,
   createOrderDraft,
@@ -776,17 +781,15 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
       setBusy("saving");
       try {
         // A new order is written CONFIRMED or DRAFT by `sales.auto_post`; an
-        // existing one keeps the status it was loaded with.
+        // existing one keeps the status it was loaded with. CONFIRMED is the
+        // server's one-call save-and-confirm (notes 106): a refusal leaves no
+        // draft and burns no number.
         const payload = buildSavePayload(draft, pricing, actor, {
           newOrderStatus: newOrderStatusFor(settings),
         });
         const saved = await saveSaleOrder(payload).unwrap();
         dispatch(saveResponseApplied({ payload: saved, sentDraft: draft }));
-        toast.success(
-          saved.soOrderRefno
-            ? `Order ${saved.soOrderRefno} saved successfully.`
-            : "Order saved successfully.",
-        );
+        toast.success(savedOrderMessage(saved));
         return { status: "saved", document: savedRefOf(saved) };
       } catch (error) {
         toast.error(errorMessage(error));
@@ -828,11 +831,7 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
         });
         const saved = await saveSaleOrder(payload).unwrap();
         dispatch(saveResponseApplied({ payload: saved, sentDraft: draft }));
-        toast.success(
-          saved.soOrderRefno
-            ? `Order ${saved.soOrderRefno} saved successfully.`
-            : "Order saved successfully.",
-        );
+        toast.success(savedOrderMessage(saved));
         return { status: "saved", document: savedRefOf(saved) };
       } catch (error) {
         toast.error(errorMessage(error));

@@ -49,14 +49,13 @@ import type {
   AmendBillDto,
   BillKey,
   BillTenderRow,
-  PostBillDto,
   SaleBillDraft,
   SaveBillAdjustmentDto,
   SaveBillChargeDto,
   SaveBillDto,
   ValidateBillDto,
 } from "@/features/sales/testbill/types";
-import { adjustmentDto, adjustmentsForWire } from "./build-adjustments";
+import { adjustmentDto } from "./build-adjustments";
 import { chargeDtoForBill } from "./build-charges";
 import { dateOrNull, itemDto, uuidArray, uuidOrNull } from "./build-items";
 import { buildBillTenderDto, rollupsForPayload } from "./build-tenders";
@@ -236,8 +235,9 @@ export function buildSavePayload(
     // A bool, never null — `null` is a 400 (§18.1).
     sbDiscAlterBase: draft.policy.discountAlterBaseRate === true,
     sbRoundOffStep: draft.policy.roundOffStep,
-    // `sbStatus` is NOT sent: a save is always a DRAFT and only `/bills/post`
-    // moves it (§18.1). Nor is `sbVersionNo`; both are server-owned.
+    // `sbStatus` is NOT sent: this is a DRAFT unless `buildCreateAndPostBody`
+    // adds `post: true` (§18.1, notes 106). Nor is `sbVersionNo`; both are
+    // server-owned.
     ...(draft.docId ? { sbModifiedBy: actorLabel(actor) } : { sbCreatedBy: actorLabel(actor) }),
     items: lineIndexes.map(({ line, index }, position) =>
       itemDto(line, pricing.lines[index], position),
@@ -339,20 +339,19 @@ export function bareBillKey(key: BillKey): BillKey {
 }
 
 /**
- * `POST /bills/post`: the keys only — it posts what the server HOLDS (§17.5).
- * `adjustments` is sent whenever the draft has them (§14.4).
+ * Post in ONE call (notes 106): the save body plus `post: true` and the ticked
+ * overrides, to `/bills/create`. The server saves and posts in one transaction,
+ * and a refusal leaves nothing behind — no draft, no number. With `sbId` a
+ * reopened draft is updated and posted the same way.
+ *
+ * The credits the operator picked ride in the payload's own `adjustments`
+ * (§14.4) — they used to be repeated on `/bills/post`, and without them the
+ * server sets off the oldest credits instead. There is no `printAfter`: the
+ * screen prints once the post has answered.
  */
-export function buildPostBody(
-  key: BillKey,
-  options: { overrides?: readonly string[]; adjustments?: SaveBillAdjustmentDto[]; printAfter?: boolean } = {},
-): PostBillDto {
-  const codes = dedupeCodes(options.overrides ?? []);
-  return {
-    ...bareBillKey(key),
-    ...(codes ? { overrides: codes } : {}),
-    ...(options.printAfter ? { printAfter: true } : {}),
-    ...(options.adjustments !== undefined ? { adjustments: options.adjustments } : {}),
-  };
+export function buildCreateAndPostBody(payload: SaveBillDto, overrides: readonly string[]): SaveBillDto {
+  const codes = dedupeCodes(overrides);
+  return { ...payload, post: true, ...(codes ? { overrides: codes } : {}) };
 }
 
 /** `POST /bills/amend`: the whole payload, the optimistic lock and the remark (§17.8). */

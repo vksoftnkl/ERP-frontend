@@ -99,9 +99,11 @@ $tint-strong: color-mix(in srgb, var(--primary, #7b1515) 14%, #ffffff);
   color: var(--primary, #7b1515);
 }
 
-/* Where the cash comes from — a small card beside the title. */
+/* Where the cash comes from — a small card beside the title, centred on the
+   title row as Qt 6f15977 aligns it (AlignVCenter). */
 .moneyFrom {
   display: inline-flex;
+  align-self: center;
   align-items: center;
   gap: u(0.5);
   min-width: 0;

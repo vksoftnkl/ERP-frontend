@@ -18,6 +18,7 @@
  *
  * Refusals are RETURNED, never raised, so no caller can drop one.
  */
+import type { DocumentRights } from "@/lib/permissions/document-rights";
 import type { TenderMasterRow } from "@/features/sales/sale-order/sale-order.types";
 import { autoAllocate, clearAllocations } from "@/features/accounts/receipt/domain/allocate";
 import { toPaise } from "@/features/accounts/receipt/domain/money";
@@ -151,6 +152,26 @@ export function withSeeded(draft: PaymentDraft): PaymentDraft {
 
 export function isPaymentEditable(draft: PaymentDraft): boolean {
   return draft.amending || draft.header.status === "DRAFT";
+}
+
+/**
+ * Why Save Draft is off for these rights, or null when it is on. Create is the
+ * draft right and Edit the right to change a saved one (Qt, 2026-10-12), so a
+ * Post-only user posts and never parks a draft — the button greys with this
+ * reason rather than hiding.
+ */
+export function saveDraftDenial(rights: DocumentRights, saved: boolean): string | null {
+  if (rights.maySaveDraft(saved)) {
+    return null;
+  }
+  return saved
+    ? "You may not change a saved draft (no Edit right) — post it instead"
+    : "You may not save drafts (no Create right) — post the payment instead";
+}
+
+/** Post is the Post right; correcting a posted payment keeps the amend's own gate. */
+export function mayPostPayment(rights: DocumentRights, amending: boolean): boolean {
+  return amending || rights.mayPost;
 }
 
 function replaceBill(bills: BillRow[], billId: string, next: BillRow): BillRow[] {

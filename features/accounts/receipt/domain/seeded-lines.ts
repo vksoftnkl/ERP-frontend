@@ -3,11 +3,12 @@
  *
  * Two kinds, and the difference is the whole module:
  *
- *  - **DERIVED** — DISCOUNT_ALLOWED, WRITE_OFF, ROUND_OFF and BANK_CHARGES.
- *    Their amounts are sums of columns the operator already typed somewhere
- *    else (the three bill columns, and the MDR column on the instruments), so
- *    they are rebuilt after every edit that could move them and the operator
- *    never types into them.
+ *  - **DERIVED** — DISCOUNT_ALLOWED, WRITE_OFF, ROUND_OFF, BANK_CHARGES and
+ *    SURCHARGE_RECOVERED. Their amounts are sums of figures the operator
+ *    already typed somewhere else (the three bill columns, the MDR column on
+ *    the instruments, and the surcharge the tender master puts on a UPI or
+ *    card instrument), so they are rebuilt after every edit that could move
+ *    them and the operator never types into them.
  *  - **OFFERED** — TDS_RECEIVABLE and TCS_PAYABLE. The screen puts the line
  *    there; the AMOUNT and the pin are the operator's and survive every
  *    rebuild.
@@ -30,6 +31,7 @@ import type {
 } from "../receipt.types";
 import { sumOf, toRupees } from "./money";
 import { defaultsForRole } from "./roles";
+import { surchargeTotal } from "./surcharge";
 
 /** Roles this module owns. A line carrying one of them is never hand-made. */
 const DERIVED_ROLES: readonly ReceiptRole[] = [
@@ -37,9 +39,15 @@ const DERIVED_ROLES: readonly ReceiptRole[] = [
   "WRITE_OFF",
   "ROUND_OFF",
   "BANK_CHARGES",
+  "SURCHARGE_RECOVERED",
 ];
 
 const OFFERED_ROLES: readonly ReceiptRole[] = ["TDS_RECEIVABLE", "TCS_PAYABLE"];
+
+/** A line whose amount is a SUM of figures elsewhere on the screen — read-only. */
+export function isDerivedRole(role: ReceiptRole | null): boolean {
+  return role !== null && DERIVED_ROLES.includes(role);
+}
 
 export function isSeededRole(role: ReceiptRole | null): boolean {
   return (
@@ -91,6 +99,12 @@ export function rebuildSeededLines(input: SeedInput): OtherLineRow[] {
     WRITE_OFF: toRupees(sumOf(input.bills, (bill) => bill.writeOff)),
     ROUND_OFF: toRupees(sumOf(input.bills, (bill) => bill.roundOff)),
     BANK_CHARGES: toRupees(sumOf(input.tenders, (tender) => tender.mdrAmt)),
+    // The UPI / card surcharge the customer paid ON TOP: income that settles
+    // nothing, so the identity counts it as an ADDITION — 1,002.02 received =
+    // 1,000 allocated + 2.02 surcharge. The server seeds the same line from
+    // the tenders and refuses one that disagrees, which is why it is the
+    // rows' own `surchargeAmt` (the server's figure) and not recomputed here.
+    SURCHARGE_RECOVERED: surchargeTotal(input.tenders),
   };
 
   const offered = new Set<ReceiptRole>();
@@ -159,6 +173,8 @@ export function seededRemovalMessage(role: ReceiptRole): string {
       return "This line is the total of the R/off column. Clear the round-offs on the bills instead.";
     case "BANK_CHARGES":
       return "This line is the total of the MDR column. Clear the MDR on the instrument instead.";
+    case "SURCHARGE_RECOVERED":
+      return "This line is the surcharge the tender master charges on a UPI or card instrument. Change that instrument instead.";
     default:
       return "The server raises this line again at post and then refuses the receipt as a disagreement. Set its amount to zero instead.";
   }

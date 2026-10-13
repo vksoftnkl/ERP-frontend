@@ -6,7 +6,11 @@
  * once. Nothing else in the feature touches a response: `payload/parse.ts`
  * reads what comes out of these, and it says why in as many words.
  *
- * ── Two routes are deliberately absent ───────────────────────────────────
+ * ── Three routes are deliberately absent ─────────────────────────────────
+ * `POST /post` — Post is ONE call since server notes 106: `/create` with
+ * `post: true` saves and posts in one transaction, and a refusal leaves no
+ * draft behind. Posting a reopened draft is the same call with its id.
+ *
  * `PUT /update-header` — the Qt screen does not use it and neither does this
  * one. A posted receipt's header is corrected by `/amend`, which carries the
  * whole document under an optimistic lock; a second way to edit a posted
@@ -27,7 +31,6 @@ import type {
   DuplicateCheckPayload,
   OpenItemsPayload,
   PartyContextPayload,
-  PostReceiptBody,
   ReceiptAmendPayload,
   ReceiptCancelPayload,
   ReceiptDeletePayload,
@@ -35,6 +38,7 @@ import type {
   ReceiptKeys,
   ReceiptPayload,
   ReceiptPostPayload,
+  SaveAndPostReceiptBody,
   SaveDraftReceiptBody,
 } from "@/features/accounts/receipt/receipt.types";
 
@@ -42,7 +46,6 @@ const OPEN_ITEMS_ENDPOINT = "/receipts/open-items";
 const PARTY_CONTEXT_ENDPOINT = "/receipts/party-context";
 const GET_ENDPOINT = "/receipts/get";
 const CREATE_ENDPOINT = "/receipts/create";
-const POST_ENDPOINT = "/receipts/post";
 const AMEND_ENDPOINT = "/receipts/amend";
 const CANCEL_ENDPOINT = "/receipts/cancel";
 const DELETE_ENDPOINT = "/receipts/delete";
@@ -182,9 +185,8 @@ export const receiptApi = baseApi.injectEndpoints({
      * Save the draft. `replace: true` — the body IS the document, and anything
      * absent from it is gone.
      *
-     * The new id is at `data.header.avhVoucherId`. Read one level too shallow
-     * it comes back empty and `/post` then complains that `avhVoucherId` must
-     * be a valid UUID, which points at the wrong route entirely.
+     * The new id is at `data.header.avhVoucherId` — `data.avhVoucherId` is
+     * undefined, and an id read one level too shallow is silently empty.
      */
     saveReceiptDraft: builder.mutation<ReceiptDraftPayload, SaveDraftReceiptBody>({
       query: (body) => ({ url: CREATE_ENDPOINT, method: "POST", body }),
@@ -192,9 +194,14 @@ export const receiptApi = baseApi.injectEndpoints({
       invalidatesTags: ["Receipt"],
     }),
 
-    /** Post it. The number is at `data.header.avhVoucherRefno`. */
-    postReceipt: builder.mutation<ReceiptPostPayload, PostReceiptBody>({
-      query: (body) => ({ url: POST_ENDPOINT, method: "POST", body }),
+    /**
+     * Save AND post, in one transaction — `/create` with `post: true`. It
+     * answers the `/post` shape, so the number is at
+     * `data.header.avhVoucherRefno` and the PDC vouchers at `data.pdcVouchers`.
+     * A refusal wrote nothing: no draft, no number.
+     */
+    saveAndPostReceipt: builder.mutation<ReceiptPostPayload, SaveAndPostReceiptBody>({
+      query: (body) => ({ url: CREATE_ENDPOINT, method: "POST", body }),
       transformResponse: (payload: ApiSuccessResponse<ReceiptPostPayload>) => payload.data,
       invalidatesTags: ["Receipt"],
     }),
@@ -408,7 +415,7 @@ export const {
   useLazyGetReceiptPartyContextQuery,
   useLazyGetReceiptQuery,
   useSaveReceiptDraftMutation,
-  usePostReceiptMutation,
+  useSaveAndPostReceiptMutation,
   useAmendReceiptMutation,
   useCancelReceiptMutation,
   useDeleteReceiptDraftMutation,

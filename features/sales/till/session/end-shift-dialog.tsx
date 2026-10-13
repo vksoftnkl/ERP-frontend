@@ -9,6 +9,10 @@
  * finishing a counter's). Esc after step 1 does NOT reopen billing: the
  * session stays COUNTING. What it decides is `end-shift.ts`.
  *
+ * At the top, the supervisor's pickups / top-ups on the session (Qt
+ * 2026-10-12): questioned before the drawer is counted, not after; re-read
+ * with every reload.
+ *
  * Keys: F10 submits the count, Esc goes back.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -24,6 +28,7 @@ import { TillDialog, TonePill } from "../shared/till-dialog";
 import type { TillSessionKey, TillSessionPayload } from "../shared/wire/types";
 import styles from "../shared/till.module.scss";
 import { DenomCount } from "./denom-count";
+import { SupervisorMoves } from "./supervisor-moves";
 import {
   APPROVAL_TEXT,
   END_BILLING_CONFIRM,
@@ -76,6 +81,8 @@ function EndShiftBody({ sessionKey, onClose, onChanged }: { sessionKey: TillSess
   const [slips, setSlips] = useState<SlipLine[]>([]);
   const [floatLeftText, setFloatLeftText] = useState("");
   const [busy, setBusy] = useState(false);
+  /** Bumped by every reload: the supervisor's movements are re-read with the session (Qt reload). */
+  const [movesTick, setMovesTick] = useState(0);
   const answerRef = useRef<EndShiftAnswer>("");
 
   const showOutcome = useCallback((outcome: EndShiftAnswer, attemptsLeft: number, slipGap: boolean) => {
@@ -117,6 +124,7 @@ function EndShiftBody({ sessionKey, onClose, onChanged }: { sessionKey: TillSess
   );
 
   const reload = useCallback(async () => {
+    setMovesTick((tick) => tick + 1);
     try {
       showSession(await client.get(sessionKey));
     } catch (error) {
@@ -275,6 +283,8 @@ function EndShiftBody({ sessionKey, onClose, onChanged }: { sessionKey: TillSess
         </>
       }
     >
+      <SupervisorMoves tssId={sessionKey.tssId} reloadKey={movesTick} />
+
       <div className={styles.steps}>
         {steps.labels.map((label, index) => (
           <span key={index} className={stepClass(steps.tones[index])}>

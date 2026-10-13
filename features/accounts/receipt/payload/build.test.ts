@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildDraftPayload } from "./build-draft";
 import { buildAllocations, buildOtherLinePins, buildPostPayload, spreadPaise } from "./build-post";
 import { buildAmendPayload } from "./build-amend";
+import { buildSaveAndPostPayload } from "./build-save-and-post";
 import { aBill, aHeader, aLine, aTender } from "../domain/fixtures";
 import { rebuildSeededLines } from "../domain/seeded-lines";
 import { aParty } from "../domain/fixtures";
@@ -176,6 +177,63 @@ describe("the post body", () => {
       otherLines: [],
     });
     expect(rows.map((row) => row.billId)).toEqual(["b1"]);
+  });
+});
+
+describe("the save-and-post body (notes 106)", () => {
+  const input = {
+    header: aHeader(),
+    tenders: [aTender({ amount: 8600 })],
+    otherLines: [
+      aLine("TDS_RECEIVABLE", {
+        amount: 1400,
+        againstBillId: "b1",
+        againstBillAccYear: "2026-2027",
+      }),
+    ],
+    bills: [aBill({ billId: "b1", pendingAmount: 12000, receive: 8600 })],
+    credits: [],
+    userId: "user",
+  };
+
+  it("is the draft body with post: true", () => {
+    const body = buildSaveAndPostPayload(input);
+    expect(body.post).toBe(true);
+    expect(body.replace).toBe(true);
+    expect(body.tenders).toEqual(buildDraftPayload(input).tenders);
+    expect(body.otherLines).toEqual(buildDraftPayload(input).otherLines);
+  });
+
+  it("carries the settlement in the POST shape, not the remembered memo", () => {
+    // The memo holds the RAW receive (8,600); applied, the bill takes the TDS
+    // too — and the memo shape would be refused on onAccount.
+    const body = buildSaveAndPostPayload(input);
+    expect(body.allocations).toEqual([expect.objectContaining({ billId: "b1", amount: 10000 })]);
+    expect(body.otherLineBills).toEqual([
+      { lineNo: 1, billId: "b1", billAccYear: "2026-2027", amount: 1400 },
+    ]);
+    expect(body.onAccount).toBe(0);
+  });
+
+  it("sends no voucher id on a new receipt — an empty one is not a UUID", () => {
+    expect(buildSaveAndPostPayload(input)).not.toHaveProperty("avhVoucherId");
+  });
+
+  it("posts a reopened draft under its own id", () => {
+    const body = buildSaveAndPostPayload({ ...input, header: aHeader({ voucherId: "vch" }) });
+    expect(body.avhVoucherId).toBe("vch");
+  });
+
+  it("sends tdSurchargeAmt only where the row says the server takes it", () => {
+    const body = buildSaveAndPostPayload({
+      ...input,
+      tenders: [
+        aTender({ amount: 202.02, surchargeAmt: 2.02, sendSurcharge: true }),
+        aTender({ amount: 101.01, surchargeAmt: 1.01, sendSurcharge: false }),
+      ],
+    });
+    expect(body.tenders[0].tdSurchargeAmt).toBe(2.02);
+    expect(body.tenders[1]).not.toHaveProperty("tdSurchargeAmt");
   });
 });
 

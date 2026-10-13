@@ -39,7 +39,7 @@ import {
   type EntryMode,
 } from "./domain/entryModel";
 import { describeRevocations, revokesAnything } from "./domain/grantDiff";
-import { copyGrantsFrom, countGrants, grantsFromPayload } from "./domain/grants";
+import { copyGrantsFrom, countGrants, grantsFromPayload, withAncestorsTicked } from "./domain/grants";
 import { validateIdentity } from "./domain/identity";
 import { parseMenuTree } from "./domain/menuTree";
 import { NESTED_SURFACE_ATTR } from "./nested-surface";
@@ -200,9 +200,15 @@ function EntryDialogBody({ mode, usrId, readOnly = false, onClose, onSaved }: Us
       setCopyBusy(true);
       try {
         const payload = await loadUser(user.usrId).unwrap();
-        const source = grantsFromPayload(payload.menus);
-        dispatch({ type: "grants/changed", grants: copyGrantsFrom(source, state.loadedGrants) });
-        const kept = countGrants(source, state.tree.value);
+        const tree = state.tree.value;
+        // The other user's screens bring their groups, as a loaded set does.
+        const copied = withAncestorsTicked(
+          copyGrantsFrom(grantsFromPayload(payload.menus), state.loadedGrants),
+          tree,
+          state.loadedGrants,
+        );
+        dispatch({ type: "grants/changed", grants: copied });
+        const kept = countGrants(copied, tree);
         setCopyHint(
           `${user.displayName || user.loginName}'s rights are in the form — ${kept.ticked} menus` +
             (kept.outsideTree > 0 ? ` and ${kept.outsideTree} not shown here` : "") +

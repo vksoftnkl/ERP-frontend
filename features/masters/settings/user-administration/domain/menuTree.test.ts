@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { LIVE_MENU_TREE_PAYLOAD } from "./fixtures";
 import {
+  ancestorIds,
   CRUD_VERBS,
   menuLabel,
   parentIds,
@@ -122,6 +123,16 @@ describe("subtreeIds / parentIds", () => {
     const parents = parentIds(tree);
     expect(parents).toEqual(expect.arrayContaining([1, 2, 3, 4, 5, 6, 7]));
     expect(parents).not.toContain(10);
+  });
+});
+
+describe("ancestorIds", () => {
+  it("lists the groups above a menu, nearest first, and nothing for a root or an unknown id", () => {
+    // 249 Stock Track Policy sits under 34, under 3 Inventory.
+    expect(ancestorIds(tree, 249)).toEqual([34, 3]);
+    expect(ancestorIds(tree, 10)).toEqual([1]);
+    expect(ancestorIds(tree, 1)).toEqual([]);
+    expect(ancestorIds(tree, 8)).toEqual([]);
   });
 });
 

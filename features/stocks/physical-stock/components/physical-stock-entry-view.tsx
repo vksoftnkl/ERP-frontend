@@ -143,12 +143,13 @@ export function PhysicalStockEntryView({
       onClose,
     );
 
-  // F9 draws the sheet, F8 shows the list, Ctrl+Enter saves — Enter alone
+  // F9 draws the sheet, F8 shows the list, F5 saves a draft and Ctrl+Enter
+  // posts (one call, it still asks first) — a chord because Enter alone
   // belongs to the grid, and on a 300-line sheet it is the key pressed most.
-  // Ctrl+Enter is Save Draft's key, so it obeys Save Draft's gate.
-  const keysRef = useRef({ api, editable, canSaveDraft, showList, picker });
+  // Each key obeys its button's gate.
+  const keysRef = useRef({ api, editable, canSaveDraft, canPost, showList, picker });
   useLayoutEffect(() => {
-    keysRef.current = { api, editable, canSaveDraft, showList, picker };
+    keysRef.current = { api, editable, canSaveDraft, canPost, showList, picker };
   });
   useEffect(() => {
     if (!active) {
@@ -169,14 +170,24 @@ export function PhysicalStockEntryView({
         current.showList();
         return;
       }
-      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+      if (event.key === "F5" && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        // Never the browser's reload, whether or not a draft may be saved.
+        event.preventDefault();
         if (!current.editable || !current.canSaveDraft) {
           return;
         }
-        event.preventDefault();
         // Close any open cell editor first.
         (document.activeElement as HTMLElement | null)?.blur();
-        current.api.saveDraft(false);
+        current.api.saveDraft();
+        return;
+      }
+      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+        if (!current.editable || !current.canPost) {
+          return; // not a draft open for entry, or no right to post it
+        }
+        event.preventDefault();
+        (document.activeElement as HTMLElement | null)?.blur();
+        current.api.postDocument();
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -337,7 +348,7 @@ export function PhysicalStockEntryView({
           <span className={quotationStyles.gridHeadTitle}>Holdings</span>
           <span className={quotationStyles.modalNote}>
             Enter next line · type on Item or Reason to search · scan on the blank row · F9 load
-            sheet · Ctrl+Enter save
+            sheet · F5 save draft · Ctrl+Enter post
           </span>
         </div>
         <CountGrid
@@ -409,18 +420,21 @@ export function PhysicalStockEntryView({
           type="button"
           className={quotationStyles.button}
           disabled={working || !canSaveDraft}
-          onClick={() => api.saveDraft(false)}
+          title="Writes the sheet and nothing else. No stock moves."
+          onClick={api.saveDraft}
         >
           {busy === "saving" ? "Saving…" : "Save Draft"}{" "}
-          <span className={quotationStyles.buttonHint}>Ctrl+Enter</span>
+          <span className={quotationStyles.buttonHint}>F5</span>
         </button>
         <button
           type="button"
           className={cx(quotationStyles.button, quotationStyles.buttonPrimary)}
           disabled={working || !canPost}
-          onClick={() => api.saveDraft(true)}
+          title="Saves, checks and posts the variance in one step. A posted count is frozen and can only be cancelled."
+          onClick={api.postDocument}
         >
-          {busy === "posting" ? "Posting…" : "Save & Post"}
+          {busy === "posting" ? "Posting…" : "Save & Post"}{" "}
+          <span className={quotationStyles.buttonHint}>Ctrl+Enter</span>
         </button>
         <button
           type="button"

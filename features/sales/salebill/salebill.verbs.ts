@@ -6,7 +6,8 @@
  * blocked now, and the tooltip says why. In plain words:
  *
  *  - Tender route: Tender (F5) only.
- *  - Plain route:  Save (F5) · Save & Print (F6).
+ *  - Plain route:  Save (F5) · Save & Print (F6). Without auto-post, Save is
+ *                  a DRAFT and is greyed for a user who may not keep one.
  *  - Posted:       Edit · Cancel bill · Copy · Clear.
  *  - Amending:     Tender (tender route) or Save changes / Save changes & Print · Clear.
  *
@@ -34,6 +35,8 @@ export type VerbInput = {
   /** The generic screen permission — the DRAFT edit gate, which knows nothing of posting. */
   canEditScreen: boolean;
   canDeleteScreen: boolean;
+  /** `documentRights(...).maySaveDraft(!isNew)` — Create for a new bill, Edit for a saved one. */
+  maySaveDraft: boolean;
 };
 
 export type Verb = {
@@ -60,6 +63,20 @@ export type VerbState = {
   /** Save (F5) and F6 are one verb each; this is which one they are right now. */
   saveRoute: "tender" | "amend" | "autoPost" | "draft";
 };
+
+/** What a plain Save says to a user who posts but may not keep drafts (Qt, 2026-10-12). */
+export const NO_DRAFTS_MESSAGE = "You post bills, you do not keep drafts — use Post (Ctrl+Shift+Enter).";
+
+/**
+ * Whether Save would write a DRAFT this user may not keep. A plain Save is a
+ * draft — not under `sales.auto_post` (Save posts) and not while amending (Save
+ * is the amend) — and a draft needs Create (new) or Edit (saved): "Post
+ * without Create = no drafts". F5, the button and the tender dialog's OK all
+ * ask this, not only the button.
+ */
+export function draftSaveRefused(input: { autoPost: boolean; amending: boolean; maySaveDraft: boolean }): boolean {
+  return !input.amending && !input.autoPost && !input.maySaveDraft;
+}
 
 const hidden: Verb = { visible: false, enabled: false, label: "", tooltip: null };
 function verb(label: string, enabled = true, tooltip: string | null = null): Verb {
@@ -144,7 +161,7 @@ export function verbState(input: VerbInput): VerbState {
       ? verb(tenderRoute ? "Save changes" : "Save changes - F5")
       : autoPost
         ? verb("Save - F5")
-        : verb("Save draft - F5");
+        : verb("Save draft - F5", input.maySaveDraft, input.maySaveDraft ? null : NO_DRAFTS_MESSAGE);
   }
 
   let saveAndPrint: Verb = hidden;

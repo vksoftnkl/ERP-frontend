@@ -2,9 +2,9 @@
  * Every `/payments` response → the draft, in one place.
  *
  * The envelope rules are the receipt's (`receipt/payload/parse.ts` says why in
- * as many words): `/create` answers the id at `data.header.avhVoucherId`,
- * `/post` the number at `data.header.avhVoucherRefno`. What is the payment's
- * own:
+ * as many words): `/create` answers the id at `data.header.avhVoucherId`, and
+ * a post (`/create` with `post: true`) the number at
+ * `data.header.avhVoucherRefno`. What is the payment's own:
  *
  *  - the party carries the TDS rate facts, the bank and the favouring name;
  *  - the summary keeps the receipt's key names (`creditsHeld`,
@@ -15,7 +15,7 @@
  *    lines at post), so its role lines are read back off its legs.
  */
 import { netCreditsApplied } from "@/features/accounts/receipt/domain/net-allocations";
-import { toPaise, toRupees } from "@/features/accounts/receipt/domain/money";
+import { formatTotal, toPaise, toRupees } from "@/features/accounts/receipt/domain/money";
 import { nextRowKey, toDateInput } from "@/features/accounts/receipt/payload/parse";
 import type { ReceiptLeg } from "@/features/accounts/receipt/receipt.types";
 import type {
@@ -29,6 +29,7 @@ import type {
   PaymentOpenItemsSummary,
   PaymentOtherLineWire,
   PaymentPartyFacts,
+  PaymentPostPayload,
   PaymentRole,
   PaymentTenderRow,
   PaymentTenderWire,
@@ -345,4 +346,33 @@ export function heldRowsFromApplied(
     apply: credit.amount,
     applyTyped: true,
   }));
+}
+
+/**
+ * What a post says it did, one sentence each: the number (under
+ * `data.HEADER` — read at `data` it is blank and a payment that HAS posted
+ * reads as one that did not), the leaf each cheque row took (the number the
+ * operator writes on the cheque), the post-dated cheques' own vouchers, and
+ * what went on account.
+ */
+export function postedPaymentNotes(payload: PaymentPostPayload): string[] {
+  const number = payload.header?.avhVoucherRefno || payload.header?.avhVoucherNo || "";
+  const notes: string[] = [`Payment ${number || "(unnumbered)"} posted.`];
+  for (const cheque of payload.cheques ?? []) {
+    notes.push(
+      `Row ${cheque.tdRowNo}: cheque leaf ${cheque.leaf}` +
+        `${cheque.bookNo ? ` from book ${cheque.bookNo}` : ""}.`,
+    );
+  }
+  const pdcCount = (payload.pdcVouchers ?? []).length;
+  if (pdcCount > 0) {
+    notes.push(
+      `${pdcCount} post-dated cheque(s) got their own voucher — the bills they cover settle ` +
+        "on the cheque's date.",
+    );
+  }
+  if (payload.totalOnAccount > 0) {
+    notes.push(`${formatTotal(payload.totalOnAccount)} is on account as an advance.`);
+  }
+  return notes;
 }

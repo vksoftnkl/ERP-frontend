@@ -14,6 +14,7 @@ import type {
   PaymentIssuedChequeWire,
   PaymentOpenItemsParty,
   PaymentOtherLineWire,
+  PaymentPostPayload,
   PaymentTenderWire,
 } from "../payment.types";
 import {
@@ -22,7 +23,9 @@ import {
   buildPaymentDraftPayload,
   buildPaymentLineBodies,
   buildPaymentPostPayload,
+  buildPaymentSaveAndPostPayload,
   buildPaymentTenderBodies,
+  withAppliedSettlement,
 } from "./build";
 import {
   billSideOfApplied,
@@ -32,6 +35,7 @@ import {
   parsePaymentLines,
   parsePaymentParty,
   parsePaymentTenders,
+  postedPaymentNotes,
   totalDebitsOf,
 } from "./parse";
 
@@ -223,6 +227,79 @@ describe("the draft and amend bodies", () => {
   });
 });
 
+describe("post is ONE call — /create with post: true", () => {
+  // A bill paid 9,900 with 100 TDS pinned to it: the draft REMEMBERS 9,900
+  // against it, the post APPLIES 10,000 (the TDS inside the bill's amount).
+  const input = (voucherId: string | null) => ({
+    header: aHeader({ voucherId, employeeId: "emp-1", usrRefno: " OUR-7 " }),
+    tenders: [aPaymentTender({ amount: 9900 })],
+    lines: [
+      aPaymentLine("TDS_PAYABLE", {
+        amount: 100,
+        seeded: true,
+        againstBillId: "b1",
+        againstBillAccYear: "2026-2027",
+      }),
+    ],
+    bills: [aBill({ billId: "b1", pendingAmount: 10000, receive: 9900 })],
+    credits: [aCredit({ billId: "c1", apply: 0 })],
+    userId: "user-1",
+  });
+
+  it("sends the draft's body with the settlement APPLIED, not remembered", () => {
+    const draft = buildPaymentDraftPayload(input(null));
+    const settle = buildPaymentPostPayload(input(null));
+    const body = buildPaymentSaveAndPostPayload(input(null));
+
+    expect(draft.allocations?.[0].amount).toBe(9900);
+    expect(body.allocations).toEqual(settle.allocations);
+    expect(body.allocations?.[0].amount).toBe(10000);
+    expect(body.creditsApplied).toEqual(settle.creditsApplied);
+    expect(body.otherLineBills).toEqual([
+      { lineNo: 1, billId: "b1", billAccYear: "2026-2027", amount: 100 },
+    ]);
+    expect(body.onAccount).toBe(0);
+    expect(body.post).toBe(true);
+    // Everything else is the draft's, untouched.
+    expect(body).toMatchObject({
+      avhCompanyId: "co",
+      avhBranchId: "br",
+      avhAccYear: "2026-2027",
+      avhPartyId: "party",
+      avhEmployeeId: ["emp-1"],
+      avhUsrRefno: "OUR-7",
+      avhUserId: "user-1",
+      tenders: draft.tenders,
+      otherLines: draft.otherLines,
+      replace: true,
+    });
+  });
+
+  it("never copies the post shape's voucher key — a NEW payment has none", () => {
+    expect(buildPaymentPostPayload(input(null)).avhVoucherId).toBe("");
+    expect(buildPaymentSaveAndPostPayload(input(null))).not.toHaveProperty("avhVoucherId");
+  });
+
+  it("posts a reopened draft under its own id", () => {
+    expect(buildPaymentSaveAndPostPayload(input("v1")).avhVoucherId).toBe("v1");
+  });
+
+  it("removes a settlement key the post shape lacks — the draft's memo never leaks", () => {
+    const draft = buildPaymentDraftPayload({
+      ...input(null),
+      credits: [aCredit({ billId: "c1", apply: 100 })],
+    });
+    expect(draft.creditsApplied).toHaveLength(1);
+    const body = withAppliedSettlement(draft, {
+      allocations: [],
+      otherLineBills: [],
+      onAccount: 0,
+    });
+    expect(body).not.toHaveProperty("creditsApplied");
+    expect(body).toMatchObject({ allocations: [], otherLineBills: [], onAccount: 0, post: true });
+  });
+});
+
 describe("reading the server's answers", () => {
   const party: PaymentOpenItemsParty = {
     ledId: "p1",
@@ -378,6 +455,29 @@ describe("reading the server's answers", () => {
       // 70 written back, 50 of it the W/back column: 20 was typed.
       ["BALANCES_WRITTEN_BACK", "CR", 20, false],
     ]);
+  });
+
+  it("names what a post did: the number off data.header, each leaf, the PDCs, the advance", () => {
+    const payload = {
+      header: { avhVoucherId: "v9", avhVoucherNo: "17", avhVoucherRefno: "PAY/17" },
+      cheques: [{ tdRowNo: 2, apdId: "apd", apdAccYear: "2026-2027", leaf: "000124", bookNo: "004" }],
+      pdcVouchers: [{}],
+      totalOnAccount: 500,
+    } as unknown as PaymentPostPayload;
+    const notes = postedPaymentNotes(payload);
+    expect(notes[0]).toBe("Payment PAY/17 posted.");
+    expect(notes[1]).toBe("Row 2: cheque leaf 000124 from book 004.");
+    expect(notes[2]).toMatch(/^1 post-dated cheque\(s\) got their own voucher/);
+    expect(notes[3]).toMatch(/is on account as an advance\.$/);
+    expect(
+      postedPaymentNotes({
+        ...payload,
+        header: { ...payload.header, avhVoucherRefno: null },
+        cheques: [],
+        pdcVouchers: [],
+        totalOnAccount: 0,
+      }),
+    ).toEqual(["Payment 17 posted."]);
   });
 
   it("reads each held-debit spend ONCE — the bill side of the pair the engine writes", () => {

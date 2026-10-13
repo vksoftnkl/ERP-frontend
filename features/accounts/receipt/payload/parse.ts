@@ -148,26 +148,41 @@ export function parseTenders(rows: readonly ReceiptTenderWire[] | undefined): Te
   return (rows ?? [])
     .slice()
     .sort((left, right) => left.tdRowNo - right.tdRowNo)
-    .map((row) => ({
-      key: nextRowKey("tender"),
-      tdId: row.tdId ?? null,
-      tenderId: row.tdTenderId,
-      tenderTypeId: row.tdTenderTypeId,
-      tenderName: row.tdTenderName ?? "",
-      tenderLedgerId: row.tdTenderLedgerId || null,
-      amount: row.tdAmount ?? 0,
-      receivedAmt: row.tdReceivedAmt ?? 0,
-      changeAmt: row.tdChangeAmt ?? 0,
-      mdrAmt: row.tdMdrAmt ?? 0,
-      refNo: row.tdRefNo ?? "",
-      bankName: row.tdBankName ?? "",
-      payerVpa: row.tdPayerVpa ?? "",
-      instrumentDate: toDateInput(row.tdInstrumentDate),
-      // The cheque extras live in `acc_pdc_register`, not on the tender row.
-      // They are filled in afterwards from `cheques[]` — see `applyCheques`.
-      cheque: { bankBranch: "", ifsc: "", drawerName: "", bankLedgerId: null },
-      pdcVoucherRefno: null,
-    }));
+    .map((row) => {
+      const amount = Number(row.tdAmount) || 0;
+      // The server's own surcharge on this row. What went to the bills is the
+      // gross less it — the figure the operator typed (Qt 6f15977).
+      const surchargeAmt = Number(row.tdSurchargeAmt) || 0;
+      return {
+        key: nextRowKey("tender"),
+        tdId: row.tdId ?? null,
+        tenderId: row.tdTenderId,
+        tenderTypeId: row.tdTenderTypeId,
+        tenderName: row.tdTenderName ?? "",
+        tenderLedgerId: row.tdTenderLedgerId || null,
+        amount,
+        forBills: toRupees(toPaise(amount) - toPaise(surchargeAmt)),
+        surchargeAmt,
+        // Sent back as it came, so a re-save keeps the figure the draft was
+        // saved with. On a master that does not allow the surcharge to be edited
+        // the server ignores it and computes the same number; on one that does,
+        // leaving it out would let the server fall back to the master's FLAT
+        // amount — and then refuse the SURCHARGE_RECOVERED line as a
+        // disagreement. Qt leaves it unset here and has exactly that gap.
+        sendSurcharge: surchargeAmt > 0,
+        receivedAmt: row.tdReceivedAmt ?? 0,
+        changeAmt: row.tdChangeAmt ?? 0,
+        mdrAmt: row.tdMdrAmt ?? 0,
+        refNo: row.tdRefNo ?? "",
+        bankName: row.tdBankName ?? "",
+        payerVpa: row.tdPayerVpa ?? "",
+        instrumentDate: toDateInput(row.tdInstrumentDate),
+        // The cheque extras live in `acc_pdc_register`, not on the tender row.
+        // They are filled in afterwards from `cheques[]` — see `applyCheques`.
+        cheque: { bankBranch: "", ifsc: "", drawerName: "", bankLedgerId: null },
+        pdcVoucherRefno: null,
+      };
+    });
 }
 
 /** The F4 extras, joined onto their instrument row by `tenderRowNo`. */

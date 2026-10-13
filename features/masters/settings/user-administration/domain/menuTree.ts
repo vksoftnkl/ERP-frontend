@@ -169,6 +169,20 @@ export function subtreeIds(node: MenuNode): number[] {
   return ids;
 }
 
+/**
+ * The groups above a menu, nearest first, up to its root. Empty for a root,
+ * and for a menu the tree does not carry.
+ */
+export function ancestorIds(tree: MenuTree, menuId: number): number[] {
+  const ids: number[] = [];
+  let parentId = tree.byId.get(menuId)?.parentId ?? null;
+  while (parentId !== null) {
+    ids.push(parentId);
+    parentId = tree.byId.get(parentId)?.parentId ?? null;
+  }
+  return ids;
+}
+
 /** Every node with children — what "collapse all" folds. */
 export function parentIds(tree: MenuTree): number[] {
   return tree.rows.filter((node) => node.children.length > 0).map((node) => node.id);

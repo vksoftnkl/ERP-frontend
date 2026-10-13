@@ -3,8 +3,12 @@ import {
   apiErrorText,
   buildLines,
   buildPayload,
+  buildPostPayload,
   failingLines,
   lineProblemsMessage,
+  postConfirmMessage,
+  postedMessage,
+  refusalLineProblems,
   sheetRowsOf,
 } from "./physical-stock.payload";
 import { blankLine, computeTotals, createDraft, recalcLine } from "./physical-stock.state";
@@ -107,6 +111,67 @@ describe("buildPayload", () => {
     expect(header.freezeTo).toMatch(/^2026-10-02T12:00:00[+-]\d{2}:\d{2}$/);
     expect(header.lineCount).toBe(1);
     expect(header.totalQty).toBe(0);
+  });
+});
+
+describe("Post — one save call that posts (notes 106)", () => {
+  it("is the save payload with header.status POSTED, and changes nothing else", () => {
+    const lines = [line({ key: "a", countedText: "7" })];
+    const draft = draftWith(lines, { svhId: "svh-1" });
+    const totals = computeTotals(lines);
+    const saved = buildPayload(draft, totals);
+    const posted = buildPostPayload(draft, totals);
+    expect(saved.header.status).toBeUndefined();
+    expect(posted).toEqual({ ...saved, header: { ...saved.header, status: "POSTED" } });
+  });
+
+  it("asks with the counted / variance / net summary", () => {
+    expect(
+      postConfirmMessage({ lines: 3, counted: 3, varianceLines: 1, netQty: -2, netValue: -8 }),
+    ).toBe(
+      "Posting writes the stock ledger for the lines that DISAGREE and freezes this sheet. " +
+        "A line that matches writes nothing.\n\n3 / 3 counted · 1 with a variance · net -2.000",
+    );
+  });
+
+  it("says so when holdings on screen are left off the document", () => {
+    expect(
+      postConfirmMessage({ lines: 5, counted: 3, varianceLines: 0, netQty: 0, netValue: 0 }),
+    ).toMatch(/\n\n2 holdings on screen are not counted and are left off the document\.$/);
+  });
+
+  it("words the posted answer by rowsPosted — 0 is a success, absent says only 'posted'", () => {
+    expect(postedMessage("PS-7", 3)).toBe("PS-7 posted — 3 variance rows written.");
+    expect(postedMessage("PS-7", 0)).toBe(
+      "PS-7 posted — every holding counted matched the book, so no ledger row was written. " +
+        "Nothing was wrong.",
+    );
+    expect(postedMessage("PS-7", null)).toBe("PS-7 posted.");
+    expect(postedMessage("PS-7", undefined)).toBe("PS-7 posted.");
+    expect(postedMessage("PS-7", "3")).toBe("PS-7 posted.");
+  });
+
+  it("reads per-line problems off a refusal's data, and nothing off a plain one", () => {
+    const refused = {
+      status: 422,
+      data: {
+        success: false,
+        message: "This physical stock count cannot be posted",
+        data: [
+          { sviId: "1", lineNo: 1, splitNo: 1, itemId: "a", itemCode: null, itemName: "MILK", problem: null },
+          { sviId: "2", lineNo: 2, splitNo: 1, itemId: "b", itemCode: null, itemName: "CURD", problem: "lot gone" },
+        ],
+      },
+    };
+    expect(refusalLineProblems(refused).map((row) => row.lineNo)).toEqual([2]);
+    expect(
+      refusalLineProblems({
+        status: 422,
+        data: { message: "x", errors: [{ field: "lines.2", message: "Line 2 (CURD): lot gone" }] },
+      }),
+    ).toEqual([]);
+    expect(refusalLineProblems({ status: 422, data: { data: [{ lineNo: 1, problem: null }] } })).toEqual([]);
+    expect(refusalLineProblems(undefined)).toEqual([]);
   });
 });
 

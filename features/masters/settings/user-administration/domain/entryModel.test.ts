@@ -110,7 +110,7 @@ describe("the form", () => {
     expect(isDirty(run(ready, { type: "identity/changed", patch: { fullName: "Arjun K." } }))).toBe(true);
     expect(isDirty(run(ready, { type: "identity/changed", patch: { password: "x" } }))).toBe(true);
     // Post on 249 — a right the fixture user does not hold, so granting it is a change.
-    const changed = setFlag(ready.grants, 249, "umCanPost", true, ready.loadedGrants);
+    const changed = setFlag(ready.grants, tree, 249, "umCanPost", true, ready.loadedGrants);
     const withGrants = run(ready, { type: "grants/changed", grants: changed });
     expect(isDirty(withGrants)).toBe(true);
     expect(currentDiff(withGrants).flagsAdded).toEqual([{ menuId: 249, key: "umCanPost" }]);
@@ -135,7 +135,7 @@ describe("the form", () => {
   });
 
   it("a revoking edit is reported by the diff", () => {
-    const revoked = tickMenu(ready.grants, tree.byId.get(249)!, false, ready.loadedGrants);
+    const revoked = tickMenu(ready.grants, tree, tree.byId.get(249)!, false, ready.loadedGrants);
     const diff = currentDiff(run(ready, { type: "grants/changed", grants: revoked }));
     expect(diff.revoked).toEqual([249]);
   });
@@ -149,6 +149,62 @@ describe("the form", () => {
     expect(saved.saving).toBe(false);
     expect(saved.identity.fullName).toBe("Arjun K.");
     expect(saved.identity.password).toBe("");
+    expect(isDirty(saved)).toBe(false);
+  });
+});
+
+describe("groups follow their children on load (Qt 6f15977)", () => {
+  // Sales Entry (12) and Stock Track Policy (249, under 34 under 3), saved
+  // without their groups — as sets were before groups followed children.
+  const groupless = () =>
+    liveUserPayload({
+      menus: [
+        { umMenuId: 12, umCanView: true, umCanPost: true },
+        { umMenuId: 249, umCanView: true },
+        { umMenuId: 3, umIsPinned: true },
+      ],
+    });
+  const keys = (grants: ReadonlyMap<number, unknown>) => [...grants.keys()].sort((a, b) => a - b);
+
+  it("puts the groups back whichever half arrives second, and opens clean", () => {
+    const treeFirst = run(
+      initialEntryState({ mode: "edit", usrId: "u1" }),
+      { type: "tree/loaded", tree },
+      { type: "user/loaded", payload: groupless() },
+    );
+    const userFirst = run(
+      initialEntryState({ mode: "edit", usrId: "u1" }),
+      { type: "user/loaded", payload: groupless() },
+      { type: "tree/loaded", tree },
+    );
+    for (const state of [treeFirst, userFirst]) {
+      expect(keys(state.grants)).toEqual([1, 3, 12, 34, 249]);
+      expect(keys(state.loadedGrants)).toEqual([1, 3, 12, 34, 249]);
+      expect(state.grants.get(12)?.flags.umCanPost).toBe(true);
+      // A group already granted keeps the user's own columns.
+      expect(state.grants.get(3)?.pinned).toBe(true);
+      expect(isDirty(state)).toBe(false);
+      // The next save sends the groups.
+      expect(keys(grantsForSave(state)!)).toEqual([1, 3, 12, 34, 249]);
+    }
+  });
+
+  it("leaves the set as loaded while the tree is missing", () => {
+    const state = run(
+      initialEntryState({ mode: "edit", usrId: "u1" }),
+      { type: "user/loaded", payload: groupless() },
+      { type: "tree/failed", error: "Network down." },
+    );
+    expect(keys(state.grants)).toEqual([3, 12, 249]);
+  });
+
+  it("a saved answer gets its groups too", () => {
+    const ready = run(
+      initialEntryState({ mode: "create", usrId: null }),
+      { type: "tree/loaded", tree },
+    );
+    const saved = run(ready, { type: "save/started" }, { type: "save/succeeded", payload: groupless() });
+    expect(keys(saved.grants)).toEqual([1, 3, 12, 34, 249]);
     expect(isDirty(saved)).toBe(false);
   });
 });

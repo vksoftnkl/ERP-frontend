@@ -8,7 +8,8 @@
  * a Qty box per denomination with its amount beside it, and a last "Loose /
  * other" line on the right for coin in a bag or a torn note, typed as one
  * figure. Enter in a Qty box moves down the left grid, then the right, then
- * to the loose box; Enter there hands the focus on (`onDone`).
+ * to the loose box; Enter there hands the focus on (`onDone`). Every box
+ * selects its text on focus (a click too), so a typed figure replaces it.
  *
  * The arithmetic is `../shared/denom.ts` (integer paise, tested); this file
  * only draws it.
@@ -26,6 +27,7 @@ import {
   type Denomination,
 } from "../shared/denom";
 import { formatMoney, isAmountDraft } from "../shared/money";
+import { selectOnFocus } from "../shared/select-on-focus";
 import styles from "../shared/till.module.scss";
 
 export type DenomCountProps = {
@@ -100,7 +102,7 @@ export function DenomCount({
             value={qty ? String(qty) : ""}
             disabled={disabled}
             autoFocus={autoFocusFirst && index === 0}
-            onFocus={(event) => event.currentTarget.select()}
+            onFocus={selectOnFocus}
             onKeyDown={(event) => move(event, index)}
             onChange={(event) => {
               const parsed = parseQty(event.target.value);
@@ -157,7 +159,7 @@ export function DenomCount({
                 value={value.loose}
                 disabled={disabled}
                 autoFocus={autoFocusFirst && looseIndex === 0}
-                onFocus={(event) => event.currentTarget.select()}
+                onFocus={selectOnFocus}
                 onKeyDown={(event) => move(event, looseIndex)}
                 onChange={(event) => {
                   const text = event.target.value.trim();

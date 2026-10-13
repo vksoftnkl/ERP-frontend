@@ -124,6 +124,10 @@ export type TillVariance = {
   tvrReasonId: string | null;
   tvrStatus: string;
   tvrVoucherId: string | null;
+  /** Notes 105: the till_approval row that decided it, who decided, and RECOVER's staff ledger. */
+  tvrApprovalId?: string | null;
+  tvrDecidedBy?: string | null;
+  tvrRecoveryLedgerId?: string | null;
 };
 
 export type TillCashLimit = {
@@ -187,6 +191,32 @@ export type TillSessionPayload = {
   tenders: TillSessionTender[];
   movements: unknown[];
   variances: TillVariance[];
+};
+
+// ─── decide-variance (notes 105 A1) ─────────────────────────────────────────
+
+export type TillVarianceDecision = "APPROVE" | "RECOUNT";
+
+/** The treatments an approver may choose; WITHIN_TOLERANCE and RETENDERED are the system's. */
+export type TillApprovableTreatment = "EXPENSE" | "RECOVER" | "SUSPENSE";
+
+/** The decision as recorded, and the session after it. */
+export type TillVarianceDecisionResult = {
+  /** The till_approval row (A3). */
+  tapId: string;
+  decision: TillVarianceDecision;
+  /** CASH_VARIANCE | NONCASH_VARIANCE */
+  event: string;
+  /** Σ|counted − expected| over the PENDING variances. */
+  amount: number;
+  /** The rule's level. */
+  requiredRole: string;
+  /** The level the approver's grant conferred — HO_FINANCE for a SUPER ADMIN. */
+  approverRole: string;
+  channel: "COUNTER" | "REMOTE";
+  /** APPROVE: the treatment the variances took; null on RECOUNT. */
+  treatment: TillApprovableTreatment | null;
+  session: TillSessionPayload;
 };
 
 export type TillCountResult = {

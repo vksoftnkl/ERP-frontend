@@ -16,8 +16,12 @@
  * ── Nothing may be added to this body ────────────────────────────────────
  * `forbidNonWhitelisted: true` — one unknown key fails the whole request. The
  * beat is therefore not sent (`SaveDraftReceiptDto` has no `areaId`), and
- * neither are `tdAuthCode`, `tdCardLast4`, `tdSurcharge*` or `tdNotes`, which
- * the DTO accepts and this screen has no cell for.
+ * neither are `tdAuthCode`, `tdCardLast4`, `tdSurchargePerc` or `tdNotes`,
+ * which the DTO accepts and this screen has no cell for. `tdSurchargeAmt`
+ * travels only where `domain/surcharge.ts` says the server would take it.
+ *
+ * Post sends this same body with the settlement APPLIED on top — see
+ * `build-save-and-post.ts` — so the two saves cannot drift.
  */
 import type {
   BillRow,
@@ -76,6 +80,10 @@ export function buildTenderBodies(tenders: readonly TenderRow[]): SaveReceiptTen
     ...(toPaise(tender.receivedAmt) > 0 ? { tdReceivedAmt: roundMoney(tender.receivedAmt) } : {}),
     ...(toPaise(tender.changeAmt) > 0 ? { tdChangeAmt: roundMoney(tender.changeAmt) } : {}),
     ...(toPaise(tender.mdrAmt) > 0 ? { tdMdrAmt: roundMoney(tender.mdrAmt) } : {}),
+    // The surcharge the customer paid on top (UPI / card). Only where the
+    // master lets it be edited — otherwise the server computes the same figure
+    // from the master and this would be noise.
+    ...(tender.sendSurcharge ? { tdSurchargeAmt: roundMoney(tender.surchargeAmt ?? 0) } : {}),
     ...(trimmed(tender.refNo) ? { tdRefNo: tender.refNo.trim() } : {}),
     ...(trimmed(tender.bankName) ? { tdBankName: tender.bankName.trim() } : {}),
     ...(trimmed(tender.payerVpa) ? { tdPayerVpa: tender.payerVpa.trim() } : {}),

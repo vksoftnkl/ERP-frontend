@@ -97,6 +97,8 @@ import {
   type SavedOrderRef,
 } from "../use-sale-order-draft";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
+import { documentRights } from "@/lib/permissions/document-rights";
+import { saveAllowed } from "../sale-order.rights";
 import { NumberPromptModal } from "./number-prompt-modal";
 import { OrderIconToolbar } from "./order-icon-toolbar";
 import { SaleOrderListModal } from "./sale-order-list-modal";
@@ -205,11 +207,23 @@ export function SaleOrderEntryView({
   // Menu permissions for this screen (Settings → User Administration). They are
   // folded into the two flags the whole view already reads, so the grids, the
   // header blocks, both toolbars and the F-key shortcuts inherit the limit
-  // instead of each re-deriving it. A document that exists is edited on save; a
-  // blank one is created — so Save answers to a different flag in each mode.
+  // instead of each re-deriving it. Which right a save needs is the document
+  // rights rule (`saveAllowed`): a new order under `sales.auto_post` is
+  // confirmed by the save — Create or Post; otherwise it is a draft — Create
+  // for a new one, Edit for a saved one. Derived every render, so load, clear,
+  // copy-as-new and a permissions change all re-judge it.
   const { permissions: menuPermissions } = usePagePermissions();
-  const canSaveDoc = draft.docId ? menuPermissions.canEdit : menuPermissions.canCreate;
-  const editable = draft.mode === "entry" && !draft.isDeleted && canSaveDoc;
+  const documentRightsNow = useMemo(() => documentRights(menuPermissions), [menuPermissions]);
+  const saveVerb = useMemo(
+    () =>
+      saveAllowed({
+        saved: Boolean(draft.docId),
+        autoPost: settings.autoPost,
+        rights: documentRightsNow,
+      }),
+    [documentRightsNow, draft.docId, settings.autoPost],
+  );
+  const editable = draft.mode === "entry" && !draft.isDeleted && saveVerb.ok;
   const canAlter = Boolean(draft.docId) && !draft.isDeleted && menuPermissions.canDelete;
   const canCopyDoc = Boolean(draft.docId) && menuPermissions.canCreate;
 
@@ -524,8 +538,10 @@ export function SaleOrderEntryView({
 
   const runSave = useCallback(
     async (print: boolean) => {
-      if (!canSaveDoc) {
-        toast.error("You do not have permission to save orders on this screen.");
+      // No draft without the right to make one — checked here too, so F5 / F6
+      // cannot go round a disabled button.
+      if (!saveVerb.ok) {
+        toast.warn(saveVerb.reason);
         return;
       }
       const violation = api.validate();
@@ -543,7 +559,7 @@ export function SaleOrderEntryView({
       }
       afterSaved(outcome.document, print);
     },
-    [afterSaved, api, canSaveDoc],
+    [afterSaved, api, saveVerb],
   );
 
   const onCreditConfirmed = useCallback(async () => {
@@ -724,6 +740,12 @@ export function SaleOrderEntryView({
    * and a positive total, and re-judges the tenders against the final bill.
    */
   const openTender = useCallback(() => {
+    // The tender dialog's OK writes the order, so the right is asked before
+    // any money is taken, not after.
+    if (!saveVerb.ok) {
+      toast.warn(saveVerb.reason);
+      return;
+    }
     if (!editable) {
       toast.warn("Open the order for editing before recording an advance.");
       return;
@@ -741,7 +763,7 @@ export function SaleOrderEntryView({
       }
     }
     setTenderOpen(true);
-  }, [api, editable, tenderRoute]);
+  }, [api, editable, saveVerb, tenderRoute]);
 
   /** F5 — Tender on the tender route, a plain Save otherwise (the Qt `btnTender` / `btnSave` pair). */
   const onF5 = useCallback(() => {
@@ -972,6 +994,7 @@ export function SaleOrderEntryView({
         canTender={editable && tenderRoute}
         canDelete={canAlter}
         canCopy={canCopyDoc}
+        saveBlockedReason={saveVerb.reason}
         onOpenTender={openTender}
         onImportQuotation={() => guardedRun("import")}
         onShowList={() => guardedRun("list")}
@@ -1169,6 +1192,8 @@ export function SaleOrderEntryView({
         canDelete={canAlter}
         canCopyAsNew={canCopyDoc}
         canTender={editable}
+        saveAllowed={saveVerb.ok}
+        saveBlockedReason={saveVerb.reason}
         onOpenTender={openTender}
         onSave={() => void runSave(false)}
         onSaveAndPrint={onF6}

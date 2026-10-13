@@ -10,7 +10,7 @@
  *
  * Enter walks the layout's focus chain (ui table 28 flags Counted Qty alone,
  * so it runs straight down the column); ↑↓ change row; ←→ and Backspace move
- * between read-only cells. Ctrl+Enter is left to bubble — it saves.
+ * between read-only cells. Ctrl+Enter is left to bubble — it posts.
  */
 import {
   useEffect,
@@ -163,7 +163,7 @@ export function CountGrid(props: CountGridProps) {
     switch (event.key) {
       case "Enter": {
         if (event.ctrlKey || event.metaKey || event.altKey) {
-          return; // Ctrl+Enter saves — the screen's, not the grid's
+          return; // Ctrl+Enter posts — the screen's, not the grid's
         }
         event.preventDefault();
         // A picker cell whose key is still empty opens its popup on Enter.

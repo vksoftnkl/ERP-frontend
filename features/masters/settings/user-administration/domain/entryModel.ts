@@ -8,11 +8,14 @@
  *   the save OMITS `menus` — the server then leaves the rows alone. That is
  *   the one safe way to save without the set.
  * - A 400's `errors[]` land on their fields; anything else is the banner.
+ * - Once both halves are in, every ticked row ticks the groups above it — in
+ *   the baseline too, so a form that only put a missing group back does not
+ *   open dirty; the next save sends the group (Qt 6f15977).
  *
  * The React side (`user-entry-dialog.tsx`) only dispatches and renders.
  */
 import { grantDiff, type GrantDiff } from "./grantDiff";
-import { EMPTY_GRANTS, type Grants, grantsFromPayload, sameGrants } from "./grants";
+import { EMPTY_GRANTS, type Grants, grantsFromPayload, sameGrants, withAncestorsTicked } from "./grants";
 import {
   EMPTY_IDENTITY,
   factsFromPayload,
@@ -91,7 +94,28 @@ export function initialEntryState(args: {
   };
 }
 
+/**
+ * The groups of a screen granted without them, put back once the tree and
+ * the user have both arrived — whichever came second. Idempotent: a set with
+ * every group present comes back as the same state.
+ */
+function withGroupsTicked(state: EntryState): EntryState {
+  if (!permissionsReady(state)) return state;
+  const tree = state.tree.value;
+  const loadedGrants = withAncestorsTicked(state.loadedGrants, tree, state.loadedGrants);
+  const grants = withAncestorsTicked(state.grants, tree, state.loadedGrants);
+  if (loadedGrants === state.loadedGrants && grants === state.grants) return state;
+  return { ...state, loadedGrants, grants };
+}
+
 export function entryReducer(state: EntryState, action: EntryAction): EntryState {
+  const next = reduce(state, action);
+  return action.type === "tree/loaded" || action.type === "user/loaded" || action.type === "save/succeeded"
+    ? withGroupsTicked(next)
+    : next;
+}
+
+function reduce(state: EntryState, action: EntryAction): EntryState {
   switch (action.type) {
     case "tree/loading":
       return { ...state, tree: { ...state.tree, status: "loading", error: null } };

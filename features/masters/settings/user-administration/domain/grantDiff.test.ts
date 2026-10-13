@@ -19,10 +19,10 @@ describe("grantDiff", () => {
   it("counts and names grants, revokes and flag-level changes", () => {
     // Revoke menu 10, grant menu 8, and on 249 drop Print and add Post (which
     // the fixture user does not hold there).
-    let current = tickMenu(loaded, tree.byId.get(10)!, false, loaded);
-    current = setFlag(current, 8, "umCanView", true, loaded);
-    current = setFlag(current, 249, "umCanPrint", false, loaded);
-    current = setFlag(current, 249, "umCanPost", true, loaded);
+    let current = tickMenu(loaded, tree, tree.byId.get(10)!, false, loaded);
+    current = setFlag(current, tree, 8, "umCanView", true, loaded);
+    current = setFlag(current, tree, 249, "umCanPrint", false, loaded);
+    current = setFlag(current, tree, 249, "umCanPost", true, loaded);
 
     const diff = grantDiff(loaded, current);
     expect(diff.revoked).toEqual([10]);
@@ -34,14 +34,14 @@ describe("grantDiff", () => {
   });
 
   it("does not double-count the flags of a revoked menu", () => {
-    const current = tickMenu(loaded, tree.byId.get(249)!, false, loaded);
+    const current = tickMenu(loaded, tree, tree.byId.get(249)!, false, loaded);
     const diff = grantDiff(loaded, current);
     expect(diff.revoked).toEqual([249]);
     expect(diff.flagsRemoved).toEqual([]);
   });
 
   it("a grant alone is a change but not a revocation", () => {
-    const current = setFlag(loaded, 249, "umCanPost", true, loaded);
+    const current = setFlag(loaded, tree, 249, "umCanPost", true, loaded);
     const diff = grantDiff(loaded, current);
     expect(diff.changed).toBe(true);
     expect(revokesAnything(diff)).toBe(false);
@@ -50,11 +50,11 @@ describe("grantDiff", () => {
 
 describe("describeRevocations", () => {
   it("names the revoked menus and counts the flags per verb", () => {
-    let current = tickMenu(loaded, tree.byId.get(249)!, false, loaded);
-    current = tickMenu(current, tree.byId.get(250)!, false, loaded);
-    current = setFlag(current, 10, "umCanEdit", false, loaded);
-    current = setFlag(current, 12, "umCanEdit", false, loaded);
-    current = setFlag(current, 12, "umCanDelete", false, loaded);
+    let current = tickMenu(loaded, tree, tree.byId.get(249)!, false, loaded);
+    current = tickMenu(current, tree, tree.byId.get(250)!, false, loaded);
+    current = setFlag(current, tree, 10, "umCanEdit", false, loaded);
+    current = setFlag(current, tree, 12, "umCanEdit", false, loaded);
+    current = setFlag(current, tree, 12, "umCanDelete", false, loaded);
     const sentence = describeRevocations(grantDiff(loaded, current), nameOf);
     expect(sentence).toBe(
       "This save removes access to 2 menus: Stock Track Policy and Ledger mapping, " +
@@ -65,7 +65,7 @@ describe("describeRevocations", () => {
   it("names at most six menus and says how many more", () => {
     let current = loaded;
     const ids = [...loaded.keys()].slice(0, 9);
-    for (const id of ids) current = tickMenu(current, tree.byId.get(id)!, false, loaded);
+    for (const id of ids) current = tickMenu(current, tree, tree.byId.get(id)!, false, loaded);
     const diff = grantDiff(loaded, current);
     expect(diff.revoked.length).toBeGreaterThanOrEqual(9);
     const sentence = describeRevocations(diff, nameOf)!;
@@ -75,7 +75,7 @@ describe("describeRevocations", () => {
   });
 
   it("speaks only of flags when no menu is revoked", () => {
-    const current = setFlag(loaded, 12, "umCanView", false, loaded);
+    const current = setFlag(loaded, tree, 12, "umCanView", false, loaded);
     expect(describeRevocations(grantDiff(loaded, current), nameOf)).toBe(
       "This save removes View on 1 menu. Continue?",
     );

@@ -2,7 +2,8 @@
  * The user master's wire, against a REAL backend — the port plan's §11 live
  * acceptance, run through the same functions the screen uses:
  *
- *   1. create a ZT user with three menus; read `menus[]` back;
+ *   1. create a ZT user with three menus (and their group, Sales — groups
+ *      follow their children since Qt 6f15977); read `menus[]` back;
  *   2. grant one more — the other three come back unchanged (this is the
  *      2026-09-19 regression, where a save meant to grant one menu rewrote
  *      the set and four rows came back all-false);
@@ -120,10 +121,10 @@ suite("User Administration against the live API", () => {
   });
 
   it("1. creates the user with three menus and reads them back", async () => {
-    let grants = setAllVerbsOnMenu(EMPTY_GRANTS, node(10), true, EMPTY_GRANTS);
-    grants = setAllVerbsOnMenu(grants, node(11), true, EMPTY_GRANTS);
-    grants = setFlag(grants, 12, "umCanView", true, EMPTY_GRANTS);
-    grants = setFlag(grants, 12, "umCanCreate", true, EMPTY_GRANTS);
+    let grants = setAllVerbsOnMenu(EMPTY_GRANTS, tree, node(10), true, EMPTY_GRANTS);
+    grants = setAllVerbsOnMenu(grants, tree, node(11), true, EMPTY_GRANTS);
+    grants = setFlag(grants, tree, 12, "umCanView", true, EMPTY_GRANTS);
+    grants = setFlag(grants, tree, 12, "umCanCreate", true, EMPTY_GRANTS);
 
     const created = await save(buildSaveBody({ mode: "create", usrId: null, identity, grants }));
     usrId = created.usrId;
@@ -135,7 +136,8 @@ suite("User Administration against the live API", () => {
     const back = await read(usrId);
     loaded = grantsFromPayload(back.menus);
     identity = identityFromPayload(back);
-    expect([...loaded.keys()].sort((a, b) => a - b)).toEqual([10, 11, 12]);
+    // Sales (1) came with its screens.
+    expect([...loaded.keys()].sort((a, b) => a - b)).toEqual([1, 10, 11, 12]);
     expect(flagsOf(loaded, 10)).toEqual(flagsOf(grants, 10));
     expect(flagsOf(loaded, 11)).toEqual(flagsOf(grants, 11));
     expect(flagsOf(loaded, 12)).toEqual(flagsOf(grants, 12));
@@ -144,15 +146,16 @@ suite("User Administration against the live API", () => {
 
   it("2. grants one more menu and leaves the other three exactly as they were", async () => {
     const before = { 10: flagsOf(loaded, 10), 11: flagsOf(loaded, 11), 12: flagsOf(loaded, 12) };
-    const grants = setAllVerbsOnMenu(loaded, node(249), true, loaded);
+    const grants = setAllVerbsOnMenu(loaded, tree, node(249), true, loaded);
     const diff = grantDiff(loaded, grants);
-    expect(diff.granted).toEqual([249]);
+    // 249 brings its groups: 34 under 3 Inventory.
+    expect(diff.granted).toEqual([3, 34, 249]);
     expect(describeRevocations(diff, nameOf)).toBeNull();
 
     await save(buildSaveBody({ mode: "edit", usrId, identity, grants }));
     const back = await read(usrId);
     loaded = grantsFromPayload(back.menus);
-    expect([...loaded.keys()].sort((a, b) => a - b)).toEqual([10, 11, 12, 249]);
+    expect([...loaded.keys()].sort((a, b) => a - b)).toEqual([1, 3, 10, 11, 12, 34, 249]);
     expect(flagsOf(loaded, 10)).toEqual(before[10]);
     expect(flagsOf(loaded, 11)).toEqual(before[11]);
     expect(flagsOf(loaded, 12)).toEqual(before[12]);
@@ -163,7 +166,7 @@ suite("User Administration against the live API", () => {
   });
 
   it("3. revokes one menu, and the confirmation names it", async () => {
-    const grants = tickMenu(loaded, node(11), false, loaded);
+    const grants = tickMenu(loaded, tree, node(11), false, loaded);
     const sentence = describeRevocations(grantDiff(loaded, grants), nameOf);
     expect(sentence).toBe("This save removes access to 1 menu: Sales Order. Continue?");
 
@@ -171,13 +174,14 @@ suite("User Administration against the live API", () => {
     const back = await read(usrId);
     const before10 = flagsOf(loaded, 10);
     loaded = grantsFromPayload(back.menus);
-    expect([...loaded.keys()].sort((a, b) => a - b)).toEqual([10, 12, 249]);
+    // Sales keeps 10 and 12, so it stays.
+    expect([...loaded.keys()].sort((a, b) => a - b)).toEqual([1, 3, 10, 12, 34, 249]);
     expect(flagsOf(loaded, 10)).toEqual(before10);
   });
 
   it("4. Post and Cancel granted on a posting menu reach the row", async () => {
-    let grants = setFlag(loaded, 12, "umCanPost", true, loaded);
-    grants = setFlag(grants, 12, "umCanCancel", true, loaded);
+    let grants = setFlag(loaded, tree, 12, "umCanPost", true, loaded);
+    grants = setFlag(grants, tree, 12, "umCanCancel", true, loaded);
     await save(buildSaveBody({ mode: "edit", usrId, identity, grants }));
     const back = await read(usrId);
     loaded = grantsFromPayload(back.menus);

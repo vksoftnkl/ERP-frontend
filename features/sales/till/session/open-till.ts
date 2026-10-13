@@ -1,7 +1,7 @@
 /**
  * Open Till (S1, menu 272) — everything Qt `TillOpenSessionDialog` decides,
  * without the widgets: which counter, which float, what the count says, the
- * live-session panel, why F10 would refuse, and the body it would post.
+ * live-session panel, why Open (Ctrl+Enter) would refuse, and the body it would post.
  *
  * One read, `GET /till/sessions/open-check`, says everything: whether this
  * device needs a session at all, the business day, the counter (linked, or the
@@ -134,6 +134,11 @@ export type LivePanel = {
   cashMovementEnabled: boolean;
   /** The Till menu's Suspend (Qt TillMenu line 8), placed here: the own OPEN session. */
   showSuspend: boolean;
+  /**
+   * The session whose supervisor pickups / top-ups the panel lists (Qt
+   * 2026-10-12): this cashier's own, on this device — else none.
+   */
+  supervisorMovesTssId: string | null;
 };
 
 export function livePanelOf(check: TillOpenCheck | null, me: string): LivePanel | null {
@@ -187,6 +192,7 @@ export function livePanelOf(check: TillOpenCheck | null, me: string): LivePanel 
     showCashMovement: onThisDevice && ownSession,
     cashMovementEnabled: resumable,
     showSuspend: onThisDevice && ownSession && status === "OPEN",
+    supervisorMovesTssId: onThisDevice && ownSession ? session.sessionId : null,
   };
 }
 
@@ -285,7 +291,7 @@ export function carriedLabel(carried: TillCarriedFrom | null): string {
     : "Carried — none on this counter today";
 }
 
-// ─── why F10 would refuse, and what it would post ────────────────────────────
+// ─── why Open (Ctrl+Enter) would refuse, and what it would post ──────────────
 
 export function openProblem(inputs: OpenTillInputs): string {
   const { check, checkError, form } = inputs;

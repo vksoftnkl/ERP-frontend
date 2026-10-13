@@ -67,7 +67,6 @@ import {
   useCancelBillMutation,
   useCancelOrderLineMutation,
   useDeleteBillMutation,
-  usePostBillMutation,
   useValidateBillMutation,
   useLazyGetOpenCreditsQuery,
   useLazyGetPartyContextQuery,
@@ -80,8 +79,6 @@ import {
   overrideToggled,
   notesSet,
   notesCleared,
-  draftDisowned,
-  draftAdopted,
   amendBegun,
   amendAbandoned,
   adjustmentsApplied,
@@ -187,11 +184,9 @@ import {
 } from "./promotions/evaluate";
 import type { PromotionContext } from "./promotions/match";
 import {
-  adjustmentsForWire,
   billKeyOf,
   buildAmendBody,
-  bareBillKey,
-  buildPostBody,
+  buildCreateAndPostBody,
   buildSavePayload,
   buildValidateBody,
   parseLoadedBill,
@@ -238,7 +233,6 @@ import {
 import type {
   AdjustableCredit,
   BillAdjustmentRow,
-  BillKey,
   PendingScanValue,
   SaleBillDocKey,
   SaleBillDraft,
@@ -258,7 +252,7 @@ import { getDropdownId } from "@/lib/configured-dropdowns";
  */
 export type SaveOutcome =
   | { status: "saved"; ref: SavedBillRef }
-  /** The bill went through `/post` (auto-post, F6, Ctrl+Enter) or `/amend`. */
+  /** The bill was posted — `/create` with `post: true` (auto-post, F6, Ctrl+Enter) — or amended. */
   | { status: "posted"; ref: SavedBillRef }
   | { status: "invalid"; violation: SaleBillViolation }
   | { status: "confirm-needed"; violation: SaleBillViolation }
@@ -446,7 +440,7 @@ export type SaleBillDraftApi = {
   loadDocument: (key: SaleBillDocKey) => Promise<SaleBillDraft | null>;
   /** Cancels the SOURCE ORDER, not the bill — there is no route for the bill. */
   // --- the lifecycle (§17) ---
-  /** `sales.auto_post`: Save is check → create → post. */
+  /** `sales.auto_post`: Save is check → save and post in one call. */
   autoPost: boolean;
   /** The registered device the login returned. Without it a post is refused (§3.3). */
   canPostOnThisDevice: boolean;
@@ -454,7 +448,7 @@ export type SaleBillDraftApi = {
   validateOnServer: () => Promise<ServerValidation>;
   /** The customer on the bill is the walk-in (§7.7): party-context's answer, or the setting's. */
   isWalkIn: boolean;
-  /** F6 / Ctrl+Enter / Ctrl+Shift+Enter: create → validate → confirm → post (§17.5). */
+  /** F6 / Ctrl+Enter / Ctrl+Shift+Enter: validate → confirm → save and post in one call (§17.5). */
   post: (options?: SaveOptions) => Promise<SaveOutcome>;
   /** Save while amending, once the operator has said what changed (§17.8). */
   amend: (options: SaveOptions & { editRemark: string }) => Promise<SaveOutcome>;
@@ -605,7 +599,6 @@ export function useSaleBillDraft(): SaleBillDraftApi {
   // --- the bill's own endpoints -------------------------------------------
   const [saveBill] = useSaveBillMutation();
   const [validateBill] = useValidateBillMutation();
-  const [postBillMutation] = usePostBillMutation();
   const [amendBillMutation] = useAmendBillMutation();
   const [cancelBillMutation] = useCancelBillMutation();
   const [deleteBillMutation] = useDeleteBillMutation();
@@ -1708,10 +1701,12 @@ export function useSaleBillDraft(): SaleBillDraftApi {
   // recomputed here; the client's own checks exist only so the operator hears
   // about a zero quantity before a round trip.
   //
-  // Post saves first. `/bills/post` takes only the keys, so it posts what the
-  // server holds, not what the screen shows. Every post path is therefore
-  // create → validate → post, and auto-post validates BEFORE create so a
-  // refused bill leaves no draft and burns no number.
+  // Post posts what is ON SCREEN, in one call (notes 106): `/validate` on the
+  // screen's payload, the popup, then `/bills/create` with `post: true` — the
+  // save and the post in one transaction. Nothing is written until the
+  // operator posts from the popup, and a refusal leaves nothing behind: no
+  // draft, no number. Auto-post's Save takes the same path, for a new bill and
+  // a reopened draft alike.
 
   /**
    * `confirmProceed(verb)` (§16.4): with notes in the strip, the Validation
@@ -1803,115 +1798,61 @@ export function useSaleBillDraft(): SaleBillDraftApi {
   });
 
   /**
-   * A failed auto-post leaves nothing behind (§17.6): the draft the post was
-   * attempted on is deleted, and ONE dialog says so — not the strip's popup
-   * plus this one.
+   * Save and post in ONE call (notes 106): `/bills/create` with the screen's
+   * payload, `post: true` and the ticked overrides. The server saves, guards
+   * and posts in one transaction, and a refusal rolls all of it back — so on
+   * a failure the screen is still the bill it was: the notes go in the strip
+   * and the popup (a 422 is the answer), anything else is a plain error. A
+   * reopened draft travels with its `sbId` and is updated and posted the same
+   * way. Nothing asks the server to print: the screen prints off the outcome.
    */
-  const discardFailedAutoPost = useCallback(
-    async (key: BillKey, reason: string) => {
-      const refno = draftRef.current.billRefno || "this bill";
-      try {
-        await deleteBillMutation(bareBillKey(key)).unwrap();
-        dispatch(draftDisowned());
-        toast.error(
-          `The bill could NOT be posted:\n\n${reason}\n\nNothing was saved — correct it and press Save again.`,
-        );
-      } catch {
-        toast.error(
-          `Bill ${refno} is saved as a DRAFT but was NOT posted:\n\n${reason}\n\nCorrect it and press Save again — it posts this same bill, it does not create another.`,
-        );
-      }
-    },
-    [deleteBillMutation, dispatch],
-  );
-
-  /**
-   * `POST /bills/post` on a saved draft (§17.5). No second validate: the
-   * caller has just run one. `adjustments` ride along whenever the draft has
-   * them, or the server picks the party's oldest credits instead (§14.4).
-   */
-  const postNow = useCallback(
-    async (key: BillKey, print: boolean): Promise<SaveOutcome> => {
-      // From the store, not `draftRef`: the auto-post routes call this straight
-      // after `draftAdopted`, before any render, and `draftFromAutoPost` below
-      // is what decides whether a refused post deletes the draft it created.
-      const current = selectSaleBillDraft(store.getState());
-      const body = buildPostBody(key, {
-        overrides: current.overrides,
-        adjustments: adjustmentsForWire(current),
-        printAfter: print,
-      });
-      try {
-        const posted = await postBillMutation(body).unwrap();
-        const refno = posted.sbBillRefno ?? current.billRefno ?? "";
-        const voucher = posted.posting?.voucherRefno;
-        toast.success(voucher ? `Bill ${refno} posted — voucher ${voucher}.` : `Bill ${refno} posted.`);
-        const ref = refOf(posted);
-        await finishDocument(ref);
-        return { status: "posted", ref };
-      } catch (error) {
-        const notes = notesFromError(error);
-        const reason = errorMessageOf(error);
-        if (notes.length > 0) {
-          dispatch(notesSet({ notes }));
-        }
-        if (current.draftFromAutoPost) {
-          await discardFailedAutoPost(key, reason);
-          return { status: "refused" };
-        }
-        if (notes.length > 0) {
-          setNotesPopupOpen(true);
-        } else {
-          // The generic error only when the strip stayed empty.
-          toast.error(reason);
-        }
-        return notes.length > 0 ? { status: "refused" } : { status: "failed" };
-      }
-    },
-    [discardFailedAutoPost, dispatch, finishDocument, postBillMutation, store],
-  );
-
-  /** `/create` → adopt the key. A retry then updates instead of duplicating. */
-  const createDraft = useCallback(
-    async (payload: ReturnType<typeof buildSavePayload>, fromAutoPost: boolean) => {
-      const saved = await saveBill(payload).unwrap();
-      if (!saved.sbId) {
-        return null;
-      }
-      dispatch(draftAdopted({ payload: saved, fromAutoPost }));
-      return saved;
-    },
-    [dispatch, saveBill],
-  );
-
-  /**
-   * Auto-post, new bill (§17.5): validate → confirm → create → adopt → post.
-   * Validating BEFORE the create is what keeps a refused bill from leaving a
-   * draft behind and burning a number.
-   */
-  const postNewBill = useCallback(
-    async (payload: ReturnType<typeof buildSavePayload>, print: boolean): Promise<SaveOutcome> => {
-      const validation = await runServerValidation(payload, { popupOnRefusal: false });
-      if (validation.status === "refused") {
+  const createAndPost = useCallback(async (): Promise<SaveOutcome> => {
+    // From the store, not `draftRef`: with no notes the popup never opens, so
+    // no render separates this call from `/validate`'s `notesSet`, which keeps
+    // only the override ticks the new answer still raises.
+    const current = selectSaleBillDraft(store.getState());
+    const body = buildCreateAndPostBody(buildSavePayload(current, pricingRef.current, actor), current.overrides);
+    try {
+      const posted = await saveBill(body).unwrap();
+      const refno = posted.sbBillRefno ?? current.billRefno ?? "";
+      const voucher = posted.posting?.voucherRefno;
+      toast.success(voucher ? `Bill ${refno} posted — voucher ${voucher}.` : `Bill ${refno} posted.`);
+      const ref = refOf(posted);
+      await finishDocument(ref);
+      return { status: "posted", ref };
+    } catch (error) {
+      const notes = notesFromError(error);
+      if (notes.length > 0) {
+        dispatch(notesSet({ notes }));
         setNotesPopupOpen(true);
+        return { status: "refused" };
+      }
+      toast.error(errorMessageOf(error));
+      return { status: "failed" };
+    }
+  }, [actor, dispatch, finishDocument, saveBill, store]);
+
+  /**
+   * Every post (§17.5) — Post, Post & Print, and auto-post's Save: the dry run
+   * on the screen's payload, the Validation popup (`confirmProceed`), then
+   * `createAndPost`. A refusal, Back or the server away writes nothing.
+   */
+  const checkThenPost = useCallback(
+    async (payload: ReturnType<typeof buildSavePayload>, verb: string): Promise<SaveOutcome> => {
+      const validation = await runServerValidation(payload, { popupOnRefusal: true });
+      if (validation.status === "refused") {
         return { status: "refused" };
       }
       if (validation.status === "unreachable") {
         toast.error(validation.message);
         return { status: "failed" };
       }
-      if (!(await confirmProceed(print ? "Save & Print" : "Save"))) {
+      if (!(await confirmProceed(verb))) {
         return { status: "abandoned" };
       }
-      const saved = await createDraft(buildSavePayload(draftRef.current, pricingRef.current, actor), true);
-      if (!saved) {
-        toast.error("The server saved the bill but returned no id — reopen it from the list (F8) to post it.");
-        return { status: "failed" };
-      }
-      void clearAutosave(actor.deviceId ?? "");
-      return postNow(refOf(saved), print);
+      return createAndPost();
     },
-    [actor, confirmProceed, createDraft, postNow, runServerValidation],
+    [confirmProceed, createAndPost, runServerValidation],
   );
 
   /**
@@ -1921,9 +1862,10 @@ export function useSaleBillDraft(): SaleBillDraftApi {
    * repeat the call with that gate waived.
    *
    * Amending → `remark-needed`: the screen asks what changed and calls `amend`.
-   * Auto-post on a new bill → `postNewBill`. Otherwise a draft is written —
-   * validated first when the post is a separate verb, so the operator hears
-   * about a refusal now rather than at F6 — and the screen resets.
+   * Auto-post → `checkThenPost`, for a new bill and a reopened draft alike.
+   * Otherwise a DRAFT is written — validated first, so the operator hears
+   * about a refusal now rather than at Post — and the screen resets. Whether
+   * this user may keep a draft at all is the screen's check (`draftSaveRefused`).
    */
   const save = useCallback(
     async (options: SaveOptions = {}): Promise<SaveOutcome> => {
@@ -1956,35 +1898,18 @@ export function useSaleBillDraft(): SaleBillDraftApi {
       setBusy("saving");
       try {
         const payload = buildSavePayload(current, pricing, actor);
-        if (autoPost && current.isNewEntry) {
-          return await postNewBill(payload, options.print === true);
+        if (autoPost) {
+          return await checkThenPost(payload, options.print ? "Save & Print" : "Save");
         }
-        if (!autoPost) {
-          const validation = await runServerValidation(payload, { popupOnRefusal: true });
-          if (validation.status === "refused") {
-            return { status: "refused" };
-          }
-          // The server away: the create below will say so in its own words.
+        const validation = await runServerValidation(payload, { popupOnRefusal: true });
+        if (validation.status === "refused") {
+          return { status: "refused" };
         }
-        const saved = await createDraft(payload, false);
-        if (!saved) {
+        // The server away: the create below will say so in its own words.
+        const saved = await saveBill(payload).unwrap();
+        if (!saved.sbId) {
           toast.error("The server saved the bill but returned no id — reopen it from the list (F8).");
           return { status: "failed" };
-        }
-        if (autoPost) {
-          // A loaded draft re-saved under auto-post: adopted, then posted.
-          const validation = await runServerValidation(payload, { popupOnRefusal: true });
-          if (validation.status === "refused") {
-            return { status: "refused" };
-          }
-          if (validation.status === "unreachable") {
-            toast.error(validation.message);
-            return { status: "failed" };
-          }
-          if (!(await confirmProceed(options.print ? "Save & Print" : "Save"))) {
-            return { status: "abandoned" };
-          }
-          return await postNow(refOf(saved), options.print === true);
         }
         const ref = refOf(saved);
         toast.success(ref.billRefno ? `Bill ${ref.billRefno} saved successfully.` : "Bill saved.");
@@ -2007,32 +1932,28 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     [
       actor,
       autoPost,
-      confirmProceed,
-      createDraft,
+      checkThenPost,
       dispatch,
       finishDocument,
-      postNewBill,
-      postNow,
       pricing,
       refusePostWithoutDevice,
       runServerValidation,
+      saveBill,
       validate,
     ],
   );
 
   /**
-   * Post from the keyboard or F6 (§17.5): checks → CREATE first, always (the
-   * posted document must match the screen) → validate + overrides → confirm →
-   * post. Under auto-post on a new bill it is the same as Save.
+   * Post from the keyboard or F6 (§17.5): the client checks, then
+   * `checkThenPost` — `/validate` on what is on screen, the popup, and the
+   * save and the post in one call. Nothing is saved before the dry run passes
+   * and the operator posts from the popup.
    */
   const post = useCallback(
     async (options: SaveOptions = {}): Promise<SaveOutcome> => {
       const current = draftRef.current;
       if (current.amending) {
         return { status: "remark-needed" };
-      }
-      if (autoPost && current.isNewEntry) {
-        return save(options);
       }
       if (inFlight.current) {
         return { status: "busy" };
@@ -2058,25 +1979,7 @@ export function useSaleBillDraft(): SaleBillDraftApi {
       setBusy("saving");
       try {
         const payload = buildSavePayload(current, pricing, actor);
-        const saved = await createDraft(payload, false);
-        if (!saved) {
-          toast.error(
-            "The draft was saved but the server did not return its id, so there is nothing to post against. Reopen the bill from the list (F8) and post it there.",
-          );
-          return { status: "failed" };
-        }
-        const validation = await runServerValidation(payload, { popupOnRefusal: true });
-        if (validation.status === "refused") {
-          return { status: "refused" };
-        }
-        if (validation.status === "unreachable") {
-          toast.error(validation.message);
-          return { status: "failed" };
-        }
-        if (!(await confirmProceed(options.print ? "Post & Print" : "Post"))) {
-          return { status: "abandoned" };
-        }
-        return await postNow(refOf(saved), options.print === true);
+        return await checkThenPost(payload, options.print ? "Post & Print" : "Post");
       } catch (error) {
         const notes = notesFromError(error);
         if (notes.length > 0) {
@@ -2091,19 +1994,7 @@ export function useSaleBillDraft(): SaleBillDraftApi {
         setBusy("idle");
       }
     },
-    [
-      actor,
-      autoPost,
-      confirmProceed,
-      createDraft,
-      dispatch,
-      postNow,
-      pricing,
-      refusePostWithoutDevice,
-      runServerValidation,
-      save,
-      validate,
-    ],
+    [actor, checkThenPost, dispatch, pricing, refusePostWithoutDevice, validate],
   );
 
   /** Ctrl+F7 (§17.7): the operator's dry run, painted WITH the popup. */

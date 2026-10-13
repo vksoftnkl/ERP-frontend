@@ -15,6 +15,9 @@
  * There is NO delete: a draft that is not wanted is left unposted (Qt's list
  * offers no delete either).
  *
+ * F8's register is grid 137 "MAIN LIST - EXPENSE VOUCHERS" — the list the
+ * menu lands on, run here as a picker (`expenseRegister`, a plain query).
+ *
  * Every `/expenses/*` endpoint is a MUTATION, the reads included: the
  * screen calls them imperatively — on mount, on a 400 ms debounce, after a
  * save — and a query endpoint fired from a mount effect resolves `undefined`
@@ -57,6 +60,47 @@ function dataOf(payload: unknown): unknown {
   return typeof payload === "object" && payload !== null ? (payload as Envelope).data : undefined;
 }
 
+/** A configured-grid page's row count — `data.meta.total`, two levels down. */
+function totalOf(payload: unknown): number {
+  const data = dataOf(payload);
+  const meta = typeof data === "object" && data !== null ? (data as { meta?: unknown }).meta : undefined;
+  const total = typeof meta === "object" && meta !== null ? Number((meta as { total?: unknown }).total) : NaN;
+  return Number.isFinite(total) && total > 0 ? total : 0;
+}
+
+/** One row of grid 137, as far as the F8 picker reads it (the four keys never shown). */
+export type ExpenseRegisterRow = {
+  avh_voucher_id?: unknown;
+  avh_company_id?: unknown;
+  avh_branch_id?: unknown;
+  avh_acc_year?: unknown;
+  avh_voucher_refno?: unknown;
+  avh_voucher_date?: unknown;
+  paid_to?: unknown;
+  expense_heads?: unknown;
+  avh_doc_amount?: unknown;
+  tenders?: unknown;
+  gst_bill_no?: unknown;
+  session_no?: unknown;
+  avh_voucher_status?: unknown;
+};
+
+export type ExpenseRegisterQuery = {
+  companyId: string;
+  branchId: string;
+  accYear: string;
+  /** "" = every status. */
+  status: string;
+  /** ISO dates; "" = no bound. */
+  fromDate: string;
+  toDate: string;
+  search: string;
+  page: number;
+  limit: number;
+};
+
+export type ExpenseRegisterPage = { rows: ExpenseRegisterRow[]; total: number };
+
 export const expenseApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     expenseCreate: builder.mutation<unknown, SaveExpenseBody>({
@@ -97,6 +141,33 @@ export const expenseApi = baseApi.injectEndpoints({
       transformResponse: rowsOf,
       keepUnusedDataFor: 300,
     }),
+    /**
+     * F8 — grid 137, the register, a page at a time. Every one of its six bare
+     * tokens is sent, "" included: an unbound bare token stays in the SQL as a
+     * word and fails the whole query.
+     */
+    expenseRegister: builder.query<ExpenseRegisterPage, ExpenseRegisterQuery>({
+      query: (params) => ({
+        url: GRID_RUN_ENDPOINT,
+        params: {
+          grid_id: getGridId("expenseVoucherList"),
+          page: params.page,
+          limit: params.limit,
+          ...(params.search ? { search: params.search } : {}),
+          grid_param: JSON.stringify({
+            iavh_company_id: params.companyId,
+            iavh_branch_id: params.branchId,
+            iavh_acc_year: params.accYear,
+            iavh_status: params.status,
+            ifrom_date: params.fromDate,
+            ito_date: params.toDate,
+          }),
+        },
+      }),
+      transformResponse: (payload: unknown) => ({ rows: rowsOf(payload), total: totalOf(payload) }),
+      // Saves and posts do not invalidate it: every opening reads afresh.
+      keepUnusedDataFor: 0,
+    }),
     /** Dropdown 21 "GST - STATE CODES", whole: the place of supply's names. */
     expenseStateRows: builder.query<Record<string, unknown>[], void>({
       query: () => ({
@@ -121,4 +192,4 @@ export const expenseApi = baseApi.injectEndpoints({
   }),
 });
 
-export const { useExpenseReasonRowsQuery, useExpenseStateRowsQuery } = expenseApi;
+export const { useExpenseRegisterQuery, useExpenseReasonRowsQuery, useExpenseStateRowsQuery } = expenseApi;

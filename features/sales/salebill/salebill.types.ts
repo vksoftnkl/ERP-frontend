@@ -535,13 +535,6 @@ export type SaleBillDraft = {
    */
   amending: boolean;
   /**
-   * A failed auto-post left this draft behind (§17.4–17.6). A retry then sends
-   * `sbId` and updates rather than creating a second bill — the missing id was
-   * the duplicate-bill cause — and a refusal deletes the draft so nothing is
-   * left half-done.
-   */
-  draftFromAutoPost: boolean;
-  /**
    * The five `user_menus` rights for menu 12, READ from `/bills/get` and never
    * computed (§17.2). `null` on a bill that has not been loaded: a new bill has
    * no rights yet, and the server checks — the screen must not refuse Post on
@@ -1197,9 +1190,9 @@ export type SaveBillDto = {
   sbDiscAlterBase?: boolean;
   sbRoundOffStep?: number;
   /**
-   * Declared on the DTO and IGNORED: a save is always a DRAFT, and only
-   * `/bills/post` moves it. Not sent (§18.1) — the Qt habit of sending the
-   * status label's text is not ported.
+   * Not sent (§18.1). `'POSTED'` is the same instruction as `post: true`
+   * (notes 106) and any other value is ignored; the client says `post` — the
+   * Qt habit of sending the status label's text is not ported.
    */
   sbStatus?: string | null;
   /** Declared and ignored likewise; server-owned. Not sent. */
@@ -1236,8 +1229,21 @@ export type SaveBillDto = {
    * Absent is NOT empty here, unlike every other array on this payload: omit it
    * to leave the stored settlement alone, and send `[]` to clear it. A changed
    * set is reversed and re-posted; nothing is ever edited in place.
+   *
+   * They are also the credits a post sets off: with `post: true` the ones the
+   * operator picked are written; without the array the server sets off the
+   * party's credits oldest-first instead.
    */
   adjustments?: SaveBillAdjustmentDto[];
+  /**
+   * Notes 106 — save AND post in one transaction. A refusal rolls all of it
+   * back (no draft, no number) and answers what `/bills/post` used to: a 422
+   * with the notes. Omitted → a DRAFT. With `sbId` a reopened draft is
+   * updated and posted the same way.
+   */
+  post?: boolean;
+  /** Read only with `post: true`: the WARN codes the operator overrides. */
+  overrides?: string[];
 };
 
 // ------------------------------- lifecycle ---------------------------------
@@ -1247,17 +1253,6 @@ export type SaveBillDto = {
 
 /** `POST /bills/validate` — the save body plus the codes the operator overrides. */
 export type ValidateBillDto = SaveBillDto & { overrides?: string[] };
-
-/**
- * `POST /bills/post` — the four keys only: it posts what the server HOLDS, not
- * what the screen shows (§1 fact 1). `adjustments` must ride along whenever the
- * draft has them, or the server picks the party's oldest credits instead (§17.5).
- */
-export type PostBillDto = BillKey & {
-  overrides?: string[];
-  printAfter?: boolean;
-  adjustments?: SaveBillAdjustmentDto[];
-};
 
 /** `POST /bills/amend` — the whole payload plus the lock and the remark (§17.8). */
 export type AmendBillDto = SaveBillDto & {

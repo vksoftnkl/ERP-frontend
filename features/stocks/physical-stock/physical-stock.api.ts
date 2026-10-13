@@ -18,7 +18,7 @@ import type {
   PhysicalStockDocKey,
   PhysicalStockDocument,
   PhysicalStockLineProblem,
-  PhysicalStockPostResult,
+  PhysicalStockSaveResult,
   SavePhysicalStockPayload,
 } from "./physical-stock.types";
 
@@ -92,17 +92,16 @@ export const physicalStockApi = baseApi.injectEndpoints({
       keepUnusedDataFor: 0,
     }),
 
-    /** Create or update a DRAFT (by header.svhId presence). A full replace of the lines. */
-    physicalStockSave: builder.mutation<PhysicalStockDocument, SavePhysicalStockPayload>({
+    /**
+     * Create or update (by header.svhId presence) — a full replace of the
+     * lines. A DRAFT, unless header.status is "POSTED": then the same call
+     * posts it too, in one transaction (notes 106). Posting has no route of
+     * its own on this screen any more — a refusal there would have left a
+     * saved draft behind.
+     */
+    physicalStockSave: builder.mutation<PhysicalStockSaveResult, SavePhysicalStockPayload>({
       query: (body) => ({ url: PHYSICAL_STOCK_ENDPOINTS.create, method: "POST", body }),
-      transformResponse: (payload: ApiSuccessResponse<PhysicalStockDocument>) => payload.data,
-      invalidatesTags: ["PhysicalStock"],
-    }),
-
-    /** stock.fn_svh_post. Zero ledger rows is a success: every line agreed. */
-    physicalStockPost: builder.mutation<PhysicalStockPostResult, PhysicalStockDocKey>({
-      query: (key) => ({ url: PHYSICAL_STOCK_ENDPOINTS.post, method: "POST", body: postBody(key) }),
-      transformResponse: (payload: ApiSuccessResponse<PhysicalStockPostResult>) => payload.data,
+      transformResponse: (payload: ApiSuccessResponse<PhysicalStockSaveResult>) => payload.data,
       invalidatesTags: ["PhysicalStock"],
     }),
 
@@ -162,6 +161,5 @@ export const physicalStockApi = baseApi.injectEndpoints({
 export const {
   usePhysicalStockPickerGridQuery,
   usePhysicalStockSaveMutation,
-  usePhysicalStockPostMutation,
   usePhysicalStockCancelMutation,
 } = physicalStockApi;

@@ -16,6 +16,10 @@
  * The read carries the `AppSettings` tag, so saving an override invalidates it
  * and the new values arrive here on their own — which is what makes a setting
  * the catalog marks `asdNeedsRelogin: false` genuinely need no sign-in.
+ *
+ * The till check rides beside it (Qt calls `checkTillSession` right after
+ * `fetchApplicationSettings` once the branch is known): a till device with no
+ * session held opens Open Till by itself — see `use-till-session-check.tsx`.
  */
 
 import { useEffect, useMemo } from "react";
@@ -31,6 +35,7 @@ import {
   selectUserInfo,
 } from "@/store/slices/authSlice";
 import { sessionQuery, type SessionContext } from "@/features/settings/app-settings/lib/session-scope";
+import { useTillSessionCheck } from "./use-till-session-check";
 
 /**
  * Auth, the persisted business context and the provider that corrects the
@@ -76,6 +81,8 @@ export default function SessionAppSettings() {
       dispatch(appSettingsApplied(data));
     }
   }, [data, isAuthenticated, dispatch]);
+
+  useTillSessionCheck();
 
   return null;
 }

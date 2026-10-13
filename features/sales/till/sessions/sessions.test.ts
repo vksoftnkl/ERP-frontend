@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import type { TillSessionPayload, TillSessionTender, TillSlipCheckPayload, TillVariance } from "../shared/wire/types";
 import {
   approvalBand,
+  approveButton,
   cockpitButtons,
   cockpitFacts,
   cockpitHeader,
   cockpitTiles,
   footNote,
   gridCellText,
+  pendingVariance,
   shouldFallBackToBlind,
   slipTenders,
   tenderRows,
@@ -186,6 +188,36 @@ describe("the cockpit", () => {
     expect(approvalBand(session({ variances: [], tssStatus: "PENDING_APPROVAL" }))?.text).toBe(
       "The count is out of tolerance after the last recount.",
     );
+    expect(approvalBand(session({ tssStatus: "PENDING_APPROVAL" }))?.note).toBe(
+      "Approve decides it: a treatment and a reason, or send it back to recount. Not the session's cashier — a " +
+        "supervisor or above with an Approval Setup (276) grant, or a super admin.",
+    );
+  });
+
+  it("picks the cash variance among the pending ones", () => {
+    const card = variance({ tvrId: "card", tvrTenderTypeId: 2, tvrTenderId: "hdfc" });
+    const cash = variance({ tvrId: "cash" });
+    expect(pendingVariance(session({ variances: [cash, card] }))?.tvrId).toBe("cash");
+    expect(pendingVariance(session({ variances: [card, cash] }))?.tvrId).toBe("cash");
+    expect(pendingVariance(session({ variances: [card] }))?.tvrId).toBe("card");
+    expect(pendingVariance(session({ variances: [variance({ tvrTreatment: "EXPENSE" })] }))).toBeNull();
+  });
+
+  it("lets anyone but the session's cashier approve a session waiting for it", () => {
+    const waiting = session({ tssStatus: "PENDING_APPROVAL", tssOperatorId: "019C-CASHIER" });
+    expect(approveButton(waiting, "019c-supervisor")).toEqual({
+      enabled: true,
+      tip: "Approve with a treatment, or send it back to recount",
+    });
+    expect(approveButton(waiting, "019c-cashier")).toEqual({
+      enabled: false,
+      tip: "You are this session's cashier: another person approves it",
+    });
+    expect(approveButton(session({ tssOperatorId: "019c-cashier" }), "019c-supervisor")).toEqual({
+      enabled: false,
+      tip: "Only a session waiting for approval (PENDING_APPROVAL)",
+    });
+    expect(approveButton(null, "me").enabled).toBe(false);
   });
 
   it("counts the tiles off the grids", () => {

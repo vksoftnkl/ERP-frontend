@@ -6,17 +6,20 @@
  * from `/user-administration/get` before any edit is possible, because a save
  * sends it whole: a menu missing from `toMenusPayload()` is revoked (§7.2).
  *
- * Two consequences the functions here protect:
+ * Three rules the functions here protect:
  *
  * - A grant on a menu the tree does not show (a hidden menu, or a verb the
  *   menu no longer has) is data this screen did not decide. It stays in the
  *   map untouched and goes back exactly as it came.
  * - `umIsFavourite` / `umIsPinned` / `umSortOrder` are the user's own, not the
  *   admin's. They go back as loaded; a new row gets the defaults.
+ * - Groups follow their children (Qt 6f15977): every edit that changes a
+ *   row's place in the set re-derives the groups above it, so a ticked screen
+ *   is never saved without the group the menu bar needs to show it.
  *
  * `toMenusPayload()` is the ONLY function that builds `menus[]`.
  */
-import { type MenuNode, type MenuTree, subtreeIds, type MenuVerb } from "./menuTree";
+import { ancestorIds, type MenuNode, type MenuTree, subtreeIds, type MenuVerb } from "./menuTree";
 import { flagKeyOf } from "./columns";
 import {
   GRANT_FLAG_KEYS,
@@ -94,12 +97,60 @@ function withFlags(grant: Grant, patch: Partial<GrantFlags>): Grant {
 }
 
 /**
+ * The groups above `menuId`, nearest first, each re-derived from its children
+ * after a change: in the set when any child is, out of it when none is (Qt
+ * `UserMenuWidget::syncAncestors`, 6f15977). Only rows in the set are saved,
+ * and the menu bar shows a screen only under a granted group — so a ticked
+ * row ticks every group above it, and a group whose last ticked child is
+ * unticked goes too. A group put back takes the user's own favourite /
+ * pinned / sort order from `loaded`, as any re-ticked row does.
+ *
+ * Works on the caller's fresh copy. A menu the tree does not carry has no
+ * groups here and changes nothing.
+ */
+function syncAncestors(next: Map<number, Grant>, tree: MenuTree, menuId: number, loaded: Grants): void {
+  for (const parentId of ancestorIds(tree, menuId)) {
+    const parent = tree.byId.get(parentId);
+    if (!parent) return;
+    if (parent.children.some((child) => next.has(child.id))) {
+      if (!next.has(parentId)) next.set(parentId, newGrant(parentId, loaded));
+    } else {
+      next.delete(parentId);
+    }
+  }
+}
+
+/**
+ * On load: every row in the set puts every group above it in the set too. A
+ * screen granted without its group (saved before groups followed their
+ * children) then shows its group ticked, so the next save puts the group back
+ * (Qt `applyPermissions`, 6f15977).
+ *
+ * Only ever adds: a group granted on its own, with no ticked child, stays as
+ * the server has it until something under it changes. Hands back the same map
+ * when no group was missing.
+ */
+export function withAncestorsTicked(grants: Grants, tree: MenuTree, loaded: Grants): Grants {
+  let next: Map<number, Grant> | null = null;
+  for (const menuId of grants.keys()) {
+    for (const parentId of ancestorIds(tree, menuId)) {
+      if ((next ?? grants).has(parentId)) continue;
+      next ??= new Map(grants);
+      next.set(parentId, newGrant(parentId, loaded));
+    }
+  }
+  return next ?? grants;
+}
+
+/**
  * Column 0 on one row, cascading to its subtree: ticking a parent ticks its
  * children's column 0 and only column 0 (a child already in the set keeps its
- * flags); unticking removes the whole subtree from the set.
+ * flags); unticking removes the whole subtree from the set. Then the groups
+ * above it follow (`syncAncestors`).
  */
 export function tickMenu(
   grants: Grants,
+  tree: MenuTree,
   node: MenuNode,
   ticked: boolean,
   loaded: Grants,
@@ -112,20 +163,28 @@ export function tickMenu(
       next.delete(id);
     }
   }
+  syncAncestors(next, tree, node.id, loaded);
   return next;
 }
 
-/** One cell. Ticking a verb on a menu not yet in the set puts it in the set. */
+/**
+ * One cell. A right on a row that is not ticked is never saved, so ticking
+ * one ticks the row (and its groups). Unticking a right on a row outside the
+ * set has nothing to change.
+ */
 export function setFlag(
   grants: Grants,
+  tree: MenuTree,
   menuId: number,
   key: GrantFlagKey,
   value: boolean,
   loaded: Grants,
 ): Grants {
+  const current = grants.get(menuId);
+  if (!current && !value) return grants;
   const next = new Map(grants);
-  const current = next.get(menuId) ?? newGrant(menuId, loaded);
-  next.set(menuId, withFlags(current, { [key]: value }));
+  next.set(menuId, withFlags(current ?? newGrant(menuId, loaded), { [key]: value }));
+  syncAncestors(next, tree, menuId, loaded);
   return next;
 }
 
@@ -174,11 +233,12 @@ export function verbColumnState(
 
 /**
  * The row's context menu: every verb this menu has, on or off. Puts the menu
- * in the set. A flag for a verb the menu lacks is not touched — it is not
- * painted, and it is not this screen's to decide.
+ * — and so its groups — in the set. A flag for a verb the menu lacks is not
+ * touched — it is not painted, and it is not this screen's to decide.
  */
 export function setAllVerbsOnMenu(
   grants: Grants,
+  tree: MenuTree,
   node: MenuNode,
   value: boolean,
   loaded: Grants,
@@ -188,13 +248,14 @@ export function setAllVerbsOnMenu(
   const patch: Partial<GrantFlags> = {};
   for (const verb of node.verbs) patch[flagKeyOf(verb)] = value;
   next.set(node.id, withFlags(current, patch));
+  syncAncestors(next, tree, node.id, loaded);
   return next;
 }
 
 /** "All": every row of the tree in the set with every cell it has ticked. */
 export function grantEverything(grants: Grants, tree: MenuTree, loaded: Grants): Grants {
   let next: Grants = grants;
-  for (const node of tree.rows) next = setAllVerbsOnMenu(next, node, true, loaded);
+  for (const node of tree.rows) next = setAllVerbsOnMenu(next, tree, node, true, loaded);
   return next;
 }
 

@@ -26,7 +26,6 @@ export {
   useLazyGetBillQuery,
   useSaveBillMutation,
   useValidateBillMutation,
-  usePostBillMutation,
   useAmendBillMutation,
   useCancelBillMutation,
   useDeleteBillMutation,

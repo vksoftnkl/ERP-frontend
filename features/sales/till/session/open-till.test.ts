@@ -135,7 +135,7 @@ describe("the figures", () => {
   });
 });
 
-describe("why F10 refuses", () => {
+describe("why Open (Ctrl+Enter) refuses", () => {
   it("names each stop in Qt's words", () => {
     expect(openProblem(inputs({ check: null }))).toBe("Still asking the server about this device…");
     expect(openProblem(inputs({ check: null, checkError: "Not registered" }))).toBe("Not registered");
@@ -168,7 +168,7 @@ describe("why F10 refuses", () => {
   });
 });
 
-describe("the body F10 posts", () => {
+describe("the body Open (Ctrl+Enter) posts", () => {
   it("names the picked counter and the issued float", () => {
     const body = openBody(inputs({}, { count: withQty(EMPTY_COUNT, "d500", 4) }), { companyId: "co", branchId: "br" });
     expect(body).toEqual({
@@ -227,6 +227,14 @@ describe("the live panel", () => {
     expect(panel?.title).toBe("Your session on another device");
     expect(panel?.showResume).toBe(false);
     expect(panel?.text).toMatch(/open on another device/);
+  });
+
+  it("lists the supervisor's movements only on this cashier's own session here", () => {
+    const sessionId = live().sessionId;
+    expect(livePanelOf(check({ deviceSession: live() }), "u-me")?.supervisorMovesTssId).toBe(sessionId);
+    expect(livePanelOf(check({ deviceSession: live({ status: "COUNTING" }) }), "u-me")?.supervisorMovesTssId).toBe(sessionId);
+    expect(livePanelOf(check({ deviceSession: live({ operatorId: "u-other" }) }), "u-me")?.supervisorMovesTssId).toBeNull();
+    expect(livePanelOf(check({ userSessionElsewhere: live() }), "u-me")?.supervisorMovesTssId).toBeNull();
   });
 
   it("draws the gauge in quarters", () => {

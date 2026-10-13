@@ -11,7 +11,15 @@ import {
 } from "../domain/fixtures";
 import type { PaymentOpenItemsPayload, PaymentSettings } from "../payment.types";
 import { validatePaymentBeforePost, validatePaymentBeforeSave } from "../validate";
-import { initialPaymentDraft, paymentDraftReducer, type PaymentDraft } from "./draft";
+import { documentRights } from "@/lib/permissions/document-rights";
+import { NO_MENU_PERMISSIONS } from "@/lib/permissions/menu-permissions";
+import {
+  initialPaymentDraft,
+  mayPostPayment,
+  paymentDraftReducer,
+  saveDraftDenial,
+  type PaymentDraft,
+} from "./draft";
 
 const SCOPE = { companyId: "co", branchId: "br", accYear: "2026-2027" };
 
@@ -247,5 +255,33 @@ describe("payment validation", () => {
 
   it("posts a payment held wholly on account", () => {
     expect(validatePaymentBeforePost(base)).toEqual([]);
+  });
+});
+
+describe("the document rights on Save Draft and Post", () => {
+  const rightsOf = (grant: { canCreate?: boolean; canEdit?: boolean; canPost?: boolean }) =>
+    documentRights({ ...NO_MENU_PERMISSIONS, ...grant });
+
+  it("keeps drafts from a Post-only user, new or saved, and says why", () => {
+    const postOnly = rightsOf({ canPost: true });
+    expect(saveDraftDenial(postOnly, false)).toBe(
+      "You may not save drafts (no Create right) — post the payment instead",
+    );
+    expect(saveDraftDenial(postOnly, true)).toBe(
+      "You may not change a saved draft (no Edit right) — post it instead",
+    );
+    expect(mayPostPayment(postOnly, false)).toBe(true);
+  });
+
+  it("lets Create save a new draft and Edit change a saved one", () => {
+    expect(saveDraftDenial(rightsOf({ canCreate: true }), false)).toBeNull();
+    expect(saveDraftDenial(rightsOf({ canCreate: true }), true)).not.toBeNull();
+    expect(saveDraftDenial(rightsOf({ canEdit: true }), true)).toBeNull();
+  });
+
+  it("needs the Post right to post — but not to save a correction", () => {
+    const draftsOnly = rightsOf({ canCreate: true, canEdit: true, canPost: false });
+    expect(mayPostPayment(draftsOnly, false)).toBe(false);
+    expect(mayPostPayment(draftsOnly, true)).toBe(true);
   });
 });

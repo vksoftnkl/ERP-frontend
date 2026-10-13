@@ -14,9 +14,10 @@
  *
  * Acts through the screens already built: Count / close (S4) on a COUNTING
  * session, Cash movement (S3: a supervisor's pickup / top-up) on a live one,
- * the Slip check on a counted one. Approve & close, Recount request, Force
- * close, Reopen, Re-tender from here, Print Z and X read wait for the server
- * and are shown greyed with why.
+ * the Slip check on a counted one, and Approve (notes 105 A: approve with a
+ * treatment, or send back to recount — `variance-decide.ts`) on one waiting
+ * for approval. Force close, Reopen, Re-tender from here, Print Z and X read
+ * wait for the server and are shown greyed with why.
  */
 import { clockOf, ddmmyyyy, durationText, textOf, type TillTone } from "../shared/format";
 import { formatFigure, formatMoney, formatSignedMoney, paiseOf, toPaise } from "../shared/money";
@@ -163,16 +164,25 @@ export type ApprovalBand = {
 };
 
 /**
- * A variance waiting for an approver: a drawer variance first; a slip gap
- * (non-cash) is final with the count and waits for the slip check —
- * reported, not enforced.
+ * The PENDING variance an approver decides — the cash one when there is one
+ * (the last PENDING row wins only if it is cash, as Qt picks it).
  */
-export function approvalBand(s: TillSessionPayload): ApprovalBand | null {
+export function pendingVariance(s: TillSessionPayload): TillVariance | null {
   let pending: TillVariance | null = null;
   for (const v of s.variances ?? []) {
     if (v.tvrTreatment !== "PENDING") continue;
     if (!pending || v.tvrTenderTypeId === CASH_TENDER_TYPE_ID) pending = v;
   }
+  return pending;
+}
+
+/**
+ * A variance waiting for an approver: a drawer variance first; a slip gap
+ * (non-cash) is final with the count and waits for the slip check —
+ * reported, not enforced.
+ */
+export function approvalBand(s: TillSessionPayload): ApprovalBand | null {
+  const pending = pendingVariance(s);
   const status = s.tssStatus ?? "";
   if (status !== "PENDING_APPROVAL" && !pending) return null;
   const slips = pending !== null && pending.tvrTenderTypeId !== CASH_TENDER_TYPE_ID;
@@ -189,8 +199,8 @@ export function approvalBand(s: TillSessionPayload): ApprovalBand | null {
       slips && status !== "PENDING_APPROVAL"
         ? "Reported, not enforced: the session closes and nothing posts for the gap. The card money's truth comes " +
           "with the statement — a row never paid shows in Settlement → Not received."
-        : "Approver, PIN and the treatment are the approval gate (till build phase 3), not on the server yet. Until it " +
-          "is, a PENDING_APPROVAL session holds its counter, cashier and device (notes 97 §1.2).",
+        : "Approve decides it: a treatment and a reason, or send it back to recount. Not the session's cashier — a " +
+          "supervisor or above with an Approval Setup (276) grant, or a super admin.",
   };
 }
 
@@ -309,8 +319,23 @@ export function cockpitButtons(s: TillSessionPayload | null): CockpitButtons {
   };
 }
 
+export type ApproveButton = { enabled: boolean; tip: string };
+
+/** Approve (notes 105 A): only a session waiting for approval, and never by its own cashier. */
+export function approveButton(s: TillSessionPayload | null, me: string): ApproveButton {
+  const pendingApproval = s?.tssStatus === "PENDING_APPROVAL";
+  const mine = Boolean(me) && (s?.tssOperatorId ?? "").toLowerCase() === me.toLowerCase();
+  return {
+    enabled: pendingApproval && !mine,
+    tip: !pendingApproval
+      ? "Only a session waiting for approval (PENDING_APPROVAL)"
+      : mine
+        ? "You are this session's cashier: another person approves it"
+        : "Approve with a treatment, or send it back to recount",
+  };
+}
+
 export const WAITING_TIPS = {
-  approve: "Comes with the approval gate (till build phase 3) — not on the server yet",
   retender: "Re-tender a bill from the sale bill (Ctrl+F6) for now",
   forceClose: "No server route for this yet",
   reopen: "No server route for this yet",

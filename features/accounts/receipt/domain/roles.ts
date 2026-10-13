@@ -175,12 +175,13 @@ export const ROLE_LABELS: Readonly<Record<ReceiptRole, string>> = {
  * The mirrored three are absent: they are DERIVED from the bills grid's
  * columns, and a hand-keyed one would be a second way to say the same thing.
  * BANK_CHARGES is absent for the same reason — it is derived from the MDR
- * column on the instruments.
+ * column on the instruments — and so is SURCHARGE_RECOVERED since Qt 6f15977:
+ * it is derived from the tender master's surcharge, and the server refuses a
+ * hand-keyed one that disagrees with the instruments.
  */
 export const PICKABLE_ROLES: readonly ReceiptRole[] = [
   "TDS_RECEIVABLE",
   "CLAIMS_ALLOWED",
   "INTEREST_INCOME",
-  "SURCHARGE_RECOVERED",
   "TCS_PAYABLE",
 ];

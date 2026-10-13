@@ -6,6 +6,10 @@
  * Painted from `tree + grants` and nothing else — no signals to block, no
  * pending queue. A cell exists only where the menu has the verb (§6.3). Rows
  * are virtualised: the tree is a couple of hundred rows by twelve cells.
+ *
+ * Every tick goes through `domain/grants.ts`, which keeps the groups in step
+ * (Qt 6f15977): a right ticks its row, a ticked row ticks every group above
+ * it, and a group whose last ticked child goes is unticked too.
  */
 import {
   type MouseEvent as ReactMouseEvent,
@@ -277,7 +281,7 @@ export function PermissionsTab({
                       checked={ticked}
                       disabled={inert}
                       aria-label={`${node.label} in the user's menu`}
-                      onChange={(event) => onChange(tickMenu(grants, node, event.target.checked, loaded))}
+                      onChange={(event) => onChange(tickMenu(grants, tree, node, event.target.checked, loaded))}
                     />
                     <span
                       className={cx(
@@ -304,7 +308,7 @@ export function PermissionsTab({
                           disabled={inert}
                           aria-label={`${column.label} on ${node.label}`}
                           onChange={(event) =>
-                            onChange(setFlag(grants, node.id, column.key, event.target.checked, loaded))
+                            onChange(setFlag(grants, tree, node.id, column.key, event.target.checked, loaded))
                           }
                         />
                       </div>
@@ -340,7 +344,7 @@ export function PermissionsTab({
               role="menuitem"
               className={styles.contextMenuItem}
               onClick={() => {
-                onChange(setAllVerbsOnMenu(grants, contextMenu.node, true, loaded));
+                onChange(setAllVerbsOnMenu(grants, tree, contextMenu.node, true, loaded));
                 setContextMenu(null);
               }}
             >
@@ -351,7 +355,7 @@ export function PermissionsTab({
               role="menuitem"
               className={styles.contextMenuItem}
               onClick={() => {
-                onChange(setAllVerbsOnMenu(grants, contextMenu.node, false, loaded));
+                onChange(setAllVerbsOnMenu(grants, tree, contextMenu.node, false, loaded));
                 setContextMenu(null);
               }}
             >

@@ -14,6 +14,7 @@ import {
   buildTenderPayload,
   importQuotationAsOrder,
   parseLoadedDocument,
+  savedOrderMessage,
   tenderRowFromPayload,
   toArithRow,
 } from "./sale-order.payload";
@@ -772,5 +773,22 @@ describe("load round trip", () => {
     expect(resaved.soPayStatus).toBe("PARTIAL");
     expect(resaved.tenders?.[0].tdId).toBe("td-1");
     expect(resaved.tenders?.[0].tdAmount).toBe(500);
+  });
+});
+
+describe("savedOrderMessage — a one-call confirm says confirmed, not saved", () => {
+  it("reads soStatus off the answer", () => {
+    expect(savedOrderMessage({ soOrderRefno: "SO-12", soStatus: "CONFIRMED" })).toBe(
+      "Order SO-12 confirmed.",
+    );
+    expect(savedOrderMessage({ soOrderRefno: "SO-12", soStatus: "confirmed" })).toBe(
+      "Order SO-12 confirmed.",
+    );
+    expect(savedOrderMessage({ soOrderRefno: "SO-12", soStatus: "DRAFT" })).toBe(
+      "Order SO-12 saved successfully.",
+    );
+    expect(savedOrderMessage({ soOrderRefno: null, soStatus: null })).toBe(
+      "Order saved successfully.",
+    );
   });
 });

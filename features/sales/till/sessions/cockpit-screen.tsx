@@ -10,7 +10,8 @@
  * Till Sessions 273 OVERRIDE); refused (403, or TILL_BLIND_CLOSE to the
  * session's own cashier) it falls back to the blind `/sessions/get`. The four
  * grids under the reconciliation are 146 bills · 147 money documents · 148
- * counts · 145 timeline. What it decides is `cockpit.ts`.
+ * counts · 145 timeline. What it decides is `cockpit.ts`; Approve opens the
+ * approver's decision (`variance-decide-dialog.tsx`).
  *
  * Keys: F5 refresh, Esc close.
  */
@@ -22,9 +23,9 @@ import { toast } from "@/lib/notify";
 import { useTillSessionClient } from "../shared/api/till-session-api";
 import { tillErrorOf } from "../shared/errors";
 import { TILL_SESSIONS_HREF, sortRowsBy } from "../shared/format";
-import { reasonGridParams, toReasons } from "../shared/reasons";
+import { reasonGridParams, toReasons, type TillReason } from "../shared/reasons";
 import { TonePill, overlayOpen } from "../shared/till-dialog";
-import type { GridRow, TillSessionKey, TillSessionPayload } from "../shared/wire/types";
+import type { GridRow, TillSessionKey, TillSessionPayload, TillVarianceDecision } from "../shared/wire/types";
 import styles from "../shared/till.module.scss";
 import { CashMovementDialog } from "../session/cash-movement-dialog";
 import { EndShiftDialog } from "../session/end-shift-dialog";
@@ -34,6 +35,7 @@ import {
   TENDER_FIGURES,
   WAITING_TIPS,
   approvalBand,
+  approveButton,
   cockpitButtons,
   cockpitFacts,
   cockpitHeader,
@@ -47,6 +49,8 @@ import {
 import { FALLBACK_COLUMNS, GridTable } from "./grid-table";
 import { EventCell } from "./journal-dialog";
 import { SlipCheckDialog } from "./slip-check-dialog";
+import { VarianceDecideDialog } from "./variance-decide-dialog";
+import { decideRequestOf, decidedMessage, type DecideRequest } from "./variance-decide";
 
 type DocTab = "bills" | "money" | "counts";
 
@@ -69,13 +73,16 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
   const [grids, setGrids] = useState<Grids>(NO_GRIDS);
   const [gridsLoading, setGridsLoading] = useState(true);
   const [gridsError, setGridsError] = useState("");
-  const [reasonNames, setReasonNames] = useState<Map<string, string>>(() => new Map());
+  /** Grid 134, every reason: the reconciliation names them, the decide dialog offers its gap's. */
+  const [reasons, setReasons] = useState<TillReason[]>([]);
+  const reasonNames = useMemo(() => new Map(reasons.map((r) => [r.id, r.name])), [reasons]);
   const [tab, setTab] = useState<DocTab>("bills");
   const tabChosen = useRef(false);
   const [now, setNow] = useState(() => new Date());
   const [countOpen, setCountOpen] = useState(false);
   const [movementOpen, setMovementOpen] = useState(false);
   const [slipOpen, setSlipOpen] = useState(false);
+  const [decide, setDecide] = useState<DecideRequest | null>(null);
 
   /** Bumped by F5 / Refresh and after a dialog: the effect below re-reads everything. */
   const [tick, setTick] = useState(0);
@@ -149,7 +156,7 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
     client
       .gridRows("tillReasonList", reasonGridParams(key.companyId, true))
       .then((rows) => {
-        if (!cancelled) setReasonNames(new Map(toReasons(rows).map((r) => [r.id, r.name])));
+        if (!cancelled) setReasons(toReasons(rows));
       })
       .catch(() => undefined);
     return () => {
@@ -196,7 +203,14 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
   const reconciliation = session ? tenderRows(session, reasonNames, expectedShown) : null;
   const band = session ? approvalBand(session) : null;
   const buttons = cockpitButtons(session);
+  const approve = approveButton(session, me);
   const mine = session?.tssOperatorId === me;
+
+  const decided = (decision: TillVarianceDecision) => {
+    setDecide(null);
+    load();
+    toast.info(decidedMessage(decision));
+  };
 
   const docGrid =
     tab === "bills"
@@ -390,7 +404,15 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
       </div>
 
       <div className={styles.buttonRow}>
-        <button type="button" className={styles.primaryButton} disabled title={WAITING_TIPS.approve}>
+        <button
+          type="button"
+          className={styles.primaryButton}
+          disabled={!approve.enabled}
+          title={approve.tip}
+          onClick={() => {
+            if (session) setDecide(decideRequestOf(session, key));
+          }}
+        >
           Approve
         </button>
         <button
@@ -460,6 +482,7 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
           load();
         }}
       />
+      <VarianceDecideDialog request={decide} reasons={reasons} onClose={() => setDecide(null)} onDecided={decided} />
       <SlipCheckDialog
         sessionKey={slipOpen ? key : null}
         tenders={slipTenders(session)}

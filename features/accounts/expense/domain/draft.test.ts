@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ExpenseDraft, ExpenseLedgerPick, ExpenseReasonPick } from "../expense.types";
 import {
+  asksBeforeOpeningAnother,
   cellAfterPick,
   emptyLine,
   emptyTender,
@@ -92,6 +93,18 @@ describe("blank rows", () => {
     expect(withTrailingRows(grown)).toBe(grown);
     const posted = { ...filled, status: "POSTED" as const };
     expect(withTrailingRows(posted)).toBe(posted);
+  });
+});
+
+describe("F8 over a voucher (Qt showList, 6f15977)", () => {
+  it("asks only while the voucher can change and a line has something in it", () => {
+    const typed = [{ ...emptyLine(), description: "tea" }, emptyLine()];
+    expect(asksBeforeOpeningAnother(typed, true)).toBe(true);
+    // A blank voucher — or only a tender typed — is simply replaced.
+    expect(asksBeforeOpeningAnother([emptyLine()], true)).toBe(false);
+    expect(asksBeforeOpeningAnother([], true)).toBe(false);
+    // A posted or cancelled voucher (or one still being read) has nothing to lose.
+    expect(asksBeforeOpeningAnother(typed, false)).toBe(false);
   });
 });
 

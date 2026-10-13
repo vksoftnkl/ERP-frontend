@@ -12,10 +12,10 @@
  *
  * One `POST /till/movements/create` each. The safe is the server's (the
  * counter's, else the branch default — the route takes no safe). Pickup /
- * Top-up need Till Sessions (273) OVERRIDE on the LOGGED-IN user; the
- * supervisor's PIN at the till is the approval gate (phase 3, not built), so
- * the sign-off panel says who signs instead of asking for PINs. A pickup is
- * always two people: the session's own cashier cannot take it.
+ * Top-up need Till Sessions (273) OVERRIDE on the LOGGED-IN user, and the
+ * witness — the session's cashier — types their till PIN on this screen
+ * (notes 108): nothing is recorded without them there. A pickup is always
+ * two people: the session's own cashier cannot take it.
  */
 import { countLines, countedPaise, type DenomCountValue, type Denomination } from "../shared/denom";
 import { formatMoney, paiseToNumber } from "../shared/money";
@@ -34,6 +34,14 @@ export const MODE_TITLES: Record<MovementMode, string> = {
   TOP_UP: "Top-up",
 };
 
+/** The mode tiles' second line (Qt 2026-10-12). Ctrl+1..4 pick them in this order. */
+export const MODE_LINES: Record<MovementMode, string> = {
+  DROP: "Sealed bag to the safe",
+  PAID_IN: "Cash income, no party",
+  PICKUP: "Supervisor takes cash",
+  TOP_UP: "Change from the safe",
+};
+
 export type MovementForm = {
   mode: MovementMode;
   reasonId: string;
@@ -45,6 +53,8 @@ export type MovementForm = {
   refNo: string;
   partyName: string;
   notes: string;
+  /** Notes 108: the session cashier's till PIN (a pickup; a top-up someone else brings). */
+  witnessPin: string;
   count: DenomCountValue;
 };
 
@@ -56,7 +66,7 @@ export type MovementInputs = {
   denominations: readonly Denomination[];
   /** The signed-in user. */
   me: string;
-  /** The signed-in user's name, for the sign-off panel. */
+  /** The signed-in user's name: the supervisor on the summary card. */
   myName: string;
 };
 
@@ -81,6 +91,23 @@ export function refVisible(form: MovementForm, reasons: readonly TillReason[]): 
   return Boolean(reasonCategory(form.mode) && reasonById(reasons, form.reasonId)?.needsRef);
 }
 
+/**
+ * Notes 108: a Pickup always has a witness (the session's cashier); a Top-up
+ * has one unless the session's own cashier brings the change to their own
+ * drawer. Whenever there is a witness, their till PIN proves they were here.
+ * Until the session is read its cashier is unknown, so a top-up asks (Qt).
+ */
+export function needsWitnessPin(mode: MovementMode, session: TillSessionPayload | null, me: string): boolean {
+  if (mode === "PICKUP") return true;
+  if (mode !== "TOP_UP") return false;
+  return (session?.tssOperatorId ?? "") !== me;
+}
+
+/** The session's cashier by name, or the stand-in Qt uses before it is read. */
+function cashierOr(session: TillSessionPayload | null, standIn: string): string {
+  return session?.operatorName?.trim() || standIn;
+}
+
 export function movementAmount(inputs: MovementInputs): number {
   return isCounted(inputs.form.mode)
     ? countedPaise(inputs.denominations, inputs.form.count)
@@ -100,6 +127,9 @@ export function movementProblem(inputs: MovementInputs): string {
   }
   const needsReason = form.mode === "PAID_IN" || form.mode === "PICKUP";
   if (needsReason && !form.reasonId) return "Pick a reason.";
+  if (needsWitnessPin(form.mode, session, inputs.me) && !form.witnessPin.trim()) {
+    return `${cashierOr(session, "The cashier")} must type their till PIN.`;
+  }
   if (form.mode === "DROP" && (!form.bagNo.trim() || !form.sealNo.trim())) {
     return "A drop is a sealed bag: enter its bag no and seal.";
   }
@@ -141,27 +171,33 @@ export function movementBody(inputs: MovementInputs, key: TillSessionKey): TillM
     body.bagNo = textOrNull(form.bagNo);
     body.sealNo = textOrNull(form.sealNo);
   }
+  if (needsWitnessPin(form.mode, inputs.session, inputs.me)) body.witnessPin = form.witnessPin.trim();
   return body;
 }
 
 export type MovementWords = {
   title: string;
-  voucher: string;
-  voucherTone: "blue" | "green" | "grey";
+  /** Under the title: whose session, or that it is still being read. */
+  sub: string;
+  /** Which way the cash goes, in words a cashier reads at a glance. */
+  flow: string;
+  flowTone: "blue" | "green";
+  /** The summary card. */
+  totalCaption: string;
   safeCaption: string;
+  safeTip: string;
   bagCaption: string;
   sealCaption: string;
-  totalCaption: string;
-  signRule: string;
   supervisor: string;
   witness: string;
-  postHint: string;
+  /** Notes 108: the witness PIN row. */
+  pinCaption: string;
+  pinHint: string;
   modeNote: string;
 };
 
-export const SIGN_NOTE =
-  "Supervisor and witness PINs at the till come with the approval gate (till build phase 3). Until then the " +
-  "supervisor is whoever is logged in with the Till Sessions (273) override right.";
+export const SUPERVISOR_TIP = "The user logged in now, with the Till Sessions override right.";
+export const WITNESS_TIP = "The session's cashier signs the slip.";
 
 export function movementWords(mode: MovementMode, session: TillSessionPayload | null, myName: string): MovementWords {
   const drop = mode === "DROP";
@@ -169,37 +205,90 @@ export function movementWords(mode: MovementMode, session: TillSessionPayload | 
   const pickup = mode === "PICKUP";
   const topUp = mode === "TOP_UP";
   const cashier = session?.operatorName ?? "";
+  const sessionNo = session?.tssSessionNo ?? "";
   return {
-    title: `${MODE_TITLES[mode]} — ${session?.tssSessionNo ?? ""} · ${cashier}`,
-    voucher: paidIn ? "TPIn" : topUp ? "TFlt" : "TDrp",
-    voucherTone: topUp ? "green" : paidIn ? "blue" : "grey",
-    safeCaption: topUp ? "From safe" : "To safe",
+    title: `Cash Movement — ${MODE_TITLES[mode]}`,
+    sub: sessionNo ? `Session ${sessionNo} · ${cashier}` : "Reading the session…",
+    flow: paidIn ? "INTO THE TILL" : topUp ? "SAFE → TILL" : "TILL → SAFE",
+    flowTone: topUp || paidIn ? "green" : "blue",
+    totalCaption: drop ? "DECLARED IN THE BAG" : paidIn ? "PAID IN" : pickup ? "PICKED UP" : "TOPPED UP",
+    safeCaption: paidIn ? "Ledger" : topUp ? "From safe" : "To safe",
+    safeTip: paidIn ? "" : "The counter's own safe, else the branch's default safe.",
     bagCaption: drop ? "Bag no *" : "Bag no",
     sealCaption: drop ? "Seal *" : "Seal",
-    totalCaption: topUp ? "TOPPED UP" : pickup ? "PICKED UP" : "PAID IN",
-    signRule: pickup ? "PICKUP · ALWAYS · Supervisor" : "TOP_UP · ALWAYS · Supervisor",
-    supervisor: `${myName}  (logged in — Till Sessions right)`,
-    witness: pickup ? `${cashier}  (the session's cashier)` : cashier,
-    postHint: drop
-      ? "Posts TDrp  Dr Safe / Cr Till cash  (on the declared amount)"
-      : paidIn
-        ? "Posts TPIn  Dr Till cash / Cr the reason's or chosen ledger"
-        : pickup
-          ? "Posts TDrp  Dr Safe / Cr Till cash"
-          : "Posts TFlt  Dr Till cash / Cr Safe",
+    supervisor: myName,
+    witness: cashier,
+    pinCaption: `${cashierOr(session, "Cashier")}'s PIN *`,
+    pinHint: `${cashierOr(session, "The cashier")} types their own till PIN here — proof they saw it.`,
     modeNote: drop
-      ? "Sealed by the cashier, dropped into the safe slot. Nobody counts it now — the cash office opens the bag " +
-        "later; a difference there becomes this session's variance."
+      ? "The cashier seals the bag and drops it in the safe. The cash office counts it later."
       : paidIn
-        ? "Cash income with no party (scrap, a refund to the store). An expense is an Expense voucher; a supplier " +
-          "or staff member is a bill-wise Payment."
+        ? "Cash income with no party, e.g. scrap. An expense is an Expense voucher."
         : pickup
-          ? "A supervisor takes cash out of the drawer; the cashier signs for it. Slip prints with two signature lines."
-          : "Change from the safe into the drawer, counted by note — the mirror of a pickup.",
+          ? "A supervisor takes cash from the drawer; the cashier signs for it."
+          : "A supervisor brings change from the safe into the drawer.",
   };
 }
 
-/** A fresh form for a mode — Qt clears the count, the amount and every box on a mode change. */
+/**
+ * The summary card's second line: a paid-in's ledger (the one picked, else
+ * the reason's own, else —); every other mode moves cash through the
+ * counter's safe.
+ */
+export function summaryAccount(inputs: Pick<MovementInputs, "form" | "reasons">): string {
+  const { form, reasons } = inputs;
+  if (form.mode !== "PAID_IN") return "Counter's safe";
+  const ledger = form.ledger?.text?.trim() || reasonById(reasons, form.reasonId)?.ledgerName?.trim() || "";
+  return ledger || "—";
+}
+
+export type MovementStars = {
+  /** A paid-in whose reason has no ledger of its own (or no reason yet). */
+  ledger: boolean;
+  /** The reason demands a ref no (Till Masters). */
+  ref: boolean;
+  /** The reason demands a note (Till Masters). */
+  notes: boolean;
+  /** Every mode but a drop counts by note. */
+  count: boolean;
+};
+
+/** A * on what this mode and this reason demand. */
+export function movementStars(inputs: Pick<MovementInputs, "form" | "reasons">): MovementStars {
+  const { form, reasons } = inputs;
+  const reason = reasonById(reasons, form.reasonId);
+  return {
+    ledger: form.mode === "PAID_IN" && !reason?.ledgerId,
+    ref: Boolean(reason?.needsRef),
+    notes: Boolean(reason?.needsNote),
+    count: isCounted(form.mode),
+  };
+}
+
+/** The ledger box's tip: blank falls back to the reason's own ledger. */
+export function ledgerTip(inputs: Pick<MovementInputs, "form" | "reasons">): string {
+  const { form, reasons } = inputs;
+  const reason = reasonById(reasons, form.reasonId);
+  return form.mode === "PAID_IN" && reason?.ledgerId ? `Blank = the reason's own ledger (${reason.ledgerName}).` : "";
+}
+
+/**
+ * The mode a Ctrl+digit picks (Ctrl+1..4, the tiles' order); null for any
+ * other key.
+ */
+export function modeForKey(event: { key: string; ctrlKey: boolean; altKey: boolean; shiftKey: boolean; metaKey: boolean }): MovementMode | null {
+  if (!event.ctrlKey || event.altKey || event.shiftKey || event.metaKey) return null;
+  const index = ["1", "2", "3", "4"].indexOf(event.key);
+  return index >= 0 ? MOVEMENT_MODES[index] : null;
+}
+
+/** Ctrl+Enter posts (Qt 2026-10-12); F10 still does. */
+export function isPostKey(event: { key: string; ctrlKey: boolean; altKey: boolean; shiftKey: boolean; metaKey: boolean }): boolean {
+  if (event.altKey || event.shiftKey || event.metaKey) return false;
+  return event.ctrlKey ? event.key === "Enter" : event.key === "F10";
+}
+
+/** A fresh form for a mode — Qt clears the count, the amount and every box (the PIN too) on a mode change. */
 export function emptyMovementForm(mode: MovementMode, count: DenomCountValue): MovementForm {
   return {
     mode,
@@ -211,6 +300,7 @@ export function emptyMovementForm(mode: MovementMode, count: DenomCountValue): M
     refNo: "",
     partyName: "",
     notes: "",
+    witnessPin: "",
     count,
   };
 }

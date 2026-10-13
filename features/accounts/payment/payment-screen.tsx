@@ -31,6 +31,7 @@ import { useRouter } from "next/navigation";
 import { useBusinessContext } from "@/components/layout/business-context";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
+import { documentRights } from "@/lib/permissions/document-rights";
 import { toast } from "@/lib/notify";
 import { useUiTableId } from "@/lib/ui-tables";
 import { todayIso } from "@/features/sales/quotation/quotation.utils";
@@ -55,7 +56,7 @@ import { paymentTdsOf } from "./domain/seeded-lines";
 import { defaultPaymentTender, isChequeType, isTransferType, isUpiType } from "./domain/tenders";
 import type { BillRow, CreditRow, PaymentKeys, PaymentScope } from "./payment.types";
 import type { PartyHandoff } from "@/lib/navigation/party-handoff";
-import { paidTotal } from "./state/draft";
+import { mayPostPayment, paidTotal, saveDraftDenial } from "./state/draft";
 import { usePaymentDraft, type ConfirmRequest, type PromptRequest } from "./state/use-payment-draft";
 import { usePaymentSettings } from "./state/use-payment-settings";
 import { BeneficiaryDialog } from "./components/beneficiary-dialog";
@@ -137,8 +138,11 @@ export default function PaymentScreen({ initialKeys, onBackToList, openOnParty }
   );
 
   // "Unloaded" is not "denied": read-only while the menu loads, and the server
-  // stays the authority.
-  const canWrite = !permissionsLoading && permissions.canEdit;
+  // stays the authority. Post alone is a writing right too (notes 106): a
+  // Post-only user keys a NEW payment and posts it in one call, no draft in
+  // between — so the entry closes only with no Create, no Edit AND no Post.
+  const rights = useMemo(() => documentRights(permissions), [permissions]);
+  const canWrite = !permissionsLoading && (rights.mayStartNew || rights.mayEdit);
   const settings = usePaymentSettings(scope.companyId, scope.branchId);
 
   const [dialog, setDialog] = useState<DialogRequest | null>(null);
@@ -158,6 +162,7 @@ export default function PaymentScreen({ initialKeys, onBackToList, openOnParty }
     appDate: todayIso(),
     settings,
     canWrite,
+    rights,
     confirm,
     prompt,
   });
@@ -427,8 +432,11 @@ export default function PaymentScreen({ initialKeys, onBackToList, openOnParty }
 
   const shortcuts = {
     saveDraft: api.saveDraft,
+    saveAmend: api.saveAmend,
     reloadItems: api.reloadItems,
     postAndPrint,
+    amending: draft.amending,
+    mayPost: mayPostPayment(rights, draft.amending),
     walk: api.walk,
     newDocument: api.newDocument,
     closeScreen,
@@ -467,7 +475,13 @@ export default function PaymentScreen({ initialKeys, onBackToList, openOnParty }
       }
       if (event.ctrlKey && event.key === "Enter") {
         event.preventDefault();
-        void current.postAndPrint();
+        // The one key, two verbs (Qt post()): correcting a posted payment saves
+        // the correction; anything else posts — and that needs the Post right.
+        if (current.amending) {
+          void current.saveAmend();
+        } else if (current.mayPost) {
+          void current.postAndPrint();
+        }
         return;
       }
       if (event.key === "F6") {
@@ -534,12 +548,15 @@ export default function PaymentScreen({ initialKeys, onBackToList, openOnParty }
     settings.allowPostedAmend && draft.header.status === "POSTED" && !draft.amending && canWrite;
   const postDisabled =
     !canWrite ||
+    !mayPostPayment(rights, draft.amending) ||
     !identity.balances ||
     busy !== "idle" ||
     !draft.header.partyId ||
     (!editable && !draft.amending);
 
   const paid = paidTotal(draft);
+  // Greyed with the reason, not hidden: a Post-only user posts instead.
+  const draftDenied = saveDraftDenial(rights, Boolean(draft.header.voucherId));
 
   return (
     <div
@@ -878,7 +895,8 @@ export default function PaymentScreen({ initialKeys, onBackToList, openOnParty }
             <button
               type="button"
               className={styles.button}
-              disabled={!canWrite || !editable || busy !== "idle"}
+              disabled={!canWrite || !editable || busy !== "idle" || draftDenied !== null}
+              title={draftDenied ?? undefined}
               onClick={() => void api.saveDraft()}
             >
               Save Draft

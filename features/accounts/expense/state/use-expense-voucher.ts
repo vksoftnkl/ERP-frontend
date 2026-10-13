@@ -13,6 +13,8 @@
  *   post          Ctrl+Enter  POST create, then POST post by the key — the number
  *                             is issued at post; a failed post leaves the draft saved
  *   cancelVoucher      POST cancel with a reason (a POSTED voucher only)
+ *   openVoucher   F8 pick     GET get by the four keys, into this screen (Qt
+ *                             `loadVoucher`, 6f15977)
  *   validate           POST validate, debounced 400 ms, the older answer
  *                      discarded; asked only while `problem` is empty
  */
@@ -98,6 +100,9 @@ function keysOf(voucher: ExpensePayload): ExpenseKeys {
   };
 }
 
+/** A read by the four keys; `picked` = from the register, over a voucher already shown. */
+type OpenRequest = { keys: ExpenseKeys; picked: boolean };
+
 export type UseExpenseVoucherOptions = {
   /** The header's business context: where a NEW voucher is written. */
   scope: ExpenseScope;
@@ -115,9 +120,12 @@ export function useExpenseVoucher({ scope, initialKeys, today, session, rights }
   const [validateError, setValidateError] = useState<{ bodyKey: string; message: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  // The screen is keyed on the document, so the keys it opens on never change
-  // for the life of this hook.
-  const [openKeys] = useState(initialKeys);
+  // The read asked for: the keys the screen opened on, then each voucher
+  // picked from the register (F8). A new request re-runs the read below.
+  const [openRequest, setOpenRequest] = useState<OpenRequest | null>(() =>
+    initialKeys ? { keys: initialKeys, picked: false } : null,
+  );
+  const openKeys = openRequest?.keys;
   const [loading, setLoading] = useState(Boolean(initialKeys));
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -204,12 +212,14 @@ export function useExpenseVoucher({ scope, initialKeys, today, session, rights }
   );
 
   // ── the open-by-keys read ───────────────────────────────────────────────
+  // On mount for the keys the screen opened on, and again for each voucher
+  // `openVoucher` asks for; a read still in flight is aborted by the next.
   useEffect(() => {
-    if (!openKeys) {
+    if (!openRequest) {
       return undefined;
     }
     let cancelled = false;
-    const request = dispatch(expenseApi.endpoints.expenseGet.initiate(openKeys));
+    const request = dispatch(expenseApi.endpoints.expenseGet.initiate(openRequest.keys));
     settle(request)
       .then((raw) => {
         if (!cancelled) showVoucher(readVoucher(raw));
@@ -217,7 +227,9 @@ export function useExpenseVoucher({ scope, initialKeys, today, session, rights }
       .catch((error: unknown) => {
         if (!cancelled && !isAbort(error)) {
           const message = expenseError(error);
-          setLoadError(message);
+          // A screen opened on these keys has nothing else to show; a pick
+          // keeps the voucher already on the screen and only says why.
+          if (!openRequest.picked) setLoadError(message);
           toast.error(message);
         }
       })
@@ -228,7 +240,7 @@ export function useExpenseVoucher({ scope, initialKeys, today, session, rights }
       cancelled = true;
       request.abort();
     };
-  }, [dispatch, openKeys, showVoucher]);
+  }, [dispatch, openRequest, showVoucher]);
 
   // ── the server's check, 400 ms after each edit ──────────────────────────
   // The body is read through a ref when the timer fires: keying the effect on
@@ -328,6 +340,19 @@ export function useExpenseVoucher({ scope, initialKeys, today, session, rights }
   const endBusy = useCallback(() => {
     busyRef.current = false;
     setBusy(false);
+  }, []);
+
+  /**
+   * F8's pick: read another voucher into this screen by its four keys (Qt
+   * `loadVoucher`). What is on the screen stays, read-only, until the answer
+   * replaces it; a failed read leaves it there and says why. The same voucher
+   * picked again is read again.
+   */
+  const openVoucher = useCallback((keys: ExpenseKeys) => {
+    if (busyRef.current) return;
+    setLoadError(null);
+    setLoading(true);
+    setOpenRequest({ keys, picked: true });
   }, []);
 
   const startNew = useCallback(() => {
@@ -598,6 +623,7 @@ export function useExpenseVoucher({ scope, initialKeys, today, session, rights }
     placeOfSupply,
     docCompanyId,
     startNew,
+    openVoucher,
     saveDraft,
     post,
     cancelVoucher,

@@ -13,7 +13,7 @@ import {
   applyBillSaveResponse,
   billKeyOf,
   buildAmendBody,
-  buildPostBody,
+  buildCreateAndPostBody,
   buildSavePayload,
   buildValidateBody,
   parseLoadedBill,
@@ -21,7 +21,6 @@ import {
 } from "./salebill.payload";
 import {
   AMEND_BILL_DTO_KEYS,
-  POST_BILL_DTO_KEYS,
   SAVE_BILL_ADJUSTMENT_DTO_KEYS,
   SAVE_BILL_DTO_KEYS,
   SAVE_BILL_ITEM_DTO_KEYS,
@@ -122,9 +121,11 @@ describe("the bill number is the SERVER's, both halves", () => {
 
 describe("a save is always a DRAFT", () => {
   it("never sends a status or a version — both are server-owned (§18.1)", () => {
-    // A save is a draft until `/bills/post`; the server ignores whatever status
-    // it is sent, and the Qt habit of sending the label's text is not ported.
+    // A save is a draft unless `post: true` rides along (notes 106); the Qt
+    // habit of sending the status label's text is not ported.
     expect(build(draftWith())).not.toHaveProperty("sbStatus");
+    expect(build(draftWith())).not.toHaveProperty("post");
+    expect(build(draftWith())).not.toHaveProperty("overrides");
     expect(build(draftWith({ docId: "sb-1", status: "POSTED" }))).not.toHaveProperty("sbStatus");
     expect(build(draftWith({ docId: "sb-1" }))).not.toHaveProperty("sbVersionNo");
   });
@@ -596,16 +597,11 @@ describe("every body stays inside the server's whitelist", () => {
     expect(keysOutside(validate as Record<string, unknown>, VALIDATE_BILL_DTO_KEYS)).toEqual([]);
     expect(validate.overrides).toEqual(["SALES_RATE_BELOW_MIN"]);
 
-    const key = billKeyOf(draft);
-    expect(key).not.toBeNull();
-    const post = buildPostBody(key as NonNullable<typeof key>, {
-      overrides: [],
-      adjustments: adjustmentsForWire(draft),
-      printAfter: true,
-    });
-    expect(keysOutside(post as Record<string, unknown>, POST_BILL_DTO_KEYS)).toEqual([]);
+    expect(billKeyOf(draft)).not.toBeNull();
+    const post = buildCreateAndPostBody(payload, []);
+    expect(keysOutside(post as Record<string, unknown>, SAVE_BILL_DTO_KEYS)).toEqual([]);
     expect(post).not.toHaveProperty("overrides");
-    expect(post.adjustments).toEqual([]);
+    expect(post.adjustments).toEqual(adjustmentsForWire(draft));
     for (const row of post.adjustments ?? []) {
       expect(keysOutside(row as Record<string, unknown>, SAVE_BILL_ADJUSTMENT_DTO_KEYS)).toEqual([]);
     }
@@ -624,14 +620,78 @@ describe("every body stays inside the server's whitelist", () => {
 
   it("omits `adjustments` entirely when the screen never handled them (§14.4)", () => {
     expect(adjustmentsForWire(draftWith({ adjustmentsTouched: false }))).toBeUndefined();
-    const post = buildPostBody({ sbId: "sb-1", sbCompanyId: "c", sbBranchId: "b", sbAccYear: "2026-2027" }, {
-      adjustments: adjustmentsForWire(draftWith({ adjustmentsTouched: false })),
-    });
+    const post = buildCreateAndPostBody(build(draftWith({ docId: "sb-1", adjustmentsTouched: false })), []);
     expect(post).not.toHaveProperty("adjustments");
   });
 
   it("never sends a null sbDiscAlterBase", () => {
     expect(typeof payload.sbDiscAlterBase).toBe("boolean");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Post is ONE call (notes 106): `/bills/create` with `post: true`
+// ---------------------------------------------------------------------------
+
+describe("Post is the save body plus post:true, in one call (notes 106)", () => {
+  const picked = draftWith({
+    adjustmentsTouched: true,
+    adjustments: [
+      {
+        key: "a1",
+        amount: 500,
+        credit: {
+          billId: "abl-1",
+          billAccYear: "2025-2026",
+          billType: "ADVANCE",
+          drCr: "CR",
+          docRefno: "SO-2201",
+          docDate: "2026-03-30",
+          billAmount: 500,
+          pendingAmount: 500,
+          status: "OPEN",
+          srcModule: "SALES",
+          srcDocType: "SALES_ORDER",
+          srcDocId: "so-1",
+          srcAccYear: "2025-2026",
+          narration: null,
+          adjType: "ADVANCE_ADJUST",
+          settlementMode: "ADVANCE",
+        },
+      },
+    ],
+  });
+
+  it("is the whole save body with post:true — nothing dropped, nothing else added", () => {
+    const payload = build(picked);
+    expect(buildCreateAndPostBody(payload, [])).toEqual({ ...payload, post: true });
+  });
+
+  it("carries the credits the operator picked — they used to be repeated on /bills/post", () => {
+    // Without them the server sets off the party's oldest credits instead.
+    const body = buildCreateAndPostBody(build(picked), []);
+    expect(body.adjustments).toEqual([
+      expect.objectContaining({ againstBillId: "abl-1", againstBillAccYear: "2025-2026", amount: 500 }),
+    ]);
+  });
+
+  it("sends each ticked override once, and no key when nothing is ticked", () => {
+    expect(buildCreateAndPostBody(build(picked), ["A", "A", " ", "B"]).overrides).toEqual(["A", "B"]);
+    expect(buildCreateAndPostBody(build(picked), [])).not.toHaveProperty("overrides");
+  });
+
+  it("never asks the server to print, and posts a reopened draft by its sbId", () => {
+    const reopened = buildCreateAndPostBody(build(draftWith({ docId: "sb-7" })), []);
+    expect(reopened).not.toHaveProperty("printAfter");
+    expect(reopened.sbId).toBe("sb-7");
+    expect(buildCreateAndPostBody(build(draftWith()), [])).not.toHaveProperty("sbId");
+  });
+
+  it("leaves the payload it was handed a DRAFT body", () => {
+    const payload = build(picked);
+    buildCreateAndPostBody(payload, ["A"]);
+    expect(payload).not.toHaveProperty("post");
+    expect(payload).not.toHaveProperty("overrides");
   });
 });
 

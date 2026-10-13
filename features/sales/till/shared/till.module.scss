@@ -282,6 +282,17 @@
   flex-wrap: wrap;
 }
 
+/* Supervisor movements: Qt's lines, their three-space gaps kept. */
+.moveLines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.82rem;
+  color: var(--text-main);
+  white-space: pre-wrap;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── Controls ──────────────────────────────────────────────────────────── */
 
 .primaryButton,
@@ -661,6 +672,97 @@
   gap: 8px;
 }
 
+/* ── Cash Movement (Qt 2026-10-12 layout) ──────────────────────────────── */
+
+/* The four mode tiles: a name and what it is, Ctrl+1..4. */
+.modeTiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.modeTile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 46px;
+  padding: 6px 10px;
+  white-space: normal;
+  text-align: left;
+}
+
+.modeTileLine {
+  font-size: 0.74rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* The form on the left, the summary card on the right. */
+.moveBody {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 270px;
+  gap: 14px;
+  align-items: start;
+}
+
+/* One label column; bag and seal share a row (Qt's four-column form). */
+.moveForm {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 6px 10px;
+  align-items: center;
+}
+
+.moveSpan {
+  grid-column: 2 / -1;
+  min-width: 0;
+}
+
+.moveHint {
+  grid-column: 3 / -1;
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.moveSummary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 5px 12px;
+  align-items: baseline;
+  padding: 10px 12px;
+  background: var(--page-bg);
+  border: 1px solid var(--border-light, var(--border));
+  border-radius: var(--erp-radius);
+}
+
+.moveSummaryWide {
+  grid-column: 1 / -1;
+}
+
+.moveSummaryRule {
+  grid-column: 1 / -1;
+  height: 1px;
+  margin: 3px 0;
+  background: var(--border);
+}
+
+/* Close and Post: the same width, on the right. */
+.verbButton {
+  min-width: 170px;
+}
+
+@media (max-width: 760px) {
+  .modeTiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .moveBody {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* ── Dialog shell (three-part: isolated overlay · backdrop · panel) ───── */
 
 .overlay {
@@ -722,6 +824,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.panelTitleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
 }
 
 .panelClose {

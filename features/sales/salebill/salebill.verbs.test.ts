@@ -2,7 +2,15 @@
  * Sale Bill Entry — every row of the §17.1 verb table, and the §17.2 reasons.
  */
 import { describe, expect, it } from "vitest";
-import { amendBlockedReason, cancelBlockedReason, verbState, type VerbInput } from "./salebill.verbs";
+import { documentRights, type DocumentRightsInput } from "@/lib/permissions/document-rights";
+import {
+  NO_DRAFTS_MESSAGE,
+  amendBlockedReason,
+  cancelBlockedReason,
+  draftSaveRefused,
+  verbState,
+  type VerbInput,
+} from "./salebill.verbs";
 import type { BillLocks, BillRights } from "./salebill.types";
 
 const RIGHTS: BillRights = { post: true, cancel: true, amend: true, override: true, retender: true };
@@ -29,6 +37,7 @@ function input(overrides: Partial<VerbInput> = {}): VerbInput {
     locks: null,
     canEditScreen: true,
     canDeleteScreen: true,
+    maySaveDraft: true,
     ...overrides,
   };
 }
@@ -152,5 +161,50 @@ describe("the blocked reasons, in the order the operator must act", () => {
     expect(amendBlockedReason({ ...RIGHTS, amend: false }, { ...LOCKS, ewbLive: true })).toMatch(/e-way/);
     expect(amendBlockedReason({ ...RIGHTS, amend: false }, LOCKS)).toMatch(/permission to edit posted/);
     expect(amendBlockedReason(null, null)).toBeNull();
+  });
+});
+
+describe("draft rights — Post without Create = no drafts (Qt 2026-10-12)", () => {
+  const perms = (overrides: Partial<DocumentRightsInput> = {}): DocumentRightsInput => ({
+    canCreate: true,
+    canEdit: true,
+    canDelete: true,
+    canPost: true,
+    canCancel: true,
+    canAmend: true,
+    ...overrides,
+  });
+
+  it("greys Save draft with the reason; Post & Print stays the way", () => {
+    const state = verbState(input({ maySaveDraft: false }));
+    expect(state.save.visible).toBe(true);
+    expect(state.save.enabled).toBe(false);
+    expect(state.save.tooltip).toBe(NO_DRAFTS_MESSAGE);
+    expect(state.saveAndPrint.enabled).toBe(true);
+  });
+
+  it("leaves auto-post's Save and an amend's Save changes alone — neither is a draft", () => {
+    expect(verbState(input({ autoPost: true, maySaveDraft: false })).save.enabled).toBe(true);
+    const amending = verbState(
+      input({ status: "POSTED", isNew: false, amending: true, rights: RIGHTS, locks: LOCKS, maySaveDraft: false }),
+    );
+    expect(amending.save.enabled).toBe(true);
+    expect(amending.save.tooltip).toBeNull();
+  });
+
+  it("refuses only a plain draft save, whatever reaches it (F5, the tender dialog's OK)", () => {
+    expect(draftSaveRefused({ autoPost: false, amending: false, maySaveDraft: false })).toBe(true);
+    expect(draftSaveRefused({ autoPost: false, amending: false, maySaveDraft: true })).toBe(false);
+    expect(draftSaveRefused({ autoPost: true, amending: false, maySaveDraft: false })).toBe(false);
+    expect(draftSaveRefused({ autoPost: false, amending: true, maySaveDraft: false })).toBe(false);
+  });
+
+  it("reads the right from documentRights: Create for a new bill, Edit for a saved draft", () => {
+    const postOnly = documentRights(perms({ canCreate: false, canEdit: false }));
+    expect(postOnly.mayStartNew).toBe(true);
+    expect(draftSaveRefused({ autoPost: false, amending: false, maySaveDraft: postOnly.maySaveDraft(false) })).toBe(true);
+    const createOnly = documentRights(perms({ canEdit: false }));
+    expect(createOnly.maySaveDraft(false)).toBe(true);
+    expect(createOnly.maySaveDraft(true)).toBe(false);
   });
 });

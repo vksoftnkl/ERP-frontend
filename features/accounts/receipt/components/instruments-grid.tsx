@@ -22,8 +22,13 @@ import type { TenderMasterRow } from "@/features/sales/sale-order/sale-order.typ
 import { scaledWidth, totalColumnWidth } from "@/features/sales/quotation/quotation.utils";
 import type { ResolvedReceiptColumn, TenderColumnKey } from "../columns";
 import { ROLE_LABELS, PICKABLE_ROLES } from "../domain/roles";
+import { formatMoney } from "../domain/money";
+import { isDerivedRole } from "../domain/seeded-lines";
+import { typedAmountOf } from "../domain/surcharge";
 import { isChequeTender, isPdc, requiredRefLabel } from "../domain/tenders";
 import type { BillRow, DrCr, OtherLineRow, ReceiptRole, TenderRow } from "../receipt.types";
+import type { TenderPatch } from "../state/draft";
+import { AmountInput } from "./amount-input";
 import { Chip } from "./chip";
 import styles from "../page.module.scss";
 
@@ -36,7 +41,12 @@ export type InstrumentsGridProps = {
   bills: readonly BillRow[];
   receiptDate: string;
   editable: boolean;
-  onSetTender: (rowKey: string, patch: Partial<TenderRow>) => void;
+  onSetTender: (rowKey: string, patch: TenderPatch) => void;
+  /**
+   * The Amount cell — the figure for the BILLS. The row's master may add a
+   * surcharge on top, so it never goes through `onSetTender`.
+   */
+  onSetTenderAmount: (rowKey: string, amount: number) => void;
   onRetarget: (rowKey: string, master: TenderMasterRow) => void;
   onConvertToLine: (rowKey: string, role: ReceiptRole) => void;
   onConvertToTender: (rowKey: string, master: TenderMasterRow) => void;
@@ -84,6 +94,7 @@ export function InstrumentsGrid(props: InstrumentsGridProps) {
     receiptDate,
     editable,
     onSetTender,
+    onSetTenderAmount,
     onRetarget,
     onConvertToLine,
     onConvertToTender,
@@ -186,15 +197,21 @@ export function InstrumentsGrid(props: InstrumentsGridProps) {
         );
       case "amount":
         return (
-          <input
+          <AmountInput
             className={`${styles.cellInput} ${styles.alignRight}`}
-            type="number"
-            min={0}
-            step="0.01"
-            value={row.amount === 0 ? "" : row.amount}
+            // At rest the GROSS the customer pays; typed into, the figure for
+            // the bills — a UPI / card surcharge goes on top (Qt 6f15977).
+            value={row.amount}
+            editValue={typedAmountOf(row)}
             disabled={!editable}
+            title={
+              (row.surchargeAmt ?? 0) > 0
+                ? `${formatMoney(row.forBills)} to the bills + ${formatMoney(row.surchargeAmt)} ` +
+                  `surcharge — the customer pays ${formatMoney(row.amount)}. Type what goes to the bills.`
+                : undefined
+            }
             onFocus={() => onFocusRow(row.key)}
-            onChange={(event) => onSetTender(row.key, { amount: Number(event.target.value) })}
+            onValueChange={(amount) => onSetTenderAmount(row.key, amount)}
             // The guard asks about the TOTAL received, once it has settled —
             // two 500s keyed as two rows are not a duplicate of anything.
             onBlur={onAmountCommitted}
@@ -514,9 +531,5 @@ export function InstrumentsGrid(props: InstrumentsGridProps) {
  * operator keys what the customer actually withheld.
  */
 function isDerived(row: OtherLineRow): boolean {
-  return (
-    row.seeded &&
-    row.role !== null &&
-    ["DISCOUNT_ALLOWED", "WRITE_OFF", "ROUND_OFF", "BANK_CHARGES"].includes(row.role)
-  );
+  return row.seeded && isDerivedRole(row.role);
 }
