@@ -1,10 +1,10 @@
 /**
- * The lines of the cashier's "Supervisor movements" panel — Qt
+ * The lines of the cashier's "Pickups and top-ups" panel — Qt
  * `TillSupervisorMoves::load` without the widget: every Pickup and Top-up on
  * the session, read from grid 147 (the cockpit's money documents), one line
- * each, oldest first.
+ * each, oldest first, naming the supervisor who signed it.
  *
- *   10:42   Pickup (taken out)   ₹ 5,000.00   by RAVI   TDrp/26/0012
+ *   10:42   Pickup (taken out)   ₹ 5,000.00   supervisor ANU   TDrp/26/0012
  *
  * A voided one keeps its line and says so (the cashier still saw the cash
  * move). Everything else on the grid (drops, paid-ins, exchanges, the float)
@@ -26,8 +26,13 @@ export function supervisorMoveLines(rows: readonly GridRow[]): string[] {
     const status = textOf(row, "md_status").trim().toUpperCase();
     const voided = status === "VOIDED" || status === "VOID";
     const what = kind === "PICKUP" ? "Pickup (taken out)" : "Top-up (put in)";
+    // Notes 110: the supervisor is the witness who signed with a PIN (the
+    // cashier is the doer). Rows from before it named the supervisor as the
+    // doer, so a row with no witness falls back to md_by (Qt's rule; grid 147
+    // gives "" for no witness).
+    const supervisor = textOf(row, "md_witness").trim() || textOf(row, "md_by");
     lines.push(
-      [textOf(row, "md_clock"), what, `₹ ${formatMoney(paiseOf(row.md_amount))}`, `by ${textOf(row, "md_by")}`, textOf(row, "md_doc")].join(
+      [textOf(row, "md_clock"), what, `₹ ${formatMoney(paiseOf(row.md_amount))}`, `supervisor ${supervisor}`, textOf(row, "md_doc")].join(
         GAP,
       ) + (voided ? `${GAP}— VOID` : ""),
     );

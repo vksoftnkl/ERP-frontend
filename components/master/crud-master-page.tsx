@@ -3029,6 +3029,7 @@ export default function CrudMasterPage({
   const [gridSettingsSaving, setGridSettingsSaving] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const tableContainerRef = useRef<HTMLDivElement | null>(null);
+  const listRootRef = useRef<HTMLElement | null>(null);
   const previousListStateResetKeyRef = useRef<string | number | null | undefined>(undefined);
   const gridSettingsModeRef = useRef<"filter" | "visibility" | null>(gridSettingsMode);
   const pendingDeleteRowRef = useRef<MasterTableRow | null>(pendingDeleteRow);
@@ -3890,13 +3891,14 @@ export default function CrudMasterPage({
     setSelectedRowId(row.__rowId);
     setSelectedRow(row);
   }, []);
-  // Search box ⇄ grid focus chain, row walking, Ctrl+Enter — see the hook.
+  // The search box keeps the caret; row walking, Ctrl+Enter — see the hook.
   useMasterListKeyboard({
     enabled: !hideListPage,
     rows: renderedRows,
     selectedRowId,
     searchInputRef,
     tableContainerRef,
+    listRootRef,
     onSelectRow: handleListRowSelect,
     onSearchTermChange: handleSearchChange,
     onViewRow: handleRowView,
@@ -3982,10 +3984,10 @@ export default function CrudMasterPage({
    * handler as the button beside it, so a key can never do what the button
    * refuses — permission, a row the page will not edit, a request in flight.
    *
-   * Plain Enter is bound ONLY while the grid itself has focus. The list
-   * keyboard hook leaves it alone for a good reason — it submits the search
-   * box and activates whatever button is focused — and that reason does not
-   * apply when the row list is what the operator is standing on.
+   * Plain Enter is bound ONLY in the search box or the grid. The list keyboard
+   * hook leaves it alone elsewhere for a good reason — it activates whatever
+   * button is focused — but the search box is where the caret lives while Up
+   * and Down walk the rows, so Enter there means the highlighted row.
    */
   useEffect(() => {
     if (hideListPage || !enableListActionKeys) {
@@ -4024,10 +4026,12 @@ export default function CrudMasterPage({
       if (key === "F2" || key === "Enter") {
         if (key === "Enter") {
           const target = event.target as HTMLElement | null;
-          const withinGrid = Boolean(
-            target && tableContainerRef.current?.contains(target),
+          const withinList = Boolean(
+            target &&
+              (target === searchInputRef.current ||
+                tableContainerRef.current?.contains(target)),
           );
-          if (!withinGrid) {
+          if (!withinList) {
             return;
           }
         }
@@ -4413,7 +4417,7 @@ export default function CrudMasterPage({
     <>
       {gridSettingsContextMenu}
       {!hideListPage ? (
-        <main className={`${styles.page} erp-master-shell`}>
+        <main ref={listRootRef} className={`${styles.page} erp-master-shell`}>
           <div className={`${styles.viewport} erp-ms-viewport`}>
             <div className={`${styles.board} erp-ms-board`}>
               <section className={styles.content}>

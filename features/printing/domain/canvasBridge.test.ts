@@ -198,6 +198,33 @@ describe("opening a revision on the canvas", () => {
       expect(definition.bands[0].elements).toEqual([{ id: "e1" }]);
     });
 
+    it("gives a RECT and the page border the server's 0mm corner radius when the body omits it", () => {
+      // The server parses radiusMm as `.default(0)`, so a stored body may not
+      // carry it -- and the canvas rendered `mmToPx(undefined)` as a NaN radius.
+      const definition = toTemplateDefinition(
+        version({
+          ptvBody: {
+            bands: [
+              {
+                type: "DETAIL",
+                elements: [
+                  { id: "r1", kind: "RECT", x: 0, y: 0, w: 10, h: 5 },
+                  { id: "r2", kind: "RECT", x: 0, y: 0, w: 10, h: 5, radiusMm: 2 },
+                ],
+              },
+            ],
+            pageBorder: { insetMm: null, widthPt: 1, color: "#000000" },
+          },
+        }),
+      );
+
+      const radii = definition.bands[0].elements.map(
+        (element) => (element as { radiusMm?: number }).radiusMm,
+      );
+      expect(radii).toEqual([0, 2]);
+      expect(definition.pageBorder?.radiusMm).toBe(0);
+    });
+
     it("keeps the good bands out of a mixed array", () => {
       const definition = toTemplateDefinition(
         version({ ptvBody: { bands: [{ type: "PAGE_HEADER" }, null, { type: "DETAIL" }] } }),

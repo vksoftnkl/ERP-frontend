@@ -13,7 +13,6 @@ export type IdentityForm = {
   loginName: string;
   /** Blank on edit means "keep" — the key is then omitted from the body. */
   password: string;
-  displayName: string;
   fullName: string;
   mobileNo: string;
   email: string;
@@ -50,7 +49,6 @@ export type IdentityForm = {
 export const EMPTY_IDENTITY: IdentityForm = {
   loginName: "",
   password: "",
-  displayName: "",
   fullName: "",
   mobileNo: "",
   email: "",
@@ -112,6 +110,7 @@ export function isUserType(value: unknown): value is UserType {
 /** The DTO's own lengths. */
 export const IDENTITY_LIMITS = {
   loginName: 50,
+  /** `usrDisplayName` — not on the screen: the body derives it from the full name, else the login. */
   displayName: 100,
   fullName: 150,
   mobileNo: 20,
@@ -128,7 +127,6 @@ export function identityFromPayload(payload: UserAdminPayload): IdentityForm {
   return {
     loginName: text(payload.usrLoginName),
     password: "",
-    displayName: text(payload.usrDisplayName),
     fullName: text(payload.usrFullName),
     mobileNo: text(payload.usrMobileNo),
     email: text(payload.usrEmail),
@@ -208,9 +206,6 @@ export function validateIdentity(form: IdentityForm, mode: "create" | "edit"): I
   } else if (pin && form.clearPin) {
     errors.pin = "Either type a new till PIN or clear it, not both.";
   }
-  if (form.displayName.trim().length > IDENTITY_LIMITS.displayName) {
-    errors.displayName = `Display name must be at most ${IDENTITY_LIMITS.displayName} characters.`;
-  }
   if (form.fullName.trim().length > IDENTITY_LIMITS.fullName) {
     errors.fullName = `Full name must be at most ${IDENTITY_LIMITS.fullName} characters.`;
   }
@@ -237,7 +232,8 @@ export function sameIdentity(a: IdentityForm, b: IdentityForm): boolean {
 export const SERVER_FIELD_TO_FORM: Readonly<Record<string, keyof IdentityForm>> = {
   usrLoginName: "loginName",
   usrPassword: "password",
-  usrDisplayName: "displayName",
+  // Derived from the full name (else the login), so its refusal belongs there.
+  usrDisplayName: "fullName",
   usrFullName: "fullName",
   usrMobileNo: "mobileNo",
   usrEmail: "email",

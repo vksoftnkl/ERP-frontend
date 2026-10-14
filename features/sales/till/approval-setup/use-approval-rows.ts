@@ -6,9 +6,6 @@ import { toast } from "@/lib/notify";
 import { isApprovalAbort, type TillApprovalClient } from "./api/till-approval-api";
 import { approvalErrorText, type GridRow } from "./domain/approval-setup";
 
-/** The server caches a grid run for about a second; a re-read straight after a save waits it out. */
-export const RELOAD_AFTER_SAVE_MS = 1500;
-
 export type LoadState = "idle" | "loading" | "ready" | "error";
 
 /** `company` keys the slot: rows read for another company are never shown. */
@@ -47,7 +44,11 @@ function wait(ms: number, signal: AbortSignal): Promise<boolean> {
 /**
  * Grid 151 (rules: the shipped rows and this company's) and grid 152 (grants:
  * this company's and the every-company ones), both bound by a QUOTED
- * `'icompany_id'`. One read at a time per grid: a new read aborts the last.
+ * `'icompany_id'`; 152 also by a quoted `'iinactive'`, sent as 'true' — ended
+ * and switched-off grants too, as Qt reads them (a449b8c). Here the grants only
+ * feed the rule form's "can anybody approve this?" warning; they are edited on
+ * Till Approval Authority (285). One read at a time per grid: a new read aborts
+ * the last.
  */
 export function useApprovalRows(client: TillApprovalClient, companyId: string): ApprovalRows {
   const [rulesSlot, setRules] = useState<Slot>(EMPTY);
@@ -70,7 +71,10 @@ export function useApprovalRows(client: TillApprovalClient, companyId: string): 
       if (!(await wait(delayMs, controller.signal))) return null;
       try {
         const rows = await client.gridRows(
-          { grid: which === "rules" ? "tillApprovalRules" : "tillApprovalGrants", params: { icompany_id: companyId } },
+          which === "rules"
+            ? { grid: "tillApprovalRules", params: { icompany_id: companyId } }
+            : // Every token of 152, always: one left out stays a literal word in the SQL.
+              { grid: "tillApprovalGrants", params: { icompany_id: companyId, iinactive: "true" } },
           controller.signal,
         );
         if (controller.signal.aborted) return null;

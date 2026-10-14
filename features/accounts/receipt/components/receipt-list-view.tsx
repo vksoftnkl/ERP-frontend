@@ -27,6 +27,10 @@
  *  3. **Only a DRAFT may be deleted at all.** A posted receipt wrote legs into
  *     the day book and moved bills; it is CANCELLED, which writes a reversal
  *     voucher, and that is a different button on a different screen.
+ *
+ * Print is the `RECEIPT_VOUCHER` purpose through the same five-button dialog
+ * the bills print from — the highlighted row, or every ticked one as one PDF.
+ * A draft does not print: it has no number yet.
  */
 import { useCallback, useMemo, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
@@ -41,6 +45,8 @@ import {
   toNumber,
 } from "@/features/sales/quotation/quotation.utils";
 import { useDeleteReceiptDraftMutation } from "@/store/api/receiptApi";
+import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
+import { PURPOSE_CODE } from "@/features/printing/domain/documentPrint";
 import { receiptError } from "../api-errors";
 import { formatTotal } from "../domain/money";
 import type { ReceiptKeys } from "../receipt.types";
@@ -160,6 +166,13 @@ export function ReceiptListView({ onCreate, onOpen }: ReceiptListViewProps) {
   const [fromDate, setFromDate] = useState(() => addDays(todayIso(), -DEFAULT_WINDOW_DAYS));
   const [toDate, setToDate] = useState(() => todayIso());
   const [period, setPeriod] = useState<string>(String(DEFAULT_WINDOW_DAYS));
+  /**
+   * What the print dialog is open on — held here, not read off the shell's
+   * selection, so a selection that moves under the dialog cannot change which
+   * receipt prints. Empty means closed; `printRefno` names a single one.
+   */
+  const [printTargets, setPrintTargets] = useState<ReceiptKeys[]>([]);
+  const [printRefno, setPrintRefno] = useState("");
 
   const applyPeriod = useCallback((value: string) => {
     setPeriod(value);
@@ -315,60 +328,114 @@ export function ReceiptListView({ onCreate, onOpen }: ReceiptListViewProps) {
   );
 
   return (
-    <CrudMasterPage
-      title="Receipts"
-      listTitleOverride="Receipts"
-      listSubtitleOverride="Money received from customers."
-      entityLabel="receipt"
-      entityLabelPlural="receipts"
-      searchPlaceholder="receipt no, party or amount"
-      apiEndpoints={API_ENDPOINTS}
-      gridKey="receiptList"
-      lookupKeys={LOOKUP_KEYS}
-      requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
-      styles={masterStyles}
-      createLabel="New Receipt"
-      codeColumnHeader="Receipt No"
-      nameColumnHeader="Party"
-      // Without this the shell falls back to response-driven columns, and a
-      // configured grid with no `styles` array renders a serial column only.
-      listResponseStyleArrayKey=""
-      gridTableName="acc_voucher_header"
-      useConfiguredGridColumnsOnly
-      enableGridSettingsContextMenu
-      columnRenderOverrides={COLUMN_RENDER_OVERRIDES}
-      toolbarContent={toolbarContent}
-      buildListQuery={buildListQuery}
-      listStateResetKey={listStateResetKey}
-      listEmptyText="No receipt in this window. Widen the dates, or take one."
-      // The keys the desktop screen answers to, and the legend that says so.
-      enableListActionKeys
-      listHintMessage={hintMessage}
-      rowClassName={(row) => (statusOf(row) === "CANCELLED" ? styles.cancelledRow : undefined)}
-      onCreateAction={onCreate}
-      // Edit opens the voucher — a receipt has bills, instruments and an
-      // identity to balance, so it does not fit the shell's modal form. A
-      // CANCELLED one is readable but not writable.
-      isRowEditDisabled={(row) => statusOf(row) === "CANCELLED"}
-      rowEditDisabledReason="This receipt is cancelled — it can be read, not changed"
-      onEditAction={(row) => onOpen(docKeyOf(row))}
-      // Ctrl+Enter and double-click READ it. Every status opens, cancelled
-      // included: the screen decides what may be touched.
-      onViewAction={(row) => onOpen(docKeyOf(row))}
-      // Only a draft can be deleted. A posted receipt is CANCELLED instead,
-      // from inside the voucher, which writes a reversal rather than removing
-      // anything — so the button says so here instead of failing there.
-      isRowDeleteDisabled={(row) => statusOf(row) !== "DRAFT"}
-      rowDeleteDisabledReason="Only a draft can be deleted — a posted receipt is cancelled, which writes a reversal"
-      onDeleteAction={handleDelete}
-      auditHistory={{
-        screenName: "Receipt",
-        getRecordId: (row) => asText(sourceValue(row, "avh_voucher_id")) || null,
-        getDisplayName: (row) =>
-          asText(sourceValue(row, "avh_voucher_refno")) ||
-          asText(sourceValue(row, "party_name")) ||
-          null,
-      }}
-    />
+    <>
+      <CrudMasterPage
+        title="Receipts"
+        listTitleOverride="Receipts"
+        listSubtitleOverride="Money received from customers."
+        entityLabel="receipt"
+        entityLabelPlural="receipts"
+        searchPlaceholder="receipt no, party or amount"
+        apiEndpoints={API_ENDPOINTS}
+        gridKey="receiptList"
+        lookupKeys={LOOKUP_KEYS}
+        requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
+        styles={masterStyles}
+        createLabel="New Receipt"
+        codeColumnHeader="Receipt No"
+        nameColumnHeader="Party"
+        // Without this the shell falls back to response-driven columns, and a
+        // configured grid with no `styles` array renders a serial column only.
+        listResponseStyleArrayKey=""
+        gridTableName="acc_voucher_header"
+        useConfiguredGridColumnsOnly
+        enableGridSettingsContextMenu
+        columnRenderOverrides={COLUMN_RENDER_OVERRIDES}
+        toolbarContent={toolbarContent}
+        buildListQuery={buildListQuery}
+        listStateResetKey={listStateResetKey}
+        listEmptyText="No receipt in this window. Widen the dates, or take one."
+        // The keys the desktop screen answers to, and the legend that says so.
+        enableListActionKeys
+        listHintMessage={hintMessage}
+        rowClassName={(row) => (statusOf(row) === "CANCELLED" ? styles.cancelledRow : undefined)}
+        onCreateAction={onCreate}
+        // Edit opens the voucher — a receipt has bills, instruments and an
+        // identity to balance, so it does not fit the shell's modal form. A
+        // CANCELLED one is readable but not writable.
+        isRowEditDisabled={(row) => statusOf(row) === "CANCELLED"}
+        rowEditDisabledReason="This receipt is cancelled — it can be read, not changed"
+        onEditAction={(row) => onOpen(docKeyOf(row))}
+        // Ctrl+Enter and double-click READ it. Every status opens, cancelled
+        // included: the screen decides what may be touched.
+        onViewAction={(row) => onOpen(docKeyOf(row))}
+        // Only a draft can be deleted. A posted receipt is CANCELLED instead,
+        // from inside the voucher, which writes a reversal rather than removing
+        // anything — so the button says so here instead of failing there.
+        isRowDeleteDisabled={(row) => statusOf(row) !== "DRAFT"}
+        rowDeleteDisabledReason="Only a draft can be deleted — a posted receipt is cancelled, which writes a reversal"
+        onDeleteAction={handleDelete}
+        // A draft took no number (R10) and moved no money, so it has no paper.
+        // A cancelled receipt still prints — it was issued, and the paper says so.
+        onPrintAction={(row) => {
+          setPrintTargets([docKeyOf(row)]);
+          setPrintRefno(asText(sourceValue(row, "avh_voucher_refno")));
+        }}
+        isRowPrintDisabled={(row) => statusOf(row) === "DRAFT"}
+        rowPrintDisabledReason="A draft has no number yet — post it to print it"
+        // Tick several and Print renders them into ONE pdf.
+        enableMultiSelect
+        onBulkPrintAction={(rows) => {
+          setPrintTargets(rows.map(docKeyOf));
+          setPrintRefno("");
+        }}
+        // One render binds ONE company and ONE year; grid 108 already scopes to
+        // both, so this mostly catches the drafts in a ticked set.
+        bulkPrintDisabledReason={(rows) => {
+          if (rows.some((row) => statusOf(row) === "DRAFT")) {
+            return "Untick the drafts — a draft has no number to print.";
+          }
+          const distinct = (key: string) =>
+            new Set(rows.map((row) => asText(sourceValue(row, key)))).size;
+          if (distinct("avh_company_id") > 1) {
+            return "Select receipts from one company at a time.";
+          }
+          if (distinct("avh_acc_year") > 1) {
+            return "Select receipts from one accounting year at a time.";
+          }
+          return null;
+        }}
+        auditHistory={{
+          screenName: "Receipt",
+          getRecordId: (row) => asText(sourceValue(row, "avh_voucher_id")) || null,
+          getDisplayName: (row) =>
+            asText(sourceValue(row, "avh_voucher_refno")) ||
+            asText(sourceValue(row, "party_name")) ||
+            null,
+        }}
+      />
+      {printTargets.length > 0 ? (
+        <PrintOptionsDialog
+          open
+          onClose={() => setPrintTargets([])}
+          purposeCode={PURPOSE_CODE.RECEIPT_VOUCHER}
+          documentLabel={
+            printTargets.length > 1
+              ? `${printTargets.length} Receipts`
+              : printRefno
+                ? `Receipt ${printRefno}`
+                : "Receipt"
+          }
+          // Each row's own company and year — the token's company is the user's
+          // home one, and every dataset filters on it.
+          targets={printTargets.map((target) => ({
+            docId: target.avhVoucherId,
+            companyId: target.avhCompanyId,
+            accYear: target.avhAccYear,
+            filename: `receipt-${printRefno || target.avhVoucherId}`,
+          }))}
+        />
+      ) : null}
+    </>
   );
 }

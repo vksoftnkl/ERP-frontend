@@ -11,6 +11,7 @@ import { useDataRefresh, type DataRefreshReason } from "@/lib/data-freshness";
 import { getMessages } from "@/lib/notify";
 import { useAppSelector } from "@/store/hooks";
 import { selectAppSettingText } from "@/store/slices/appSettingsSlice";
+import { LiveCashLine } from "../shared/live-cash-line";
 import { DayGrid } from "./components/day-grid";
 import { Checklist, DayNumbers, FactsStrip, VerdictBand, pillToneClass } from "./components/day-panels";
 import { DAY_COLUMNS_FALLBACK, SESSION_COLUMNS_FALLBACK } from "./domain/columns";
@@ -79,9 +80,11 @@ function dayRowKey(row: GridRow, index: number): string {
  * mockup till_day_close_ui_mockup.png, TILL_DESIGN §8 S8).
  *
  * Built on what the server has: `GET /till/days/get`, `POST /till/days/open`
- * and three configured grids. The checklist is the screen's own reading of
- * those rows; Close day, Close with exception, Cancel closing and Print day X
- * are off with the reason until the server's phase 4 lands.
+ * and three configured grids, plus the live line (Qt a449b8c: every drawer
+ * still out at the branch, any day, `../shared/live-cash.ts`). The checklist
+ * is the screen's own reading of those rows; Close day, Close with exception,
+ * Cancel closing and Print day X are off with the reason until the server's
+ * phase 4 lands.
  *
  * Keys (Qt): F5 Refresh checks (always today) · F8 Day ⇄ List · Enter on a
  * session opens its cockpit, on a day opens that day · Esc closes.
@@ -97,7 +100,7 @@ export default function BusinessDayScreen() {
   const [initialPick] = useState(pickFromUrl);
 
   const model = useBusinessDay({ companyId, branchId, cutoff, initialPick, canCreate: permissions.canCreate });
-  const { dayState, pick, sessions, safes, days, dayBusy, opening, scopeReady } = model;
+  const { dayState, pick, sessions, liveSessions, safes, days, dayBusy, opening, scopeReady } = model;
 
   const [tab, setTab] = useState<Tab>("day");
   const sessionsGridRef = useRef<HTMLDivElement | null>(null);
@@ -111,10 +114,11 @@ export default function BusinessDayScreen() {
     return blankHead(headContext);
   }, [dayState, headContext]);
   const reading = useMemo<DayReading | null>(() => {
-    if (dayState.kind === "day") return readDay(sessions, safes);
+    // The live read answering rebuilds the checklist (Qt `updated` → `rebuild`).
+    if (dayState.kind === "day") return readDay(sessions, safes, liveSessions, dayState.day.tbdBusinessDate);
     if (dayState.kind === "none") return noDayReading();
     return null;
-  }, [dayState, sessions, safes]);
+  }, [dayState, sessions, safes, liveSessions]);
 
   const canDayOpen = dayState.kind === "none" && permissions.canCreate && !opening;
   let dayOpenTitle: string | undefined;
@@ -223,6 +227,8 @@ export default function BusinessDayScreen() {
             {head.sub}
             {dayBusy ? <span className={styles.busy}> · reading…</span> : null}
           </p>
+          {/* Qt a449b8c: the sessions still out, any day — a day's list shows only its own date. */}
+          {scopeReady ? <LiveCashLine sessions={liveSessions} className={styles.liveLine} /> : null}
         </div>
         {head.pill ? (
           <span className={cx(styles.pill, styles.statusPill, pillToneClass(head.pillTone))}>{head.pill}</span>

@@ -25,7 +25,9 @@
  * is issued at post, and either way the screen clears for the next one (Qt
  * 5e25760; the draft reopens from the list). F8 opens the register (grid 137,
  * the menu's own list) as a picker over the screen, and the voucher picked is
- * read into it (Qt 6f15977). A POSTED voucher can be cancelled,
+ * read into it (Qt 6f15977). F11 prints the voucher on screen once it has a
+ * number, or else the one this screen just posted (purpose EXPENSE_VOUCHER).
+ * A POSTED voucher can be cancelled,
  * or cancelled and re-entered — its copy opens as a new voucher to correct and
  * post. A POSTED voucher can be cancelled (a mirror in the Rev
  * series) while its till session still takes money. The approval the EXPENSE
@@ -47,6 +49,8 @@ import { toast } from "@/lib/notify";
 import { useUiTableId } from "@/lib/ui-tables";
 import { useGetQuotationGridLayoutQuery } from "@/store/api/quotationApi";
 import { todayIso } from "@/features/sales/quotation/quotation.utils";
+import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
+import { PURPOSE_CODE } from "@/features/printing/domain/documentPrint";
 import { GridPickerModal, type PickerFallbackColumn } from "@/features/stocks/opening-stock/components/grid-picker-modal";
 /*
  * The right-click menu ("save column width", "Admin settings"): the same
@@ -70,7 +74,7 @@ import {
 import { LinesGrid, type PopupColumn } from "./components/lines-grid";
 import { TendersGrid } from "./components/tenders-grid";
 import { EXPENSE_ROUTE } from "./constants";
-import type { ExpenseKeys, ExpenseScope } from "./expense.types";
+import type { ExpenseKeys, ExpensePrintTarget, ExpenseScope } from "./expense.types";
 import { asksBeforeOpeningAnother, isBlankLine, isBlankTender } from "./domain/draft";
 import { defaultRegisterFilters, type RegisterFilters } from "./domain/register";
 import { statusPill, TENDER_NOTE, type Tone } from "./domain/view";
@@ -83,6 +87,7 @@ import styles from "./expense.module.scss";
  *
  *   F5  Save draft     Ctrl+Enter  Post     F2  New (in a grid: the cell's own)
  *   F8  List (picker)  Alt+N  + line        Alt+T  + tender      Esc  Close
+ *   F11 Print (the voucher on screen, else the one just posted)
  *   Enter walks the header like Tab, then on into the lines (Reason)
  *   in a grid: Enter next cell · + / − add / remove a line · F2 the picker
  *
@@ -360,6 +365,12 @@ export default function ExpenseScreen({ initialKeys, onBackToList }: ExpenseScre
     [api, picker],
   );
 
+  /** The voucher Post just numbered (F11 prints it), and what the print dialog is open on. */
+  const [lastPosted, setLastPosted] = useState<ExpensePrintTarget | null>(null);
+  const [printTarget, setPrintTarget] = useState<{ voucher: ExpensePrintTarget; reprint: boolean } | null>(
+    null,
+  );
+
   // Save draft and Post both clear the screen for the next voucher (Qt
   // 5e25760): the caret goes back to Paid to, where Qt's New puts it.
   const { saveDraft: saveDraftNow, post: postNow } = api;
@@ -371,12 +382,47 @@ export default function ExpenseScreen({ initialKeys, onBackToList }: ExpenseScre
     }
   }, [saveDraftNow]);
   const post = useCallback(async () => {
-    if (await postNow()) {
+    const posted = await postNow();
+    if (posted) {
+      // Kept for F11: the screen is already clear for the next voucher.
+      setLastPosted({
+        companyId: posted.companyId,
+        branchId: posted.branchId,
+        accYear: posted.accYear,
+        voucherId: posted.voucherId,
+        voucherNo: posted.voucherNo,
+      });
       setActiveLineKey(null);
       setActiveTenderKey(null);
       focusHeadSoon("paidTo");
     }
   }, [postNow]);
+
+  // ── print (F11) ─────────────────────────────────────────────────────────
+  /*
+   * The voucher on screen once it has a number (POSTED, or CANCELLED — it was
+   * issued, and the paper says so); otherwise the one this screen just posted.
+   * A draft has no number and moved no money, so it has no paper.
+   */
+  const canPrint = permissions.canPrint;
+  const onScreenPrintable =
+    draft.keys !== null && (draft.status === "POSTED" || draft.status === "CANCELLED");
+  const printable = onScreenPrintable || lastPosted !== null;
+  const printVoucher = useCallback(() => {
+    if (!canPrint) {
+      toast.error("You do not have permission to print on this screen.");
+      return;
+    }
+    if (onScreenPrintable && draft.keys) {
+      setPrintTarget({ voucher: { ...draft.keys, voucherNo: draft.voucherNo }, reprint: true });
+      return;
+    }
+    if (lastPosted) {
+      setPrintTarget({ voucher: lastPosted, reprint: false });
+      return;
+    }
+    toast.info("Post a voucher, or open a posted one from F8 List, to print it — a draft has no number.");
+  }, [canPrint, draft.keys, draft.voucherNo, lastPosted, onScreenPrintable]);
 
   // A new voucher opens with the caret in Paid to.
   const opensNew = !initialKeys;
@@ -396,7 +442,9 @@ export default function ExpenseScreen({ initialKeys, onBackToList }: ExpenseScre
     close,
     addLine,
     addTender,
+    printVoucher,
     dialogOpen:
+      printTarget !== null ||
       confirmRequest !== null ||
       cancelOpen ||
       picker !== null ||
@@ -447,6 +495,12 @@ export default function ExpenseScreen({ initialKeys, onBackToList }: ExpenseScre
       if (event.key === "F8") {
         event.preventDefault();
         current.showList();
+        return;
+      }
+      if (event.key === "F11") {
+        // The browser's own F11 goes full-screen.
+        event.preventDefault();
+        current.printVoucher();
         return;
       }
       if (chord && letter === "n") {
@@ -905,6 +959,23 @@ export default function ExpenseScreen({ initialKeys, onBackToList }: ExpenseScre
               Cancel &amp; re-enter…
             </button>
           ) : null}
+          <button
+            type="button"
+            className={styles.button}
+            disabled={!canPrint || !printable || busy}
+            title={
+              !canPrint
+                ? "You do not have permission to print on this screen."
+                : onScreenPrintable
+                  ? "Print this voucher"
+                  : lastPosted
+                    ? `Print ${lastPosted.voucherNo ?? "the voucher"} just posted`
+                    : "Post a voucher, or open a posted one from F8 List, to print it"
+            }
+            onClick={printVoucher}
+          >
+            F11  Print
+          </button>
           <button type="button" className={styles.button} disabled={busy} onClick={showList}>
             F8  List
           </button>
@@ -913,6 +984,27 @@ export default function ExpenseScreen({ initialKeys, onBackToList }: ExpenseScre
           </button>
         </div>
       </div>
+      {/*
+        The voucher's own company and year travel with it (the token's company
+        is the user's home one); branch and counter are the session's.
+      */}
+      {printTarget ? (
+        <PrintOptionsDialog
+          open
+          onClose={() => setPrintTarget(null)}
+          purposeCode={PURPOSE_CODE.EXPENSE_VOUCHER}
+          documentLabel={`Expense ${printTarget.voucher.voucherNo ?? ""}${printTarget.reprint ? " (reprint)" : ""}`.trim()}
+          targets={[
+            {
+              docId: printTarget.voucher.voucherId,
+              companyId: printTarget.voucher.companyId,
+              accYear: printTarget.voucher.accYear,
+              ...(printTarget.reprint ? { isReprint: true } : {}),
+              filename: `expense-${printTarget.voucher.voucherNo || printTarget.voucher.voucherId}`,
+            },
+          ]}
+        />
+      ) : null}
       {picker ? (
         <GridPickerModal
           key={`${picker.lineKey}-${picker.column}`}

@@ -11,15 +11,20 @@
  * verbs are Qt's:
  *   Enter / Ctrl+Enter / double-click   the Session Cockpit (S5), on the row's
  *                                       own tenant key
- *   F5  Cash movement                   pickup / top-up (supervisor) — S3, on a
- *                                       session still taking money
  *   F6  Count / close                   the cash office's count — S4, on a
  *                                       COUNTING session
  *   Ctrl+H                              the session's journal (grid 145)
+ * No cash movement from here (Qt a449b8c, notes 110): a pickup / top-up is
+ * signed at the counter by the cashier and the supervisor together.
  *
  * Filters: Status (`istatus`) and Variance (`ivariance`), and the business
  * dates, seven days back. All six grid tokens are always sent
  * (`session-list.ts`).
+ *
+ * The live line (Qt `TillSessionsView`, a449b8c) on the toolbar: every session
+ * of the branch still holding a drawer, any date, and the cash in them; and in
+ * the list, a live row's "Cash exp." — blank in the grid until the count —
+ * carries the server's live figure (`../shared/live-cash.ts`).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -31,11 +36,12 @@ import { toast } from "@/lib/notify";
 import masterStyles from "@/app/master/state-master/page.module.scss";
 import receiptStyles from "@/features/accounts/receipt/page.module.scss";
 import { addDaysIso, cockpitHref, textOf, todayIso } from "../shared/format";
-import { formatFigure, formatSignedMoney, toPaise } from "../shared/money";
+import { LiveCashLine } from "../shared/live-cash-line";
+import { formatFigure, formatMoney, formatSignedMoney, toPaise } from "../shared/money";
 import { TonePill, overlayOpen } from "../shared/till-dialog";
 import type { TillSessionKey } from "../shared/wire/types";
 import tillStyles from "../shared/till.module.scss";
-import { CashMovementDialog } from "../session/cash-movement-dialog";
+import { useLiveCash } from "../shared/use-live-cash";
 import { EndShiftDialog } from "../session/end-shift-dialog";
 import { JournalDialog } from "./journal-dialog";
 import {
@@ -47,7 +53,6 @@ import {
   rowHint,
   sessionGridParams,
   sessionRowOf,
-  takesMoney,
   varianceTone,
   type SessionRow,
 } from "./session-list";
@@ -102,7 +107,6 @@ const COLUMN_RENDER_OVERRIDES = {
     return text ? <TonePill tone={badgeTone("treatment", text)}>{text}</TonePill> : null;
   },
   net_sales: (row: MasterTableRow) => formatFigure(sourceOf(row)?.net_sales),
-  cash_expected: (row: MasterTableRow) => formatFigure(sourceOf(row)?.cash_expected),
   cash_counted: (row: MasterTableRow) => formatFigure(sourceOf(row)?.cash_counted),
   cash_variance: (row: MasterTableRow) => {
     const value = sourceOf(row)?.cash_variance;
@@ -117,6 +121,20 @@ const COLUMN_RENDER_OVERRIDES = {
   },
 };
 
+/**
+ * "Cash exp." with the live figure (Qt `TillSessionsView::fillCash`): the grid
+ * has a session's expected cash only once it is counted, so a session still
+ * holding a drawer shows what the server says it holds now.
+ */
+function cashExpectedRenderer(liveCash: ReadonlyMap<string, number>) {
+  return function renderCashExpected(row: MasterTableRow) {
+    const source = sourceOf(row);
+    const live = liveCash.get(textOf(source, "tss_id"));
+    if (live === undefined) return formatFigure(source?.cash_expected);
+    return <span title="Live — the cash this drawer should hold now">{formatMoney(live)}</span>;
+  };
+}
+
 export default function TillSessionsScreen() {
   const router = useRouter();
   const { activeCompany, activeBranch } = useBusinessContext();
@@ -129,11 +147,20 @@ export default function TillSessionsScreen() {
   const [toDate, setToDate] = useState(() => todayIso());
   const [period, setPeriod] = useState<string>(String(DEFAULT_DAYS_BACK));
   const [refreshNonce, setRefreshNonce] = useState(0);
-  const [movementKey, setMovementKey] = useState<TillSessionKey | null>(null);
   const [countKey, setCountKey] = useState<TillSessionKey | null>(null);
   const [journalRow, setJournalRow] = useState<SessionRow | null>(null);
   /** The highlighted row, as the hint callback last saw it. */
   const selected = useRef<SessionRow | null>(null);
+
+  const {
+    sessions: liveSessions,
+    cashByTss: liveCash,
+    refreshUnlessLoading: refreshLive,
+  } = useLiveCash({ companyId, branchId });
+  const columnRenderOverrides = useMemo(
+    () => ({ ...COLUMN_RENDER_OVERRIDES, cash_expected: cashExpectedRenderer(liveCash) }),
+    [liveCash],
+  );
 
   const applyPeriod = useCallback((value: string) => {
     setPeriod(value);
@@ -157,15 +184,26 @@ export default function TillSessionsScreen() {
       pageSize: number;
       sortBy?: string;
       sortDir?: "asc" | "desc";
-    }): Record<string, string> => ({
-      page: String(currentPage),
-      limit: String(pageSize),
-      ...(searchTerm ? { search: searchTerm } : {}),
-      ...(sortBy ? { sort_by: sortBy } : {}),
-      ...(sortBy && sortDir ? { sort_dir: sortDir } : {}),
-      grid_param: JSON.stringify(sessionGridParams({ companyId, branchId, fromDate, toDate, status, variance })),
-    }),
-    [branchId, companyId, fromDate, status, toDate, variance],
+    }): Record<string, string> => {
+      // A new nonce is a new function, which is what makes the shell re-read
+      // (a changed listStateResetKey only moves it back to page 1) — so a
+      // count or a Refresh on page 1 still reloads.
+      void refreshNonce;
+      // Every page load asks the live line again — the figures move with each
+      // bill (Qt `TillSessionsView` on `dataLoaded`), unless a read is still on
+      // the wire. The shell has no "page loaded" callback; it builds this query
+      // once per page request, which is the same moment.
+      refreshLive();
+      return {
+        page: String(currentPage),
+        limit: String(pageSize),
+        ...(searchTerm ? { search: searchTerm } : {}),
+        ...(sortBy ? { sort_by: sortBy } : {}),
+        ...(sortBy && sortDir ? { sort_dir: sortDir } : {}),
+        grid_param: JSON.stringify(sessionGridParams({ companyId, branchId, fromDate, toDate, status, variance })),
+      };
+    },
+    [branchId, companyId, fromDate, refreshLive, refreshNonce, status, toDate, variance],
   );
 
   const listStateResetKey = `${companyId}|${branchId}|${fromDate}|${toDate}|${status}|${variance}|${refreshNonce}`;
@@ -183,15 +221,6 @@ export default function TillSessionsScreen() {
     [router],
   );
 
-  const openMovement = useCallback(() => {
-    const row = selected.current;
-    if (!row || !takesMoney(row.status)) {
-      toast.warn("Highlight a session still taking money (OPEN or SUSPENDED) first.");
-      return;
-    }
-    setMovementKey(row.key);
-  }, []);
-
   const openCount = useCallback(() => {
     const row = selected.current;
     if (!row || !awaitsCount(row.status)) {
@@ -201,19 +230,16 @@ export default function TillSessionsScreen() {
     setCountKey(row.key);
   }, []);
 
-  const dialogOpen = movementKey !== null || countKey !== null || journalRow !== null;
+  const dialogOpen = countKey !== null || journalRow !== null;
 
-  // F5 cash movement · F6 count / close · Enter the cockpit — the Qt keys.
-  // Quiet while a dialog is up, so its own keys are not also this screen's.
+  // F6 count / close · Enter the cockpit — the Qt keys. Quiet while a dialog
+  // is up, so its own keys are not also this screen's.
   useEffect(() => {
     if (dialogOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.repeat || event.altKey || event.shiftKey || event.ctrlKey || event.metaKey) return;
       if (overlayOpen()) return;
-      if (event.key === "F5") {
-        event.preventDefault();
-        openMovement();
-      } else if (event.key === "F6") {
+      if (event.key === "F6") {
         event.preventDefault();
         openCount();
       } else if (event.key === "Enter") {
@@ -228,7 +254,7 @@ export default function TillSessionsScreen() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [dialogOpen, openCockpit, openCount, openMovement]);
+  }, [dialogOpen, openCockpit, openCount]);
 
   const toolbarContent = useMemo(
     () => (
@@ -316,9 +342,14 @@ export default function TillSessionsScreen() {
             ))}
           </select>
         </div>
+        {companyId && branchId ? (
+          <div className={masterStyles.filterCheckGroup}>
+            <LiveCashLine sessions={liveSessions} />
+          </div>
+        ) : null}
       </>
     ),
-    [applyPeriod, fromDate, period, status, toDate, variance],
+    [applyPeriod, branchId, companyId, fromDate, liveSessions, period, status, toDate, variance],
   );
 
   /** The hint bar: what the highlighted row allows. The shell hands its selection over here. */
@@ -331,7 +362,6 @@ export default function TillSessionsScreen() {
   const toolbarActions = useCallback(
     (shellRow: MasterTableRow | null) => {
       const row = sessionRowOf(sourceOf(shellRow));
-      const live = row ? takesMoney(row.status) : false;
       const counting = row ? awaitsCount(row.status) : false;
       return (
         <>
@@ -347,22 +377,6 @@ export default function TillSessionsScreen() {
               <ErpActionIcon name="search" />
             </span>
             <span>Cockpit</span>
-          </button>
-          <button
-            type="button"
-            className={`${masterStyles.iconBtn} ${masterStyles.iconBtnImport} erp-ms-tbtn`}
-            title={
-              live
-                ? "Pickup / top-up (supervisor), drop / paid in — on a session still taking money (F5)"
-                : "Only a session still taking money (OPEN / SUSPENDED) moves cash."
-            }
-            disabled={!live}
-            onClick={openMovement}
-          >
-            <span className={`${masterStyles.iconBtnBox} erp-ms-tbtn-icon`}>
-              <ErpActionIcon name="import" />
-            </span>
-            <span>Cash movement</span>
           </button>
           <button
             type="button"
@@ -383,7 +397,7 @@ export default function TillSessionsScreen() {
         </>
       );
     },
-    [openCockpit, openCount, openMovement],
+    [openCockpit, openCount],
   );
 
   return (
@@ -406,7 +420,7 @@ export default function TillSessionsScreen() {
         gridTableName="till_session"
         useConfiguredGridColumnsOnly
         enableGridSettingsContextMenu
-        columnRenderOverrides={COLUMN_RENDER_OVERRIDES}
+        columnRenderOverrides={columnRenderOverrides}
         toolbarContent={toolbarContent}
         toolbarActions={toolbarActions}
         buildListQuery={buildListQuery}
@@ -420,14 +434,6 @@ export default function TillSessionsScreen() {
         onHistoryAction={(row) => {
           const session = sessionRowOf(sourceOf(row));
           if (session) setJournalRow(session);
-        }}
-      />
-      <CashMovementDialog
-        sessionKey={movementKey}
-        initialMode="PICKUP"
-        onClose={() => {
-          setMovementKey(null);
-          refresh();
         }}
       />
       <EndShiftDialog

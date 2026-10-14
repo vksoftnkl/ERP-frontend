@@ -1,0 +1,85 @@
+/**
+ * Till Approval Authority (menu 285).
+ *
+ * The list is the house `CrudMasterPage` shell and carries its skin; the
+ * popups borrow the till masters' popup chrome (see components/popup-frame)
+ * and the "Who can approve?" table borrows Till Approval Rules' tables. This
+ * sheet dresses only what those leave: the greyed rows, the status ink, and
+ * the who-can-approve ask row, rule line and gap box.
+ *
+ * The popups are portaled to <body>, so they may only use tokens declared on
+ * :root (they are, in app/globals.css).
+ */
+
+/* ── The list ──────────────────────────────────────────────────────────── */
+
+/* Switched off or ended: kept for the approvals it signed, no longer counting. */
+.rowMuted td {
+  color: var(--text-muted);
+}
+
+.inkSuccess {
+  color: #047857;
+  font-weight: 600;
+}
+
+.inkInfo {
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.inkMuted {
+  color: var(--text-muted);
+}
+
+/* ── Who can approve? ──────────────────────────────────────────────────── */
+
+.whoBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px 14px;
+}
+
+.whoBar {
+  display: grid;
+  grid-template-columns: auto minmax(160px, 2fr) auto minmax(160px, 2fr) auto minmax(100px, 1fr) auto;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+.whoCap {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+/* Outranks the borrowed table's own `flex` / `min-height` (one class each, load order unknown). */
+.whoBody .whoTable {
+  flex: 0 1 auto;
+  min-height: 180px;
+  max-height: calc(48dvh / var(--erp-ui-scale));
+}
+
+.ruleLine {
+  margin: 0;
+  min-height: 1.2em;
+  font-size: 0.82rem;
+  color: var(--text-main);
+}
+
+.gap {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid #fde68a;
+  border-radius: var(--erp-radius);
+  background: #fffbeb;
+  font-size: 0.8rem;
+  color: #92400e;
+}

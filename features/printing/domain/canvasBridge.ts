@@ -192,11 +192,27 @@ function normaliseBand(value: unknown, layoutMode: LayoutMode): Band | null {
     spacingRows: num("spacingRows", base.spacingRows),
     // The crash this whole function exists for: never anything but an array.
     elements: Array.isArray(raw.elements)
-      ? (raw.elements.filter(
-          (element) => typeof element === "object" && element !== null && !Array.isArray(element),
-        ) as Band["elements"])
+      ? (raw.elements
+          .filter(
+            (element): element is Record<string, unknown> =>
+              typeof element === "object" && element !== null && !Array.isArray(element),
+          )
+          .map(withElementDefaults) as Band["elements"])
       : [],
   };
+}
+const finiteOr = (value: unknown, fallback: number): number =>
+  typeof value === "number" && Number.isFinite(value) ? value : fallback;
+/**
+ * The defaults the server's schema fills in, for the keys the canvas does
+ * arithmetic on. The server parses `radiusMm` as `.default(0)`, so a stored RECT
+ * may simply not carry one -- and `mmToPx(undefined)` is a NaN border radius.
+ */
+function withElementDefaults(element: Record<string, unknown>): Record<string, unknown> {
+  if (element.kind === "RECT") {
+    return { ...element, radiusMm: finiteOr(element.radiusMm, 0) };
+  }
+  return element;
 }
 /**
  * The working revision, as something the canvas can open.
@@ -232,7 +248,15 @@ export function toTemplateDefinition(working: DraftVersion): TemplateDefinition 
     paper,
     // Kept from the body like `meta`: the definition is rebuilt key by key, and
     // a key not named here is gone after the next open-and-save.
-    ...(isTemplateDefinition(stored) && stored.pageBorder ? { pageBorder: stored.pageBorder } : {}),
+    // Its `radiusMm` is optional on the server too (`.default(0)`).
+    ...(isTemplateDefinition(stored) && stored.pageBorder
+      ? {
+          pageBorder: {
+            ...stored.pageBorder,
+            radiusMm: finiteOr(stored.pageBorder.radiusMm, 0),
+          },
+        }
+      : {}),
     ...(isTemplateDefinition(stored) && stored.watermark ? { watermark: stored.watermark } : {}),
     datasets,
     bands,

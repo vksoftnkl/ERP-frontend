@@ -7,6 +7,7 @@ import { confirm } from "@/lib/confirm";
 import { toast } from "@/lib/notify";
 import type { TillApprovalClient } from "./api/till-approval-api";
 import {
+  RELOAD_AFTER_SAVE_MS,
   approvalErrorText,
   effectiveRule,
   removeRowMessage,
@@ -24,7 +25,7 @@ import {
   type GridRow,
   type RuleForm,
 } from "./domain/approval-setup";
-import { RELOAD_AFTER_SAVE_MS, type ApprovalRows } from "./use-approval-rows";
+import type { ApprovalRows } from "./use-approval-rows";
 
 /** The event the screen opens on (Qt `reloadAll`). */
 export const FIRST_EVENT = "CASH_VARIANCE";

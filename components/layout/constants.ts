@@ -69,7 +69,8 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
               { label: "Denominations", href: "/sales/till/denominations" },
             ],
           },
-          { label: "Till Approval Setup", href: "/sales/till/approval-setup" },
+          { label: "Till Approval Rules", href: "/sales/till/approval-rules" },
+          { label: "Till Approval Authority", href: "/sales/till/approval-authority" },
         ],
       },
       {

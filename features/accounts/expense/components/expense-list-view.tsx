@@ -15,7 +15,9 @@
  *    cancelled, a CANCELLED one read;
  *  - nothing is deleted here — the server has no delete route for an expense
  *    draft, and a posted voucher is cancelled from inside (Cancel voucher);
- *  - no print — the EXPENSE_VOUCHER purpose has no template yet.
+ *  - Print is the EXPENSE_VOUCHER purpose through the five-button dialog —
+ *    the highlighted row, or every ticked one as one PDF. A draft has no
+ *    number, so it does not print.
  * History (Ctrl+H) is the document's status trail (`txn_status_log`, EXPENSE).
  */
 import { useCallback, useMemo, useState } from "react";
@@ -23,10 +25,12 @@ import CrudMasterPage from "@/components/master/crud-master-page";
 import type { MasterTableRow } from "@/components/master/crud-master-page.types";
 import { useBusinessContext } from "@/components/layout/business-context";
 import { TxnHistoryDialog, type TxnHistoryTarget } from "@/components/txn/txn-history-dialog";
+import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
+import { PURPOSE_CODE } from "@/features/printing/domain/documentPrint";
 import masterStyles from "@/app/master/state-master/page.module.scss";
 import { addDays, toDisplayDate, todayIso } from "@/features/sales/quotation/quotation.utils";
 import { Chip } from "@/features/accounts/receipt/components/chip";
-import type { ExpenseKeys } from "../expense.types";
+import type { ExpenseKeys, ExpensePrintTarget } from "../expense.types";
 import { formatMoney } from "../domain/money";
 import styles from "../expense.module.scss";
 
@@ -84,6 +88,13 @@ export function expenseKeysOfRow(row: MasterTableRow): ExpenseKeys {
   };
 }
 
+function printTargetOfRow(row: MasterTableRow): ExpensePrintTarget {
+  return {
+    ...expenseKeysOfRow(row),
+    voucherNo: asText(sourceValue(row, "avh_voucher_refno")) || null,
+  };
+}
+
 const COLUMN_RENDER_OVERRIDES = {
   avh_voucher_date: (row: MasterTableRow) =>
     toDisplayDate(asText(sourceValue(row, "avh_voucher_date")).slice(0, 10)),
@@ -121,6 +132,8 @@ export function ExpenseListView({ onCreate, onOpen }: ExpenseListViewProps) {
   const [toDate, setToDate] = useState(() => todayIso());
   const [period, setPeriod] = useState<string>(String(DEFAULT_WINDOW_DAYS));
   const [historyTarget, setHistoryTarget] = useState<TxnHistoryTarget | null>(null);
+  /** What the print dialog is open on — held here, so a moving selection cannot change it. */
+  const [printTargets, setPrintTargets] = useState<ExpensePrintTarget[]>([]);
 
   const applyPeriod = useCallback((value: string) => {
     setPeriod(value);
@@ -277,6 +290,29 @@ export function ExpenseListView({ onCreate, onOpen }: ExpenseListViewProps) {
         isRowDeleteDisabled={() => true}
         rowDeleteDisabledReason="An expense voucher is not deleted: a draft stays until it is posted, and a posted one is cancelled from inside the voucher"
         onDeleteAction={() => false}
+        // A draft took no number and moved no money, so it has no paper. A
+        // cancelled voucher still prints — it was issued, and the paper says so.
+        onPrintAction={(row) => setPrintTargets([printTargetOfRow(row)])}
+        isRowPrintDisabled={(row) => statusOf(row) === "DRAFT"}
+        rowPrintDisabledReason="A draft has no number yet — post it to print it"
+        // Tick several and Print renders them into ONE pdf.
+        enableMultiSelect
+        onBulkPrintAction={(rows) => setPrintTargets(rows.map(printTargetOfRow))}
+        // One render binds ONE company and ONE year; grid 137 already scopes to
+        // both, so this mostly catches the drafts in a ticked set.
+        bulkPrintDisabledReason={(rows) => {
+          if (rows.some((row) => statusOf(row) === "DRAFT")) {
+            return "Untick the drafts — a draft has no number to print.";
+          }
+          const distinct = (key: string) => new Set(rows.map((row) => asText(sourceValue(row, key)))).size;
+          if (distinct("avh_company_id") > 1) {
+            return "Select vouchers from one company at a time.";
+          }
+          if (distinct("avh_acc_year") > 1) {
+            return "Select vouchers from one accounting year at a time.";
+          }
+          return null;
+        }}
         onHistoryAction={(row) => {
           const keys = expenseKeysOfRow(row);
           if (!keys.voucherId) {
@@ -295,6 +331,26 @@ export function ExpenseListView({ onCreate, onOpen }: ExpenseListViewProps) {
         docLabel="Expense Voucher"
         onClose={() => setHistoryTarget(null)}
       />
+      {printTargets.length > 0 ? (
+        <PrintOptionsDialog
+          open
+          onClose={() => setPrintTargets([])}
+          purposeCode={PURPOSE_CODE.EXPENSE_VOUCHER}
+          documentLabel={
+            printTargets.length > 1
+              ? `${printTargets.length} Expense Vouchers`
+              : `Expense ${printTargets[0].voucherNo ?? ""}`.trim()
+          }
+          // Each row's own company and year — the token's company is the
+          // user's home one, and every dataset filters on it.
+          targets={printTargets.map((target) => ({
+            docId: target.voucherId,
+            companyId: target.companyId,
+            accYear: target.accYear,
+            filename: `expense-${target.voucherNo || target.voucherId}`,
+          }))}
+        />
+      ) : null}
     </>
   );
 }

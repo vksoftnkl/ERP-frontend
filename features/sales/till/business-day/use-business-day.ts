@@ -5,6 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { useGridId } from "@/lib/configured-grids";
 import { confirm } from "@/lib/confirm";
 import { toast } from "@/lib/notify";
+import { useLiveCash } from "../shared/use-live-cash";
 import { useBusinessDayClient } from "./api/business-day-api";
 import type { RowsState } from "./domain/day-reading";
 import {
@@ -58,9 +59,14 @@ const LOADING: RowsState = { status: "loading", rows: EMPTY_ROWS };
  * A `quiet` load (the app's focus revalidation) keeps what is on screen until
  * the new rows arrive and says nothing when it fails; an asked-for load clears
  * and says.
+ *
+ * The live sessions (Qt a449b8c `TillLiveCash`: every drawer still out, any
+ * date) are read again each time the day's sessions arrive — unless a read is
+ * still on the wire — as Qt does on the sessions grid's `dataLoaded`.
  */
 export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCreate }: Options) {
   const client = useBusinessDayClient();
+  const { sessions: liveSessions, refreshUnlessLoading: refreshLive } = useLiveCash({ companyId, branchId });
   const sessionsGridId = useGridId("tillDaySessions");
   const daysGridId = useGridId("tillBusinessDayList");
   const safesGridId = useGridId("tillSafeList");
@@ -116,6 +122,7 @@ export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCr
       const { companyId: company, branchId: branch, sessionsGridId: gridId } = latest.current;
       if (!businessDate) {
         setSessions({ status: "ready", rows: EMPTY_ROWS });
+        refreshLive();
         return;
       }
       if (!quiet) setSessions(LOADING);
@@ -125,13 +132,16 @@ export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCr
           gridId,
           sessionGridParams({ companyId: company, branchId: branch }, businessDate),
         );
-        if (gen === gens.current.sessions) setSessions({ status: "ready", rows });
+        if (gen === gens.current.sessions) {
+          setSessions({ status: "ready", rows });
+          refreshLive();
+        }
       } catch {
         if (gen !== gens.current.sessions || quiet) return;
         setSessions({ status: "error", rows: EMPTY_ROWS });
       }
     },
-    [client],
+    [client, refreshLive],
   );
 
   const loadSafes = useCallback(
@@ -343,6 +353,7 @@ export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCr
     dayState,
     pick,
     sessions,
+    liveSessions,
     safes,
     days,
     dayBusy,

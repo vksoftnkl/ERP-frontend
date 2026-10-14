@@ -57,14 +57,15 @@ type Props = {
   canCreate: boolean;
   canEdit: boolean;
   canDelete: boolean;
-  hidden: boolean;
 };
 
 /**
- * Approval Rules — the matrix of every event at one scope (left) and the
- * selected event's layers and this scope's row (right).
+ * Till Approval Rules — the matrix of every event at one scope (left) and the
+ * selected event's layers and this scope's row (right). The screen's only
+ * page since the grants moved to Till Approval Authority (Qt a449b8c hides
+ * the tab bar).
  */
-export function RulesTab({ t, companyId, companyName, loading, failed, onRetry, canCreate, canEdit, canDelete, hidden }: Props) {
+export function RulesTab({ t, companyId, companyName, loading, failed, onRetry, canCreate, canEdit, canDelete }: Props) {
   const branchDropdownId = useDropdownId("branchByCompany");
   const branchParams = useMemo(() => ({ ibr_comp_id: companyId }), [companyId]);
   const bodyRef = useRef<HTMLTableSectionElement | null>(null);
@@ -111,7 +112,7 @@ export function RulesTab({ t, companyId, companyName, loading, failed, onRetry, 
   };
 
   return (
-    <div className={styles.rulesBody} hidden={hidden} role="tabpanel" aria-label="Approval Rules">
+    <div className={styles.rulesBody}>
       <div className={styles.topBar}>
         <span className={styles.fieldCap}>Company</span>
         <span className={styles.topValue}>{companyName || "—"}</span>

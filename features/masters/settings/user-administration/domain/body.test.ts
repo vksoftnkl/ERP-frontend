@@ -126,21 +126,19 @@ describe("buildSaveBody", () => {
     expect(body.usrNotes).toBeNull();
   });
 
-  it("falls back the display name to the full name, then the login", () => {
+  it("derives the display name: the full name, else the login (Qt a449b8c)", () => {
     const base = { ...EMPTY_IDENTITY, loginName: "zt", password: "pw" };
     expect(buildSaveBody({ mode: "create", usrId: null, identity: base, grants: null }).usrDisplayName).toBe("zt");
     expect(
-      buildSaveBody({ mode: "create", usrId: null, identity: { ...base, fullName: "Zed Tee" }, grants: null })
+      buildSaveBody({ mode: "create", usrId: null, identity: { ...base, fullName: " Zed Tee " }, grants: null })
         .usrDisplayName,
     ).toBe("Zed Tee");
+    // The column takes 100, the full name 150.
+    const long = `${"A".repeat(99)} ${"B".repeat(20)}`;
     expect(
-      buildSaveBody({
-        mode: "create",
-        usrId: null,
-        identity: { ...base, fullName: "Zed Tee", displayName: "ZT" },
-        grants: null,
-      }).usrDisplayName,
-    ).toBe("ZT");
+      buildSaveBody({ mode: "create", usrId: null, identity: { ...base, fullName: long }, grants: null })
+        .usrDisplayName,
+    ).toBe("A".repeat(99));
   });
 
   it("leaves timezone, language and avatar unsent", () => {

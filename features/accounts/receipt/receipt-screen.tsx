@@ -28,6 +28,8 @@ import { documentRights } from "@/lib/permissions/document-rights";
 import { useUiTableId } from "@/lib/ui-tables";
 import { todayIso } from "@/features/sales/quotation/quotation.utils";
 import { useGetQuotationGridLayoutQuery } from "@/store/api/quotationApi";
+import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
+import { PURPOSE_CODE } from "@/features/printing/domain/documentPrint";
 /*
  * The right-click menu, the Admin-settings dialog and drag-to-widen are the
  * SAME two affordances every other configured grid in this app carries, acting
@@ -45,7 +47,12 @@ import { resolveBillColumns, resolveTenderColumns } from "./columns";
 import { RECEIPT_FIELD_ATTR, advanceReceiptField, focusReceiptField } from "./focus-walk";
 import { forBillsTotal } from "./domain/surcharge";
 import { defaultTender } from "./domain/tenders";
-import type { ChequeExtras, ReceiptKeys, ReceiptScope } from "./receipt.types";
+import type {
+  ChequeExtras,
+  ReceiptKeys,
+  ReceiptPrintTarget,
+  ReceiptScope,
+} from "./receipt.types";
 import { receivedTotal } from "./state/draft";
 import { AmountInput } from "./components/amount-input";
 import type { TempCreditCollect } from "./domain/collect";
@@ -95,6 +102,7 @@ export const RECEIPT_MENU_ID = 99;
  *   F6                Re-read bills  F4      Cheque details (on the row)
  *   F7                Paid detail    F8      Show list
  *   F9                Ledger statement
+ *   F11               Print the receipt on screen (a reprint)
  *   Ctrl+Enter        Post & print
  *   Ctrl+PgUp/PgDn    Walk the register
  *   Esc               Close
@@ -267,6 +275,15 @@ export default function ReceiptScreen({ initialKeys, onBackToList, collect, open
   const pageRef = useRef<HTMLDivElement | null>(null);
   /** The instrument row the cursor is on — what Default and − act on. */
   const [currentTenderKey, setCurrentTenderKey] = useState<string | null>(null);
+  /**
+   * The receipt the print dialog is open on. Held apart from the draft: Post
+   * clears the screen for the next receipt before the dialog appears, so the
+   * one just numbered exists only here.
+   */
+  const [printTarget, setPrintTarget] = useState<
+    { receipt: ReceiptPrintTarget; reprint: boolean } | null
+  >(null);
+  const canPrint = !permissionsLoading && permissions.canPrint;
 
   const chequeRow = useMemo(
     () => draft.tenders.find((row) => row.key === chequeRowKey) ?? null,
@@ -415,9 +432,9 @@ export default function ReceiptScreen({ initialKeys, onBackToList, collect, open
   }, []);
 
   /**
-   * Post, then print. There IS no print pipeline for a receipt yet, so it
-   * posts and says so: a button that silently does half of what it promises is
-   * worse than one that reports the half it did.
+   * Post, then print — the `RECEIPT_VOUCHER` purpose, through the same
+   * five-button dialog the bills print from. Silent about the print when the
+   * operator may not print: the post is what they asked for, and it is done.
    *
    * Restating a posted receipt is a different verb behind the same key: while
    * amending, Ctrl+Enter saves the amend (Qt `post()` → `sendAmend()`) rather
@@ -434,10 +451,39 @@ export default function ReceiptScreen({ initialKeys, onBackToList, collect, open
       return;
     }
     const posted = await api.post();
-    if (posted) {
-      toast.info("Printing is not available from this screen yet.");
+    if (posted && canPrint) {
+      setPrintTarget({ receipt: posted, reprint: false });
     }
-  }, [amending, api, busy]);
+  }, [amending, api, busy, canPrint]);
+
+  /**
+   * F11: print the receipt on screen again. Only a numbered one — a draft has
+   * taken no number and moved no money, so there is nothing to put on paper —
+   * and not mid-amend, when the screen shows figures the server has not got.
+   * A cancelled receipt still prints: it was issued, and the paper says so.
+   */
+  const printable =
+    Boolean(draft.header.voucherId) && draft.header.status !== "DRAFT" && !draft.amending;
+  const printCurrent = useCallback(() => {
+    if (!canPrint) {
+      toast.error("You do not have permission to print on this screen.");
+      return;
+    }
+    const voucherId = draft.header.voucherId;
+    if (!voucherId || !printable) {
+      toast.info("Open a posted receipt first — a draft has no number to print.");
+      return;
+    }
+    setPrintTarget({
+      receipt: {
+        voucherId,
+        companyId: draft.header.scope.companyId,
+        accYear: draft.header.scope.accYear,
+        voucherRefno: draft.header.voucherRefno,
+      },
+      reprint: true,
+    });
+  }, [canPrint, draft.header.scope, draft.header.voucherId, draft.header.voucherRefno, printable]);
 
   const closeScreen = useCallback(() => {
     void (async () => {
@@ -518,6 +564,7 @@ export default function ReceiptScreen({ initialKeys, onBackToList, collect, open
     addInstrument,
     openHistoryForCursor,
     openLedgerStatement,
+    printCurrent,
     dispatch,
     setRegisterOpen,
     registerFilters,
@@ -527,7 +574,8 @@ export default function ReceiptScreen({ initialKeys, onBackToList, collect, open
       dialog !== null ||
       chequeRowKey !== null ||
       historyTarget !== null ||
-      approverBillId !== null,
+      approverBillId !== null ||
+      printTarget !== null,
   };
   /**
    * Registered once, reading the latest values through this ref so a keystroke
@@ -585,6 +633,12 @@ export default function ReceiptScreen({ initialKeys, onBackToList, collect, open
       if (event.key === "F9") {
         event.preventDefault();
         current.openLedgerStatement();
+        return;
+      }
+      if (event.key === "F11") {
+        // The browser's own F11 goes full-screen.
+        event.preventDefault();
+        current.printCurrent();
         return;
       }
       if (event.altKey && (event.key === "a" || event.key === "A")) {
@@ -991,6 +1045,21 @@ export default function ReceiptScreen({ initialKeys, onBackToList, collect, open
             Correct this receipt
           </button>
         ) : null}
+        <button
+          type="button"
+          className={styles.button}
+          disabled={!canPrint || !printable || busy !== "idle"}
+          title={
+            !canPrint
+              ? "You do not have permission to print on this screen."
+              : printable
+                ? undefined
+                : "Open a posted receipt to print it — a draft has no number."
+          }
+          onClick={printCurrent}
+        >
+          Print - F11
+        </button>
         <button type="button" className={styles.button} onClick={() => setRegisterOpen(true)}>
           Show List - F8
         </button>
@@ -1065,6 +1134,28 @@ export default function ReceiptScreen({ initialKeys, onBackToList, collect, open
       ) : null}
 
       <PaidDetail target={historyTarget} onClose={() => setHistoryTarget(null)} />
+
+      {/*
+        The receipt's own company and year travel with it (the token's company
+        is the user's home one); branch and counter are the session's.
+      */}
+      {printTarget ? (
+        <PrintOptionsDialog
+          open
+          onClose={() => setPrintTarget(null)}
+          purposeCode={PURPOSE_CODE.RECEIPT_VOUCHER}
+          documentLabel={`Receipt${printTarget.receipt.voucherRefno ? ` ${printTarget.receipt.voucherRefno}` : ""}${printTarget.reprint ? " (reprint)" : ""}`}
+          targets={[
+            {
+              docId: printTarget.receipt.voucherId,
+              companyId: printTarget.receipt.companyId,
+              accYear: printTarget.receipt.accYear,
+              ...(printTarget.reprint ? { isReprint: true } : {}),
+              filename: `receipt-${printTarget.receipt.voucherRefno || printTarget.receipt.voucherId}`,
+            },
+          ]}
+        />
+      ) : null}
 
       <ApproverDialog
         isOpen={approverBill !== null}

@@ -6,7 +6,7 @@
  * key outside `SaveUserAdministrationDto`, and the payload carries a dozen.
  */
 import { type Grants, toMenusPayload } from "./grants";
-import type { IdentityForm } from "./identity";
+import { IDENTITY_LIMITS, type IdentityForm } from "./identity";
 import type { SaveUserAdministrationDto } from "./wire";
 
 export type SaveBodyInput = {
@@ -36,9 +36,10 @@ export function buildSaveBody({ mode, usrId, identity, grants }: SaveBodyInput):
 
   const body: SaveUserAdministrationDto = {
     usrLoginName: loginName,
-    // The column is NOT NULL and the header greets the user by it, so a blank
-    // display name falls back to the full name, then the login.
-    usrDisplayName: identity.displayName.trim() || fullName || loginName,
+    // The screen has no Display Name (Qt a449b8c): it is the Full Name, else
+    // the login name, so the two never drift apart. The column is NOT NULL and
+    // shorter than the full name, hence the cut.
+    usrDisplayName: (fullName || loginName).slice(0, IDENTITY_LIMITS.displayName).trimEnd(),
     usrFullName: nullable(fullName),
     usrMobileNo: nullable(identity.mobileNo),
     usrEmail: nullable(identity.email),

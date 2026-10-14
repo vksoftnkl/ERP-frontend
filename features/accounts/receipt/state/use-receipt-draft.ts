@@ -54,6 +54,7 @@ import {
 import type {
   ReceiptKeys,
   ReceiptPayload,
+  ReceiptPrintTarget,
   ReceiptScope,
   ReceiptSettings,
   OpenItemsPayload,
@@ -721,15 +722,20 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
   }, [appDate, canWrite, maySaveDraft, persistDraft, reportProblems, scope, validationInput]);
 
   // ── Post ──────────────────────────────────────────────────────────────────
-  const post = useCallback(async (): Promise<boolean> => {
+  /**
+   * Resolves to the receipt it numbered — what Post & Print hands the print
+   * dialog — or null when nothing was posted. The screen is already cleared for
+   * the next one by then, so the caller cannot read it back off the draft.
+   */
+  const post = useCallback(async (): Promise<ReceiptPrintTarget | null> => {
     // Ctrl+Enter reaches here past a greyed button, so the right is checked
     // again. Post alone is enough — no Create needed (notes 106).
     if (!canWrite || !mayPost) {
       toast.error("You do not have the right to post receipts on this screen.");
-      return false;
+      return null;
     }
     if (!reportProblems(validateBeforePost(validationInput()))) {
-      return false;
+      return null;
     }
     const current = latest.current;
     const figures = computeIdentity(current);
@@ -745,7 +751,7 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
         confirmLabel: "Hold on account",
       });
       if (!ok) {
-        return false;
+        return null;
       }
     }
 
@@ -788,7 +794,15 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
       // Then CLEAR, ready for the next one — the message has already named it.
       seededTender.current = false;
       dispatch({ type: "NEW_DOCUMENT", scope, voucherDate: appDate });
-      return true;
+      const voucherId = payload.header?.avhVoucherId ?? "";
+      return voucherId
+        ? {
+            voucherId,
+            companyId: payload.header?.avhCompanyId || after.header.scope.companyId,
+            accYear: payload.header?.avhAccYear || after.header.scope.accYear,
+            voucherRefno: refno || null,
+          }
+        : null;
     } catch (error) {
       // Nothing to undo: the one transaction rolled back, so there is no draft
       // to delete and the screen keeps everything keyed — a reopened draft
@@ -805,7 +819,7 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
       } else {
         toast.error(receiptError(error));
       }
-      return false;
+      return null;
     } finally {
       setBusy("idle");
     }

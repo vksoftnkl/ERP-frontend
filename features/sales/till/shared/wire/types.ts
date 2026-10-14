@@ -147,6 +147,12 @@ export type TillSessionPayload = {
   tssCounterId: string;
   counterCode: string;
   counterName: string;
+  /**
+   * Notes 110 §3 — the counter's own safe when it is a drop safe, else null: a
+   * DROP is refused (TILL_NO_DROP_SAFE) and the screen disables its tile. A
+   * server from before notes 110 leaves the key out (a drop works as it did).
+   */
+  dropSafeName?: string | null;
   tssDeviceId: string;
   tssOperatorId: string;
   operatorName: string | null;
@@ -191,6 +197,16 @@ export type TillSessionPayload = {
   tenders: TillSessionTender[];
   movements: unknown[];
   variances: TillVariance[];
+};
+
+/** GET /till/movements/supervisors — one person who can sign a pickup / top-up on the session (notes 110 §2). */
+export type TillSupervisor = {
+  userId: string;
+  loginName: string;
+  /** usr_full_name, else usr_display_name; null when both are blank. */
+  fullName: string | null;
+  /** False: a till PIN must be set in User Administration (menu 58) before they can sign. */
+  hasPin: boolean;
 };
 
 // ─── decide-variance (notes 105 A1) ─────────────────────────────────────────

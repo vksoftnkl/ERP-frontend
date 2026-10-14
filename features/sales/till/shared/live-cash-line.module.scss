@@ -1,0 +1,20 @@
+/* The live line (Qt `TillLiveCash`, NexStyle role "strong"). */
+.line {
+  display: inline-block;
+  max-width: 100%;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--text-main);
+  white-space: pre; /* "…₹ 7,450.00  (1 not shown …)" keeps its two spaces */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+
+/* Before the first read of the branch answers. */
+.reading {
+  font-weight: 400;
+  font-style: italic;
+  color: var(--text-muted);
+}

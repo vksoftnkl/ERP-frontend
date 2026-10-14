@@ -261,17 +261,6 @@ export function IdentityTab({ identity, errors, facts, mode, disabled, onChange 
 
         <section className={styles.group} aria-label="Person">
           <h4 className={styles.groupTitle}>Person</h4>
-          <Field id={`${ids}-display`} label="Display name" error={errors.displayName}>
-            <input
-              id={`${ids}-display`}
-              className={controlClass(Boolean(errors.displayName))}
-              value={identity.displayName}
-              maxLength={IDENTITY_LIMITS.displayName}
-              placeholder="Shown in the header; defaults to the full name"
-              disabled={disabled}
-              onChange={(event) => onChange({ displayName: event.target.value })}
-            />
-          </Field>
           <Field id={`${ids}-full`} label="Full name" error={errors.fullName}>
             <input
               id={`${ids}-full`}

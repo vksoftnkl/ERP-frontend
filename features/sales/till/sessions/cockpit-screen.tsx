@@ -27,7 +27,6 @@ import { reasonGridParams, toReasons, type TillReason } from "../shared/reasons"
 import { TonePill, overlayOpen } from "../shared/till-dialog";
 import type { GridRow, TillSessionKey, TillSessionPayload, TillVarianceDecision } from "../shared/wire/types";
 import styles from "../shared/till.module.scss";
-import { CashMovementDialog } from "../session/cash-movement-dialog";
 import { EndShiftDialog } from "../session/end-shift-dialog";
 import {
   REC_HINT,
@@ -80,7 +79,6 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
   const tabChosen = useRef(false);
   const [now, setNow] = useState(() => new Date());
   const [countOpen, setCountOpen] = useState(false);
-  const [movementOpen, setMovementOpen] = useState(false);
   const [slipOpen, setSlipOpen] = useState(false);
   const [decide, setDecide] = useState<DecideRequest | null>(null);
 
@@ -424,15 +422,8 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
         >
           Count / close
         </button>
-        <button
-          type="button"
-          className={styles.secondaryButton}
-          disabled={!buttons.movement}
-          title="A supervisor's pickup / top-up on a session still taking money"
-          onClick={() => setMovementOpen(true)}
-        >
-          Cash movement
-        </button>
+        {/* No Cash movement here (Qt a449b8c, notes 110): a pickup / top-up is
+            signed at the counter by the cashier and the supervisor together. */}
         <button
           type="button"
           className={styles.secondaryButton}
@@ -471,14 +462,6 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
         sessionKey={countOpen ? key : null}
         onClose={() => {
           setCountOpen(false);
-          load();
-        }}
-      />
-      <CashMovementDialog
-        sessionKey={movementOpen ? key : null}
-        initialMode="PICKUP"
-        onClose={() => {
-          setMovementOpen(false);
           load();
         }}
       />

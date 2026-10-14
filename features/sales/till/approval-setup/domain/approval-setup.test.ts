@@ -3,20 +3,10 @@ import {
   APPROVER_LEVELS,
   allEvents,
   approvalErrorText,
-  approverIdentity,
-  approverLines,
-  canEndGrant,
-  copyGrantBodies,
   effectiveRule,
-  endGrantPlan,
   gapEvents,
   gapText,
-  grantBody,
-  grantFormFrom,
-  grantLine,
-  grantProblem,
-  grantStatus,
-  grantsNote,
+  grantLive,
   levelRank,
   lowestOkLevel,
   removeRowMessage,
@@ -29,7 +19,6 @@ import {
   ruleProblem,
   ruleSummary,
   ruleWarning,
-  sameGrant,
   sameRule,
   scopeRow,
   thresholdText,
@@ -298,6 +287,8 @@ describe("the rule form", () => {
     const form = { ...ruleFormFrom(SHIPPED, { ownRow: false, today: TODAY }), minRole: "AREA_MANAGER" };
     const context = { event: "CASH_VARIANCE", grants: [grant({})], companyId: CO, scopeBranch: "", loginBranch: BR };
     expect(ruleWarning(form, context)).toContain("No grant at this scope reaches AREA_MANAGER for CASH_VARIANCE");
+    // The grants live on their own menu since the Qt split (a449b8c).
+    expect(ruleWarning(form, context)).toContain("(Till Approval Authority, menu 285)");
     expect(ruleWarning({ ...form, minRole: "STORE_MANAGER" }, context)).toBe("");
     // Probed a paisa above the threshold: a 10,000 ceiling does not cover OVER 10,000.
     expect(ruleWarning({ ...form, minRole: "SUPERVISOR", threshold: "10000" }, context)).not.toBe("");
@@ -318,114 +309,13 @@ describe("the rule form", () => {
   });
 });
 
-describe("approvers and grants", () => {
-  const grants = [
-    grant({ taa_id: "g1" }),
-    grant({ taa_id: "g2", taa_valid_to: "2026-10-05" }),
-    grant({ taa_id: "g3", taa_user_id: "u2", approver: "Meena", user_role: "SUPERVISOR", taa_can_remote: false, taa_role: "SUPERVISOR" }),
-  ];
-
-  it("lists users with grants, then the ones added here, with live counts", () => {
-    const lines = approverLines(grants, [{ id: "u9", name: "Kumar" }, { id: "u1", name: "dup" }], { search: "", today: TODAY });
-    expect(lines.map((line) => [line.name, line.live, line.remote])).toEqual([
-      ["Ravi", 1, true],
-      ["Meena", 1, false],
-      ["Kumar", 0, false],
-    ]);
-    expect(approverLines(grants, [], { search: "mee", today: TODAY }).map((line) => line.userId)).toEqual(["u2"]);
-    expect(approverIdentity(grants, [], "u2")).toEqual({ name: "Meena", role: "SUPERVISOR" });
-    expect(approverIdentity(grants, [{ id: "u9", name: "Kumar" }], "u9")).toEqual({ name: "Kumar", role: "" });
-  });
-
-  it("states a grant's status and what ends on its own", () => {
-    expect(grantStatus(grants[0], TODAY)).toBe("Active");
-    expect(grantStatus(grants[1], TODAY)).toBe("Ended");
-    expect(grantStatus(grant({ taa_valid_from: "2026-11-01" }), TODAY)).toBe("Future");
-    expect(grantStatus(grant({ taa_is_active: false }), TODAY)).toBe("Inactive");
-    expect(grantsNote([grant({ taa_valid_to: "2026-12-31" }), grants[1]], TODAY)).toBe("row 1 ends on its own on 31-12-2026");
-    expect(grantsNote([], TODAY)).toBe("No grant yet — Add grant, or copy another approver's.");
-    expect(grantLine(grants[0], TODAY)).toMatchObject({ event: "(every event)", max: "10,000.00", from: "01-10-2026", to: "" });
-    expect(grantLine(grant({ taa_max_amount: null }), TODAY).max).toBe("no ceiling");
-  });
-
-  it("starts a new grant at the user's role when it is a level", () => {
-    expect(grantFormFrom(null, { userRole: "SUPERVISOR", today: TODAY }).level).toBe("SUPERVISOR");
-    expect(grantFormFrom(null, { userRole: "MANAGER", today: TODAY })).toMatchObject({
-      level: "SUPERVISOR",
-      everyCompany: false,
-      branchId: "",
-      max: "",
-      from: TODAY,
-      hasTo: false,
-    });
-    expect(grantFormFrom(grants[1], { userRole: "", today: TODAY })).toMatchObject({
-      level: "STORE_MANAGER",
-      max: "10000.00",
-      hasTo: true,
-      to: "2026-10-05",
-    });
-  });
-
-  it("posts every company with no branch, and blanks as nulls", () => {
-    const form = grantFormFrom(null, { userRole: "", today: TODAY });
-    expect(grantBody({ ...form, branchId: BR }, { grant: null, userId: "u1", companyId: CO })).toEqual({
-      taaUserId: "u1",
-      taaCompanyId: CO,
-      taaBranchId: BR,
-      taaRole: "SUPERVISOR",
-      taaEventCode: null,
-      taaMaxAmount: null,
-      taaCanRemote: false,
-      taaValidFrom: TODAY,
-      taaValidTo: null,
-      taaIsActive: true,
-    });
-    const every = grantBody({ ...form, everyCompany: true, branchId: BR, max: "500" }, { grant: grants[0], userId: "u1", companyId: CO });
-    expect(every).toMatchObject({ taaId: "g1", taaCompanyId: null, taaBranchId: null, taaMaxAmount: 500 });
-  });
-
-  it("validates the grant form", () => {
-    const form = grantFormFrom(null, { userRole: "", today: TODAY });
-    expect(grantProblem({ userId: "", dirty: true, form })).toBe("Pick or add an approver.");
-    expect(grantProblem({ userId: "u1", dirty: false, form })).toBe("Nothing changed.");
-    expect(grantProblem({ userId: "u1", dirty: true, form: { ...form, hasTo: true, to: "2026-01-01" } })).toBe(
-      "Valid to is before valid from.",
-    );
-    expect(grantProblem({ userId: "u1", dirty: true, form })).toBe("");
-    expect(sameGrant(form, { ...form, max: "" })).toBe(true);
-    expect(sameGrant(form, { ...form, everyCompany: true })).toBe(false);
-  });
-
-  it("ends a live grant today and switches off one that has not started", () => {
-    const saved = grantBody(grantFormFrom(grants[0], { userRole: "", today: TODAY }), { grant: grants[0], userId: "u1", companyId: CO });
-    expect(canEndGrant(grants[0], TODAY)).toBe(true);
-    expect(canEndGrant(grants[1], TODAY)).toBe(false);
-    expect(endGrantPlan(saved, grants[0], TODAY)).toMatchObject({ future: false, body: { taaValidTo: TODAY, taaIsActive: true } });
-    const future = grant({ taa_valid_from: "2026-11-01" });
-    expect(canEndGrant(future, TODAY)).toBe(true);
-    expect(endGrantPlan(saved, future, TODAY)).toMatchObject({
-      future: true,
-      message: "This grant has not started yet: switch it off?",
-      body: { taaIsActive: false, taaValidTo: null },
-    });
-  });
-
-  it("copies only live grants, from today", () => {
-    const bodies = copyGrantBodies(grants.slice(0, 2), { userId: "u7", today: TODAY });
-    expect(bodies).toEqual([
-      {
-        taaUserId: "u7",
-        taaCompanyId: CO,
-        taaBranchId: null,
-        taaRole: "STORE_MANAGER",
-        taaEventCode: null,
-        taaMaxAmount: 10000,
-        taaCanRemote: true,
-        taaValidFrom: TODAY,
-        taaValidTo: null,
-        taaIsActive: true,
-      },
-    ]);
+describe("grants", () => {
+  it("counts a grant live only while active, started and not past its valid-to", () => {
+    expect(grantLive(grant({}), TODAY)).toBe(true);
+    expect(grantLive(grant({ taa_valid_to: TODAY }), TODAY)).toBe(true);
+    expect(grantLive(grant({ taa_valid_to: "2026-10-05" }), TODAY)).toBe(false);
+    expect(grantLive(grant({ taa_valid_from: "2026-11-01" }), TODAY)).toBe(false);
+    expect(grantLive(grant({ taa_is_active: false }), TODAY)).toBe(false);
   });
 });
 

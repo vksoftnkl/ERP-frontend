@@ -1,10 +1,11 @@
 /**
- * Till Approval Setup (menu 276) — the look of Till Masters (275), plus the
- * rules matrix, the layer cards and the approval preview.
+ * Till Approval Rules (menu 276) — the look of the till screens, plus the
+ * rules matrix and the layer cards. Till Approval Authority (285) borrows the
+ * tables and pills for its "Who can approve?" dialog.
  *
  * The screen sizes itself to `.erp-app-content`, so the shell is `height: 100%`
- * (never a viewport unit: the app scales with `zoom` on <html>). Each tab is a
- * grid of panes; tables and the side forms scroll inside their own pane.
+ * (never a viewport unit: the app scales with `zoom` on <html>). The body is a
+ * grid of panes; tables and the side form scroll inside their own pane.
  */
 .page {
   height: 100%;
@@ -96,46 +97,7 @@
   opacity: 0.7;
 }
 
-/* ── Tabs ──────────────────────────────────────────────────────────────── */
-
-.tabs {
-  display: flex;
-  gap: 2px;
-  border-bottom: 1px solid var(--border);
-}
-
-.tab {
-  padding: 7px 16px;
-  border: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  background: transparent;
-  font-size: 0.86rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  cursor: pointer;
-
-  &:hover {
-    color: var(--text-main);
-  }
-}
-
-.tabActive {
-  color: var(--primary);
-  border-bottom-color: var(--primary);
-}
-
-.tabDot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-left: 6px;
-  border-radius: 50%;
-  background: #b45309;
-  vertical-align: middle;
-}
-
-/* ── Tab bodies ────────────────────────────────────────────────────────── */
+/* ── The body ──────────────────────────────────────────────────────────── */
 
 .rulesBody {
   flex: 1 1 auto;
@@ -143,10 +105,6 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-
-  &[hidden] {
-    display: none;
-  }
 }
 
 .rulesPanes {
@@ -157,21 +115,8 @@
   gap: 16px;
 }
 
-.authorityBody {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(280px, 2fr) minmax(560px, 5fr);
-  gap: 16px;
-
-  &[hidden] {
-    display: none;
-  }
-}
-
 @container till-approval (max-width: 1100px) {
-  .rulesPanes,
-  .authorityBody {
+  .rulesPanes {
     grid-template-columns: minmax(0, 1fr);
     overflow: auto;
   }
@@ -324,7 +269,6 @@
   font-weight: 600;
 }
 
-.searchInput,
 .textInput {
   min-height: 30px;
   padding: 0 8px;
@@ -355,12 +299,6 @@
   text-align: right;
 }
 
-.searchInput {
-  flex: 0 1 200px;
-  min-width: 0;
-  margin-left: auto;
-}
-
 .checkLine {
   display: inline-flex;
   align-items: center;
@@ -374,18 +312,6 @@
 .checkDisabled {
   color: var(--text-muted);
   cursor: default;
-}
-
-.inlineRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.grow {
-  flex: 1 1 auto;
-  min-width: 0;
 }
 
 .dropdown {
@@ -551,23 +477,8 @@
   background: var(--card-bg);
 }
 
-.grantFields {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: center;
-  gap: 7px 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--erp-radius);
-  background: var(--card-bg);
-}
-
 .span2 {
   grid-column: span 2;
-}
-
-.fieldFull {
-  grid-column: 1 / -1;
 }
 
 .ruleChecks {
@@ -575,33 +486,6 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-
-/* ── Who can approve? ──────────────────────────────────────────────────── */
-
-.whoBar {
-  display: grid;
-  grid-template-columns: auto minmax(160px, 2fr) auto minmax(160px, 2fr) auto minmax(100px, 1fr) auto;
-  align-items: center;
-  gap: 8px 10px;
-}
-
-.ruleLine {
-  margin: 0;
-  font-size: 0.82rem;
-  color: var(--text-main);
-}
-
-.gap {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 8px 10px;
-  border: 1px solid #fde68a;
-  border-radius: var(--erp-radius);
-  background: #fffbeb;
-  font-size: 0.8rem;
-  color: #92400e;
 }
 
 /* ── Footer ────────────────────────────────────────────────────────────── */

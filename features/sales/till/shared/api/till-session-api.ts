@@ -30,6 +30,7 @@ import type {
   TillSessionPayload,
   TillSlipCheckPayload,
   TillSlipCheckResult,
+  TillSupervisor,
   TillApprovableTreatment,
   TillVarianceDecision,
   TillVarianceDecisionResult,
@@ -116,11 +117,13 @@ export type TillMovementBody = TillSessionKey & {
   bagNo?: string | null;
   sealNo?: string | null;
   /**
-   * Notes 108 — PICKUP, and a TOP_UP the session's own cashier does not bring:
-   * the session cashier's till PIN, typed by them on this screen (they witness
-   * it). Sent only when there is a witness.
+   * Notes 110 — PICKUP / TOP_UP only: the supervisor standing at the counter
+   * (one of `supervisors()`), who signs with their own till PIN after the
+   * count. The cashier signs by being logged in. (Notes 108's `witnessPin` is
+   * no longer read by the server.)
    */
-  witnessPin?: string;
+  supervisorId?: string;
+  supervisorPin?: string;
   notes: string | null;
 };
 
@@ -153,6 +156,8 @@ export type TillSessionClient = {
   slipCheckRows: (key: TillSessionKey, tenderId: string) => Promise<TillSlipCheckPayload>;
   slipCheckRecord: (body: TillSlipCheckBody) => Promise<TillSlipCheckResult>;
   createMovement: (body: TillMovementBody) => Promise<TillMovementDetail>;
+  /** Notes 110: who may sign a pickup / top-up on the session — 273 OVERRIDE, active, never its cashier. */
+  supervisors: (key: TillSessionKey) => Promise<TillSupervisor[]>;
   denominations: (companyId: string) => Promise<TillDenominationRow[]>;
   /** Every row of a configured grid, every page of it. */
   gridRows: (grid: ConfiguredGridKey, params: Record<string, string>) => Promise<GridRow[]>;
@@ -175,6 +180,10 @@ export function createTillSessionClient(dispatch: AppDispatch): TillSessionClien
     slipCheckRows: (key, tenderId) => read(dispatch, "/till/sessions/slip-check", { ...keyParams(key), tenderId }),
     slipCheckRecord: (body) => write(dispatch, "/till/sessions/slip-check", body),
     createMovement: (body) => write(dispatch, "/till/movements/create", body),
+    supervisors: async (key) => {
+      const data = await read<TillSupervisor[] | null>(dispatch, "/till/movements/supervisors", keyParams(key));
+      return Array.isArray(data) ? data : [];
+    },
     denominations: async (companyId) => {
       const data = await read<TillDenominationRow[] | { items?: TillDenominationRow[] }>(
         dispatch,

@@ -6,22 +6,25 @@
  *   Drop     the cashier's sealed bag to the safe: declared amount + bag +
  *            seal, no count now (the cash office verifies it)        TDrp
  *   Paid in  cash income with no party: reason, ledger, ref           TPIn
- *   Pickup   a SUPERVISOR takes cash, the cashier witnesses:
+ *   Pickup   cash from the drawer into a supervisor's hand:
  *            reason, counted by note                                  TDrp
- *   Top-up   a SUPERVISOR brings change from the safe, counted        TFlt
+ *   Top-up   change a supervisor brings from the safe, counted        TFlt
  *
- * One `POST /till/movements/create` each. The safe is the server's (the
- * counter's, else the branch default — the route takes no safe). Pickup /
- * Top-up need Till Sessions (273) OVERRIDE on the LOGGED-IN user, and the
- * witness — the session's cashier — types their till PIN on this screen
- * (notes 108): nothing is recorded without them there. A pickup is always
- * two people: the session's own cashier cannot take it.
+ * One `POST /till/movements/create` each, always by the session's cashier at
+ * the counter (notes 110). A hand-over is two signatures, not "do +
+ * approve": the cashier is logged in, the supervisor picks their name and
+ * types their till PIN here, after the count — so neither can post one
+ * without the other there. Pickup: the cashier gives, the supervisor
+ * receives; Top-up the other way round.
+ *
+ * A drop goes only into the counter's own drop safe (the session's
+ * `dropSafeName`); with none, the bag goes to a supervisor as a Pickup.
  */
 import { countLines, countedPaise, type DenomCountValue, type Denomination } from "../shared/denom";
 import { formatMoney, paiseToNumber } from "../shared/money";
 import { reasonById, reasonsOf, type TillReason } from "../shared/reasons";
 import type { TillMovementBody } from "../shared/api/till-session-api";
-import type { TillSessionKey, TillSessionPayload } from "../shared/wire/types";
+import type { TillSessionKey, TillSessionPayload, TillSupervisor } from "../shared/wire/types";
 
 export type MovementMode = "DROP" | "PAID_IN" | "PICKUP" | "TOP_UP";
 
@@ -38,7 +41,7 @@ export const MODE_TITLES: Record<MovementMode, string> = {
 export const MODE_LINES: Record<MovementMode, string> = {
   DROP: "Sealed bag to the safe",
   PAID_IN: "Cash income, no party",
-  PICKUP: "Supervisor takes cash",
+  PICKUP: "Cash to a supervisor",
   TOP_UP: "Change from the safe",
 };
 
@@ -53,8 +56,10 @@ export type MovementForm = {
   refNo: string;
   partyName: string;
   notes: string;
-  /** Notes 108: the session cashier's till PIN (a pickup; a top-up someone else brings). */
-  witnessPin: string;
+  /** Notes 110, a hand-over: the supervisor at the counter (a `TillSupervisor.userId`), "" = none picked. */
+  supervisorId: string;
+  /** …and their own till PIN, which signs the counted amount. */
+  supervisorPin: string;
   count: DenomCountValue;
 };
 
@@ -64,10 +69,12 @@ export type MovementInputs = {
   session: TillSessionPayload | null;
   reasons: readonly TillReason[];
   denominations: readonly Denomination[];
-  /** The signed-in user. */
+  /** The signed-in user: a movement is entered by the session's own cashier (notes 110). */
   me: string;
-  /** The signed-in user's name: the supervisor on the summary card. */
-  myName: string;
+  /** `GET /till/movements/supervisors` — who may sign a hand-over here; null while it is read. */
+  supervisors: readonly TillSupervisor[] | null;
+  /** Why that list did not load ("" when it did). */
+  supervisorError: string;
 };
 
 /** A drop is a sealed bag: declared, counted later by the cash office. Everything else counts by note. */
@@ -92,20 +99,55 @@ export function refVisible(form: MovementForm, reasons: readonly TillReason[]): 
 }
 
 /**
- * Notes 108: a Pickup always has a witness (the session's cashier); a Top-up
- * has one unless the session's own cashier brings the change to their own
- * drawer. Whenever there is a witness, their till PIN proves they were here.
- * Until the session is read its cashier is unknown, so a top-up asks (Qt).
+ * Notes 110: cash changing hands between the cashier and a supervisor. Both
+ * sign: the cashier by being logged in, the supervisor by name + till PIN.
  */
-export function needsWitnessPin(mode: MovementMode, session: TillSessionPayload | null, me: string): boolean {
-  if (mode === "PICKUP") return true;
-  if (mode !== "TOP_UP") return false;
-  return (session?.tssOperatorId ?? "") !== me;
+export function isHandOver(mode: MovementMode): boolean {
+  return mode === "PICKUP" || mode === "TOP_UP";
 }
 
-/** The session's cashier by name, or the stand-in Qt uses before it is read. */
-function cashierOr(session: TillSessionPayload | null, standIn: string): string {
-  return session?.operatorName?.trim() || standIn;
+/**
+ * A drop goes only into the counter's own drop safe. A server without notes
+ * 110 sends no `dropSafeName` at all: then a drop works as it did — and so
+ * does a session not read yet (Qt reads an empty object the same way).
+ */
+export function hasDropSafe(session: TillSessionPayload | null): boolean {
+  if (!session || !("dropSafeName" in session)) return true;
+  return Boolean(session.dropSafeName?.trim());
+}
+
+export const NO_DROP_SAFE_TIP =
+  "This counter has no drop safe: hand the bag to a supervisor as a Pickup (Till Safes, menu 280, marks a drop safe).";
+
+/** The Drop tile's tip: the safe the bag goes into, or why the tile is off. */
+export function dropTileTitle(session: TillSessionPayload | null): string {
+  if (!hasDropSafe(session)) return NO_DROP_SAFE_TIP;
+  const safe = session?.dropSafeName?.trim();
+  return safe ? `Ctrl+1 · into ${safe}` : "Ctrl+1";
+}
+
+/**
+ * The mode the dialog stays on once the session is read. Open Till opens on
+ * Drop; with no drop safe that tile is off, and the bag goes to a supervisor
+ * instead — so the dialog moves to Pickup rather than sit on a dead tile (Qt
+ * stays on Drop and refuses the post).
+ */
+export function openingMode(mode: MovementMode, session: TillSessionPayload | null): MovementMode {
+  return mode === "DROP" && !hasDropSafe(session) ? "PICKUP" : mode;
+}
+
+/** A supervisor by name: the full name, else the login (Qt's combo text). */
+export function supervisorLabel(supervisor: TillSupervisor): string {
+  return supervisor.fullName?.trim() || supervisor.loginName;
+}
+
+/** The supervisor picked, when they are on the list. */
+export function pickedSupervisor(
+  inputs: Pick<MovementInputs, "form" | "supervisors">,
+): TillSupervisor | null {
+  const id = inputs.form.supervisorId;
+  if (!id) return null;
+  return inputs.supervisors?.find((supervisor) => supervisor.userId === id) ?? null;
 }
 
 export function movementAmount(inputs: MovementInputs): number {
@@ -119,22 +161,36 @@ export function movementProblem(inputs: MovementInputs): string {
   if (!session) return "Reading the session…";
   const status = session.tssStatus;
   if (status !== "OPEN" && status !== "SUSPENDED") return `The session is ${status}: it no longer moves cash.`;
-  if (form.mode === "PICKUP" && session.tssOperatorId === inputs.me) {
-    return (
-      "A pickup is two people: a supervisor takes it (from Till Sessions) and you sign for it. " +
-      "To move cash to the safe yourself, use Drop."
-    );
+  // Notes 110: every kind is entered at the counter by the session's cashier
+  // (the server refuses one from the office: TILL_MOVEMENT_AT_COUNTER).
+  if (session.tssOperatorId !== inputs.me) {
+    const cashier = session.operatorName?.trim();
+    return `Cash movements are entered at the counter, logged in as the session's cashier${cashier ? ` (${cashier})` : ""}.`;
+  }
+  if (form.mode === "DROP" && !hasDropSafe(session)) {
+    return "This counter has no drop safe: hand the bag to a supervisor as a Pickup.";
   }
   const needsReason = form.mode === "PAID_IN" || form.mode === "PICKUP";
   if (needsReason && !form.reasonId) return "Pick a reason.";
-  if (needsWitnessPin(form.mode, session, inputs.me) && !form.witnessPin.trim()) {
-    return `${cashierOr(session, "The cashier")} must type their till PIN.`;
-  }
   if (form.mode === "DROP" && (!form.bagNo.trim() || !form.sealNo.trim())) {
     return "A drop is a sealed bag: enter its bag no and seal.";
   }
   const amount = movementAmount(inputs);
   if (amount <= 0) return isCounted(form.mode) ? "Count the cash, note by note." : "Enter the declared amount.";
+  // The second signature, after the count (notes 110): the server re-checks
+  // all of it (273 OVERRIDE, not the cashier, the PIN) on the post.
+  if (isHandOver(form.mode)) {
+    if (inputs.supervisors === null) return "Reading who can sign…";
+    if (inputs.supervisors.length === 0) {
+      return inputs.supervisorError || "No one can sign here: a supervisor needs the Till Sessions (273) override right.";
+    }
+    const supervisor = pickedSupervisor(inputs);
+    if (!supervisor) return "Pick the supervisor who is here with you.";
+    const name = supervisorLabel(supervisor);
+    // Qt reads a missing hasPin as "has one": only an explicit false refuses.
+    if (supervisor.hasPin === false) return `${name} has no till PIN: set one in User Administration (menu 58).`;
+    if (!form.supervisorPin.trim()) return `${name} types their till PIN to sign.`;
+  }
   // What the reason itself demands (Till Masters: Note / Ref / Cap).
   const reason = needsReason ? reasonById(reasons, form.reasonId) : null;
   if (reason) {
@@ -171,7 +227,10 @@ export function movementBody(inputs: MovementInputs, key: TillSessionKey): TillM
     body.bagNo = textOrNull(form.bagNo);
     body.sealNo = textOrNull(form.sealNo);
   }
-  if (needsWitnessPin(form.mode, inputs.session, inputs.me)) body.witnessPin = form.witnessPin.trim();
+  if (isHandOver(form.mode)) {
+    body.supervisorId = form.supervisorId;
+    body.supervisorPin = form.supervisorPin.trim();
+  }
   return body;
 }
 
@@ -188,23 +247,31 @@ export type MovementWords = {
   safeTip: string;
   bagCaption: string;
   sealCaption: string;
-  supervisor: string;
-  witness: string;
-  /** Notes 108: the witness PIN row. */
-  pinCaption: string;
-  pinHint: string;
+  /**
+   * A hand-over's two signatures (notes 110): Pickup — the cashier gives, the
+   * supervisor receives; Top-up the reverse. "—" until the supervisor is picked.
+   */
+  givenBy: string;
+  receivedBy: string;
   modeNote: string;
 };
 
-export const SUPERVISOR_TIP = "The user logged in now, with the Till Sessions override right.";
-export const WITNESS_TIP = "The session's cashier signs the slip.";
+/** Under the supervisor's PIN (notes 110): the PIN signs the counted amount, so it comes after the count. */
+export const SIGN_HINT =
+  "Count first, in front of both of you. The supervisor then types their own till PIN — that signs the counted amount.";
 
-export function movementWords(mode: MovementMode, session: TillSessionPayload | null, myName: string): MovementWords {
+/** `supervisorName`: the supervisor picked, "" for none yet. */
+export function movementWords(
+  mode: MovementMode,
+  session: TillSessionPayload | null,
+  supervisorName: string,
+): MovementWords {
   const drop = mode === "DROP";
   const paidIn = mode === "PAID_IN";
   const pickup = mode === "PICKUP";
   const topUp = mode === "TOP_UP";
   const cashier = session?.operatorName ?? "";
+  const supervisor = supervisorName || "—";
   const sessionNo = session?.tssSessionNo ?? "";
   return {
     title: `Cash Movement — ${MODE_TITLES[mode]}`,
@@ -216,17 +283,15 @@ export function movementWords(mode: MovementMode, session: TillSessionPayload | 
     safeTip: paidIn ? "" : "The counter's own safe, else the branch's default safe.",
     bagCaption: drop ? "Bag no *" : "Bag no",
     sealCaption: drop ? "Seal *" : "Seal",
-    supervisor: myName,
-    witness: cashier,
-    pinCaption: `${cashierOr(session, "Cashier")}'s PIN *`,
-    pinHint: `${cashierOr(session, "The cashier")} types their own till PIN here — proof they saw it.`,
+    givenBy: topUp ? supervisor : cashier,
+    receivedBy: topUp ? cashier : supervisor,
     modeNote: drop
-      ? "The cashier seals the bag and drops it in the safe. The cash office counts it later."
+      ? "The cashier seals the bag and drops it in the drop safe. The cash office counts it later."
       : paidIn
         ? "Cash income with no party, e.g. scrap. An expense is an Expense voucher."
         : pickup
-          ? "A supervisor takes cash from the drawer; the cashier signs for it."
-          : "A supervisor brings change from the safe into the drawer.",
+          ? "You hand cash to the supervisor, here at the counter. Both of you sign."
+          : "The supervisor hands you change from the safe, here at the counter. Both of you sign.",
   };
 }
 
@@ -288,7 +353,10 @@ export function isPostKey(event: { key: string; ctrlKey: boolean; altKey: boolea
   return event.ctrlKey ? event.key === "Enter" : event.key === "F10";
 }
 
-/** A fresh form for a mode — Qt clears the count, the amount and every box (the PIN too) on a mode change. */
+/**
+ * A fresh form for a mode — Qt clears the count, the amount and every box on
+ * a mode change, the supervisor's pick and PIN too (notes 110 `setMode`).
+ */
 export function emptyMovementForm(mode: MovementMode, count: DenomCountValue): MovementForm {
   return {
     mode,
@@ -300,7 +368,8 @@ export function emptyMovementForm(mode: MovementMode, count: DenomCountValue): M
     refNo: "",
     partyName: "",
     notes: "",
-    witnessPin: "",
+    supervisorId: "",
+    supervisorPin: "",
     count,
   };
 }

@@ -83,6 +83,14 @@ export function SafeFields({ form, update, editable, locked, focus, companyId }:
           disabled={off("isDefault")}
           onChange={(isDefault) => update({ isDefault })}
         />
+        {/* Notes 110: a Drop goes only into the counter's own safe, and only when it is a drop safe. */}
+        <Check
+          id={id("isDropSafe")}
+          label="Drop safe (sealed bags dropped at the counter)"
+          checked={form.isDropSafe}
+          disabled={off("isDropSafe")}
+          onChange={(isDropSafe) => update({ isDropSafe })}
+        />
         <Check
           id={id("active")}
           label="Active"

@@ -1,15 +1,16 @@
 /**
- * Till Approval Setup (menu 276) — the server's `till-masters.controller`.
+ * The two till approval screens — Till Approval Rules (276) and Till Approval
+ * Authority (285) — against the server's `till-masters.controller`.
  *
  *   GET    /configured-grid-sql/run  grid "TILL APPROVAL RULES" (151)   the rules (shipped + this company's)
- *   GET    /configured-grid-sql/run  grid "TILL APPROVAL GRANTS" (152)  the grants
+ *   GET    /configured-grid-sql/run  grid "TILL APPROVAL GRANTS" (152)  the grants ('iinactive' = ended too)
  *   POST   /till/approval-rules/create          create, or update by tarId presence
  *   DELETE /till/approval-rules/delete?id&companyId
  *   POST   /till/approval-authorities/create    grant, or change by taaId presence
  *
- * Grants are never deleted from this screen (End grant is a save), so
+ * A grant is never deleted (Active off is a save), so
  * `approval-authorities/delete` is not wired; nor are the two `/get` routes —
- * every field the screen needs is on the grid rows.
+ * every field the screens need is on the grid rows.
  *
  * Every endpoint is a MUTATION (the grid reads send a GET): one request per
  * call, abortable, nothing cached — the screen owns its state, and a query's

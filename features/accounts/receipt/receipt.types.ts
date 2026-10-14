@@ -570,6 +570,18 @@ export type ReceiptKeys = {
   avhAccYear: string;
 };
 
+/**
+ * A numbered receipt the print dialog is opened on. The company and the year
+ * are the RECEIPT's own, never the header picker's: every dataset filters on
+ * `:company_id`, and the token's company is the user's home one.
+ */
+export type ReceiptPrintTarget = {
+  voucherId: string;
+  companyId: string;
+  accYear: string;
+  voucherRefno: string | null;
+};
+
 export type SaveReceiptChequeBody = {
   bankBranch?: string | null;
   ifsc?: string | null;

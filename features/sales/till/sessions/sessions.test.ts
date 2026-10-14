@@ -256,8 +256,8 @@ describe("the cockpit", () => {
   });
 
   it("enables the verbs on the right statuses", () => {
-    expect(cockpitButtons(session())).toEqual({ count: true, movement: false, slipCheck: true });
-    expect(cockpitButtons(session({ tssStatus: "OPEN" }))).toEqual({ count: false, movement: true, slipCheck: false });
+    expect(cockpitButtons(session())).toEqual({ count: true, slipCheck: true });
+    expect(cockpitButtons(session({ tssStatus: "OPEN" }))).toEqual({ count: false, slipCheck: false });
     expect(slipTenders(session())).toEqual([{ tenderId: "hdfc", name: "HDFC EDC" }]);
     expect(footNote(false, true)).toMatch(/blind close/);
     expect(gridCellText({ md_amount: "500.00", md_doc: "TDrp/7" }, "md_amount")).toBe("500.00");

@@ -13,11 +13,11 @@
  *         145 timeline (till_event)
  *
  * Acts through the screens already built: Count / close (S4) on a COUNTING
- * session, Cash movement (S3: a supervisor's pickup / top-up) on a live one,
- * the Slip check on a counted one, and Approve (notes 105 A: approve with a
- * treatment, or send back to recount — `variance-decide.ts`) on one waiting
- * for approval. Force close, Reopen, Re-tender from here, Print Z and X read
- * wait for the server and are shown greyed with why.
+ * session, the Slip check on a counted one, and Approve (notes 105 A: approve
+ * with a treatment, or send back to recount — `variance-decide.ts`) on one
+ * waiting for approval. No Cash movement since Qt a449b8c (notes 110: signed
+ * at the counter). Force close, Reopen, Re-tender from here, Print Z and X
+ * read wait for the server and are shown greyed with why.
  */
 import { clockOf, ddmmyyyy, durationText, textOf, type TillTone } from "../shared/format";
 import { formatFigure, formatMoney, formatSignedMoney, paiseOf, toPaise } from "../shared/money";
@@ -295,9 +295,12 @@ export function slipTenders(s: TillSessionPayload | null): SlipTender[] {
     .map((t) => ({ tenderId: t.tenderId as string, name: t.tenderName || t.tenderTypeName || "" }));
 }
 
+/**
+ * No Cash movement (Qt a449b8c, notes 110): a pickup / top-up is signed at the
+ * counter by the cashier and the supervisor together, never from the office.
+ */
 export type CockpitButtons = {
   count: boolean;
-  movement: boolean;
   slipCheck: boolean;
 };
 
@@ -314,7 +317,6 @@ export function cockpitButtons(s: TillSessionPayload | null): CockpitButtons {
   }
   return {
     count: status === "COUNTING",
-    movement: status === "OPEN" || status === "SUSPENDED",
     slipCheck: checkable && mismatch && slipTenders(s).length > 0,
   };
 }

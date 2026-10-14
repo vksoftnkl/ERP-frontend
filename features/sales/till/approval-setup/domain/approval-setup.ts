@@ -1,29 +1,32 @@
 /**
- * Till Approval Setup (menu 271 › 276) — the rules of the screen, without React.
+ * Till approval (menu 271) — the rules of the two approval screens, without React.
  *
- * Ported from the Qt `TillApprovalSetupEntry` (NexERP d5c3637, 2026-10-09):
+ * Ported from the Qt `TillApprovalSetupEntry` (NexERP d5c3637, 2026-10-09) and
+ * the split of a449b8c (server notes 111), which made its two tabs two menus:
  *
- *  - Approval Rules: WHEN an exception needs a second person. One matrix, one
- *    scope at a time — the company layer or one branch. Each event shows the
- *    rule in force there, resolved as the server's `TillApprovalService.ruleFor`:
- *    branch row > company row > shipped row, the latest `tar_effective_from` on
- *    or before today, active rows only. The form edits THIS scope's own row.
- *  - Approval Authority: WHO may approve what, where, up to how much. Grants are
- *    never deleted — "End grant" sets valid-to today (or switches off a grant
- *    that has not started), so old approvals still show who was allowed.
- *  - "Who can approve?" and the gap check are the SCREEN's preview of the
- *    rule × authority × PIN gate; the server matches no authority yet (phase 3).
+ *  - Till Approval Rules (276, this folder): WHEN an exception needs a second
+ *    person. One matrix, one scope at a time — the company layer or one branch.
+ *    Each event shows the rule in force there, resolved as the server's
+ *    `TillApprovalService.ruleFor`: branch row > company row > shipped row, the
+ *    latest `tar_effective_from` on or before today, active rows only. The form
+ *    edits THIS scope's own row.
+ *  - Till Approval Authority (285, `../../approval-authority`): WHO may approve
+ *    what, where, up to how much — a list of grants with a popup, like the other
+ *    till masters. Its own rules live in that folder's domain.
+ *
+ * What both need — the event list, the level order, rule resolution and the
+ * "Who can approve?" / gap check (Qt `till_approval_logic`) — is here. The
+ * check is the SCREENS' preview of the rule × authority × PIN gate.
  *
  * Rows are the configured-grid rows as the runner serialises them: snake_case,
  * numerics as strings ("50.00"), ints and booleans as themselves, COALESCEd
- * columns as "" (grid 152's `taa_event_code`, `taa_valid_to`).
+ * columns as "" (grid 152's `taa_event_code`, `taa_valid_to`, `taa_remarks`).
  */
 import {
   addPaise,
   compareAmount,
   formatMoney,
   normalizeAmount,
-  toPaise,
   toWhole,
   toWireNumber,
   trimDecimal,
@@ -116,11 +119,10 @@ export function describeEvent(event: string): string {
 export const RESERVED_NOTE =
   "Reserved (hidden): VOID_BILL · VOID_LINE · PRICE_OVERRIDE · DISCOUNT_OVER · RETURN_NO_RECEIPT · " +
   "REFUND_CASH · REPRINT · RETENDER — no rule rows until the void module ships.";
-export const GRANT_NOTE =
-  "Branch blank = every branch of the company (area manager) · Company “every company” = group finance · " +
-  "Max blank = no ceiling";
 export const KEYS_HINT = "Save F5 · edits create or change the row of the scope shown · shipped rows never change";
-export const WHO_HINT = "a preview of the approval gate (phase 3) — try it before a cashier needs it";
+
+/** The server caches a grid run for about a second; a re-read straight after a save waits it out. */
+export const RELOAD_AFTER_SAVE_MS = 1500;
 
 // ── Row access ──────────────────────────────────────────────────────────────
 
@@ -152,7 +154,8 @@ export function shortDate(iso: string): string {
   return match ? `${match[3]}-${match[2]}-${match[1]}` : iso;
 }
 
-function isoDate(value: string): string | null {
+/** The `YYYY-MM-DD` a value starts with, or null. */
+export function isoDate(value: string): string | null {
   const match = /^(\d{4}-\d{2}-\d{2})/.exec(value.trim());
   return match ? match[1] : null;
 }
@@ -514,7 +517,7 @@ export function ruleWarning(
   if (anyone) return "";
   return (
     `No grant at this scope reaches ${form.minRole} for ${context.event} — nobody could approve it ` +
-    "(Approval Authority tab). Warning only — saved as typed."
+    "(Till Approval Authority, menu 285). Warning only — saved as typed."
   );
 }
 
@@ -531,163 +534,20 @@ export function removeRowMessage(scopeBranch: string, event: string, below: Grid
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  Authority
+//  Grants — edited on Till Approval Authority (285), read by both screens
 // ═══════════════════════════════════════════════════════════════════════════
 
-export function grantId(grant: GridRow | null | undefined): string {
-  return text(grant, "taa_id");
-}
-
-/** Active, started, and not past its valid-to. */
+/** Active, started, and not past its valid-to (Qt `TillApproval::grantLive`). */
 export function grantLive(grant: GridRow, today: string): boolean {
   const to = text(grant, "taa_valid_to");
   return flag(grant, "taa_is_active") && text(grant, "taa_valid_from") <= today && (to === "" || to >= today);
 }
 
-export type GrantStatus = "Active" | "Inactive" | "Future" | "Ended";
-
-export function grantStatus(grant: GridRow, today: string): GrantStatus {
-  const to = text(grant, "taa_valid_to");
-  if (!flag(grant, "taa_is_active")) return "Inactive";
-  if (text(grant, "taa_valid_from") > today) return "Future";
-  if (to && to < today) return "Ended";
-  return "Active";
-}
-
-export function grantsOf(grants: readonly GridRow[], userId: string): GridRow[] {
-  return grants.filter((grant) => text(grant, "taa_user_id") === userId);
-}
-
-/** An approver added on screen who has no grant yet. */
-export type AddedApprover = { id: string; name: string };
-
-export type ApproverLine = { userId: string; name: string; role: string; live: number; remote: boolean };
-
-/** Users with at least one grant (first-seen order), then the ones added here; filtered by name. */
-export function approverLines(
-  grants: readonly GridRow[],
-  added: readonly AddedApprover[],
-  options: { search: string; today: string },
-): ApproverLine[] {
-  const order: string[] = [];
-  const lines = new Map<string, ApproverLine>();
-  for (const grant of grants) {
-    const userId = text(grant, "taa_user_id");
-    let line = lines.get(userId);
-    if (!line) {
-      line = { userId, name: text(grant, "approver"), role: text(grant, "user_role"), live: 0, remote: false };
-      lines.set(userId, line);
-      order.push(userId);
-    }
-    if (grantLive(grant, options.today)) {
-      line.live += 1;
-      line.remote = line.remote || flag(grant, "taa_can_remote");
-    }
-  }
-  for (const approver of added) {
-    if (lines.has(approver.id)) continue;
-    lines.set(approver.id, { userId: approver.id, name: approver.name, role: "", live: 0, remote: false });
-    order.push(approver.id);
-  }
-  const find = options.search.trim().toLowerCase();
-  return order
-    .map((userId) => lines.get(userId) as ApproverLine)
-    .filter((line) => !find || line.name.toLowerCase().includes(find));
-}
-
-/** The approver's name and user role: from their first grant, else from the added list. */
-export function approverIdentity(
-  grants: readonly GridRow[],
-  added: readonly AddedApprover[],
-  userId: string,
-): { name: string; role: string } {
-  const first = grantsOf(grants, userId)[0];
-  if (first) return { name: text(first, "approver"), role: text(first, "user_role") };
-  return { name: added.find((approver) => approver.id === userId)?.name ?? "", role: "" };
-}
-
-export type GrantLine = {
-  id: string;
-  company: string;
-  branch: string;
-  event: string;
-  level: string;
-  max: string;
-  remote: boolean;
-  from: string;
-  to: string;
-  status: GrantStatus;
-};
-
-export function grantLine(grant: GridRow, today: string): GrantLine {
-  return {
-    id: grantId(grant),
-    company: text(grant, "company_name"),
-    branch: text(grant, "branch_name"),
-    event: text(grant, "taa_event_code") || "(every event)",
-    level: text(grant, "taa_role"),
-    max: has(grant, "taa_max_amount") ? formatMoney(text(grant, "taa_max_amount")) : "no ceiling",
-    remote: flag(grant, "taa_can_remote"),
-    from: shortDate(text(grant, "taa_valid_from")),
-    to: shortDate(text(grant, "taa_valid_to")),
-    status: grantStatus(grant, today),
-  };
-}
-
-/** Under the grants: which rows end on their own, or how to start. */
-export function grantsNote(userGrants: readonly GridRow[], today: string): string {
-  if (userGrants.length === 0) return "No grant yet — Add grant, or copy another approver's.";
-  return userGrants
-    .map((grant, index) => ({ to: text(grant, "taa_valid_to"), row: index + 1 }))
-    .filter(({ to }) => to !== "" && to >= today)
-    .map(({ to, row }) => `row ${row} ends on its own on ${shortDate(to)}`)
-    .join(" · ");
-}
-
-// ── The grant form ──────────────────────────────────────────────────────────
-
-export type GrantForm = {
-  /** "(every company)" — group finance. */
-  everyCompany: boolean;
-  /** "" = every branch of the company. */
-  branchId: string;
-  branchName: string;
-  /** "" = every event. */
-  event: string;
-  level: string;
-  /** "" = no ceiling. */
-  max: string;
-  remote: boolean;
-  from: string;
-  hasTo: boolean;
-  to: string;
-};
-
-/** A saved grant on the form, or a new one (level = the user's role when it is a level). */
-export function grantFormFrom(grant: GridRow | null, options: { userRole: string; today: string }): GrantForm {
-  const isNew = !grant;
-  const from = isoDate(text(grant, "taa_valid_from"));
-  const to = isoDate(text(grant, "taa_valid_to"));
-  const level = isNew
-    ? levelRank(options.userRole) >= 0
-      ? options.userRole
-      : "SUPERVISOR"
-    : text(grant, "taa_role");
-  return {
-    everyCompany: !isNew && !has(grant, "taa_company_id"),
-    branchId: !isNew && has(grant, "taa_branch_id") ? text(grant, "taa_branch_id") : "",
-    branchName: !isNew && has(grant, "taa_branch_id") ? text(grant, "branch_name") : "",
-    event: isNew ? "" : text(grant, "taa_event_code"),
-    level,
-    max: !isNew && has(grant, "taa_max_amount") ? normalizeAmount(text(grant, "taa_max_amount")) : "",
-    remote: flag(grant, "taa_can_remote"),
-    from: from ?? options.today,
-    hasTo: to !== null,
-    to: to ?? options.today,
-  };
-}
-
-/** `POST /till/approval-authorities/create` — SaveTillApprovalAuthorityDto. */
+/**
+ * `POST /till/approval-authorities/create` — SaveTillApprovalAuthorityDto. A
+ * body with `taaId` changes that grant; without, it is a new one. Remarks are
+ * always sent: an absent key keeps the stored text, and a cleared box must clear it.
+ */
 export type GrantBody = {
   taaId?: string;
   taaUserId: string;
@@ -699,95 +559,9 @@ export type GrantBody = {
   taaCanRemote: boolean;
   taaValidFrom: string;
   taaValidTo: string | null;
+  taaRemarks: string | null;
   taaIsActive: boolean;
 };
-
-/** A grant for every company names no branch (the server refuses a branch without its company). */
-export function grantBody(
-  form: GrantForm,
-  context: { grant: GridRow | null; userId: string; companyId: string },
-): GrantBody {
-  const company = form.everyCompany ? null : context.companyId || null;
-  return {
-    ...(context.grant ? { taaId: grantId(context.grant) } : {}),
-    taaUserId: context.userId,
-    taaCompanyId: company,
-    taaBranchId: company ? form.branchId || null : null,
-    taaRole: form.level,
-    taaEventCode: form.event || null,
-    taaMaxAmount: form.max.trim() ? toWireNumber(form.max) : null,
-    taaCanRemote: form.remote,
-    taaValidFrom: form.from,
-    taaValidTo: form.hasTo ? form.to : null,
-    taaIsActive: context.grant ? flag(context.grant, "taa_is_active") : true,
-  };
-}
-
-const NO_GRANT_CONTEXT = { grant: null, userId: "", companyId: "c" };
-
-export function sameGrant(left: GrantForm, right: GrantForm): boolean {
-  return (
-    JSON.stringify(grantBody(left, NO_GRANT_CONTEXT)) === JSON.stringify(grantBody(right, NO_GRANT_CONTEXT))
-  );
-}
-
-export function grantProblem(state: { userId: string; dirty: boolean; form: GrantForm }): string {
-  if (!state.userId) return "Pick or add an approver.";
-  if (!state.dirty) return "Nothing changed.";
-  if (state.form.max.trim() && toPaise(state.form.max) === null) return "Max amount is not an amount.";
-  if (state.form.hasTo && state.form.to < state.form.from) return "Valid to is before valid from.";
-  return "";
-}
-
-/** Live, or active and not started yet (switched off instead of ended). */
-export function canEndGrant(grant: GridRow | null, today: string): boolean {
-  if (!grant) return false;
-  if (grantLive(grant, today)) return true;
-  const from = text(grant, "taa_valid_from");
-  return flag(grant, "taa_is_active") && from !== "" && from > today;
-}
-
-/**
- * End grant — from the grant AS SAVED, never the form, so ending it does not
- * also save what was typed and not saved. A grant that has not started is
- * switched off; a live one ends today and stays on record.
- */
-export function endGrantPlan(
-  saved: GrantBody,
-  grant: GridRow,
-  today: string,
-): { future: boolean; message: string; body: GrantBody } {
-  const from = text(grant, "taa_valid_from");
-  const future = from !== "" && from > today;
-  return {
-    future,
-    message: future
-      ? "This grant has not started yet: switch it off?"
-      : "End this grant today? It stays on record (old approvals still show who was allowed); from tomorrow it no longer counts.",
-    body: future ? { ...saved, taaIsActive: false } : { ...saved, taaValidTo: today },
-  };
-}
-
-/** Copy from user: each LIVE grant of the source, re-made for this user from today. */
-export function copyGrantBodies(
-  sourceGrants: readonly GridRow[],
-  context: { userId: string; today: string },
-): GrantBody[] {
-  return sourceGrants
-    .filter((grant) => grantLive(grant, context.today))
-    .map((grant) => ({
-      taaUserId: context.userId,
-      taaCompanyId: text(grant, "taa_company_id") || null,
-      taaBranchId: text(grant, "taa_branch_id") || null,
-      taaRole: text(grant, "taa_role"),
-      taaEventCode: text(grant, "taa_event_code") || null,
-      taaMaxAmount: has(grant, "taa_max_amount") ? toWireNumber(text(grant, "taa_max_amount")) : null,
-      taaCanRemote: flag(grant, "taa_can_remote"),
-      taaValidFrom: context.today,
-      taaValidTo: text(grant, "taa_valid_to") || null,
-      taaIsActive: true,
-    }));
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Who can approve? — the preview of the gate

@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { EMPTY_COUNT, toDenominations, withQty } from "../shared/denom";
 import type { TillReason } from "../shared/reasons";
-import type { TillSessionPayload } from "../shared/wire/types";
+import type { TillSessionPayload, TillSupervisor } from "../shared/wire/types";
 import {
+  MODE_LINES,
+  NO_DROP_SAFE_TIP,
+  dropTileTitle,
   emptyMovementForm,
+  hasDropSafe,
+  isHandOver,
   isPostKey,
   ledgerTip,
   modeForKey,
@@ -11,10 +16,12 @@ import {
   movementProblem,
   movementStars,
   movementWords,
-  needsWitnessPin,
+  openingMode,
+  pickedSupervisor,
   reasonOptions,
   refVisible,
   summaryAccount,
+  supervisorLabel,
   type MovementForm,
   type MovementInputs,
 } from "./cash-movement";
@@ -55,7 +62,18 @@ const SESSION = {
   tssStatus: "OPEN",
   tssOperatorId: "u-cashier",
   operatorName: "RAVI K",
+  dropSafeName: "DROP SAFE C01",
 } as unknown as TillSessionPayload;
+
+/** `/movements/supervisors`: never the session's cashier (the server leaves them out). */
+const SUPERVISORS: TillSupervisor[] = [
+  { userId: "u-anu", loginName: "anu", fullName: "ANU (SUP)", hasPin: true },
+  { userId: "u-babu", loginName: "babu", fullName: null, hasPin: true },
+  { userId: "u-chitra", loginName: "chitra", fullName: "CHITRA", hasPin: false },
+];
+
+/** A pickup / top-up signed by ANU — what a hand-over needs past the count. */
+const SIGNED = { supervisorId: "u-anu", supervisorPin: "4321" };
 
 const KEY = { companyId: "co", branchId: "br", accYear: "2026-2027", tssId: "tss" };
 
@@ -66,7 +84,8 @@ function inputs(form: Partial<MovementForm>, over: Partial<MovementInputs> = {})
     reasons: REASONS,
     denominations: DENOMS,
     me: "u-cashier",
-    myName: "RAVI K",
+    supervisors: SUPERVISORS,
+    supervisorError: "",
     ...over,
   };
 }
@@ -85,9 +104,33 @@ describe("the problems Post waits on", () => {
     expect(movementProblem(inputs({ bagNo: "B1", sealNo: "S1", amountPaise: 500000 }))).toBe("");
   });
 
-  it("never lets the cashier take their own pickup", () => {
-    expect(movementProblem(inputs({ mode: "PICKUP" }))).toMatch(/^A pickup is two people/);
-    expect(movementProblem(inputs({ mode: "PICKUP" }, { me: "u-super" }))).toBe("Pick a reason.");
+  it("is entered at the counter, logged in as the session's cashier, whatever the mode (notes 110)", () => {
+    for (const mode of ["DROP", "PAID_IN", "PICKUP", "TOP_UP"] as const) {
+      expect(movementProblem(inputs({ mode }, { me: "u-anu" }))).toBe(
+        "Cash movements are entered at the counter, logged in as the session's cashier (RAVI K).",
+      );
+    }
+    expect(movementProblem(inputs({}, { me: "u-anu", session: { ...SESSION, operatorName: null } }))).toBe(
+      "Cash movements are entered at the counter, logged in as the session's cashier.",
+    );
+    // The cashier's own pickup is no longer refused: the supervisor signs it.
+    expect(movementProblem(inputs({ mode: "PICKUP" }))).toBe("Pick a reason.");
+  });
+
+  it("refuses a drop on a counter with no drop safe, before the bag", () => {
+    const noSafe = { ...SESSION, dropSafeName: null };
+    expect(movementProblem(inputs({}, { session: noSafe }))).toBe(
+      "This counter has no drop safe: hand the bag to a supervisor as a Pickup.",
+    );
+    expect(movementProblem(inputs({}, { session: { ...noSafe, dropSafeName: "  " } }))).toBe(
+      "This counter has no drop safe: hand the bag to a supervisor as a Pickup.",
+    );
+    // A server from before notes 110 sends no dropSafeName: a drop works as it did.
+    const { dropSafeName: _absent, ...older } = SESSION;
+    void _absent;
+    expect(movementProblem(inputs({ bagNo: "B", sealNo: "S", amountPaise: 100 }, { session: older as TillSessionPayload }))).toBe("");
+    // Only a drop needs one.
+    expect(movementProblem(inputs({ mode: "PICKUP" }, { session: noSafe }))).toBe("Pick a reason.");
   });
 
   it("holds a reason to its note, ref and cap", () => {
@@ -98,9 +141,9 @@ describe("the problems Post waits on", () => {
     expect(movementProblem(inputs({ mode: "PAID_IN", reasonId: "capped", count: counted, notes: "x" }))).toBe(
       "“Small refund” allows at most 500.00 in one movement.",
     );
-    expect(
-      movementProblem(inputs({ mode: "PICKUP", reasonId: "bank", count: counted, witnessPin: "4321" }, { me: "u-super" })),
-    ).toBe("“Bank deposit” needs a ref no (bill / voucher no).");
+    expect(movementProblem(inputs({ mode: "PICKUP", reasonId: "bank", count: counted, ...SIGNED }))).toBe(
+      "“Bank deposit” needs a ref no (bill / voucher no).",
+    );
   });
 
   it("asks for a ledger only when the reason has none", () => {
@@ -114,38 +157,102 @@ describe("the problems Post waits on", () => {
     expect(movementProblem(inputs({ mode: "PAID_IN", reasonId: "scrap", count: counted }))).toBe("");
   });
 
-  it("asks a counted mode to count", () => {
-    expect(movementProblem(inputs({ mode: "TOP_UP", witnessPin: "1" }, { me: "u-super" }))).toBe(
-      "Count the cash, note by note.",
-    );
+  it("asks a counted mode to count, before anyone signs", () => {
+    expect(movementProblem(inputs({ mode: "TOP_UP", ...SIGNED }))).toBe("Count the cash, note by note.");
     expect(movementProblem(inputs({ mode: "TOP_UP" }))).toBe("Count the cash, note by note.");
   });
 
-  it("waits for the witness's PIN after the reason (notes 108)", () => {
-    expect(movementProblem(inputs({ mode: "PICKUP", reasonId: "bank" }, { me: "u-super" }))).toBe(
-      "RAVI K must type their till PIN.",
+  it("waits for the supervisor's signature after the count (notes 110)", () => {
+    const counted = withQty(EMPTY_COUNT, "d500", 1);
+    const topUp = (patch: Partial<MovementForm>, over: Partial<MovementInputs> = {}) =>
+      movementProblem(inputs({ mode: "TOP_UP", count: counted, ...patch }, over));
+    expect(topUp({}, { supervisors: null })).toBe("Reading who can sign…");
+    expect(topUp({}, { supervisors: [] })).toBe(
+      "No one can sign here: a supervisor needs the Till Sessions (273) override right.",
     );
-    expect(movementProblem(inputs({ mode: "PICKUP", reasonId: "bank", witnessPin: "  " }, { me: "u-super" }))).toBe(
-      "RAVI K must type their till PIN.",
+    expect(topUp({}, { supervisors: [], supervisorError: "The supervisor list did not load." })).toBe(
+      "The supervisor list did not load.",
     );
-    expect(movementProblem(inputs({ mode: "TOP_UP" }, { me: "u-super" }))).toBe("RAVI K must type their till PIN.");
+    expect(topUp({})).toBe("Pick the supervisor who is here with you.");
+    expect(topUp({ supervisorId: "u-gone" })).toBe("Pick the supervisor who is here with you.");
+    expect(topUp({ supervisorId: "u-chitra", supervisorPin: "1" })).toBe(
+      "CHITRA has no till PIN: set one in User Administration (menu 58).",
+    );
+    expect(topUp({ supervisorId: "u-anu" })).toBe("ANU (SUP) types their till PIN to sign.");
+    expect(topUp({ supervisorId: "u-anu", supervisorPin: "  " })).toBe("ANU (SUP) types their till PIN to sign.");
+    expect(topUp({ supervisorId: "u-babu" })).toBe("babu types their till PIN to sign.");
+    expect(topUp(SIGNED)).toBe("");
+  });
+
+  it("asks a pickup for its reason first, then the signature", () => {
+    const counted = withQty(EMPTY_COUNT, "d500", 1);
+    expect(movementProblem(inputs({ mode: "PICKUP", count: counted, ...SIGNED }))).toBe("Pick a reason.");
+    expect(movementProblem(inputs({ mode: "PICKUP", reasonId: "bank", count: counted, refNo: "DEP-7" }))).toBe(
+      "Pick the supervisor who is here with you.",
+    );
+    expect(movementProblem(inputs({ mode: "PICKUP", reasonId: "bank", count: counted, refNo: "DEP-7", ...SIGNED }))).toBe("");
+  });
+
+  it("asks no signature of a drop or a paid-in", () => {
+    expect(movementProblem(inputs({ bagNo: "B", sealNo: "S", amountPaise: 100 }, { supervisors: [] }))).toBe("");
     expect(
-      movementProblem(inputs({ mode: "TOP_UP" }, { me: "u-super", session: { ...SESSION, operatorName: null } })),
-    ).toBe("The cashier must type their till PIN.");
+      movementProblem(inputs({ mode: "PAID_IN", reasonId: "scrap", count: withQty(EMPTY_COUNT, "d100", 1) }, { supervisors: null })),
+    ).toBe("");
   });
 });
 
-describe("who witnesses with a PIN (notes 108)", () => {
-  it("is the cashier on every pickup, and on a top-up someone else brings", () => {
-    expect(needsWitnessPin("PICKUP", SESSION, "u-super")).toBe(true);
-    expect(needsWitnessPin("TOP_UP", SESSION, "u-super")).toBe(true);
-    expect(needsWitnessPin("TOP_UP", SESSION, "u-cashier")).toBe(false);
-    expect(needsWitnessPin("DROP", SESSION, "u-super")).toBe(false);
-    expect(needsWitnessPin("PAID_IN", SESSION, "u-super")).toBe(false);
+describe("the hand-over's signers (notes 110)", () => {
+  it("is a pickup or a top-up", () => {
+    expect(isHandOver("PICKUP")).toBe(true);
+    expect(isHandOver("TOP_UP")).toBe(true);
+    expect(isHandOver("DROP")).toBe(false);
+    expect(isHandOver("PAID_IN")).toBe(false);
   });
 
-  it("asks on a top-up while the session is still being read", () => {
-    expect(needsWitnessPin("TOP_UP", null, "u-cashier")).toBe(true);
+  it("names a supervisor by full name, else login", () => {
+    expect(supervisorLabel(SUPERVISORS[0])).toBe("ANU (SUP)");
+    expect(supervisorLabel(SUPERVISORS[1])).toBe("babu");
+    expect(supervisorLabel({ ...SUPERVISORS[0], fullName: "  " })).toBe("anu");
+  });
+
+  it("finds the supervisor picked only on the list", () => {
+    const form = (supervisorId: string) => ({ ...emptyMovementForm("PICKUP", EMPTY_COUNT), supervisorId });
+    expect(pickedSupervisor({ form: form("u-babu"), supervisors: SUPERVISORS })?.loginName).toBe("babu");
+    expect(pickedSupervisor({ form: form(""), supervisors: SUPERVISORS })).toBeNull();
+    expect(pickedSupervisor({ form: form("u-gone"), supervisors: SUPERVISORS })).toBeNull();
+    expect(pickedSupervisor({ form: form("u-anu"), supervisors: null })).toBeNull();
+  });
+});
+
+describe("the drop safe (notes 110 §3)", () => {
+  const { dropSafeName: _absent, ...older } = SESSION;
+  void _absent;
+
+  it("is the session's dropSafeName; a server without the key, or a session not read, keeps Drop on", () => {
+    expect(hasDropSafe(SESSION)).toBe(true);
+    expect(hasDropSafe({ ...SESSION, dropSafeName: null })).toBe(false);
+    expect(hasDropSafe({ ...SESSION, dropSafeName: "" })).toBe(false);
+    expect(hasDropSafe(older as TillSessionPayload)).toBe(true);
+    expect(hasDropSafe(null)).toBe(true);
+  });
+
+  it("titles the Drop tile with the safe, or why it is off", () => {
+    expect(dropTileTitle(SESSION)).toBe("Ctrl+1 · into DROP SAFE C01");
+    expect(dropTileTitle({ ...SESSION, dropSafeName: null })).toBe(NO_DROP_SAFE_TIP);
+    expect(NO_DROP_SAFE_TIP).toBe(
+      "This counter has no drop safe: hand the bag to a supervisor as a Pickup (Till Safes, menu 280, marks a drop safe).",
+    );
+    expect(dropTileTitle(older as TillSessionPayload)).toBe("Ctrl+1");
+    expect(dropTileTitle(null)).toBe("Ctrl+1");
+  });
+
+  it("moves a dialog opened on Drop to Pickup when the counter has none", () => {
+    const noSafe = { ...SESSION, dropSafeName: null };
+    expect(openingMode("DROP", noSafe)).toBe("PICKUP");
+    expect(openingMode("DROP", SESSION)).toBe("DROP");
+    expect(openingMode("DROP", null)).toBe("DROP");
+    expect(openingMode("PAID_IN", noSafe)).toBe("PAID_IN");
+    expect(openingMode("TOP_UP", noSafe)).toBe("TOP_UP");
   });
 });
 
@@ -185,19 +292,30 @@ describe("the body Post sends", () => {
     });
   });
 
-  it("sends the witness PIN, trimmed, only when there is a witness", () => {
+  it("signs a hand-over with the supervisor and their PIN, trimmed (notes 110)", () => {
     const counted = withQty(EMPTY_COUNT, "d500", 1);
-    const pickup = movementBody(
-      inputs({ mode: "PICKUP", reasonId: "bank", count: counted, witnessPin: " 4321 " }, { me: "u-super" }),
-      KEY,
-    );
-    expect(pickup.witnessPin).toBe("4321");
-    const ownTopUp = movementBody(inputs({ mode: "TOP_UP", count: counted, witnessPin: "9" }), KEY);
-    expect("witnessPin" in ownTopUp).toBe(false);
-    const theirTopUp = movementBody(inputs({ mode: "TOP_UP", count: counted, witnessPin: "77" }, { me: "u-super" }), KEY);
-    expect(theirTopUp.witnessPin).toBe("77");
-    const drop = movementBody(inputs({ bagNo: "B", sealNo: "S", amountPaise: 100, witnessPin: "1" }, { me: "u-super" }), KEY);
-    expect("witnessPin" in drop).toBe(false);
+    expect(movementBody(inputs({ mode: "TOP_UP", count: counted, supervisorId: "u-anu", supervisorPin: " 4321 " }), KEY)).toEqual({
+      ...KEY,
+      kind: "TOP_UP",
+      lines: [{ tenderTypeId: 1, denominationId: "d500", qty: 1 }],
+      supervisorId: "u-anu",
+      supervisorPin: "4321",
+      notes: null,
+    });
+    const pickup = movementBody(inputs({ mode: "PICKUP", reasonId: "bank", count: counted, ...SIGNED }), KEY);
+    expect(pickup).toMatchObject({ kind: "PICKUP", supervisorId: "u-anu", supervisorPin: "4321" });
+    // Notes 108's witnessPin is gone: never sent.
+    expect("witnessPin" in pickup).toBe(false);
+  });
+
+  it("sends no signer on a drop or a paid-in", () => {
+    const drop = movementBody(inputs({ bagNo: "B", sealNo: "S", amountPaise: 100, ...SIGNED }), KEY);
+    const paidIn = movementBody(inputs({ mode: "PAID_IN", reasonId: "scrap", count: withQty(EMPTY_COUNT, "d100", 1), ...SIGNED }), KEY);
+    for (const body of [drop, paidIn]) {
+      expect("supervisorId" in body).toBe(false);
+      expect("supervisorPin" in body).toBe(false);
+      expect("witnessPin" in body).toBe(false);
+    }
   });
 
   it("sends a pickup's ref only when its reason asks for one", () => {
@@ -223,8 +341,28 @@ describe("the mode's words and choices", () => {
     expect(words.title).toBe("Cash Movement — Pickup");
     expect(words.sub).toBe("Session C01-261009-01 · RAVI K");
     expect(movementWords("DROP", null, "x").sub).toBe("Reading the session…");
-    expect(words.supervisor).toBe("ANU (SUP)");
-    expect(words.witness).toBe("RAVI K");
+  });
+
+  it("says who gives and who receives: a pickup goes to the supervisor, a top-up comes from one", () => {
+    expect(movementWords("PICKUP", SESSION, "ANU (SUP)")).toMatchObject({ givenBy: "RAVI K", receivedBy: "ANU (SUP)" });
+    expect(movementWords("TOP_UP", SESSION, "ANU (SUP)")).toMatchObject({ givenBy: "ANU (SUP)", receivedBy: "RAVI K" });
+    // "—" until the supervisor is picked.
+    expect(movementWords("PICKUP", SESSION, "")).toMatchObject({ givenBy: "RAVI K", receivedBy: "—" });
+    expect(movementWords("TOP_UP", SESSION, "")).toMatchObject({ givenBy: "—", receivedBy: "RAVI K" });
+  });
+
+  it("explains each mode in the cashier's words (notes 110)", () => {
+    expect(movementWords("DROP", SESSION, "").modeNote).toBe(
+      "The cashier seals the bag and drops it in the drop safe. The cash office counts it later.",
+    );
+    expect(movementWords("PICKUP", SESSION, "").modeNote).toBe(
+      "You hand cash to the supervisor, here at the counter. Both of you sign.",
+    );
+    expect(movementWords("TOP_UP", SESSION, "").modeNote).toBe(
+      "The supervisor hands you change from the safe, here at the counter. Both of you sign.",
+    );
+    expect(MODE_LINES.PICKUP).toBe("Cash to a supervisor");
+    expect(MODE_LINES.TOP_UP).toBe("Change from the safe");
   });
 
   it("says which way the cash goes", () => {
@@ -242,13 +380,6 @@ describe("the mode's words and choices", () => {
     expect(movementWords("PAID_IN", SESSION, "x").safeCaption).toBe("Ledger");
     expect(movementWords("DROP", SESSION, "x").safeCaption).toBe("To safe");
     expect(movementWords("TOP_UP", SESSION, "x").safeCaption).toBe("From safe");
-  });
-
-  it("names the PIN's owner, or the cashier before the session is read", () => {
-    expect(movementWords("PICKUP", SESSION, "x").pinCaption).toBe("RAVI K's PIN *");
-    expect(movementWords("PICKUP", SESSION, "x").pinHint).toBe("RAVI K types their own till PIN here — proof they saw it.");
-    expect(movementWords("PICKUP", null, "x").pinCaption).toBe("Cashier's PIN *");
-    expect(movementWords("PICKUP", null, "x").pinHint).toBe("The cashier types their own till PIN here — proof they saw it.");
   });
 
   it("shows the paid-in's ledger: the one picked, else the reason's, else —", () => {
@@ -274,8 +405,8 @@ describe("the mode's words and choices", () => {
     expect(ledgerTip({ form: { ...emptyMovementForm("PAID_IN", EMPTY_COUNT), reasonId: "misc" }, reasons: REASONS })).toBe("");
   });
 
-  it("clears the PIN with every other box on a mode change", () => {
-    expect(emptyMovementForm("PICKUP", EMPTY_COUNT).witnessPin).toBe("");
+  it("clears the supervisor's pick and PIN with every other box on a mode change", () => {
+    expect(emptyMovementForm("PICKUP", EMPTY_COUNT)).toMatchObject({ supervisorId: "", supervisorPin: "" });
   });
 });
 

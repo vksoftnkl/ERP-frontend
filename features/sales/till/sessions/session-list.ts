@@ -88,11 +88,6 @@ export function sessionRowOf(row: GridRow | null | undefined): SessionRow | null
   };
 }
 
-/** Pickup / top-up (and the cashier kinds) on a session that still takes money. */
-export function takesMoney(status: string): boolean {
-  return status === "OPEN" || status === "SUSPENDED";
-}
-
 /** The cash office's count: S4 on a session whose billing has ended. */
 export function awaitsCount(status: string): boolean {
   return status === "COUNTING";
@@ -142,12 +137,13 @@ export function varianceTone(value: unknown): "red" | "green" | "" {
 
 /** What the highlighted row allows, said in the hint bar. */
 export function rowHint(row: SessionRow | null): string {
-  const legend = "Enter opens the cockpit · F5 cash movement · F6 count / close · Ctrl+H journal";
+  const legend = "Enter opens the cockpit · F6 count / close · Ctrl+H journal";
   if (!row) return legend;
   let state: string;
   switch (row.status) {
     case "OPEN":
-      state = "Taking money — a supervisor's pickup or top-up is F5.";
+      // Never from the office (Qt a449b8c, notes 110).
+      state = "Taking money — a pickup or top-up is signed at the counter, cashier and supervisor together.";
       break;
     case "SUSPENDED":
       state = "On a break — nothing is billed until the cashier resumes.";

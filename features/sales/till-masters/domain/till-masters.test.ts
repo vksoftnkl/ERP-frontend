@@ -349,6 +349,14 @@ describe("safes", () => {
     expect(entryBody("safes", form, null, "new", SCOPE)).not.toHaveProperty("tsfLedgerId");
   });
 
+  it("carries the drop-safe flag from the row to the body (notes 110)", () => {
+    expect(initialForm("safes", null, "new", NEW).isDropSafe).toBe(false);
+    const form = initialForm("safes", { ...SAFE_ROW, tsf_is_drop_safe: "t" }, "edit", NEW);
+    expect(form.isDropSafe).toBe(true);
+    expect(entryBody("safes", form, SAFE_ROW, "edit", SCOPE)).toMatchObject({ tsfIsDropSafe: true });
+    expect(setDefaultBody({ ...SAFE_ROW, tsf_is_drop_safe: true }, SCOPE)).toMatchObject({ tsfIsDropSafe: true });
+  });
+
   it("warns when it is switched off still holding cash or taking drops; facts from the row", () => {
     const form: SafeForm = { ...initialForm("safes", SAFE_ROW, "edit", NEW), active: false };
     expect(entryWarnings("safes", form, SAFE_ROW, "edit")).toEqual([

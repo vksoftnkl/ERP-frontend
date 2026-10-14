@@ -24,6 +24,13 @@ export type ExpenseKeys = {
   voucherId: string;
 };
 
+/**
+ * A numbered voucher the print dialog is opened on — its own company and year,
+ * never the header's: every dataset filters on `:company_id`, and the token's
+ * company is the user's home one.
+ */
+export type ExpensePrintTarget = ExpenseKeys & { voucherNo: string | null };
+
 /** Where a NEW voucher is written: the header's business context. */
 export type ExpenseScope = {
   companyId: string;

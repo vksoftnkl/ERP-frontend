@@ -339,6 +339,7 @@ export const CELL_FORMATS: Readonly<Record<string, CellFormat>> = {
   tcn_is_active: "active",
   tsf_insured_limit: "money",
   tsf_is_default: "star",
+  tsf_is_drop_safe: "tick",
   balance: "money",
   tsf_is_active: "active",
   trs_needs_note: "tick",
@@ -440,6 +441,8 @@ export type SafeForm = {
   ledgerName: string;
   insuredLimit: string;
   isDefault: boolean;
+  /** Notes 110 §3: a sealed-bag box at the counter — a Drop goes only into the counter's own drop safe. */
+  isDropSafe: boolean;
   active: boolean;
   remarks: string;
 };
@@ -534,6 +537,7 @@ function safeFormFromRow(row: GridRow): SafeForm {
     ledgerName: rowText(row, "ledger_name"),
     insuredLimit: amountInputText(row.tsf_insured_limit),
     isDefault: rowBool(row, "tsf_is_default"),
+    isDropSafe: rowBool(row, "tsf_is_drop_safe"),
     active: rowBool(row, "tsf_is_active"),
     remarks: rowText(row, "tsf_remarks"),
   };
@@ -595,6 +599,7 @@ function newForm<K extends TillMasterKind>(kind: K, context: NewFormContext): Ti
       ledgerName: "",
       insuredLimit: "",
       isDefault: context.firstSafe,
+      isDropSafe: false,
       active: true,
       remarks: "",
     },
@@ -936,6 +941,7 @@ export function safeBody(form: SafeForm, { companyId, branchId, id }: BodyContex
     ...(form.ledgerId.trim() ? { tsfLedgerId: form.ledgerId.trim() } : {}),
     tsfInsuredLimit: toAmount(form.insuredLimit),
     tsfIsDefault: form.isDefault,
+    tsfIsDropSafe: form.isDropSafe,
     tsfIsActive: form.active,
     tsfRemarks: textOrNull(form.remarks),
   };

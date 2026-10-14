@@ -363,15 +363,21 @@ export function useExpenseVoucher({ scope, initialKeys, today, session, rights }
     setLoadError(null);
   }, [cashTenderId, today]);
 
+  /**
+   * Resolves to the voucher written — the draft, or the posted voucher with its
+   * number — or null when nothing was. The screen is already cleared for the
+   * next one by then, so this is the only place a caller can still read it
+   * (F11 prints the voucher just posted).
+   */
   const save = useCallback(
-    async (thenPost: boolean): Promise<boolean> => {
+    async (thenPost: boolean): Promise<ExpensePayload | null> => {
       const why = thenPost ? postProblem : problem;
       if (why) {
         toast.warn(why);
-        return false;
+        return null;
       }
       if (!beginBusy()) {
-        return false;
+        return null;
       }
       try {
         let savedVoucher: ExpensePayload;
@@ -379,14 +385,14 @@ export function useExpenseVoucher({ scope, initialKeys, today, session, rights }
           savedVoucher = readVoucher(await settle(dispatch(expenseApi.endpoints.expenseCreate.initiate(body))));
         } catch (error) {
           toast.error(expenseError(error));
-          return false;
+          return null;
         }
         if (!thenPost) {
           // Saved: the screen starts the next one; the draft reopens from the list.
           const paid = sumPaise(draft.tenders.map((row) => paiseOfText(row.amount)));
           startNew();
           toast.success(`Draft saved — ${formatPaise(paid)}. Open it from F8 List to change or post it.`);
-          return true;
+          return savedVoucher;
         }
         try {
           const posted = readVoucher(
@@ -403,12 +409,12 @@ export function useExpenseVoucher({ scope, initialKeys, today, session, rights }
           } else {
             toast.success(message);
           }
-          return true;
+          return posted;
         } catch (error) {
           // The draft stays saved: fix it and post again.
           showVoucher(savedVoucher);
           toast.error(expenseError(error));
-          return false;
+          return null;
         }
       } finally {
         endBusy();

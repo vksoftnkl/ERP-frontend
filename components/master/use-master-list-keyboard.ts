@@ -14,10 +14,17 @@ export interface UseMasterListKeyboardOptions<Row extends MasterListKeyboardRow>
   selectedRowId: string | number | null;
   searchInputRef: RefObject<HTMLInputElement | null>;
   /**
-   * Wraps the grid. Must be focusable (`tabIndex={-1}`) so the list can hold
-   * focus once the search box hands over.
+   * Wraps the grid. Must be focusable (`tabIndex={-1}`): a click on a row or a
+   * cell then lands focus on something inside it, which is what tells the hook
+   * to hand the caret straight back to the search box.
    */
   tableContainerRef: RefObject<HTMLElement | null>;
+  /**
+   * The whole list screen — toolbar, filters, grid. A click anywhere in it
+   * leaves the caret in the search box unless it lands on a control that takes
+   * typing (a date, a select). Defaults to the grid alone.
+   */
+  listRootRef?: RefObject<HTMLElement | null>;
   onSelectRow: (row: Row) => void;
   onSearchTermChange: (value: string) => void;
   /** Ctrl/Cmd+Enter on the selected row; omitted screens simply ignore the chord. */
@@ -29,23 +36,55 @@ export interface UseMasterListKeyboardOptions<Row extends MasterListKeyboardRow>
 }
 
 /**
- * The shared keyboard chain for master list screens:
+ * The shared keyboard chain for master list screens. The search box owns the
+ * caret for as long as the list is on screen:
  *
- * 1. focus starts in the search box, with its text selected;
- * 2. Down/PageDown there hands over to the grid (row 0, or the current row);
- * 3. Up/Down walk the row highlight, Left/Right scroll the grid sideways,
- *    Ctrl+Enter opens the selected row;
- * 4. Escape, or Up on the first row, walks back out to the search box — and a
- *    printable key typed at the grid jumps to search carrying that character.
+ * 1. focus starts in the search box, with its text selected, and comes back to
+ *    it when a dialog over the list closes;
+ * 2. clicking a row selects it without taking the caret — nor do the toolbar
+ *    buttons, the pager or a checkbox. Only a control that takes typing (a
+ *    date, a select) keeps the focus it is given;
+ * 3. Up/Down walk the row highlight from inside the search box, PageUp/PageDown
+ *    jump to the first/last row, Ctrl+Enter opens the selected row;
+ * 4. if focus did fall out of the box (onto the page body), a printable key
+ *    jumps back carrying that character, and Escape or an arrow brings the
+ *    caret back too.
  *
  * Lives here so every list screen gets the same wiring instead of repeating it.
  */
+/** Controls that take typing or picking, and keep the focus a click gives them. */
+const KEEPS_FOCUS_SELECTOR = [
+  'input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"])',
+  "textarea",
+  "select",
+  '[contenteditable]:not([contenteditable="false"])',
+  // Popup triggers and their menus run their own keyboard and close on blur.
+  '[aria-haspopup]:not([aria-haspopup="false"])',
+  '[role="menu"]',
+  '[role="listbox"]',
+  '[role="combobox"]',
+  '[role="dialog"]',
+].join(", ");
+
+/** Anything a press can put focus on. A press on none of these blurs to the body. */
+const FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "button:not(:disabled)",
+  "input:not(:disabled)",
+  "select:not(:disabled)",
+  "textarea:not(:disabled)",
+  "summary",
+  "[tabindex]",
+  '[contenteditable]:not([contenteditable="false"])',
+].join(", ");
+
 export function useMasterListKeyboard<Row extends MasterListKeyboardRow>({
   enabled = true,
   rows,
   selectedRowId,
   searchInputRef,
   tableContainerRef,
+  listRootRef,
   onSelectRow,
   onSearchTermChange,
   onViewRow,
@@ -80,11 +119,16 @@ export function useMasterListKeyboard<Row extends MasterListKeyboardRow>({
 
   /**
    * First focus lands on the search box — but only once the list has actually
-   * rendered it, so a page that mounts while its columns load still gets it.
+   * rendered it, so a page that mounts while its columns load still gets it —
+   * and again each time the list comes back from behind a full-page form.
    */
   const initialFocusDoneRef = useRef(false);
   useEffect(() => {
-    if (!enabled || initialFocusDoneRef.current) return;
+    if (!enabled) {
+      initialFocusDoneRef.current = false;
+      return;
+    }
+    if (initialFocusDoneRef.current) return;
     if (!searchInputRef.current) return;
     initialFocusDoneRef.current = true;
     focusSearchInput();
@@ -116,73 +160,48 @@ export function useMasterListKeyboard<Row extends MasterListKeyboardRow>({
 
       const hasModifier =
         event.ctrlKey || event.metaKey || event.altKey || event.shiftKey;
+      const inSearch = target === searchInputRef.current;
 
-      // Search box → list. Down (or PageDown) drops into the grid, keeping the
-      // current row if one is already selected and starting at row 0 otherwise.
-      if (target === searchInputRef.current) {
-        if (hasModifier) return;
-        if (key !== "ArrowDown" && key !== "PageDown") return;
-        const currentRows = rowsRef.current;
-        if (currentRows.length === 0) return;
-        event.preventDefault();
-        const currentId = selectedRowIdRef.current;
-        const hasSelection =
-          currentId !== null && currentRows.some((row) => row.__rowId === currentId);
-        if (!hasSelection) {
-          onSelectRowRef.current(currentRows[0]);
+      if (!inSearch) {
+        const tag = target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable) return;
+
+        // "The list has focus" — the grid itself, or the page body after a
+        // click or a closing dialog dropped focus out of the search box.
+        const listHasFocus = target === document.body || container.contains(target);
+        if (!listHasFocus) return;
+
+        if (key === "Escape" && !hasModifier) {
+          event.preventDefault();
+          focusSearchInput();
+          return;
         }
-        container.focus({ preventScroll: true });
-        container
-          .querySelector<HTMLElement>('[class*="activeRow"]')
-          ?.scrollIntoView({ block: "nearest", inline: "nearest" });
-        return;
+
+        // Tally-style: a printable key typed at the list jumps to search and
+        // carries the character with it, so users can just start typing.
+        if (
+          key.length === 1 &&
+          key !== " " &&
+          !event.ctrlKey &&
+          !event.metaKey &&
+          !event.altKey &&
+          !target.closest('button, a, [role="button"]')
+        ) {
+          const input = searchInputRef.current;
+          if (!input) return;
+          event.preventDefault();
+          onSearchTermChangeRef.current(`${input.value}${key}`);
+          focusSearchInput(false);
+          return;
+        }
       }
 
-      const tag = target.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable) return;
-
-      // "The list has focus" — the grid itself, or the page body once the grid
-      // moved selection without any element of its own taking focus.
-      const listHasFocus = target === document.body || container.contains(target);
-
-      // Escape always returns to the search box.
-      if (key === "Escape" && !hasModifier && listHasFocus) {
-        event.preventDefault();
-        focusSearchInput();
-        return;
-      }
-
-      const isArrow =
-        key === "ArrowUp" || key === "ArrowDown" || key === "ArrowLeft" || key === "ArrowRight";
+      const isRowWalk =
+        key === "ArrowUp" || key === "ArrowDown" || key === "PageUp" || key === "PageDown";
       // Ctrl+Enter (Cmd+Enter on a Mac) — plain Enter is deliberately left
       // alone, since it submits the search box and activates focused buttons.
       const isViewChord =
         key === "Enter" && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey;
-
-      // Tally-style: a printable key typed at the list jumps to search and
-      // carries the character with it, so users can just start typing.
-      if (
-        !isArrow &&
-        !isViewChord &&
-        listHasFocus &&
-        key.length === 1 &&
-        key !== " " &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        !target.closest('button, a, [role="button"]')
-      ) {
-        const input = searchInputRef.current;
-        if (!input) return;
-        event.preventDefault();
-        onSearchTermChangeRef.current(`${input.value}${key}`);
-        focusSearchInput(false);
-        return;
-      }
-
-      if (!isArrow && !isViewChord) return;
-      // The arrows are the unmodified ones only; the chord owns its modifier.
-      if (isArrow && hasModifier) return;
 
       if (isViewChord) {
         const currentId = selectedRowIdRef.current;
@@ -194,33 +213,38 @@ export function useMasterListKeyboard<Row extends MasterListKeyboardRow>({
         return;
       }
 
-      if (key === "ArrowDown" || key === "ArrowUp") {
+      // Up/Down step the row highlight and PageUp/PageDown jump to the ends —
+      // from inside the search box, which keeps the caret while they do.
+      if (isRowWalk) {
+        if (hasModifier) return;
         event.preventDefault();
+        if (!inSearch) focusSearchInput(false);
         const currentRows = rowsRef.current;
-        if (currentRows.length === 0) {
-          if (key === "ArrowUp") focusSearchInput();
-          return;
-        }
+        if (currentRows.length === 0) return;
         const currentId = selectedRowIdRef.current;
         const currentIndex =
           currentId !== null
             ? currentRows.findIndex((row) => row.__rowId === currentId)
             : -1;
-        // Up from the first row walks back out to the search box.
-        if (key === "ArrowUp" && currentIndex === 0) {
-          focusSearchInput();
-          return;
-        }
+        const lastIndex = currentRows.length - 1;
         const nextIndex =
-          key === "ArrowDown"
-            ? Math.min(currentIndex + 1, currentRows.length - 1)
-            : Math.max(currentIndex <= 0 ? 0 : currentIndex - 1, 0);
+          key === "PageDown"
+            ? lastIndex
+            : key === "PageUp"
+              ? 0
+              : key === "ArrowDown"
+                ? Math.min(currentIndex + 1, lastIndex)
+                : Math.max(currentIndex - 1, 0);
         const nextRow = currentRows[nextIndex];
         if (nextRow) onSelectRowRef.current(nextRow);
         return;
       }
 
-      // Left/Right — scroll the table viewport
+      // Left/Right move the caret in the search box; only a list that has
+      // lost the box scrolls the grid sideways with them.
+      if (inSearch || hasModifier) return;
+      if (key !== "ArrowLeft" && key !== "ArrowRight") return;
+
       event.preventDefault();
       const viewport = container.querySelector<HTMLElement>('[data-erp-table-viewport="true"]');
       if (!viewport) return;
@@ -229,6 +253,102 @@ export function useMasterListKeyboard<Row extends MasterListKeyboardRow>({
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [enabled, focusSearchInput, searchInputRef, tableContainerRef]);
+
+  /**
+   * Keeps the caret in the search box while the operator works the list with
+   * the mouse. Two halves, because a click either moves focus somewhere or
+   * drops it on the page body:
+   *
+   * - focus that lands inside the list on anything but a typing control (a row,
+   *   the grid, a checkbox, a toolbar or pager button) is handed straight back.
+   *   The click itself still happens — the row still selects, the checkbox
+   *   still ticks, the header still drags — it just does not keep the focus;
+   * - a press on something that cannot take focus at all (blank space, a label)
+   *   is told not to blur the box in the first place; a disabled button, which
+   *   blurs it regardless, has it handed back straight after.
+   *
+   * A dialog over the list owns focus outright, so both stand aside while one
+   * is up.
+   */
+  useEffect(() => {
+    if (!enabled || typeof document === "undefined") return;
+    const listRoot = () => listRootRef?.current ?? tableContainerRef.current;
+    const listOwnsFocus = () =>
+      !document.querySelector('[role="dialog"], [aria-modal="true"]') &&
+      !isSuspendedRef.current?.();
+
+    const handleFocusIn = (event: FocusEvent) => {
+      const target = event.target as HTMLElement | null;
+      const input = searchInputRef.current;
+      if (!target || !input || target === input) return;
+      if (!listRoot()?.contains(target) || target.closest(KEEPS_FOCUS_SELECTOR)) return;
+      if (!listOwnsFocus()) return;
+      input.focus({ preventScroll: true });
+    };
+
+    const handleMouseDown = (event: MouseEvent) => {
+      // The middle button's autoscroll is not a focus change; leave it be.
+      if (event.button === 1) return;
+      const target = event.target as HTMLElement | null;
+      const root = listRoot();
+      if (!target || !root?.contains(target)) return;
+      const focusable = target.closest(FOCUSABLE_SELECTOR);
+      if (focusable && root.contains(focusable)) return;
+      if (!listOwnsFocus()) return;
+      event.preventDefault();
+      // Focus had already fallen to the body — say a dialog closed without
+      // handing it back — so a click on the list is as good a cue as any.
+      const input = searchInputRef.current;
+      if (input && document.activeElement !== input) input.focus({ preventScroll: true });
+    };
+
+    // A disabled button (Edit or Delete with no row picked) gets no mousedown
+    // at all, yet Chromium still blurs the box on the press; put it back once
+    // the press is through.
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest(":disabled") || !listRoot()?.contains(target)) return;
+      if (!listOwnsFocus()) return;
+      window.setTimeout(() => {
+        const active = document.activeElement;
+        if (active && active !== document.body) return;
+        searchInputRef.current?.focus({ preventScroll: true });
+      }, 0);
+    };
+
+    // Capture phase: the table stops mousedown propagation on some of its
+    // buttons, and React's root listener sits below the document.
+    document.addEventListener("focusin", handleFocusIn);
+    document.addEventListener("mousedown", handleMouseDown, true);
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    return () => {
+      document.removeEventListener("focusin", handleFocusIn);
+      document.removeEventListener("mousedown", handleMouseDown, true);
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+    };
+  }, [enabled, listRootRef, searchInputRef, tableContainerRef]);
+
+  /**
+   * A dialog over the list (print, history, a confirm, the message popup) takes
+   * focus with it, and closing it drops focus on the page body. Dialogs portal
+   * into `document.body`, so watching its direct children is enough to see one
+   * go — without observing every render in the app.
+   */
+  useEffect(() => {
+    if (!enabled || typeof document === "undefined" || typeof MutationObserver === "undefined") {
+      return;
+    }
+    const observer = new MutationObserver((mutations) => {
+      if (!mutations.some((mutation) => mutation.removedNodes.length > 0)) return;
+      const active = document.activeElement;
+      if (active && active !== document.body) return;
+      if (document.querySelector('[role="dialog"], [aria-modal="true"]')) return;
+      if (isSuspendedRef.current?.()) return;
+      focusSearchInput(false);
+    });
+    observer.observe(document.body, { childList: true });
+    return () => observer.disconnect();
+  }, [enabled, focusSearchInput]);
 
   return { focusSearchInput };
 }

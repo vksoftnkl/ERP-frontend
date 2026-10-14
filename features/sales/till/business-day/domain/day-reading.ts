@@ -10,7 +10,13 @@
  * the buttons that would do them are off with that reason.
  *
  * Money is summed in paise (`decimal.ts`), never as floats.
+ *
+ * Since Qt a449b8c the checklist also reads the LIVE sessions
+ * (`../../shared/live-cash.ts`): every session of the branch still holding a
+ * drawer, ANY date — a day's own list shows only its date, and one opened
+ * yesterday is still a drawer to collect.
  */
+import { liveCashFigure, liveTotalPaise, type LiveSession } from "../../shared/live-cash";
 import { formatMoney, formatSignedMoney, paiseOrZero, signOf, toCount, toPaise } from "./decimal";
 import { clockOf, displayDate, sessionKeysOf, text, type GridRow, type SessionKeys, type TillDay } from "./wire";
 
@@ -162,6 +168,38 @@ function sessionLabel(row: GridRow): string {
   return `${text(row.tss_session_no)} · ${text(row.cashier)}`;
 }
 
+/** "C01-261006-01 · RAVI K · ₹ 7,450.00" (or "cash hidden") — a live drawer in a checklist line. */
+function liveLabel(session: LiveSession): string {
+  return `${session.sessionNo} · ${session.cashier} · ${liveCashFigure(session)}`;
+}
+
+/**
+ * Qt a449b8c: a drawer still out from an earlier day — live, but not on this
+ * day's list. Its cash is in no safe either, so it blocks like a live session
+ * of the day; the button opens the first one's cockpit. `null` when there is
+ * none (or the live read has not answered yet).
+ *
+ * Only drawers opened BEFORE the day shown (`dayDate`, ISO): looking back at
+ * an older day, today's open drawers are not "from an earlier day" (Qt, which
+ * only filters by the day's own list, would say they were).
+ */
+function olderDrawersCheck(rows: readonly GridRow[], live: readonly LiveSession[], dayDate: string): Check | null {
+  const dayIds = new Set(rows.map((row) => text(row.tss_id).trim()));
+  const older = live.filter(
+    (session) =>
+      !dayIds.has(session.key.tssId) && (!dayDate || !session.businessDate || session.businessDate < dayDate),
+  );
+  if (older.length === 0) return null;
+  return {
+    tone: "red",
+    title: "Drawers still out from an earlier day",
+    detail:
+      `${plural(older.length, "session")} opened before today and not closed: ` +
+      older.map(liveLabel).join(", "),
+    action: { label: OPEN_COCKPIT, session: older[0].key },
+  };
+}
+
 /** The two rows every day carries until the server has their routes. */
 function laterChecks(): Check[] {
   return [
@@ -254,8 +292,17 @@ export function noDayReading(): DayReading {
  * Until the sessions are read the screen says so rather than calling the day
  * READY on an empty list (Qt briefly did, while its grid reloaded); a failed
  * read says that too.
+ *
+ * `liveSessions` is every live session of the branch, any date (`null` until
+ * read): the drawers still out from an earlier day, and "Live now" in the
+ * numbers. `dayDate` is the business date shown (ISO), "" when unknown.
  */
-export function readDay(sessions: RowsState, safes: RowsState): DayReading {
+export function readDay(
+  sessions: RowsState,
+  safes: RowsState,
+  liveSessions: readonly LiveSession[] | null = null,
+  dayDate = "",
+): DayReading {
   if (sessions.status !== "ready") {
     const failed = sessions.status === "error";
     return {
@@ -346,6 +393,8 @@ export function readDay(sessions: RowsState, safes: RowsState): DayReading {
       detail: rows.length === 0 ? "No till session today" : `All ${plural(rows.length, "session")} closed`,
     });
   }
+  const older = olderDrawersCheck(rows, liveSessions ?? [], dayDate);
+  if (older) checks.push(older);
   if (pending > 0) {
     checks.push({
       tone: "amber",
@@ -374,6 +423,17 @@ export function readDay(sessions: RowsState, safes: RowsState): DayReading {
     {
       name: "CASH IN TILLS",
       lines: [
+        // Qt a449b8c: what every drawer still out should hold now, the server's
+        // figure (a session whose cash is hidden adds nothing).
+        ...(liveSessions && liveSessions.length > 0
+          ? [
+              {
+                name: `Live now (${plural(liveSessions.length, "session")}, any day)`,
+                value: formatMoney(BigInt(liveTotalPaise(liveSessions))),
+                tone: "info" as const,
+              },
+            ]
+          : []),
         { name: `Expected (${closed} closed)`, value: formatMoney(expected), tone: "" },
         { name: "Counted", value: formatMoney(counted), tone: "" },
         {

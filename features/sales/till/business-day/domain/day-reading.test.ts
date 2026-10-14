@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { LiveSession } from "../../shared/live-cash";
 import { MINUS } from "./decimal";
 import {
   blankHead,
@@ -52,6 +53,19 @@ function session(overrides: GridRow): GridRow {
 
 const ready = (rows: GridRow[]): RowsState => ({ status: "ready", rows });
 const NO_SAFES = ready([]);
+
+function live(tssId: string, over: Partial<LiveSession> = {}): LiveSession {
+  return {
+    key: { companyId: "c1", branchId: "b1", accYear: "2026-2027", tssId },
+    sessionNo: tssId,
+    counter: "C01",
+    cashier: "RAVI K",
+    status: "OPEN",
+    businessDate: "",
+    cashPaise: 745000,
+    ...over,
+  };
+}
 
 describe("the head", () => {
   it("reads an open day as Qt shows it", () => {
@@ -216,6 +230,60 @@ describe("readDay", () => {
     const failed = readDay({ status: "error", rows: [] }, NO_SAFES);
     expect(failed.verdict.pill).toBe("NOT READ");
     expect(failed.checks[0].tone).toBe("grey");
+  });
+
+  it("is RED for a drawer still out from an earlier day, with its cockpit", () => {
+    const today = session({ tss_session_no: "C01-261007-01", cashier: "RAVI K", tss_status: "OPEN" });
+    const reading = readDay(ready([today]), NO_SAFES, [
+      live("s-C01-261007-01"),
+      live("y1", {
+        sessionNo: "C02-261006-01",
+        cashier: "MEENA T",
+        status: "SUSPENDED",
+        key: { companyId: "c1", branchId: "b1", accYear: "2025-2026", tssId: "y1" },
+      }),
+      live("y2", { sessionNo: "C03-261005-01", cashier: "SURESH B", status: "COUNTING", cashPaise: null }),
+    ]);
+    expect(checkLines(reading.checks).slice(0, 3)).toEqual([
+      "RED Sessions closed — 1 session still billing or being counted: C01-261007-01 · RAVI K",
+      "RED Drawers still out from an earlier day — 2 sessions opened before today and not closed: " +
+        "C02-261006-01 · MEENA T · ₹ 7,450.00, C03-261005-01 · SURESH B · cash hidden",
+      "GREEN Approvals pending — None waiting",
+    ]);
+    expect(reading.checks[1].action).toEqual({
+      label: "Open cockpit  →",
+      session: { companyId: "c1", branchId: "b1", accYear: "2025-2026", tssId: "y1" },
+    });
+    expect(reading.verdict.pill).toBe("2 RED");
+  });
+
+  it("looking back at an older day, flags only drawers opened before it", () => {
+    const titles = (businessDate: string) =>
+      readDay(ready([]), NO_SAFES, [live("x", { businessDate })], "2026-10-07").checks.map((check) => check.title);
+    expect(titles("2026-10-06")).toContain("Drawers still out from an earlier day");
+    expect(titles("2026-10-14")).not.toContain("Drawers still out from an earlier day");
+    // A date it cannot read stays flagged, as Qt flags every live drawer off the day's list.
+    expect(titles("")).toContain("Drawers still out from an earlier day");
+  });
+
+  it("puts the live cash first under CASH IN TILLS, only while a drawer is out", () => {
+    const cashInTills = (liveSessions: LiveSession[] | null) =>
+      readDay(ready([]), NO_SAFES, liveSessions).numbers.find((section) => section.name === "CASH IN TILLS")?.lines;
+    expect(cashInTills([live("a"), live("b", { cashPaise: null }), live("c", { cashPaise: 12345650 })])?.[0]).toEqual({
+      name: "Live now (3 sessions, any day)",
+      value: "1,30,906.50",
+      tone: "info",
+    });
+    expect(cashInTills([])?.[0].name).toBe("Expected (0 closed)");
+    expect(cashInTills(null)?.[0].name).toBe("Expected (0 closed)");
+  });
+
+  it("adds no drawer check before the live read answers, or when every live one is the day's", () => {
+    const today = session({ tss_session_no: "A", tss_status: "CLOSED" });
+    for (const liveSessions of [null, [], [live("s-A")]]) {
+      const titles = readDay(ready([today]), NO_SAFES, liveSessions).checks.map((check) => check.title);
+      expect(titles).not.toContain("Drawers still out from an earlier day");
+    }
   });
 
   it("says when the safes could not be read instead of a false green", () => {

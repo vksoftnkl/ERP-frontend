@@ -176,7 +176,8 @@ export type Column<T> = {
 
 /**
  * A plain list with one selected row: click or ↑/↓ selects (the screen asks
- * first when the form has unsaved changes). Without `onSelect` it is read-only.
+ * first when the form has unsaved changes). Without `onSelect` it is read-only
+ * — as Till Approval Authority's "Who can approve?" table uses it.
  */
 export function DataTable<T>({
   label,
@@ -187,6 +188,7 @@ export function DataTable<T>({
   onSelect,
   emptyText,
   short,
+  className,
 }: {
   label: string;
   columns: readonly Column<T>[];
@@ -197,6 +199,7 @@ export function DataTable<T>({
   emptyText: ReactNode;
   /** A table that shares its pane: no taller than about six rows. */
   short?: boolean;
+  className?: string;
 }) {
   const bodyRef = useRef<HTMLTableSectionElement | null>(null);
 
@@ -218,7 +221,7 @@ export function DataTable<T>({
 
   return (
     <div
-      className={cx(styles.tableWrap, short && styles.tableShort)}
+      className={cx(styles.tableWrap, short && styles.tableShort, className)}
       tabIndex={onSelect ? 0 : -1}
       role="grid"
       aria-label={label}
