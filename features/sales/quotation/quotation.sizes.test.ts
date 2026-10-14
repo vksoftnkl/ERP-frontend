@@ -2,16 +2,26 @@ import { describe, expect, it } from "vitest";
 import { createDraftLine, duplicateDraftLine } from "./quotation.state";
 import {
   applySizeEntry,
+  createSizeCut,
   createSizeEntryRow,
+  createSizeFace,
   findSizeGroup,
   keyedSizeRows,
   openSizeEntry,
+  openSizeSheet,
+  patchSizeCut,
+  patchSizeFace,
+  removeSizeSheetRow,
   sizeEntryTotals,
   sizeGroupKeyOf,
   sizeRowAmount,
   sizeRowQty,
+  sizeRowText,
+  sizeSheetEntries,
   validateSizeEntry,
+  validateSizeSheet,
   type SizeEntryRow,
+  type SizeSheetRow,
 } from "./quotation.sizes";
 import type { DraftLine } from "./quotation.types";
 import { splitSizeFactors } from "./quotation.utils";
@@ -420,5 +430,125 @@ describe("applySizeEntry", () => {
     expect(next[2].key).toBe("new-1");
     expect(next[2].sqiId).toBeNull();
     expect(new Set(next.map((line) => line.key)).size).toBe(next.length);
+  });
+});
+
+describe("the size sheet (L × W lines with T – Pcs under them)", () => {
+  /** Key the sheet the way the operator does: face, then its cuts. */
+  function keyed(spec: Array<[string, string, string] | [string, string]>): SizeSheetRow[] {
+    let rows: SizeSheetRow[] = [];
+    for (const entry of spec) {
+      if (entry.length === 3) {
+        const face = createSizeFace(250);
+        rows = patchSizeFace<DraftLine>([...rows, face], face.key, { length: entry[0], width: entry[1], rate: entry[2] });
+      } else {
+        const cut = createSizeCut<DraftLine>();
+        const [tp, rate] = entry;
+        const [thickness, pieces] = tp.split("-");
+        rows = patchSizeCut([...rows, cut], cut.key, { thickness, pieces });
+        if (rate) {
+          rows = patchSizeCut(rows, cut.key, { rate });
+        }
+      }
+    }
+    return rows;
+  }
+
+  it("saves each T – Pcs as the full size of the L × W above it", () => {
+    const rows = keyed([
+      ["5", "4", "100"],
+      ["1-2", "10"],
+      ["1-3", "100"],
+      ["4", "6", "1700"],
+      ["4-10", "1800"],
+    ]);
+    const entries = sizeSheetEntries(rows);
+    expect(entries.map(sizeRowText)).toEqual(["5*4*1*2", "5*4*1*3", "4*6*4*10"]);
+    expect(entries.map((entry) => entry.rate)).toEqual(["10", "100", "1800"]);
+    expect(validateSizeSheet(rows).ok).toBe(true);
+  });
+
+  it("sells a T – Pcs at its L × W's rate until one is keyed on it", () => {
+    let rows = keyed([["5", "4", "100"], ["1-2", ""], ["2-4", "106"]]);
+    expect(sizeSheetEntries(rows).map((entry) => entry.rate)).toEqual(["100", "106"]);
+    // …and goes on following the face when its rate changes.
+    rows = patchSizeFace(rows, rows[0].key, { rate: "120" });
+    expect(sizeSheetEntries(rows).map((entry) => entry.rate)).toEqual(["120", "106"]);
+  });
+
+  it("re-derives the quantity of every T – Pcs when its L × W changes", () => {
+    let rows = keyed([["6", "4", "100"], ["2-6", ""]]);
+    expect(sizeRowQty(sizeSheetEntries(rows)[0])).toBe(2);
+    rows = patchSizeFace(rows, rows[0].key, { length: "12" });
+    expect(sizeRowQty(sizeSheetEntries(rows)[0])).toBe(4);
+  });
+
+  it("leaves out the empty T – Pcs Enter opened, and an empty L × W", () => {
+    const rows = [...keyed([["5", "4", "100"], ["1-2", ""]]), createSizeCut(), createSizeFace(250)];
+    expect(sizeSheetEntries(rows)).toHaveLength(1);
+    expect(validateSizeSheet(rows).ok).toBe(true);
+  });
+
+  it("refuses an L × W keyed with no T – Pcs under it", () => {
+    const rows = [...keyed([["5", "4", "100"], ["1-2", ""], ["4", "6", "1700"]]), createSizeCut()];
+    const result = validateSizeSheet(rows);
+    expect(result.ok).toBe(false);
+    expect(result.rows[rows[2].key].size).toMatch(/T – Pcs under this L × W/);
+  });
+
+  it("refuses a T – Pcs whose L × W is incomplete rather than shifting its factors", () => {
+    // `5*1*2` would read back as L 5, W 1, T 2.
+    const rows = keyed([["5", "", "100"], ["1-2", ""]]);
+    const result = validateSizeSheet(rows);
+    expect(result.ok).toBe(false);
+    expect(result.rows[rows[1].key].size).toMatch(/L × W above/);
+  });
+
+  it("refuses Pcs keyed without T", () => {
+    const rows = keyed([["5", "4", "100"], ["-2", ""]]);
+    expect(validateSizeSheet(rows).rows[rows[1].key].size).toMatch(/T as well as Pcs/);
+  });
+
+  it("asks for a size when nothing was keyed at all", () => {
+    const group = findSizeGroup([line({ key: "a", itemSize: null, billQty: 0 })], "a");
+    expect(validateSizeSheet(openSizeSheet(group!)).formError).toBeTruthy();
+  });
+
+  it("opens a saved group back into one L × W per run of matching faces", () => {
+    const group = findSizeGroup(
+      [
+        line({ key: "a", itemSize: "5*4*1*2", billQty: 0.278, rate: 10 }),
+        line({ key: "b", itemSize: "5*4*2*4", billQty: 1.111, rate: 106 }),
+        line({ key: "c", itemSize: "4*6*4*10", billQty: 6.667, rate: 1800 }),
+      ],
+      "a",
+    );
+    const rows = openSizeSheet(group!);
+    expect(rows.map((row) => row.kind)).toEqual(["face", "cut", "cut", "face", "cut"]);
+    const entries = sizeSheetEntries(rows);
+    expect(entries.map(sizeRowText)).toEqual(["5*4*1*2", "5*4*2*4", "4*6*4*10"]);
+    expect(entries.map((entry) => entry.rate)).toEqual(["10", "106", "1800"]);
+    // Each keeps its own line, so the save is a no-op on the identities.
+    expect(entries.map((entry) => entry.source?.key)).toEqual(["a", "b", "c"]);
+    expect(validateSizeSheet(rows).ok).toBe(true);
+  });
+
+  it("keeps the just-picked line on the first T – Pcs keyed under its L × W", () => {
+    const group = findSizeGroup([line({ key: "a", itemSize: null, billQty: 0 })], "a");
+    let rows = openSizeSheet(group!);
+    expect(rows.map((row) => row.kind)).toEqual(["face", "cut"]);
+    rows = patchSizeFace(rows, rows[0].key, { length: "5", width: "4" });
+    rows = patchSizeCut(rows, rows[1].key, { thickness: "1", pieces: "2" });
+    const [entry] = sizeSheetEntries(rows);
+    expect(entry.source?.key).toBe("a");
+    expect(sizeRowText(entry)).toBe("5*4*1*2");
+    const next = applySizeEntry(group!.lines, "a", [entry], keyMaker());
+    expect(next.map((row) => row.key)).toEqual(["a"]);
+  });
+
+  it("removes an L × W together with its T – Pcs lines", () => {
+    const rows = keyed([["5", "4", "100"], ["1-2", ""], ["4", "6", "1700"], ["4-10", ""]]);
+    const next = removeSizeSheetRow(rows, rows[0].key);
+    expect(sizeSheetEntries(next).map(sizeRowText)).toEqual(["4*6*4*10"]);
   });
 });

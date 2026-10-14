@@ -1414,11 +1414,12 @@
 
 /* --------------------------------------------------------------- size entry */
 
-/* Sized to the table, not the default panel. The Size column takes whatever the
-   fixed #, CFT, Rate and × columns leave, so this width is what sets the boxes
-   at ~u(16) — the stock u(64) stretched them across half the dialog. */
+/* Sized to the table, not the default panel: the L × W and T – Pcs columns take
+   whatever the fixed #, CFT, Rate and × columns leave, so this width is what
+   sets the boxes — the stock u(64) stretched them across half the dialog. */
 .sizeEntryPanel {
-  width: min(u(32), 100%);
+  width: min(u(50), 76%);
+  height: min(u(56),76%);
 }
 
 .sizeEntry {
@@ -1427,6 +1428,22 @@
   flex-direction: column;
   gap: u(0.5);
   min-height: 0;
+}
+
+/* Room for a handful of sizes before the list scrolls, and a larger type than
+   the dense pickers that share `.listTable`: this one is keyed into. */
+.sizeEntry .listViewport {
+  min-height: u(14);
+  max-height: u(30);
+}
+
+.sizeEntry .listTable {
+  font-size: u(0.85);
+}
+
+/* `.cellInput` sets its own grid-sized type, so the table's does not reach it. */
+.sizeEntry .cellInput {
+  font-size: u(0.85);
 }
 
 /* The read-only item strip. A definition list rather than a row of labelled
@@ -1490,17 +1507,28 @@
   text-align: center;
 }
 
-/* Sits over the boxes, which cluster at the left of a wide column. */
-.sizeEntrySizeHead {
-  text-align: left;
+/* L × W and T – Pcs share the width the fixed columns leave, half each. */
+.sizeEntryPairHead {
+  width: 32%;
 }
 
-/* The four boxes fill the Size column (no cap): capped, they stopped short and
-   left a gap before CFT and Rate. `.sizeEntryPanel` keeps the column narrow.
+/* An L × W line heads the T – Pcs lines cut from it, so it reads as a band —
+   and each one after the first is rule-separated from the sizes above it. */
+.sizeEntryFaceRow td {
+  background: #faf5f5;
+}
+
+.sizeEntryFaceRow:not(:first-child) td {
+  border-top: 1px solid var(--border, #c9c9c9);
+}
+
+/* The boxes fill their L × W / T – Pcs column (no cap): capped, they stopped
+   short and left a gap before CFT and Rate.
    They carry a visible border — `.cellInput` is borderless because a dense grid
    cell must be, but a lone field in a dialog that looks like plain text is
    unfindable. */
 .sizeEntry .cellSizeBox {
+  padding: u(0.3) 0;
   border: 1px solid var(--border, #c9c9c9);
   border-radius: var(--erp-radius, 4px);
   background: #ffffff;
@@ -1519,11 +1547,12 @@
 }
 
 .sizeEntryRateCell {
-  width: u(6);
+  width: u(8);
 }
 
 /* Keyed like the size boxes, so it wears the same border. */
 .sizeEntry .sizeEntryRateInput {
+  padding: u(0.3) u(0.4);
   border: 1px solid var(--border, #c9c9c9);
   border-radius: var(--erp-radius, 4px);
   background: #ffffff;

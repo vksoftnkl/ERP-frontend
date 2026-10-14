@@ -15,15 +15,21 @@
  * `applySizeEntry`, which is where every rule about what a replaced row keeps
  * lives — this file only collects the keystrokes.
  *
- * The Size column is the same four boxes the grid's Size cell uses (length ft ×
- * width in × thickness in × pieces): `sqi_size` is free text and no size master
- * exists to drive a dropdown from. Qty follows the CFT those dimensions work out
- * to until the operator keys one themselves, exactly as the grid's Size cell
- * feeds Bill Qty — a board cut short is why it stays editable. Rate is keyed per
- * size and lands on that size's line.
+ * It is keyed the way sizes are written on paper: an L × W line with a rate,
+ * then the T – Pcs lines cut from it, each with its own rate, then the next
+ * L × W (see `SizeSheetRow`). Only the T – Pcs lines are sizes; each is saved as
+ * the full `L*W*T*Pcs` (length ft × width in × thickness in × pieces) — the
+ * `sqi_size` free text the grid's Size cell holds, since no size master exists.
+ * Qty follows the CFT that works out to, exactly as the grid's Size cell feeds
+ * Bill Qty. Rate is keyed on the L × W line only and every T – Pcs under it is
+ * sold at it; a size at another rate goes under a second L × W line.
  *
- * Keyboard: Enter walks L → W → T → Pcs → Rate → the next row's L, and Enter on
- * the LAST row's Rate adds a size — there is no separate chord for it.
+ * Keyboard: Enter walks L → W → Rate → T → Pcs → the next T. Enter on an
+ * L × W's last Pcs opens another T – Pcs under it; Enter on that new line's
+ * empty T moves on to the next L × W — or, at the end of the sheet, turns the
+ * line into a new one — and Enter on an empty L there means done: it hands the
+ * cursor to OK. `+` adds an L × W and Alt+T a T – Pcs
+ * under the L × W the cursor is in. Ctrl+Enter saves from anywhere.
  */
 import {
   Fragment,
@@ -32,19 +38,27 @@ import {
   useMemo,
   useRef,
   useState,
-  type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { cx } from "@/components/design-system/cx";
 import { formatCurrency, formatQty } from "@/domain/pricing";
 import {
-  createSizeEntryRow,
+  createSizeCut,
+  createSizeFace,
   findSizeGroup,
-  keyedSizeRows,
-  openSizeEntry,
+  openSizeSheet,
+  patchSizeCut,
+  patchSizeFace,
+  removeSizeSheetRow,
+  sizeCutFactors,
   sizeEntryTotals,
-  validateSizeEntry,
+  sizeFaceEndOf,
+  sizeFaceIndexOf,
+  sizeSheetEntries,
+  validateSizeSheet,
   type SizeEntryRow,
+  type SizeFaceRow,
   type SizeGroupLine,
+  type SizeSheetRow,
 } from "../quotation.sizes";
 import {
   SIZE_FACTOR_COUNT,
@@ -70,7 +84,9 @@ export type SizeEntryModalProps<T extends SizeGroupLine> = {
 };
 
 /**
- * The four dimension boxes.
+ * Two of the four dimension boxes — L × W on an L × W line, T – Pcs on the lines
+ * under it. `first` is the factor index of the left box (0 or 2), which picks
+ * the labels, placeholders and separator the grid's Size cell uses for them.
  *
  * Deliberately a local component rather than a reach into `GridCell`: that one
  * keeps an uncommitted buffer and writes to the draft on blur, because a grid
@@ -78,58 +94,66 @@ export type SizeEntryModalProps<T extends SizeGroupLine> = {
  * keystroke can land straight on them and the buffer would be a second copy of
  * the same value waiting to go stale.
  */
-function SizeBoxes(props: {
-  factors: string[];
+function SizePair(props: {
+  first: 0 | 2;
+  values: [string, string];
   /** Stamped on the wrapper so the dialog can put the cursor in THIS row. */
   rowKey: string;
-  disabled?: boolean;
   invalid?: boolean;
   autoFocus?: boolean;
-  onChange: (factors: string[]) => void;
-  onKeyDown?: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
+  onChange: (values: [string, string]) => void;
+  onEnter: (input: HTMLInputElement, factor: number, shiftKey: boolean) => void;
 }) {
-  const { factors, rowKey, disabled, invalid, autoFocus, onChange, onKeyDown } = props;
+  const { first, values, rowKey, invalid, autoFocus, onChange, onEnter } = props;
   return (
     <span className={styles.cellSizeBoxes} data-size-row={rowKey}>
-      {factors.map((factor, index) => (
-        <Fragment key={SIZE_FACTOR_LABELS[index]}>
-          {index > 0 && (
-            <span aria-hidden className={styles.cellSizeSep}>
-              {SIZE_FACTOR_SEPARATORS[index]}
-            </span>
-          )}
-          <input
-            className={cx(styles.cellInput, styles.cellSizeBox, invalid && styles.cellInvalid)}
-            type="text"
-            inputMode="decimal"
-            autoComplete="off"
-            disabled={disabled}
-            autoFocus={autoFocus && index === 0}
-            title={SIZE_FACTOR_LABELS[index]}
-            aria-label={SIZE_FACTOR_LABELS[index]}
-            placeholder={SIZE_FACTOR_PLACEHOLDERS[index]}
-            value={factor}
-            onChange={(event) => {
-              const next = [...factors];
-              // Only the last box tolerates a `*`: nothing keyed through the
-              // boxes produces one, but a size saved as free text before the
-              // boxes existed keeps its extra factors there, and stripping them
-              // on the first keystroke would rewrite the operator's value.
-              next[index] =
-                index === SIZE_FACTOR_COUNT - 1
-                  ? sanitizeSizeInput(event.target.value)
-                  : sanitizeSizeFactorInput(event.target.value);
-              onChange(next);
-            }}
-            onKeyDown={onKeyDown}
-          />
-        </Fragment>
-      ))}
+      {values.map((value, offset) => {
+        const factor = first + offset;
+        return (
+          <Fragment key={SIZE_FACTOR_LABELS[factor]}>
+            {offset > 0 && (
+              <span aria-hidden className={styles.cellSizeSep}>
+                {SIZE_FACTOR_SEPARATORS[factor]}
+              </span>
+            )}
+            <input
+              className={cx(styles.cellInput, styles.cellSizeBox, invalid && styles.cellInvalid)}
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              autoFocus={autoFocus && offset === 0}
+              title={SIZE_FACTOR_LABELS[factor]}
+              aria-label={SIZE_FACTOR_LABELS[factor]}
+              placeholder={SIZE_FACTOR_PLACEHOLDERS[factor]}
+              value={value}
+              onChange={(event) => {
+                const next: [string, string] = [...values];
+                // Only the last box tolerates a `*`: nothing keyed through the
+                // boxes produces one, but a size saved as free text before the
+                // boxes existed keeps its extra factors there, and stripping them
+                // on the first keystroke would rewrite the operator's value.
+                next[offset] =
+                  factor === SIZE_FACTOR_COUNT - 1
+                    ? sanitizeSizeInput(event.target.value)
+                    : sanitizeSizeFactorInput(event.target.value);
+                onChange(next);
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" || event.ctrlKey || event.metaKey) {
+                  return;
+                }
+                event.preventDefault();
+                onEnter(event.currentTarget, factor, event.shiftKey);
+              }}
+            />
+          </Fragment>
+        );
+      })}
     </span>
   );
 }
 
-/** Put the cursor in a row's first box (L), its value selected. */
+/** Put the cursor in a row's first box (L or T), its value selected. */
 function focusRowStart(root: HTMLElement | null, rowKey: string): void {
   const box = root?.querySelector<HTMLInputElement>(
     `[data-size-row="${rowKey}"] input:not([disabled])`,
@@ -152,9 +176,7 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
    * while the dialog owns them, so a snapshot is the honest model.
    */
   const [group] = useState(() => findSizeGroup(lines, anchorKey));
-  const [rows, setRows] = useState<SizeEntryRow<T>[]>(() =>
-    group ? openSizeEntry(group) : [],
-  );
+  const [rows, setRows] = useState<SizeSheetRow<T>[]>(() => (group ? openSizeSheet(group) : []));
   /**
    * Errors stay hidden until Save is pressed. A dialog that opens with "Size is
    * required" under a blank row it just added is telling the operator off for
@@ -164,23 +186,17 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
   const [showErrors, setShowErrors] = useState(false);
   /** The dialog body — the scope the Enter walker reads its boxes from. */
   const bodyRef = useRef<HTMLDivElement | null>(null);
-  /** Where Enter on an untouched last row hands the cursor — see `onRateEnter`. */
+  /** Where Enter hands the cursor once the operator is done — see `onRateEnter`. */
   const okButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const template = group?.lines[0] ?? null;
   const baseRate = template?.rate ?? 0;
 
-  // Everything OK acts on — the count, the total, the validation — reads the
-  // keyed rows only: the row Enter opened below the last size is not one yet.
-  const keyed = useMemo(() => keyedSizeRows(rows), [rows]);
-  const validation = useMemo(() => validateSizeEntry(keyed), [keyed]);
-  const totals = useMemo(() => sizeEntryTotals(keyed), [keyed]);
-
-  const patchRow = (key: string, patch: Partial<SizeEntryRow<T>>): void => {
-    setRows((current) =>
-      current.map((row) => (row.key === key ? { ...row, ...patch, pristine: false } : row)),
-    );
-  };
+  // Everything OK acts on — the count, the total, the save — reads the sizes the
+  // sheet adds up to: keyed T – Pcs lines with their L × W folded in.
+  const entries: SizeEntryRow<T>[] = useMemo(() => sizeSheetEntries(rows), [rows]);
+  const validation = useMemo(() => validateSizeSheet(rows), [rows]);
+  const totals = useMemo(() => sizeEntryTotals(entries), [entries]);
 
   /**
    * Move focus one keyable box along, in DOM order.
@@ -205,24 +221,78 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
 
   /**
    * The row whose first box the cursor owes a visit, once React has rendered
-   * it. "+ Add size" is a BUTTON: clicking it takes focus off whatever box was
-   * being keyed and parks it on the button, where the next keystroke types
-   * nothing. So adding a size names the row here and the effect below moves the
-   * cursor into it — the click and Enter on the last Rate both end where the
-   * operator is about to type.
+   * it. "+ L × W" is a BUTTON: clicking it takes focus off whatever box
+   * was being keyed and parks it on the button, where the next keystroke types
+   * nothing. So adding a row names it here and the effect below moves the cursor
+   * into it — a click and an Enter both end where the operator is about to type.
    */
   const pendingFocusRef = useRef<string | null>(null);
 
-  const addRow = (): void => {
-    // Built outside the updater: the key has to be known HERE, and an updater
-    // React may run twice must not mint two rows.
-    //
-    // The new row carries the last one's L and W only (see
-    // `createSizeEntryRow`), and the effect below drops the cursor into its L
-    // with the value selected — Enter twice reaches T, which is what differs.
-    const row = createSizeEntryRow<T>(baseRate, rows[rows.length - 1] ?? null);
-    pendingFocusRef.current = row.key;
-    setRows((current) => [...current, row]);
+  /**
+   * Add an L × W or a T – Pcs and put the cursor in it.
+   *
+   * `fromIndex` is the row the cursor was on: the new row goes at the end of
+   * THAT L × W's lines, so Alt+T in the middle of the sheet adds a size to the
+   * face being keyed rather than to the last one. `null` (the button, which
+   * takes focus off the rows when clicked) appends at the end of the sheet.
+   *
+   * The empty T – Pcs Enter opened is reused rather than stacked under: Alt+T
+   * on it just keeps the cursor there, and `+` takes its place — the same as
+   * Enter on its empty T. A sheet always opens on an L × W, so a T – Pcs asked
+   * for on an empty sheet brings one with it.
+   */
+  const addRow = useCallback(
+    (kind: "face" | "cut", fromIndex: number | null): void => {
+      const at =
+        fromIndex === null || fromIndex < 0
+          ? rows.length
+          : sizeFaceEndOf(rows, sizeFaceIndexOf(rows, fromIndex));
+      const before = rows[at - 1];
+      const spare = before?.kind === "cut" && before.pristine && !before.source ? before : null;
+      if (spare && kind === "cut") {
+        focusRowStart(bodyRef.current, spare.key);
+        return;
+      }
+      // Built outside the updater: the keys have to be known HERE, and an
+      // updater React may run twice must not mint two rows.
+      const added: SizeSheetRow<T>[] =
+        kind === "cut" && rows.length > 0 ? [createSizeCut<T>()] : [createSizeFace(baseRate)];
+      if (kind === "cut" && rows.length === 0) {
+        added.push(createSizeCut<T>());
+      }
+      const from = spare ? at - 1 : at;
+      pendingFocusRef.current = added[0].key;
+      setRows((current) => [...current.slice(0, from), ...added, ...current.slice(at)]);
+    },
+    [baseRate, rows],
+  );
+
+  /** The sheet row holding focus, or -1 when the cursor is not in one. */
+  const focusedRowIndex = useCallback((): number => {
+    const key = document.activeElement
+      ?.closest<HTMLElement>("[data-size-sheet-row]")
+      ?.getAttribute("data-size-sheet-row");
+    return key ? rows.findIndex((row) => row.key === key) : -1;
+  }, [rows]);
+
+  /** The empty T – Pcs line Enter opened becomes the next L × W. */
+  const startFace = (cutKey: string): void => {
+    const face = createSizeFace(baseRate);
+    pendingFocusRef.current = face.key;
+    setRows((current) => current.map((row) => (row.key === cutKey ? face : row)));
+  };
+
+  /** Open an empty T – Pcs line straight after `index` and put the cursor in its T. */
+  const openCutAfter = (index: number): void => {
+    const cut = createSizeCut<T>();
+    pendingFocusRef.current = cut.key;
+    setRows((current) => [...current.slice(0, index + 1), cut, ...current.slice(index + 1)]);
+  };
+
+  /** Drop the empty T – Pcs line Enter opened and move on to the L × W below it. */
+  const leaveCutFor = (cutKey: string, nextKey: string): void => {
+    pendingFocusRef.current = nextKey;
+    setRows((current) => current.filter((row) => row.key !== cutKey));
   };
 
   useEffect(() => {
@@ -235,36 +305,113 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
   }, [rows]);
 
   /**
-   * Enter on Rate — a row's last field. Mid-list it walks on to the next row's L
-   * like every other box; on the LAST row it is what adds a size.
-   *
-   * Two cases add nothing, so Enter held down cannot breed rows:
-   *  - the row is one Enter itself opened and nothing was keyed into it: the
-   *    operator is done, so the cursor goes to OK and the next Enter saves;
-   *  - the row was keyed but would not pass OK (no size, or one that works out
-   *    to nothing): its error shows and the cursor goes back to its L.
+   * Enter in a dimension box walks on to the next box, the way it walks the cells
+   * of the grid behind this dialog. Two boxes on an EMPTY line mean more:
+   *  - T on the line Enter just opened: the sizes of this L × W are done. At the
+   *    end of the sheet the line becomes the next L × W; above another L × W it
+   *    goes, and the cursor moves on to that one;
+   *  - L on an L × W at the end of the sheet: there is no next one, so the
+   *    cursor goes to OK and the next Enter saves.
+   * The cut that holds the document's own line (an item just picked) is never
+   * dropped or turned into a face — that would lose the line's identity.
    */
-  const onRateEnter = (input: HTMLInputElement, row: SizeEntryRow<T>, index: number): void => {
-    if (index < rows.length - 1) {
-      focusAdjacentField(input, 1);
+  const onBoxEnter = (
+    input: HTMLInputElement,
+    row: SizeSheetRow<T>,
+    index: number,
+    factor: number,
+    shiftKey: boolean,
+  ): void => {
+    if (shiftKey) {
+      focusAdjacentField(input, -1);
       return;
     }
-    if (row.pristine) {
+    const last = index === rows.length - 1;
+    const next = rows[index + 1];
+    if (row.kind === "cut" && factor === 2 && row.pristine && !row.source) {
+      if (last) {
+        startFace(row.key);
+        return;
+      }
+      if (next?.kind === "face") {
+        leaveCutFor(row.key, next.key);
+        return;
+      }
+    }
+    if (last && row.kind === "face" && factor === 0 && !row.length.trim() && !row.width.trim()) {
       okButtonRef.current?.focus();
       return;
     }
-    if (!validateSizeEntry([row]).ok) {
+    if (row.kind === "cut" && factor === SIZE_FACTOR_COUNT - 1) {
+      finishCut(row, index);
+      return;
+    }
+    focusAdjacentField(input, 1);
+  };
+
+  /**
+   * A T – Pcs line keyed — Enter on its Pcs. Inside an L × W's lines the cursor
+   * goes to the next line's T;
+   * on the LAST line of an L × W it opens a T – Pcs under that L × W, wherever
+   * it sits in the sheet. Walking on there instead would land in the NEXT
+   * L × W's L with its value selected, and the next size keyed would overwrite
+   * it.
+   *
+   * Two cases open nothing, so Enter held down cannot breed rows:
+   *  - the line is one Enter itself opened and nothing was keyed into it: the
+   *    operator is done — at the end of the sheet the cursor goes to OK and the
+   *    next Enter saves, above another L × W it moves on to that one;
+   *  - a line that would not pass OK: its error shows and the cursor goes back
+   *    to its T.
+   */
+  const finishCut = (row: SizeSheetRow<T>, index: number): void => {
+    const next = rows[index + 1];
+    if (next?.kind === "cut") {
+      focusRowStart(bodyRef.current, next.key);
+      return;
+    }
+    if (row.pristine) {
+      if (next) {
+        focusRowStart(bodyRef.current, next.key);
+      } else {
+        okButtonRef.current?.focus();
+      }
+      return;
+    }
+    if (validation.rows[row.key]) {
       setShowErrors(true);
       focusRowStart(bodyRef.current, row.key);
       return;
     }
-    addRow();
+    openCutAfter(index);
+  };
+
+  /**
+   * Enter on an L × W's Rate goes on to its first T – Pcs, opening one when it
+   * has none yet; an L × W with no L or W keyed adds nothing — at the end of the
+   * sheet the cursor goes to OK instead.
+   */
+  const onRateEnter = (input: HTMLInputElement, row: SizeFaceRow, index: number): void => {
+    const next = rows[index + 1];
+    if (next?.kind === "cut") {
+      focusAdjacentField(input, 1);
+      return;
+    }
+    if (!row.length.trim() && !row.width.trim()) {
+      if (next) {
+        focusAdjacentField(input, 1);
+      } else {
+        okButtonRef.current?.focus();
+      }
+      return;
+    }
+    openCutAfter(index);
   };
 
   const removeRow = (key: string): void => {
     setRows((current) => {
       const index = current.findIndex((row) => row.key === key);
-      const next = current.filter((row) => row.key !== key);
+      const next = removeSizeSheetRow(current, key);
       // The × button that had focus is about to unmount, and focus would fall
       // to <body> — where Enter and the arrows do nothing. Hand it to the row
       // that took this one's place, or to the one above when it was the last.
@@ -275,17 +422,17 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
   };
 
   const save = useCallback((): void => {
-    if (!validateSizeEntry(keyed).ok) {
+    if (!validation.ok) {
       setShowErrors(true);
       return;
     }
-    onSave(anchorKey, keyed);
+    onSave(anchorKey, entries);
     onClose();
-  }, [anchorKey, keyed, onClose, onSave]);
+  }, [anchorKey, entries, onClose, onSave, validation.ok]);
 
   /**
-   * Ctrl+Enter saves, from a document listener rather than a handler on the
-   * dialog's own markup.
+   * Ctrl+Enter saves, `+` adds an L × W and Alt+T a T – Pcs — all from a
+   * document listener rather than a handler on the dialog's own markup.
    *
    * A React `onKeyDown` only ever sees keys pressed on something inside it, and
    * focus is not reliably there: deleting a row unmounts the button that had it
@@ -305,6 +452,30 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
         event.preventDefault();
         event.stopPropagation();
         save();
+        return;
+      }
+      // `+` on its own, from the main row (Shift+=) or the keypad. Nothing in
+      // this dialog can hold a `+` — every box takes digits and a point only —
+      // so the key is free to mean "next L × W" wherever the cursor is.
+      // Ctrl/Alt+± stay the item grid's row chords.
+      if (
+        !event.isComposing &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        (event.key === "+" || event.code === "NumpadAdd")
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        addRow("face", focusedRowIndex());
+        return;
+      }
+      // By `code`, so the chord is the same key whatever the layout or Caps
+      // Lock — and with no other modifier, so AltGr text still types.
+      if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.code === "KeyT") {
+        event.preventDefault();
+        event.stopPropagation();
+        addRow("cut", focusedRowIndex());
       }
     };
     document.addEventListener("keydown", onKeyDown, true);
@@ -312,9 +483,20 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
     // Re-registered whenever the rows change rather than held in a ref: the
     // listener has to see the rows as they are NOW, and a dialog this small
     // re-binding one handler per keystroke costs nothing.
-  }, [save]);
+  }, [addRow, focusedRowIndex, save]);
 
   const errorsFor = (key: string) => (showErrors ? validation.rows[key] : undefined);
+
+  // The # column counts sizes — the lines OK writes — so L × W lines take none.
+  const sizeNumbers = useMemo(() => {
+    const numbers = new Map<string, number>();
+    for (const row of rows) {
+      if (row.kind === "cut") {
+        numbers.set(row.key, numbers.size + 1);
+      }
+    }
+    return numbers;
+  }, [rows]);
 
   return (
     <ModalShell
@@ -325,7 +507,7 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
       footer={
         <>
           <span className={styles.modalNote}>
-            {keyed.length} size{keyed.length === 1 ? "" : "s"} · total{" "}
+            {entries.length} size{entries.length === 1 ? "" : "s"} · total{" "}
             <strong>
               {/* `formatQty` blanks a zero by design — an item grid full of
                   "0.00" is unreadable. A lone footer total is the opposite case:
@@ -356,7 +538,7 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
               className={cx(styles.button, styles.buttonPrimary, styles.sizeEntryFooterButton)}
               onClick={save}
             >
-              OK-Ctrl+Enter 
+              OK-Ctrl+Enter
             </button>
           </span>
         </>
@@ -389,8 +571,11 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
                 <th scope="col" className={styles.sizeEntrySerialCell}>
                   #
                 </th>
-                <th scope="col" className={styles.sizeEntrySizeHead}>
-                  Size (L × W T-Pcs)
+                <th scope="col" className={styles.sizeEntryPairHead}>
+                  L × W
+                </th>
+                <th scope="col" className={styles.sizeEntryPairHead}>
+                  T – Pcs
                 </th>
                 <th scope="col" className={styles.alignRight}>
                   = {SIZE_UOM}
@@ -407,44 +592,102 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
                 // A size that works out to nothing has no Qty cell here to hang
                 // its error on, so it reports under the boxes it came from.
                 const sizeError = errors?.size ?? errors?.qty;
-                // The row Enter opened shows no CFT for the L × W it carried in:
-                // that figure is not in the total until the row is keyed.
-                const cft = row.pristine ? null : cubicFeetFromSize(joinSizeFactors(row.factors));
+                const removeButton = (label: string, title: string) => (
+                  <td className={styles.sizeEntrySerialCell}>
+                    <button
+                      type="button"
+                      className={styles.rowButton}
+                      title={title}
+                      aria-label={label}
+                      onClick={() => removeRow(row.key)}
+                    >
+                      ×
+                    </button>
+                  </td>
+                );
+                if (row.kind === "face") {
+                  const faceLabel = `${row.length || "L"} × ${row.width || "W"}`;
+                  return (
+                    <tr key={row.key} className={styles.sizeEntryFaceRow} data-size-sheet-row={row.key}>
+                      <td className={styles.sizeEntrySerialCell} />
+                      <td>
+                        <SizePair
+                          first={0}
+                          values={[row.length, row.width]}
+                          rowKey={row.key}
+                          invalid={Boolean(sizeError)}
+                          autoFocus={index === 0}
+                          onChange={([length, width]) =>
+                            setRows((current) => patchSizeFace(current, row.key, { length, width }))
+                          }
+                          onEnter={(input, factor, shiftKey) =>
+                            onBoxEnter(input, row, index, factor, shiftKey)
+                          }
+                        />
+                        {sizeError ? <span className={styles.sizeEntryError}>{sizeError}</span> : null}
+                      </td>
+                      <td />
+                      <td />
+                      <td className={styles.sizeEntryRateCell}>
+                        <input
+                          className={cx(styles.cellInput, styles.sizeEntryRateInput)}
+                          type="text"
+                          inputMode="decimal"
+                          autoComplete="off"
+                          title="Rate — every T – Pcs under this L × W is sold at it"
+                          aria-label={`Rate, ${faceLabel}`}
+                          value={row.rate}
+                          // Digits and a point only: a rate is never negative,
+                          // and anything else would read back as 0.
+                          onChange={(event) => {
+                            const rate = event.target.value.replace(/[^0-9.]/g, "");
+                            setRows((current) => patchSizeFace(current, row.key, { rate }));
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key !== "Enter" || event.ctrlKey || event.metaKey) {
+                              return;
+                            }
+                            event.preventDefault();
+                            if (event.shiftKey) {
+                              focusAdjacentField(event.currentTarget, -1);
+                              return;
+                            }
+                            onRateEnter(event.currentTarget, row, index);
+                          }}
+                        />
+                      </td>
+                      {removeButton(
+                        `Remove ${faceLabel} and its sizes`,
+                        "Remove this L × W and the T – Pcs under it",
+                      )}
+                    </tr>
+                  );
+                }
+
+                const sizeNumber = sizeNumbers.get(row.key) ?? 0;
+                const faceIndex = sizeFaceIndexOf(rows, index);
+                const face = faceIndex >= 0 ? (rows[faceIndex] as SizeFaceRow) : null;
+                // The line Enter opened shows no CFT for the L × W above it: that
+                // figure is not in the total until the line is keyed.
+                const cft = row.pristine
+                  ? null
+                  : cubicFeetFromSize(joinSizeFactors(sizeCutFactors(row, face)));
                 return (
-                  <tr key={row.key}>
-                    <td className={styles.sizeEntrySerialCell}>{index + 1}</td>
+                  <tr key={row.key} data-size-sheet-row={row.key}>
+                    <td className={styles.sizeEntrySerialCell}>{sizeNumber}</td>
+                    <td />
                     <td>
-                      <SizeBoxes
-                        factors={row.factors}
+                      <SizePair
+                        first={2}
+                        values={[row.thickness, row.pieces]}
                         rowKey={row.key}
                         invalid={Boolean(sizeError)}
-                        autoFocus={index === 0}
-                        onKeyDown={(event) => {
-                          // Enter moves to the next box, the way it walks the
-                          // cells of the grid behind this dialog — L → W → T →
-                          // Pcs → Rate. Only Rate's Enter can add a row.
-                          if (event.key !== "Enter" || event.ctrlKey || event.metaKey) {
-                            return;
-                          }
-                          event.preventDefault();
-                          focusAdjacentField(event.currentTarget, event.shiftKey ? -1 : 1);
-                        }}
-                        onChange={(factors) => {
-                          const next = cubicFeetFromSize(joinSizeFactors(factors));
-                          patchRow(row.key, {
-                            factors,
-                            // Keying a size re-derives Qty, ALWAYS — this is
-                            // exactly what the grid's own Size cell does, and
-                            // the two must not disagree about what the same edit
-                            // means. A quantity keyed afterwards overrides it
-                            // again, which is the visible, correctable order.
-                            //
-                            // Text that is not yet a size leaves the quantity
-                            // alone rather than zeroing a row mid-keying —
-                            // the grid's `if (cft !== null)` guard.
-                            ...(next === null ? {} : { qty: String(next), qtyTouched: false }),
-                          });
-                        }}
+                        onChange={([thickness, pieces]) =>
+                          setRows((current) => patchSizeCut(current, row.key, { thickness, pieces }))
+                        }
+                        onEnter={(input, factor, shiftKey) =>
+                          onBoxEnter(input, row, index, factor, shiftKey)
+                        }
                       />
                       {sizeError ? <span className={styles.sizeEntryError}>{sizeError}</span> : null}
                     </td>
@@ -453,57 +696,15 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
                     <td className={cx(styles.alignRight, styles.sizeEntryCftCell)}>
                       {cft === null ? "—" : formatQty(cft, 3)}
                     </td>
-                    <td className={styles.sizeEntryRateCell}>
-                      <input
-                        className={cx(
-                          styles.cellInput,
-                          styles.sizeEntryRateInput,
-                          errors?.rate && styles.cellInvalid,
-                        )}
-                        type="text"
-                        inputMode="decimal"
-                        autoComplete="off"
-                        title="Rate"
-                        aria-label={`Rate, size row ${index + 1}`}
-                        value={row.rate}
-                        // Digits and a point only: a rate is never negative, and
-                        // anything else would read back as 0.
-                        onChange={(event) =>
-                          patchRow(row.key, { rate: event.target.value.replace(/[^0-9.]/g, "") })
-                        }
-                        onKeyDown={(event) => {
-                          if (event.key !== "Enter" || event.ctrlKey || event.metaKey) {
-                            return;
-                          }
-                          event.preventDefault();
-                          if (event.shiftKey) {
-                            focusAdjacentField(event.currentTarget, -1);
-                            return;
-                          }
-                          onRateEnter(event.currentTarget, row, index);
-                        }}
-                      />
-                      {errors?.rate ? (
-                        <span className={styles.sizeEntryError}>{errors.rate}</span>
-                      ) : null}
-                    </td>
-                    <td className={styles.sizeEntrySerialCell}>
-                      <button
-                        type="button"
-                        className={styles.rowButton}
-                        title="Remove this size"
-                        aria-label={`Remove size row ${index + 1}`}
-                        onClick={() => removeRow(row.key)}
-                      >
-                        ×
-                      </button>
-                    </td>
+                    {/* No Rate of its own: sold at the L × W's above. */}
+                    <td className={styles.sizeEntryRateCell} />
+                    {removeButton(`Remove size ${sizeNumber}`, "Remove this size")}
                   </tr>
                 );
               })}
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className={styles.emptyGrid}>
+                  <td colSpan={6} className={styles.emptyGrid}>
                     {validation.formError ?? "No sizes on this item."}
                   </td>
                 </tr>
@@ -513,9 +714,15 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
         </div>
 
         <div className={styles.sizeEntryActions}>
-          <button type="button" className={styles.button} onClick={addRow}>
-            + Add size
+          {/* No T – Pcs button: Enter on the last Rate already opens the next
+              one, and Alt+T adds one under the L × W being keyed. */}
+          <button type="button" className={styles.button} onClick={() => addRow("face", null)}>
+            + L × W - Press +
           </button>
+          <span className={styles.modalNote}>
+            Alt+T adds a T – Pcs · Enter on an empty T moves to the next L × W · Enter on an
+            empty L goes to OK
+          </span>
         </div>
       </div>
     </ModalShell>

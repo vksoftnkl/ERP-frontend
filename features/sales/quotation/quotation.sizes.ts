@@ -411,3 +411,306 @@ export function applySizeEntry<T extends SizeGroupLine>(
 
   return [...lines.slice(0, group.start), ...replacement, ...lines.slice(group.end + 1)];
 }
+
+// ---------------------------------------------------------------------------
+// The sheet — L × W lines with their T – Pcs lines under them
+// ---------------------------------------------------------------------------
+
+/**
+ * The Size Entry dialog is keyed the way sizes are written on paper:
+ *
+ *     L × W    T - Pcs    Rate
+ *     5 × 4               100
+ *              1 - 2
+ *              1 - 3
+ *     4 × 6              1700
+ *              4 - 10
+ *
+ * An L × W line is written once, with a rate, and every T – Pcs line under it is
+ * one size of that face, sold at that rate. So the dialog holds two kinds of
+ * row: a FACE (L, W and the rate) and a CUT (T and Pcs). A size sold at another
+ * rate is simply under another L × W line with the same L and W. Only
+ * cuts are sizes — a face is never a line of the document — and each cut is
+ * saved as the full `L*W*T*Pcs` of the face above it, which is why everything
+ * below the dialog (validation, totals, `applySizeEntry`) still reads plain
+ * `SizeEntryRow`s: `sizeSheetEntries` is the one place the two kinds meet.
+ *
+ * The first row of a sheet is always a face, so every cut has one above it.
+ */
+export type SizeFaceRow = {
+  kind: "face";
+  /** Identity inside the dialog only. */
+  key: string;
+  length: string;
+  width: string;
+  /** The rate every cut below it is sold at. */
+  rate: string;
+  /** `true` until something is keyed into it — see `SizeEntryValues.pristine`. */
+  pristine: boolean;
+};
+
+/** One size: a thickness and piece count off the face above it. */
+export type SizeCutRow<T extends SizeGroupLine = DraftLine> = {
+  kind: "cut";
+  key: string;
+  thickness: string;
+  pieces: string;
+  /** As on `SizeEntryValues`: a stored quantity, protected only at open. */
+  qty: string;
+  qtyTouched: boolean;
+  pristine: boolean;
+  /** The draft line this cut was opened from, or `null` for one added here. */
+  source: T | null;
+};
+
+export type SizeSheetRow<T extends SizeGroupLine = DraftLine> = SizeFaceRow | SizeCutRow<T>;
+
+/** A new, empty L × W line. Its rate starts at the group's base rate. */
+export function createSizeFace(baseRate: number): SizeFaceRow {
+  return {
+    kind: "face",
+    key: nextRowKey("size"),
+    length: "",
+    width: "",
+    rate: baseRate ? String(baseRate) : "",
+    pristine: true,
+  };
+}
+
+/** A new, empty T – Pcs line, sold at the rate of the face above it. */
+export function createSizeCut<T extends SizeGroupLine>(): SizeCutRow<T> {
+  return {
+    key: nextRowKey("size"),
+    kind: "cut",
+    thickness: "",
+    pieces: "",
+    qty: "",
+    qtyTouched: false,
+    pristine: true,
+    source: null,
+  };
+}
+
+/** Index of the face a row sits under — the row itself when it is one. -1 if none. */
+export function sizeFaceIndexOf<T extends SizeGroupLine>(rows: SizeSheetRow<T>[], index: number): number {
+  for (let at = Math.min(index, rows.length - 1); at >= 0; at -= 1) {
+    if (rows[at].kind === "face") {
+      return at;
+    }
+  }
+  return -1;
+}
+
+/** Index one past a face's last cut: the next face, or the end of the sheet. */
+export function sizeFaceEndOf<T extends SizeGroupLine>(rows: SizeSheetRow<T>[], faceIndex: number): number {
+  let end = faceIndex + 1;
+  while (end < rows.length && rows[end].kind === "cut") {
+    end += 1;
+  }
+  return end;
+}
+
+/** A cut's four factors, the face's L and W in front of its own T and Pcs. */
+export function sizeCutFactors<T extends SizeGroupLine>(cut: SizeCutRow<T>, face: SizeFaceRow | null): string[] {
+  return [face?.length ?? "", face?.width ?? "", cut.thickness, cut.pieces];
+}
+
+/**
+ * The sheet opened on a size group — the document's lines, written the way the
+ * dialog keys them.
+ *
+ * Consecutive lines that share an L, a W AND a rate share one face, so a group
+ * saved from this dialog opens exactly as it was keyed. A cut has no rate of
+ * its own to show, so a line sold at another rate — keyed before the rate moved
+ * onto the L × W line, or edited on the grid since — opens under an L × W line
+ * of its own carrying that rate, rather than silently taking its neighbour's.
+ *
+ * A line with no size yet — an item just picked, the usual way this opens — is
+ * a blank face over a blank cut that holds the line. That cut is `pristine`, so
+ * a face keyed and saved with no T – Pcs under it is refused rather than saved
+ * as a bare `L*W`; once anything is keyed into it, it is the line, identity and
+ * all (see `applySizeEntry`).
+ */
+export function openSizeSheet<T extends SizeGroupLine>(group: SizeGroup<T>): SizeSheetRow<T>[] {
+  const rows: SizeSheetRow<T>[] = [];
+  let face: SizeFaceRow | null = null;
+  for (const line of group.lines) {
+    const [length, width, thickness, pieces] = splitSizeFactors(line.itemSize);
+    const rate = line.rate ? String(line.rate) : "";
+    const unsized = !(line.itemSize ?? "").trim();
+    if (!face || face.length !== length || face.width !== width || face.rate !== rate) {
+      face = { kind: "face", key: nextRowKey("size"), length, width, rate, pristine: unsized };
+      rows.push(face);
+    }
+    rows.push({
+      kind: "cut",
+      key: nextRowKey("size"),
+      thickness,
+      pieces,
+      qty: line.billQty ? String(line.billQty) : "",
+      qtyTouched: line.billQty > 0,
+      pristine: unsized,
+      source: line,
+    });
+  }
+  return rows;
+}
+
+/**
+ * The sizes the sheet adds up to — one `SizeEntryRow` per keyed cut, under the
+ * cut's own key so a validation message lands back on the cut it is about.
+ * Faces contribute their L, W and rate and are not rows themselves; pristine
+ * cuts (the one Enter opened below the last size) are left out.
+ */
+export function sizeSheetEntries<T extends SizeGroupLine>(rows: SizeSheetRow<T>[]): SizeEntryRow<T>[] {
+  const entries: SizeEntryRow<T>[] = [];
+  let face: SizeFaceRow | null = null;
+  for (const row of rows) {
+    if (row.kind === "face") {
+      face = row;
+      continue;
+    }
+    if (row.pristine) {
+      continue;
+    }
+    entries.push({
+      key: row.key,
+      factors: sizeCutFactors(row, face),
+      qty: row.qty,
+      qtyTouched: row.qtyTouched,
+      rate: face?.rate ?? "",
+      pristine: false,
+      source: row.source,
+    });
+  }
+  return entries;
+}
+
+/**
+ * Why a cut's factors would not save as the size they look like, or `null`.
+ *
+ * The stored size is the keyed factors joined with `*`, and a blank one drops
+ * out (`joinSizeFactors`) — so a T – Pcs under an L × W missing its W would
+ * save `5*1*2` and read back as L 5, W 1, T 2. A factor keyed after a blank one
+ * is therefore an error, not a shorter size. A bare L (a CFT keyed outright) or
+ * an L × W with nothing after it are still whole sizes, as they always were.
+ */
+function sizeCutGapError(factors: string[]): string | null {
+  const keyed = factors.map((factor) => factor.trim() !== "");
+  const lastKeyed = keyed.lastIndexOf(true);
+  const firstBlank = keyed.indexOf(false);
+  if (firstBlank < 0 || firstBlank > lastKeyed) {
+    return null;
+  }
+  return firstBlank < 2 ? "Key the L × W above first." : "Key T as well as Pcs.";
+}
+
+/**
+ * Everything OK checks, per row: the size rules of `validateSizeEntry` on each
+ * keyed cut, plus the two only a sheet can break —
+ *
+ *  - a cut whose factors leave a gap (see `sizeCutGapError`);
+ *  - an L × W keyed with no T – Pcs under it. A face is not a size, so saving it
+ *    would silently drop what the operator wrote; an EMPTY face (the one Enter
+ *    opens to start the next L × W) is simply left out.
+ */
+export function validateSizeSheet<T extends SizeGroupLine>(rows: SizeSheetRow<T>[]): SizeEntryValidation {
+  const base = validateSizeEntry(sizeSheetEntries(rows));
+  const result: Record<string, SizeRowErrors> = { ...base.rows };
+
+  rows.forEach((row, index) => {
+    if (row.kind === "face") {
+      const end = sizeFaceEndOf(rows, index);
+      const hasSize = rows.slice(index + 1, end).some((cut) => !cut.pristine);
+      if (!hasSize && (row.length.trim() || row.width.trim())) {
+        result[row.key] = { size: "Key a T – Pcs under this L × W." };
+      }
+      return;
+    }
+    if (row.pristine) {
+      return;
+    }
+    const faceIndex = sizeFaceIndexOf(rows, index);
+    const face = faceIndex >= 0 ? (rows[faceIndex] as SizeFaceRow) : null;
+    const gap = sizeCutGapError(sizeCutFactors(row, face));
+    if (gap) {
+      result[row.key] = { ...result[row.key], size: gap };
+    }
+  });
+
+  return {
+    ok: base.formError === null && Object.keys(result).length === 0,
+    formError: base.formError,
+    rows: result,
+  };
+}
+
+/**
+ * Edit an L × W line. Its cuts' sizes change with it, so each one whose new size
+ * works out re-derives its quantity — the same rule as keying a size anywhere
+ * else (see `openSizeEntry`).
+ */
+export function patchSizeFace<T extends SizeGroupLine>(
+  rows: SizeSheetRow<T>[],
+  key: string,
+  patch: Partial<Pick<SizeFaceRow, "length" | "width" | "rate">>,
+): SizeSheetRow<T>[] {
+  const faceIndex = rows.findIndex((row) => row.key === key && row.kind === "face");
+  if (faceIndex < 0) {
+    return rows;
+  }
+  const face: SizeFaceRow = { ...(rows[faceIndex] as SizeFaceRow), ...patch, pristine: false };
+  const resized = patch.length !== undefined || patch.width !== undefined;
+  const end = sizeFaceEndOf(rows, faceIndex);
+  return rows.map((row, index) => {
+    if (index === faceIndex) {
+      return face;
+    }
+    if (!resized || row.kind !== "cut" || index < faceIndex || index >= end) {
+      return row;
+    }
+    const cft = cubicFeetFromSize(joinSizeFactors(sizeCutFactors(row, face)));
+    return cft === null ? row : { ...row, qty: String(cft), qtyTouched: false };
+  });
+}
+
+/** Edit a T – Pcs line. Keying T or Pcs re-derives its quantity. */
+export function patchSizeCut<T extends SizeGroupLine>(
+  rows: SizeSheetRow<T>[],
+  key: string,
+  patch: Partial<Pick<SizeCutRow<T>, "thickness" | "pieces">>,
+): SizeSheetRow<T>[] {
+  const index = rows.findIndex((row) => row.key === key && row.kind === "cut");
+  if (index < 0) {
+    return rows;
+  }
+  const faceIndex = sizeFaceIndexOf(rows, index);
+  const face = faceIndex >= 0 ? (rows[faceIndex] as SizeFaceRow) : null;
+  const cut: SizeCutRow<T> = {
+    ...(rows[index] as SizeCutRow<T>),
+    ...patch,
+    pristine: false,
+  };
+  const cft = cubicFeetFromSize(joinSizeFactors(sizeCutFactors(cut, face)));
+  if (cft !== null) {
+    cut.qty = String(cft);
+    cut.qtyTouched = false;
+  }
+  return rows.map((row, at) => (at === index ? cut : row));
+}
+
+/**
+ * Remove a row. Removing an L × W takes its T – Pcs lines with it: left behind,
+ * they would fall under the face above and silently change size.
+ */
+export function removeSizeSheetRow<T extends SizeGroupLine>(
+  rows: SizeSheetRow<T>[],
+  key: string,
+): SizeSheetRow<T>[] {
+  const index = rows.findIndex((row) => row.key === key);
+  if (index < 0) {
+    return rows;
+  }
+  const end = rows[index].kind === "face" ? sizeFaceEndOf(rows, index) : index + 1;
+  return [...rows.slice(0, index), ...rows.slice(end)];
+}
