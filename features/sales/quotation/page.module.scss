@@ -1507,9 +1507,11 @@
   text-align: center;
 }
 
-/* L × W and T – Pcs share the width the fixed columns leave, half each. */
+/* L × W and T – Pcs take only the width their boxes need, so the two pairs sit
+   side by side the way they are written on paper. The slack goes to the CFT
+   column, which keeps each L × W's total beside its rate. */
 .sizeEntryPairHead {
-  width: 32%;
+  width: 1%;
 }
 
 /* An L × W line heads the T – Pcs lines cut from it, so it reads as a band —
@@ -1522,28 +1524,50 @@
   border-top: 1px solid var(--border, #c9c9c9);
 }
 
-/* The boxes fill their L × W / T – Pcs column (no cap): capped, they stopped
-   short and left a gap before CFT and Rate.
-   They carry a visible border — `.cellInput` is borderless because a dense grid
-   cell must be, but a lone field in a dialog that looks like plain text is
-   unfindable. */
+/* A pair of boxes sits centred under its L × W / T – Pcs heading, each box
+   sized for the few digits a dimension has rather than stretched across the
+   column. They carry a visible border — `.cellInput` is borderless because a
+   dense grid cell must be, but a lone field in a dialog that looks like plain
+   text is unfindable. */
+.sizeEntry .cellSizeBoxes {
+  justify-content: center;
+}
+
 .sizeEntry .cellSizeBox {
+  /* No shrink: the column is sized to fit these boxes, and a box allowed to
+     shrink would let it collapse them instead. */
+  flex: 0 0 u(4.5);
   padding: u(0.3) 0;
   border: 1px solid var(--border, #c9c9c9);
   border-radius: var(--erp-radius, 4px);
   background: #ffffff;
 }
 
+/* The × and – between the boxes, at reading size: the grid's tiny muted glyph
+   is right in a dense cell, but here it is what makes two boxes read as
+   "5 × 4" and "1 – 2". */
+.sizeEntry .sizeEntrySep {
+  min-width: u(1.4);
+  padding: 0 u(0.2);
+  color: var(--text, #222222);
+  font-size: u(1.15);
+  font-weight: 600;
+}
+
 .sizeEntry .cellSizeBox:focus-visible {
   border-color: var(--primary, #7b1515);
 }
 
-/* The CFT a size works out to — a read-out, not a field. Dimmed so the row still
-   reads as one input followed by its consequence. */
+/* The CFT column holds one figure per L × W — the total of the sizes under it,
+   beside the rate they sell at. The T – Pcs lines show none of their own. */
 .sizeEntryCftCell {
   width: u(4);
-  color: var(--text-muted, #666666);
   font-variant-numeric: tabular-nums;
+}
+
+.sizeEntryCftCell.sizeEntryFaceTotal {
+  color: var(--text, #222222);
+  font-weight: 700;
 }
 
 .sizeEntryRateCell {

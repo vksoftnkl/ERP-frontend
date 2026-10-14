@@ -55,6 +55,7 @@ import {
   type ItemPick,
 } from "@/features/sales/quotation/components/item-picker-modal";
 import { SizeEntryModal } from "@/features/sales/quotation/components/size-entry-modal";
+import { findSizeGroup, type SizeEntryRow } from "@/features/sales/quotation/quotation.sizes";
 import { PriceLevelPrompt } from "@/features/sales/quotation/components/price-level-prompt";
 import { HeldListModal } from "@/features/sales/quotation/components/held-list-modal";
 import { QuotationListModal } from "@/features/sales/quotation/components/quotation-list-modal";
@@ -1268,14 +1269,42 @@ export function SaleBillScreen({
    * `<body>`: cancelling would leave nowhere to key a size by hand, and F3 —
    * which the grid reads off the focused cell — could not re-open it at all.
    */
+  /**
+   * The row after the sized item, noted by OK for the close below. OK means the
+   * item is sized, so the operator moves on to the next one: the cursor goes to
+   * that row's Description — normally the trailing blank row, ready for Enter to
+   * pick. Cancel notes nothing, and returns to the item's own Size cell, where
+   * the sizes can still be keyed by hand.
+   *
+   * Taken BEFORE the save: lines outside the group keep their keys through
+   * `applySizeEntry`, while the group's own rows may not.
+   */
+  const sizeEntryNextRowRef = useRef<string | null>(null);
+
+  const saveSizeEntry = useCallback(
+    (anchorKey: string, rows: SizeEntryRow<SaleBillDraftLine>[]) => {
+      const group = findSizeGroup(draft.lines, anchorKey);
+      sizeEntryNextRowRef.current = group ? (draft.lines[group.end + 1]?.key ?? null) : null;
+      dispatch(lineSizesApplied({ anchorKey, rows }));
+    },
+    [dispatch, draft.lines],
+  );
+
   const closeSizeEntry = useCallback(() => {
     const rowKey = sizeEntryRow;
+    const nextRowKey = sizeEntryNextRowRef.current;
+    sizeEntryNextRowRef.current = null;
     setSizeEntryRow(null);
+    const description = itemLookupFieldKey(itemResize.columns);
+    if (nextRowKey && description) {
+      window.requestAnimationFrame(() => focusCell(ITEM_GRID_NAME, nextRowKey, description));
+      return;
+    }
     if (!rowKey) {
       return;
     }
     window.requestAnimationFrame(() => focusCell(ITEM_GRID_NAME, rowKey, "itemSize"));
-  }, [sizeEntryRow]);
+  }, [itemResize.columns, sizeEntryRow]);
 
   // --------------------------------------------------------------- shortcuts
 
@@ -1863,7 +1892,7 @@ export function SaleBillScreen({
           anchorKey={sizeEntryRow}
           lines={draft.lines}
           onClose={closeSizeEntry}
-          onSave={(anchorKey, rows) => dispatch(lineSizesApplied({ anchorKey, rows }))}
+          onSave={saveSizeEntry}
         />
       ) : null}
       <ItemPickerModal

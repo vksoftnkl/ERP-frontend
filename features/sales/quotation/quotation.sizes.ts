@@ -587,6 +587,29 @@ export function sizeSheetEntries<T extends SizeGroupLine>(rows: SizeSheetRow<T>[
 }
 
 /**
+ * Each L × W line's total quantity — the CFT of the keyed T – Pcs under it, by
+ * the face's key. The same figure per line that `sizeEntryTotals` adds up for
+ * the footer, so the face totals always sum to the footer's.
+ */
+export function sizeFaceTotals<T extends SizeGroupLine>(rows: SizeSheetRow<T>[]): Map<string, number> {
+  const totals = new Map<string, number>();
+  const qtyByCut = new Map(sizeSheetEntries(rows).map((entry) => [entry.key, sizeRowQty(entry)]));
+  let faceKey: string | null = null;
+  for (const row of rows) {
+    if (row.kind === "face") {
+      faceKey = row.key;
+      totals.set(faceKey, 0);
+      continue;
+    }
+    const qty = qtyByCut.get(row.key);
+    if (faceKey && qty !== undefined) {
+      totals.set(faceKey, Number(((totals.get(faceKey) ?? 0) + qty).toFixed(3)));
+    }
+  }
+  return totals;
+}
+
+/**
  * Why a cut's factors would not save as the size they look like, or `null`.
  *
  * The stored size is the keyed factors joined with `*`, and a blank one drops

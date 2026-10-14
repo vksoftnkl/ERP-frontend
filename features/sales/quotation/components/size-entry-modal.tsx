@@ -49,10 +49,10 @@ import {
   patchSizeCut,
   patchSizeFace,
   removeSizeSheetRow,
-  sizeCutFactors,
   sizeEntryTotals,
   sizeFaceEndOf,
   sizeFaceIndexOf,
+  sizeFaceTotals,
   sizeSheetEntries,
   validateSizeSheet,
   type SizeEntryRow,
@@ -66,8 +66,6 @@ import {
   SIZE_FACTOR_PLACEHOLDERS,
   SIZE_FACTOR_SEPARATORS,
   SIZE_UOM,
-  cubicFeetFromSize,
-  joinSizeFactors,
   sanitizeSizeFactorInput,
   sanitizeSizeInput,
 } from "../quotation.utils";
@@ -81,6 +79,16 @@ export type SizeEntryModalProps<T extends SizeGroupLine> = {
   lines: T[];
   onClose: () => void;
   onSave: (anchorKey: string, rows: SizeEntryRow<T>[]) => void;
+};
+
+/**
+ * What is drawn between the two boxes of a pair. The grid's own `×` and, for
+ * T – Pcs, an en dash rather than its hyphen: drawn large here, a hyphen is a
+ * short thin stroke, and the column heading already spells the pair "T – Pcs".
+ */
+const PAIR_SEPARATORS: Record<number, string> = {
+  1: SIZE_FACTOR_SEPARATORS[1],
+  3: "–",
 };
 
 /**
@@ -112,8 +120,8 @@ function SizePair(props: {
         return (
           <Fragment key={SIZE_FACTOR_LABELS[factor]}>
             {offset > 0 && (
-              <span aria-hidden className={styles.cellSizeSep}>
-                {SIZE_FACTOR_SEPARATORS[factor]}
+              <span aria-hidden className={cx(styles.cellSizeSep, styles.sizeEntrySep)}>
+                {PAIR_SEPARATORS[factor]}
               </span>
             )}
             <input
@@ -197,6 +205,7 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
   const entries: SizeEntryRow<T>[] = useMemo(() => sizeSheetEntries(rows), [rows]);
   const validation = useMemo(() => validateSizeSheet(rows), [rows]);
   const totals = useMemo(() => sizeEntryTotals(entries), [entries]);
+  const faceTotals = useMemo(() => sizeFaceTotals(rows), [rows]);
 
   /**
    * Move focus one keyable box along, in DOM order.
@@ -487,11 +496,12 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
 
   const errorsFor = (key: string) => (showErrors ? validation.rows[key] : undefined);
 
-  // The # column counts sizes — the lines OK writes — so L × W lines take none.
-  const sizeNumbers = useMemo(() => {
+  // The # column numbers the L × W lines, the way the sheet is read; the
+  // T – Pcs lines under each take none (the footer still counts them).
+  const faceNumbers = useMemo(() => {
     const numbers = new Map<string, number>();
     for (const row of rows) {
-      if (row.kind === "cut") {
+      if (row.kind === "face") {
         numbers.set(row.key, numbers.size + 1);
       }
     }
@@ -607,9 +617,10 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
                 );
                 if (row.kind === "face") {
                   const faceLabel = `${row.length || "L"} × ${row.width || "W"}`;
+                  const faceTotal = faceTotals.get(row.key) ?? 0;
                   return (
                     <tr key={row.key} className={styles.sizeEntryFaceRow} data-size-sheet-row={row.key}>
-                      <td className={styles.sizeEntrySerialCell} />
+                      <td className={styles.sizeEntrySerialCell}>{faceNumbers.get(row.key)}</td>
                       <td>
                         <SizePair
                           first={0}
@@ -627,7 +638,13 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
                         {sizeError ? <span className={styles.sizeEntryError}>{sizeError}</span> : null}
                       </td>
                       <td />
-                      <td />
+                      {/* The L × W's own total, beside the rate it is sold at. */}
+                      <td
+                        className={cx(styles.alignRight, styles.sizeEntryCftCell, styles.sizeEntryFaceTotal)}
+                        title={`Total ${SIZE_UOM} of the sizes under ${faceLabel}`}
+                      >
+                        {faceTotal > 0 ? formatQty(faceTotal, 3) : "—"}
+                      </td>
                       <td className={styles.sizeEntryRateCell}>
                         <input
                           className={cx(styles.cellInput, styles.sizeEntryRateInput)}
@@ -664,17 +681,10 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
                   );
                 }
 
-                const sizeNumber = sizeNumbers.get(row.key) ?? 0;
-                const faceIndex = sizeFaceIndexOf(rows, index);
-                const face = faceIndex >= 0 ? (rows[faceIndex] as SizeFaceRow) : null;
-                // The line Enter opened shows no CFT for the L × W above it: that
-                // figure is not in the total until the line is keyed.
-                const cft = row.pristine
-                  ? null
-                  : cubicFeetFromSize(joinSizeFactors(sizeCutFactors(row, face)));
+                const sizeLabel = `${row.thickness || "T"} – ${row.pieces || "Pcs"}`;
                 return (
                   <tr key={row.key} data-size-sheet-row={row.key}>
-                    <td className={styles.sizeEntrySerialCell}>{sizeNumber}</td>
+                    <td className={styles.sizeEntrySerialCell} />
                     <td />
                     <td>
                       <SizePair
@@ -691,14 +701,13 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
                       />
                       {sizeError ? <span className={styles.sizeEntryError}>{sizeError}</span> : null}
                     </td>
-                    {/* Read-only: the quantity this size works out to. Qty is
-                        not keyed here — it stays editable on the item grid. */}
-                    <td className={cx(styles.alignRight, styles.sizeEntryCftCell)}>
-                      {cft === null ? "—" : formatQty(cft, 3)}
-                    </td>
+                    {/* No CFT of its own: the column carries each L × W's total
+                        only, on its line above. Qty is not keyed here either —
+                        it stays editable on the item grid. */}
+                    <td />
                     {/* No Rate of its own: sold at the L × W's above. */}
                     <td className={styles.sizeEntryRateCell} />
-                    {removeButton(`Remove size ${sizeNumber}`, "Remove this size")}
+                    {removeButton(`Remove size ${sizeLabel}`, "Remove this size")}
                   </tr>
                 );
               })}
@@ -714,15 +723,11 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
         </div>
 
         <div className={styles.sizeEntryActions}>
-          {/* No T – Pcs button: Enter on the last Rate already opens the next
+          {/* No T – Pcs button: Enter on the last Pcs already opens the next
               one, and Alt+T adds one under the L × W being keyed. */}
           <button type="button" className={styles.button} onClick={() => addRow("face", null)}>
             + L × W - Press +
           </button>
-          <span className={styles.modalNote}>
-            Alt+T adds a T – Pcs · Enter on an empty T moves to the next L × W · Enter on an
-            empty L goes to OK
-          </span>
         </div>
       </div>
     </ModalShell>
