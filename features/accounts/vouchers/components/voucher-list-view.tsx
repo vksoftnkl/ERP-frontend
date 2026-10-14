@@ -19,6 +19,10 @@
  * A voucher is deleted only as a DRAFT — `POST /vouchers/delete` with the four
  * BARE keys — and a posted one is cancelled from inside it, which writes the
  * reversal.
+ *
+ * History (Ctrl+H) is the voucher's status trail (`txn_status_log`; JOURNAL for
+ * every type outside the receipt and payment natures), titled by the row's own
+ * type — the register lists several.
  */
 import { useCallback, useMemo, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
@@ -26,6 +30,7 @@ import type { MasterTableRow } from "@/components/master/crud-master-page.types"
 import { useBusinessContext } from "@/components/layout/business-context";
 import { getAuthUserId } from "@/lib/auth/session";
 import { toast } from "@/lib/notify";
+import { TxnHistoryDialog, type TxnHistoryTarget } from "@/components/txn/txn-history-dialog";
 import masterStyles from "@/app/master/state-master/page.module.scss";
 import { addDays, toDisplayDate, todayIso, toNumber } from "@/features/sales/quotation/quotation.utils";
 import { useDeleteVoucherDraftMutation } from "@/store/api/vouchersApi";
@@ -131,6 +136,7 @@ export function VoucherListView({ typeCode, title, subtitle, onCreate, onOpen }:
   const [fromDate, setFromDate] = useState(() => addDays(todayIso(), -DEFAULT_WINDOW_DAYS));
   const [toDate, setToDate] = useState(() => todayIso());
   const [period, setPeriod] = useState<string>(String(DEFAULT_WINDOW_DAYS));
+  const [history, setHistory] = useState<{ target: TxnHistoryTarget; docLabel: string } | null>(null);
 
   const applyPeriod = useCallback((value: string) => {
     setPeriod(value);
@@ -272,48 +278,68 @@ export function VoucherListView({ typeCode, title, subtitle, onCreate, onOpen }:
   );
 
   return (
-    <CrudMasterPage
-      title={title}
-      listTitleOverride={title}
-      listSubtitleOverride={subtitle}
-      entityLabel="voucher"
-      entityLabelPlural="vouchers"
-      searchPlaceholder={typeCode ? "voucher no, narration or their ref" : "type, voucher no, party or their ref"}
-      apiEndpoints={API_ENDPOINTS}
-      gridKey="voucherRegisterList"
-      lookupKeys={LOOKUP_KEYS}
-      requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
-      styles={masterStyles}
-      createLabel={typeCode ? `New ${title}` : "New voucher"}
-      codeColumnHeader="Voucher No"
-      nameColumnHeader="Narration"
-      listResponseStyleArrayKey=""
-      gridTableName="acc_voucher_header"
-      useConfiguredGridColumnsOnly
-      enableGridSettingsContextMenu
-      columnRenderOverrides={COLUMN_RENDER_OVERRIDES}
-      toolbarContent={toolbarContent}
-      buildListQuery={buildListQuery}
-      listStateResetKey={listStateResetKey}
-      listEmptyText={
-        typeCode
-          ? `No ${title.toLowerCase()} voucher in this window. Widen the dates, or key one.`
-          : "No voucher in this window. Widen the dates, or key one."
-      }
-      enableListActionKeys
-      listHintMessage={hintMessage}
-      rowClassName={(row) => (statusOf(row) === "CANCELLED" ? styles.cancelledRow : undefined)}
-      onCreateAction={onCreate}
-      onEditAction={(row) => onOpen(keysOf(row), asText(sourceValue(row, "vchr_type_code")).trim())}
-      onViewAction={(row) => onOpen(keysOf(row), asText(sourceValue(row, "vchr_type_code")).trim())}
-      isRowDeleteDisabled={(row) => statusOf(row) !== "DRAFT"}
-      rowDeleteDisabledReason="Only a draft can be deleted — a posted voucher is cancelled from inside it, which writes a reversal"
-      onDeleteAction={handleDelete}
-      auditHistory={{
-        screenName: title,
-        getRecordId: (row) => asText(sourceValue(row, "avh_voucher_id")) || null,
-        getDisplayName: (row) => asText(sourceValue(row, "avh_voucher_refno")) || null,
-      }}
-    />
+    <>
+      <CrudMasterPage
+        title={title}
+        listTitleOverride={title}
+        listSubtitleOverride={subtitle}
+        entityLabel="voucher"
+        entityLabelPlural="vouchers"
+        searchPlaceholder={typeCode ? "voucher no, narration or their ref" : "type, voucher no, party or their ref"}
+        apiEndpoints={API_ENDPOINTS}
+        gridKey="voucherRegisterList"
+        lookupKeys={LOOKUP_KEYS}
+        requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
+        styles={masterStyles}
+        createLabel={typeCode ? `New ${title}` : "New voucher"}
+        codeColumnHeader="Voucher No"
+        nameColumnHeader="Narration"
+        listResponseStyleArrayKey=""
+        gridTableName="acc_voucher_header"
+        useConfiguredGridColumnsOnly
+        enableGridSettingsContextMenu
+        columnRenderOverrides={COLUMN_RENDER_OVERRIDES}
+        toolbarContent={toolbarContent}
+        buildListQuery={buildListQuery}
+        listStateResetKey={listStateResetKey}
+        listEmptyText={
+          typeCode
+            ? `No ${title.toLowerCase()} voucher in this window. Widen the dates, or key one.`
+            : "No voucher in this window. Widen the dates, or key one."
+        }
+        enableListActionKeys
+        listHintMessage={hintMessage}
+        rowClassName={(row) => (statusOf(row) === "CANCELLED" ? styles.cancelledRow : undefined)}
+        onCreateAction={onCreate}
+        onEditAction={(row) => onOpen(keysOf(row), asText(sourceValue(row, "vchr_type_code")).trim())}
+        onViewAction={(row) => onOpen(keysOf(row), asText(sourceValue(row, "vchr_type_code")).trim())}
+        isRowDeleteDisabled={(row) => statusOf(row) !== "DRAFT"}
+        rowDeleteDisabledReason="Only a draft can be deleted — a posted voucher is cancelled from inside it, which writes a reversal"
+        onDeleteAction={handleDelete}
+        // The status trail, keyed by the voucher — the audit log files every
+        // type under "Voucher Register" and keys it to tender rows, so it found
+        // nothing here.
+        onHistoryAction={(row) => {
+          const keys = keysOf(row);
+          if (!keys.voucherId) {
+            return;
+          }
+          setHistory({
+            target: {
+              docId: keys.voucherId,
+              companyId: keys.companyId,
+              accYear: keys.accYear,
+              refNo: asText(sourceValue(row, "avh_voucher_refno")),
+            },
+            docLabel: asText(sourceValue(row, "type_name")).trim() || title,
+          });
+        }}
+      />
+      <TxnHistoryDialog
+        target={history?.target ?? null}
+        docLabel={history?.docLabel ?? title}
+        onClose={() => setHistory(null)}
+      />
+    </>
   );
 }

@@ -5,8 +5,9 @@
  *
  * The receipt's register on the same `CrudMasterPage` shell, over grid 123
  * "MAIN LIST - PAYMENTS" (grid 108's SQL with the voucher type swapped), so it
- * inherits the toolbar, the configured columns, the pager, the audit history
- * and the grid-settings menu without restating any of them.
+ * inherits the toolbar, the configured columns, the pager and the
+ * grid-settings menu without restating any of them. History (Ctrl+H) is the
+ * payment's status trail (`txn_status_log`, PAYMENT).
  *
  * The same three rules as the receipt's register:
  *  1. All six of the grid's tokens are ALWAYS sent — an unbound one fails the
@@ -21,6 +22,7 @@ import CrudMasterPage from "@/components/master/crud-master-page";
 import type { MasterTableRow } from "@/components/master/crud-master-page.types";
 import { useBusinessContext } from "@/components/layout/business-context";
 import { toast } from "@/lib/notify";
+import { TxnHistoryDialog, type TxnHistoryTarget } from "@/components/txn/txn-history-dialog";
 import masterStyles from "@/app/master/state-master/page.module.scss";
 import {
   addDays,
@@ -135,6 +137,7 @@ export function PaymentListView({ onCreate, onOpen }: PaymentListViewProps) {
   const [fromDate, setFromDate] = useState(() => addDays(todayIso(), -DEFAULT_WINDOW_DAYS));
   const [toDate, setToDate] = useState(() => todayIso());
   const [period, setPeriod] = useState<string>(String(DEFAULT_WINDOW_DAYS));
+  const [historyTarget, setHistoryTarget] = useState<TxnHistoryTarget | null>(null);
 
   const applyPeriod = useCallback((value: string) => {
     setPeriod(value);
@@ -277,49 +280,58 @@ export function PaymentListView({ onCreate, onOpen }: PaymentListViewProps) {
   );
 
   return (
-    <CrudMasterPage
-      title="Payments"
-      listTitleOverride="Payments"
-      listSubtitleOverride="Money paid to parties, bill by bill."
-      entityLabel="payment"
-      entityLabelPlural="payments"
-      searchPlaceholder="payee name, payment no or amount"
-      apiEndpoints={API_ENDPOINTS}
-      gridKey="paymentList"
-      lookupKeys={LOOKUP_KEYS}
-      requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
-      styles={masterStyles}
-      createLabel="New Payment"
-      codeColumnHeader="Payment No"
-      nameColumnHeader="Payee"
-      listResponseStyleArrayKey=""
-      gridTableName="acc_voucher_header"
-      useConfiguredGridColumnsOnly
-      enableGridSettingsContextMenu
-      columnRenderOverrides={COLUMN_RENDER_OVERRIDES}
-      toolbarContent={toolbarContent}
-      buildListQuery={buildListQuery}
-      listStateResetKey={listStateResetKey}
-      listEmptyText="No payment in this window. Widen the dates, or make one."
-      enableListActionKeys
-      listHintMessage={hintMessage}
-      rowClassName={(row) => (statusOf(row) === "CANCELLED" ? styles.cancelledRow : undefined)}
-      onCreateAction={onCreate}
-      isRowEditDisabled={(row) => statusOf(row) === "CANCELLED"}
-      rowEditDisabledReason="This payment is cancelled — it can be read, not changed"
-      onEditAction={(row) => onOpen(docKeyOf(row))}
-      onViewAction={(row) => onOpen(docKeyOf(row))}
-      isRowDeleteDisabled={(row) => statusOf(row) !== "DRAFT"}
-      rowDeleteDisabledReason="Only a draft can be deleted — a posted payment is cancelled, which writes a reversal"
-      onDeleteAction={handleDelete}
-      auditHistory={{
-        screenName: "Payment",
-        getRecordId: (row) => asText(sourceValue(row, "avh_voucher_id")) || null,
-        getDisplayName: (row) =>
-          asText(sourceValue(row, "avh_voucher_refno")) ||
-          asText(sourceValue(row, "party_name")) ||
-          null,
-      }}
-    />
+    <>
+      <CrudMasterPage
+        title="Payments"
+        listTitleOverride="Payments"
+        listSubtitleOverride="Money paid to parties, bill by bill."
+        entityLabel="payment"
+        entityLabelPlural="payments"
+        searchPlaceholder="payee name, payment no or amount"
+        apiEndpoints={API_ENDPOINTS}
+        gridKey="paymentList"
+        lookupKeys={LOOKUP_KEYS}
+        requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
+        styles={masterStyles}
+        createLabel="New Payment"
+        codeColumnHeader="Payment No"
+        nameColumnHeader="Payee"
+        listResponseStyleArrayKey=""
+        gridTableName="acc_voucher_header"
+        useConfiguredGridColumnsOnly
+        enableGridSettingsContextMenu
+        columnRenderOverrides={COLUMN_RENDER_OVERRIDES}
+        toolbarContent={toolbarContent}
+        buildListQuery={buildListQuery}
+        listStateResetKey={listStateResetKey}
+        listEmptyText="No payment in this window. Widen the dates, or make one."
+        enableListActionKeys
+        listHintMessage={hintMessage}
+        rowClassName={(row) => (statusOf(row) === "CANCELLED" ? styles.cancelledRow : undefined)}
+        onCreateAction={onCreate}
+        isRowEditDisabled={(row) => statusOf(row) === "CANCELLED"}
+        rowEditDisabledReason="This payment is cancelled — it can be read, not changed"
+        onEditAction={(row) => onOpen(docKeyOf(row))}
+        onViewAction={(row) => onOpen(docKeyOf(row))}
+        isRowDeleteDisabled={(row) => statusOf(row) !== "DRAFT"}
+        rowDeleteDisabledReason="Only a draft can be deleted — a posted payment is cancelled, which writes a reversal"
+        onDeleteAction={handleDelete}
+        // The status trail, keyed by the voucher — the audit log keys a
+        // payment's writes to its tender rows, so it found nothing here.
+        onHistoryAction={(row) => {
+          const keys = docKeyOf(row);
+          if (!keys.avhVoucherId) {
+            return;
+          }
+          setHistoryTarget({
+            docId: keys.avhVoucherId,
+            companyId: keys.avhCompanyId,
+            accYear: keys.avhAccYear,
+            refNo: asText(sourceValue(row, "avh_voucher_refno")),
+          });
+        }}
+      />
+      <TxnHistoryDialog target={historyTarget} docLabel="Payment" onClose={() => setHistoryTarget(null)} />
+    </>
   );
 }

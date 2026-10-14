@@ -31,6 +31,7 @@ import DataTab from "./tabs/DataTab";
 import LayoutTab from "./tabs/LayoutTab";
 import TemplateTab from "./tabs/TemplateTab";
 import { useDesigner, type DesignerTab } from "./useDesigner";
+import { useUserNames } from "./useUserNames";
 import { Chip, Note, ScreenShell } from "@/features/printing/components/screen-shell";
 import styles from "@/features/printing/printing.module.scss";
 
@@ -45,6 +46,7 @@ export default function DesignerScreen({ ptlId }: { ptlId: string | null }) {
   const designer = useDesigner(ptlId);
   const { draft, editable, workingStored } = designer;
 
+  const userNames = useUserNames();
   const [approver, setApprover] = useState("");
   const [publishing, setPublishing] = useState(false);
   const [compareWith, setCompareWith] = useState<PrintTemplateVersionPayload | null>(null);
@@ -207,13 +209,19 @@ export default function DesignerScreen({ ptlId }: { ptlId: string | null }) {
           <div className={styles.toolbar}>
             <label className={styles.fieldInline}>
               <span className={styles.fieldLabel}>Approved by</span>
-              <input
-                className={styles.input}
+              {/* Picked by name; the user id behind it is what the save sends. */}
+              <select
+                className={styles.select}
                 value={approver}
-                placeholder="user id — 019e7281-…"
-                data-uppercase="off"
-                onChange={(event) => setApprover(event.target.value.trim())}
-              />
+                onChange={(event) => setApprover(event.target.value)}
+              >
+                <option value="">Choose who signs…</option>
+                {Array.from(userNames, ([id, name]) => (
+                  <option key={id} value={id}>
+                    {name}
+                  </option>
+                ))}
+              </select>
             </label>
             {/*
              * RULE 6. `ck_ptv_published` refuses a null signature, and the

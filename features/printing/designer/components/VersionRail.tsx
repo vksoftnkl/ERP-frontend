@@ -17,6 +17,7 @@
 
 import type { PrintTemplateVersionPayload } from "@/features/printing/types/printing";
 import { Note, SectionHead } from "@/features/printing/components/screen-shell";
+import { useUserNames } from "@/features/printing/designer/useUserNames";
 import styles from "@/features/printing/printing.module.scss";
 
 const WHEN = new Intl.DateTimeFormat("en-IN", {
@@ -34,10 +35,13 @@ function when(value: string | null | undefined): string {
   return Number.isNaN(parsed.getTime()) ? "—" : WHEN.format(parsed).replace(",", "");
 }
 
-/** A uuid actor column with no name join; show enough to recognise, not a wall. */
-function actor(value: string | null | undefined): string {
+/**
+ * A uuid actor column: the user's name when the lookup knows it, else enough of
+ * the id to recognise, not a wall.
+ */
+function actor(value: string | null | undefined, names: Map<string, string>): string {
   if (!value) return "—";
-  return value.length > 8 ? value.slice(0, 8) : value;
+  return names.get(value) ?? (value.length > 8 ? value.slice(0, 8) : value);
 }
 
 export default function VersionRail({
@@ -66,6 +70,7 @@ export default function VersionRail({
   onRollback: (version: PrintTemplateVersionPayload) => void;
   onCompare: (version: PrintTemplateVersionPayload | null) => void;
 }) {
+  const userNames = useUserNames();
   const ordered = [...history].sort((left, right) => right.ptvRevNo - left.ptvRevNo);
   const selected = ordered.find((version) => version.ptvId === workingRevId) ?? null;
   const publishedIsWorking = selected !== null && selected.ptvId === publishedRevId;
@@ -186,8 +191,8 @@ export default function VersionRail({
                     </span>
                   </td>
                   <td>{when(version.ptvCreatedOn)}</td>
-                  <td className={styles.mono}>{actor(version.ptvCreatedBy)}</td>
-                  <td className={styles.mono}>{actor(version.ptvApprovedBy)}</td>
+                  <td>{actor(version.ptvCreatedBy, userNames)}</td>
+                  <td>{actor(version.ptvApprovedBy, userNames)}</td>
                   <td className={styles.muted}>{version.ptvNote ?? "—"}</td>
                 </tr>
               );

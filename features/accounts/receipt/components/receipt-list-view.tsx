@@ -6,8 +6,8 @@
  * Built on the same `CrudMasterPage` shell every master page and voucher
  * register uses, so it inherits the header, the icon toolbar, the
  * configured-column table, the row highlight, the delete confirmation, the
- * pager, the audit history and the grid-settings context menu without
- * restating any of it.
+ * pager and the grid-settings context menu without restating any of it.
+ * History (Ctrl+H) is the receipt's status trail (`txn_status_log`, RECEIPT).
  *
  * Which columns appear, in what order and how wide is grid 108's own config
  * (`MAIN LIST - RECEIPTS`), read through `/configured-grid-sql/columns` — it
@@ -37,6 +37,7 @@ import CrudMasterPage from "@/components/master/crud-master-page";
 import type { MasterTableRow } from "@/components/master/crud-master-page.types";
 import { useBusinessContext } from "@/components/layout/business-context";
 import { toast } from "@/lib/notify";
+import { TxnHistoryDialog, type TxnHistoryTarget } from "@/components/txn/txn-history-dialog";
 import masterStyles from "@/app/master/state-master/page.module.scss";
 import {
   addDays,
@@ -173,6 +174,7 @@ export function ReceiptListView({ onCreate, onOpen }: ReceiptListViewProps) {
    */
   const [printTargets, setPrintTargets] = useState<ReceiptKeys[]>([]);
   const [printRefno, setPrintRefno] = useState("");
+  const [historyTarget, setHistoryTarget] = useState<TxnHistoryTarget | null>(null);
 
   const applyPeriod = useCallback((value: string) => {
     setPeriod(value);
@@ -405,15 +407,23 @@ export function ReceiptListView({ onCreate, onOpen }: ReceiptListViewProps) {
           }
           return null;
         }}
-        auditHistory={{
-          screenName: "Receipt",
-          getRecordId: (row) => asText(sourceValue(row, "avh_voucher_id")) || null,
-          getDisplayName: (row) =>
-            asText(sourceValue(row, "avh_voucher_refno")) ||
-            asText(sourceValue(row, "party_name")) ||
-            null,
+        // The status trail — created, posted, amended, cancelled — keyed by
+        // the voucher. The audit log keys a receipt's writes to its tender
+        // rows, so the record-history modal found nothing for most receipts.
+        onHistoryAction={(row) => {
+          const keys = docKeyOf(row);
+          if (!keys.avhVoucherId) {
+            return;
+          }
+          setHistoryTarget({
+            docId: keys.avhVoucherId,
+            companyId: keys.avhCompanyId,
+            accYear: keys.avhAccYear,
+            refNo: asText(sourceValue(row, "avh_voucher_refno")),
+          });
         }}
       />
+      <TxnHistoryDialog target={historyTarget} docLabel="Receipt" onClose={() => setHistoryTarget(null)} />
       {printTargets.length > 0 ? (
         <PrintOptionsDialog
           open
