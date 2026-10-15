@@ -16,6 +16,7 @@ import ErrorBoundary from "@/components/feedback/error-boundary";
 import UiScaleController from "@/components/layout/ui-scale-controller";
 import { uiScaleBootstrapScript } from "@/lib/ui-scale";
 import AppThemeController from "@/components/layout/app-theme-controller";
+import ServerChangeFeed from "@/components/layout/server-change-feed";
 import { themeBootstrapScript } from "@/lib/app-theme";
 import RegionErrorBoundary from "@/components/feedback/region-error-boundary";
 export const metadata: Metadata = {
@@ -78,6 +79,9 @@ export default function RootLayout({
           <SessionAppSettings />
           {/* The company's colours — see components/layout/app-theme-controller.tsx. */}
           <AppThemeController />
+          {/* Other users' saves refresh this screen at once — see
+              components/layout/server-change-feed.tsx. */}
+          <ServerChangeFeed />
           {/* Grid Master and UI Table Master, resolved once so the code that
               cannot hold a hook still reads a real id — see
               components/layout/configured-directories.tsx. */}

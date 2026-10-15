@@ -1,5 +1,6 @@
 export {
   notifyDataChanged,
+  notifyRemoteDataChanged,
   requestDataRefresh,
   subscribeDataRefresh,
   type DataRefreshEvent,

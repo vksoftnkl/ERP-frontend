@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
   pageChanged,
@@ -189,18 +189,33 @@ export function useMasterModule({
     }
     return "Request failed.";
   }
+  // The total under the rows on screen, read off the same response the rows
+  // come from. `loadRecords` only runs for the screen's own loads; the list is
+  // also re-read in the background (a save elsewhere on screen, another tab,
+  // another user's save via the server's change feed, tab focus), and then the
+  // rows changed while the total and the pager under them did not — "Showing 1
+  // to 7 of 8", a page that never appears, an empty last page.
+  const listData = listSkipped ? null : listResult.data ?? null;
+  const liveTotalEntries = useMemo(
+    () => (listData === null ? null : normalizeListResponse(listData, listArrayKeys).totalEntries),
+    [listArrayKeys, listData],
+  );
+  const setCurrentPage = useCallback(
+    (page: number) => dispatch(pageChanged({ moduleKey, page })),
+    [dispatch, moduleKey],
+  );
   // ── Return interface (identical to useMasterCrud) ─────────────────────────
   return {
     list: {
       currentPage,
-      data: listSkipped ? null : listResult.data ?? null,
+      data: listData,
       error: listSkipped || !listResult.isError ? null : extractMsg(listResult.error),
       loadRecords,
       loading: listSkipped ? false : listResult.isLoading || listResult.isFetching,
       pageSize,
       reload,
       searchTerm,
-      setCurrentPage: (page: number) => dispatch(pageChanged({ moduleKey, page })),
+      setCurrentPage,
       setPageSize: (size: number) => {
         setPageSizeState(size);
         dispatch(pageChanged({ moduleKey, page: defaultPage }));
@@ -212,7 +227,7 @@ export function useMasterModule({
         sortDirRef.current = dir;
         void loadRecords(searchTerm, currentPage, pageSize);
       },
-      totalEntries,
+      totalEntries: listSkipped ? 0 : liveTotalEntries ?? totalEntries,
     },
     details: {
       error: detailResult.isError ? extractMsg(detailResult.error) : detailLocalError,

@@ -2929,6 +2929,20 @@ export default function CrudMasterPage({
     : clientSideList
       ? clientFilteredRows.length
       : totalEntries;
+  // A delete - here, by another user, or one that filtered rows out - can take
+  // away the page on screen: deleting the only row on the last page left an
+  // empty table there, with the records still on the pages before it. Step back
+  // to the new last page instead. Only once the list has settled, so a load in
+  // flight (or a page-size re-fit) is never second-guessed.
+  useEffect(() => {
+    if (loading || data === null || data === undefined) {
+      return;
+    }
+    const lastPage = Math.max(1, Math.ceil(renderedTotalEntries / Math.max(1, pageSize)));
+    if (currentPage > lastPage) {
+      setCurrentPage(lastPage);
+    }
+  }, [currentPage, data, loading, pageSize, renderedTotalEntries, setCurrentPage]);
   const [selectedRowId, setSelectedRowId] = useState<string | number | null>(
     null,
   );

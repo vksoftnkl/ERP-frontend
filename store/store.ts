@@ -1,4 +1,10 @@
-import { combineReducers, configureStore, isFulfilled, type Middleware } from "@reduxjs/toolkit";
+import {
+  combineReducers,
+  configureStore,
+  isFulfilled,
+  type Middleware,
+  type UnknownAction,
+} from "@reduxjs/toolkit";
 import { setupListeners } from "@reduxjs/toolkit/query";
 import createSagaMiddleware from "redux-saga";
 import { API_TAG_TYPES, baseApi } from "@/store/api/baseApi";
@@ -114,20 +120,57 @@ function persistReduxState(state: RootState): void {
     // Session storage may be blocked or full; Redux can continue without persistence.
   }
 }
-// A completed RTK Query mutation is a write like any other: announce it so the
-// screens that fetch outside RTK Query refresh, and so other tabs of this app
-// re-read. The "rtk:" scope tells the subscriber below that this tab's cache has
-// already been invalidated by the endpoint's own invalidatesTags.
-const announceMutations: Middleware = () => (next) => (action) => {
+type MutationActionMeta = {
+  arg?: { type?: string; endpointName?: string };
+  baseQueryMeta?: { request?: { method?: string } };
+};
+// A completed RTK Query mutation that WROTE something is a write like any other:
+// announce it so the screens that fetch outside RTK Query refresh, and so other
+// tabs of this app re-read. A mutation that sent a GET is a read kept off the
+// query cache on purpose (the till, report and stock screens use them) and
+// changed nothing, so it stays quiet - announcing it made every tab re-read
+// whenever such a screen loaded, and a screen that reloads on refresh signals
+// would have triggered itself.
+//
+// This runs while the fulfilled action is still on its way down the chain, i.e.
+// before RTK Query's own middleware processes it. The subscriber below dispatches
+// invalidateTags synchronously from here, so RTK Query sees our invalidation and
+// the endpoint's own invalidatesTags as one batch and refetches each query once.
+export const announceMutations: Middleware = () => (next) => (action) => {
   const result = next(action);
   if (isFulfilled(action)) {
-    const meta = (action as { meta?: { arg?: { type?: string; endpointName?: string } } }).meta;
-    if (meta?.arg?.type === "mutation") {
+    const meta = (action as { meta?: MutationActionMeta }).meta;
+    const method = meta?.baseQueryMeta?.request?.method?.toUpperCase();
+    if (meta?.arg?.type === "mutation" && method !== "GET") {
       notifyDataChanged(`rtk:${meta.arg.endpointName ?? "mutation"}`);
     }
   }
   return result;
 };
+// A write - in this tab, another tab, or by another user (the server's change
+// feed) - can touch anything, so drop the whole cache rather than guessing tags.
+// That includes this tab's own RTK Query mutations: most endpoints declare no
+// invalidatesTags, and the ones that do only name their own screen's tags, so a
+// list, dropdown or lookup elsewhere on screen kept the pre-save answer. Queries
+// with live subscribers refetch at once; the rest refetch the next time a screen
+// asks for them. Focus and reconnect are left out: setupListeners handles those.
+export function invalidateCacheOnDataChange(dispatch: (action: UnknownAction) => unknown): () => void {
+  return subscribeDataRefresh((event) => {
+    if (event.reason === "focus" || event.reason === "visible" || event.reason === "reconnect") {
+      return;
+    }
+    // Another session's save while this tab is in the background: nothing on
+    // screen to refresh, and refetchOnFocus re-reads it all on the way back.
+    if (
+      event.reason === "remote-mutation" &&
+      typeof document !== "undefined" &&
+      document.visibilityState === "hidden"
+    ) {
+      return;
+    }
+    dispatch(baseApi.util.invalidateTags([...API_TAG_TYPES]));
+  });
+}
 export const makeStore = () => {
   const sagaMiddleware = createSagaMiddleware();
   const store = configureStore({
@@ -142,20 +185,7 @@ export const makeStore = () => {
     // Tab focus / network reconnect revalidate every query that is currently on
     // screen (see the refetchOn* defaults in baseApi).
     setupListeners(store.dispatch);
-    // A write - here or in another tab - can touch anything, so drop the whole
-    // cache rather than guessing tags. Queries with live subscribers refetch at
-    // once; the rest refetch the next time a screen asks for them. Focus and
-    // reconnect are left out: setupListeners already handles those.
-    subscribeDataRefresh((event) => {
-      if (event.reason === "focus" || event.reason === "visible" || event.reason === "reconnect") {
-        return;
-      }
-      // This tab's own RTK Query mutation already invalidated the tags it declares.
-      if (event.reason === "mutation" && event.scope?.startsWith("rtk:")) {
-        return;
-      }
-      store.dispatch(baseApi.util.invalidateTags([...API_TAG_TYPES]));
-    });
+    invalidateCacheOnDataChange(store.dispatch);
     let pendingPersist: number | null = null;
     store.subscribe(() => {
       if (pendingPersist !== null) {

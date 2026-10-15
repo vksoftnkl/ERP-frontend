@@ -4,6 +4,7 @@ import type {
   BaseQueryFn,
   FetchArgs,
   FetchBaseQueryError,
+  FetchBaseQueryMeta,
 } from "@reduxjs/toolkit/query";
 import { API_BASE, extractApiErrorMessage, getAuthHeaderValue, isLoginEndpoint } from "@/lib/api/client";
 import {
@@ -97,7 +98,16 @@ async function refreshAuthSession(
   });
   return refreshRequest;
 }
-const baseQueryWithAuthHandling: BaseQueryFn<string | FetchArgs, unknown, ApiError> = async (
+// `meta` (the Request/Response pair) is passed through on every outcome: the
+// store's announceMutations reads the request method off it, so a read modelled
+// as a mutation is not mistaken for a save.
+const baseQueryWithAuthHandling: BaseQueryFn<
+  string | FetchArgs,
+  unknown,
+  ApiError,
+  object,
+  FetchBaseQueryMeta
+> = async (
   args,
   api,
   extraOptions,
@@ -112,7 +122,7 @@ const baseQueryWithAuthHandling: BaseQueryFn<string | FetchArgs, unknown, ApiErr
       if (refreshedSession) {
         result = await rawBaseQuery(args, api, extraOptions);
         if (!("error" in result)) {
-          return { data: result.data };
+          return { data: result.data, meta: result.meta };
         }
         error = result.error as FetchBaseQueryError;
         status = typeof error.status === "number" ? error.status : undefined;
@@ -133,9 +143,10 @@ const baseQueryWithAuthHandling: BaseQueryFn<string | FetchArgs, unknown, ApiErr
         data,
         message,
       },
+      meta: result.meta,
     };
   }
-  return { data: result.data };
+  return { data: result.data, meta: result.meta };
 };
 export function getApiErrorMessage(error?: ApiError | SerializedError | null): string | null {
   if (!error) {

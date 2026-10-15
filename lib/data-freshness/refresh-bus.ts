@@ -6,12 +6,14 @@
 //   focus / visible  - the tab came back, so anything on screen may be stale.
 //   reconnect        - the browser went back online.
 //   mutation         - THIS tab saved something (any non-GET through useApi).
-//   remote-mutation  - ANOTHER tab of this app saved something (BroadcastChannel).
+//   remote-mutation  - ANOTHER tab of this app saved something (BroadcastChannel),
+//                      or another user/device did (the server's change feed).
 //   manual           - a screen asked for a refresh explicitly.
 //
-// The point is that a record added/edited straight in the database (or by another
-// user, or in another tab) shows up in every list, modal and dropdown without the
-// user reloading the tab.
+// The point is that a record added/edited by another user, on another device or
+// in another tab shows up in every list, modal and dropdown at once, without the
+// user reloading the tab. (A row edited straight in the database bypasses the
+// server's feed; that one surfaces on the next focus/visible signal.)
 
 export type DataRefreshReason =
   | "focus"
@@ -160,6 +162,15 @@ export function subscribeDataRefresh(listener: DataRefreshListener): () => void 
 export function notifyDataChanged(scope?: string): void {
   installBrowserListeners();
   emit({ reason: "mutation", scope, at: Date.now() });
+  broadcastToOtherTabs(scope);
+}
+
+// Call when the server reports that ANOTHER session saved something (see
+// server-change-feed.ts). Only one tab per browser holds that feed, so it hands
+// the news on to its sibling tabs as well.
+export function notifyRemoteDataChanged(scope?: string): void {
+  installBrowserListeners();
+  emit({ reason: "remote-mutation", scope, at: Date.now() });
   broadcastToOtherTabs(scope);
 }
 
