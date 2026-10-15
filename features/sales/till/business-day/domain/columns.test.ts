@@ -70,8 +70,42 @@ describe("cellOf", () => {
       tone: "warning",
     });
     expect(cellOf("tbd_status", { tbd_status: "CLOSED" })).toEqual({ kind: "pill", text: "CLOSED", tone: "success" });
-    expect(cellOf("treatment", { treatment: "SUSPENSE" }).tone).toBe("warning");
     expect(cellOf("treatment", { treatment: "" })).toEqual({ kind: "text", text: "", tone: "" });
+  });
+
+  it("colours Treatment, Cash and Status as every session grid does (Qt tillSessionBadges)", () => {
+    const tone = (field: string, value: string) => cellOf(field, { [field]: value }).tone;
+    expect(tone("treatment", "SUSPENSE")).toBe("locked");
+    expect(tone("treatment", "EXPENSE")).toBe("info");
+    expect(tone("treatment", "WITHIN TOL.")).toBe("success");
+    expect(tone("treatment", "RECOVER")).toBe("danger");
+    expect(tone("treatment", "PENDING")).toBe("warning");
+    expect(tone("treatment", "RETENDERED")).toBe("muted");
+    expect(cellOf("cash_receipt", { cash_receipt: "TO APPROVE" })).toEqual({
+      kind: "pill",
+      text: "TO APPROVE",
+      tone: "warning",
+    });
+    expect(tone("cash_receipt", "APPROVED")).toBe("success");
+    expect(tone("cash_receipt", "DIFFERENCE")).toBe("danger");
+    expect(cellOf("cash_receipt", { cash_receipt: "" })).toEqual({ kind: "text", text: "", tone: "" });
+    expect(tone("status_text", "OPEN")).toBe("info");
+    expect(tone("status_text", "SUSPENDED")).toBe("muted");
+    expect(cellOf("status_text", { status_text: "PENDING_APPROVAL" }).text).toBe("PENDING APPROVAL");
+  });
+
+  it("keeps the screen's own colour for a value the shared palette does not name", () => {
+    expect(cellOf("status_text", { status_text: "CLOSING" }).tone).toBe("warning");
+    expect(cellOf("treatment", { treatment: "SOMETHING NEW" }).tone).toBe("info");
+    expect(cellOf("cash_receipt", { cash_receipt: "SOMETHING NEW" })).toEqual({
+      kind: "pill",
+      text: "SOMETHING NEW",
+      tone: "",
+    });
+  });
+
+  it("falls back to grid 150's Cash column too", () => {
+    expect(SESSION_COLUMNS_FALLBACK.map((column) => column.field)).toContain("cash_receipt");
   });
 
   it("shows anything else as it came", () => {

@@ -8,8 +8,18 @@
  *                         404 when nobody has opened it yet
  *   POST /till/days/open  { companyId, branchId }               → TillDayPayload
  *                         idempotent: an open day comes back as it is
+ *   GET  /till/days/close-check ?companyId&branchId&tbdId&accYear → TillDayCloseCheckPayload
+ *                         the server's own checklist (notes 117): RED blocks,
+ *                         AMBER is shown, canClose / canCloseWithException
+ *   POST /till/days/close  { companyId, branchId, accYear, tbdId, notes?, exception? }
+ *                         → TillDayClosePayload { day, zNo, tapId, closedOver, forceClosed }
+ *                         409 TILL_DAY_CLOSE_BLOCKED when a RED came back since the check
+ *   POST /till/days/reopen { companyId, branchId, accYear, tbdId, reasonId, approverPin, notes? }
+ *                         → TillDayReopenPayload { day, tapId }
+ *   GET  /till/movements/supervisors ?companyId&branchId&accYear&tssId → TillSupervisorPayload[]
+ *   GET  /till/denominations/list    ?companyId                        → the cash count's notes and coins
  *
- * Both DTOs are whitelisted with forbidNonWhitelisted, so nothing else is sent.
+ * Every DTO is whitelisted with forbidNonWhitelisted, so nothing else is sent.
  * A refusal is the till module's own body (till-exception.filter.ts):
  * `{ success:false, message, errors:[{ field, message, code? }] }` — flat, not
  * the global filter's nested `message.message`; both are read.
@@ -21,6 +31,7 @@
  * Every token is QUOTED in the SQL, so an unsent one stays a literal and
  * silently filters to nothing — the builders below always send all of them.
  */
+import { clock12Of } from "@/lib/time-format";
 
 export type DayStatus = "OPEN" | "CLOSING" | "CLOSED";
 
@@ -37,10 +48,29 @@ export type TillDay = {
   tbdOpenedOn: string;
   tbdOpenedBy: string;
   tbdClosedOn: string | null;
+  /** Who closed it (`tbdClosedByName`); "" while open. */
+  tbdClosedByName: string;
   tbdZNo: string;
   tbdReopenCount: number;
   /** Live, by status: what hangs off the day right now. */
   sessions: { status: string; count: number }[];
+  /**
+   * Notes 113 — `till.handover_receipt` for the branch: REQUIRED = a hand-over
+   * reaches the safe only on a supervisor's Approve Cash; NONE (or anything
+   * else, or a server before notes 113) = straight into the safe.
+   */
+  handoverReceipt: string;
+  /** Notes 113 — hand-overs and drops nobody has approved yet (no amount: the receive is blind). */
+  awaitingReceipt: AwaitingReceipt;
+};
+
+export type AwaitingReceipt = {
+  /** Of this business day. */
+  thisDay: number;
+  /** Of earlier business days, still unapproved. */
+  earlierDays: number;
+  /** When the oldest one was handed over (ISO); null when none waits. */
+  oldestOn: string | null;
 };
 
 export type GridRow = Record<string, unknown>;
@@ -95,10 +125,148 @@ export function parseDay(raw: unknown): TillDay | null {
     tbdOpenedOn: text(data.tbdOpenedOn),
     tbdOpenedBy: text(data.tbdOpenedBy),
     tbdClosedOn: data.tbdClosedOn === null || data.tbdClosedOn === undefined ? null : text(data.tbdClosedOn),
+    tbdClosedByName: text(data.tbdClosedByName).trim(),
     tbdZNo: text(data.tbdZNo).trim(),
     tbdReopenCount: wholeNumber(data.tbdReopenCount),
     sessions,
+    handoverReceipt: text(data.handoverReceipt).trim().toUpperCase(),
+    awaitingReceipt: awaitingOf(data.awaitingReceipt),
   };
+}
+
+function awaitingOf(raw: unknown): AwaitingReceipt {
+  if (!isRecord(raw)) return { thisDay: 0, earlierDays: 0, oldestOn: null };
+  const oldest = text(raw.oldestOn).trim();
+  return {
+    thisDay: Math.max(0, wholeNumber(raw.thisDay)),
+    earlierDays: Math.max(0, wholeNumber(raw.earlierDays)),
+    oldestOn: oldest || null,
+  };
+}
+
+// ── The close (notes 117) ─────────────────────────────────────────────────
+
+/** The day's key, as every close route takes it (`TillDayKeyDto`). */
+export type DayKey = { companyId: string; branchId: string; accYear: string; tbdId: string };
+
+/** The key of the day shown — the day's own company and branch, the screen's when it lacks them. */
+export function dayKeyOf(day: TillDay, scope: Scope): DayKey {
+  return {
+    companyId: day.tbdCompanyId || scope.companyId,
+    branchId: day.tbdBranchId || scope.branchId,
+    accYear: day.tbdAccYear.trim(),
+    tbdId: day.tbdId,
+  };
+}
+
+/** RED blocks the close (unless an exception may cover it) · AMBER is shown · GREEN is clear. */
+export type CloseCheckTone = "RED" | "AMBER" | "GREEN";
+
+/** One line of the server's close-check (`TillCloseCheckItem`). */
+export type CloseCheckItem = {
+  /** SESSIONS_LIVE, CASH_TO_APPROVE … — kept as sent (an unknown one shows as itself). */
+  code: string;
+  tone: CloseCheckTone;
+  count: number;
+  detail: string;
+  /** The sessions behind it, for the jump buttons. */
+  sessionIds: string[];
+};
+
+/** `TillDayCloseCheckPayload`, as the screen keeps it. */
+export type TillCloseCheck = {
+  tbdId: string;
+  tbdAccYear: string;
+  tbdBusinessDate: string;
+  tbdStatus: string;
+  items: CloseCheckItem[];
+  /** The day is open and nothing is RED. */
+  canClose: boolean;
+  /** Something is RED, and every RED is a live session (SESSIONS_LIVE). */
+  canCloseWithException: boolean;
+};
+
+function toneOf(value: unknown): CloseCheckTone {
+  const tone = text(value).trim().toUpperCase();
+  return tone === "RED" || tone === "AMBER" ? tone : "GREEN";
+}
+
+/** `GET /till/days/close-check`; `null` when it is not one. */
+export function parseCloseCheck(raw: unknown): TillCloseCheck | null {
+  const data = unwrap(raw);
+  if (!isRecord(data)) return null;
+  const tbdId = text(data.tbdId).trim();
+  if (!tbdId || !Array.isArray(data.items)) return null;
+  return {
+    tbdId,
+    tbdAccYear: text(data.tbdAccYear).trim(),
+    tbdBusinessDate: text(data.tbdBusinessDate).slice(0, 10),
+    tbdStatus: text(data.tbdStatus).trim().toUpperCase(),
+    items: data.items.filter(isRecord).map((item) => ({
+      code: text(item.code).trim().toUpperCase(),
+      tone: toneOf(item.tone),
+      count: wholeNumber(item.count),
+      detail: text(item.detail),
+      sessionIds: Array.isArray(item.sessionIds)
+        ? item.sessionIds.map((id) => text(id).trim()).filter((id) => id.length > 0)
+        : [],
+    })),
+    canClose: data.canClose === true,
+    canCloseWithException: data.canCloseWithException === true,
+  };
+}
+
+/** The close-check only speaks for the day it was read for. */
+export function checkOfDay(check: TillCloseCheck | null, day: TillDay | null): TillCloseCheck | null {
+  return check && day && check.tbdId === day.tbdId ? check : null;
+}
+
+/** `POST /till/days/close`, as the screen needs it. */
+export type DayCloseResult = {
+  /** The day as closed; `null` when the body did not carry one. */
+  day: TillDay | null;
+  /** The store Z, as text; "" when the body did not say. */
+  zNo: string;
+  /** How many live sessions the exception force-closed; `null` when the body did not say. */
+  forcedCount: number | null;
+};
+
+export function parseCloseResult(raw: unknown): DayCloseResult {
+  const data = unwrap(raw);
+  if (!isRecord(data)) return { day: null, zNo: "", forcedCount: null };
+  // `{ day, zNo, … }`; a bare day is read too (Qt read `tbdZNo` straight off `data`).
+  const day = parseDay(isRecord(data.day) ? data.day : data);
+  const zNo = text(data.zNo).trim() || day?.tbdZNo || text(data.tbdZNo).trim();
+  return { day, zNo, forcedCount: Array.isArray(data.forceClosed) ? data.forceClosed.length : null };
+}
+
+/** `POST /till/days/reopen` → the day, open again (`null` when the body did not carry it). */
+export function parseReopenResult(raw: unknown): TillDay | null {
+  const data = unwrap(raw);
+  if (!isRecord(data)) return null;
+  return parseDay(isRecord(data.day) ? data.day : data);
+}
+
+/** `GET /till/movements/supervisors` — one who may sign for a session (Till Sessions 273 OVERRIDE). */
+export type Supervisor = { userId: string; loginName: string; fullName: string; hasPin: boolean | null };
+
+/** The `data` array of a list answer (or `data.items`); `[]` for anything else. */
+export function listOf(raw: unknown): Record<string, unknown>[] {
+  const data = unwrap(raw);
+  if (Array.isArray(data)) return data.filter(isRecord);
+  if (isRecord(data) && Array.isArray(data.items)) return data.items.filter(isRecord);
+  return [];
+}
+
+export function parseSupervisors(raw: unknown): Supervisor[] {
+  return listOf(raw)
+    .map((row) => ({
+      userId: text(row.userId).trim(),
+      loginName: text(row.loginName).trim(),
+      fullName: text(row.fullName).trim(),
+      hasPin: typeof row.hasPin === "boolean" ? row.hasPin : null,
+    }))
+    .filter((row) => row.userId.length > 0);
 }
 
 /** One `/configured-grid-sql/run` page: `{ data: { items, meta: { total } } }`. */
@@ -194,6 +362,38 @@ export function errorStatus(error: unknown): number | null {
   return null;
 }
 
+/** A refusal's first `errors[]` entry — what Qt's `firstError` reads. */
+export type FirstError = {
+  status: number | null;
+  /** TILL_DAY_CLOSE_BLOCKED, TILL_APPROVER_PIN … — or "". */
+  code: string;
+  field: string;
+  /** The first error's own sentence, else the head, else the fallback. */
+  message: string;
+};
+
+/** The first `errors[]` entry of the till filter's flat body or the global filter's nested one. */
+export function firstErrorOf(error: unknown, fallback: string): FirstError {
+  if (!isRecord(error)) return { status: null, code: "", field: "", message: fallback };
+  let body: unknown = error.data;
+  if (isRecord(body) && isRecord(body.message)) body = body.message;
+  const errors = isRecord(body) && Array.isArray(body.errors) ? body.errors.filter(isRecord) : [];
+  const first = errors[0] ?? {};
+  const headSource = isRecord(body) ? body.message : undefined;
+  const message =
+    text(first.message).trim() ||
+    (typeof headSource === "string" && headSource.trim()) ||
+    (typeof error.error === "string" && error.error.trim()) ||
+    (typeof error.message === "string" && error.message.trim()) ||
+    fallback;
+  return {
+    status: errorStatus(error),
+    code: text(first.code).trim(),
+    field: text(first.field).trim(),
+    message,
+  };
+}
+
 /**
  * The sentence for a refusal: the field lines (they say what to do — "Run
  * SELECT public.ensure_acc_year_partitions(…)"), under the head when the head
@@ -246,12 +446,18 @@ export function displayDate(iso: string): string {
   return match ? `${match[3]}-${match[2]}-${match[1]}` : iso;
 }
 
-/** An ISO instant → local `HH:mm`; "" when it is not one (the Qt `clock`). */
-export function clockOf(iso: string): string {
-  if (!iso) return "";
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return "";
-  return `${pad(at.getHours())}:${pad(at.getMinutes())}`;
+/**
+ * An ISO instant → the local `hh:mm AM`; "" when it is not one — the Qt
+ * `clock`, 12-hour since c77f3f1 (`hh:mm AP`).
+ */
+export function clockOf(iso: string | null | undefined): string {
+  return clock12Of(iso);
+}
+
+/** `2026-10-07` → `20261007`, for a file name; "" when it is not a date. */
+export function compactDate(iso: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return match ? `${match[1]}${match[2]}${match[3]}` : "";
 }
 
 /** The server's default when the setting is unread (`till.settings.ts`). */

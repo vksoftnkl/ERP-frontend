@@ -66,15 +66,24 @@ describe("buildDocumentPrintRequest", () => {
     ).not.toHaveProperty("companyId");
   });
 
-  it("never sends a branch or a counter", () => {
-    // Both come from the access token; a caller-supplied branch or counter
-    // would be a screen picking which rung of the assignment ladder it wins on.
+  it("sends no branch unless the screen names one, and never a counter", () => {
+    // Both come from the access token; a caller-supplied counter would be a
+    // screen picking which rung of the assignment ladder it wins on.
     const request = buildDocumentPrintRequest("01a041fa-quote", {
       ...target,
       companyId: "01a0-comp",
     }) as Record<string, unknown>;
     expect(request).not.toHaveProperty("branchId");
     expect(request).not.toHaveProperty("deviceId");
+  });
+
+  it("sends the DOCUMENT's branch when a till print names it, and omits a blank one", () => {
+    // Qt c77f3f1: a session Z / day Z is printed from the office, so its own
+    // branch binds :branch_id and the letterhead rather than the token's.
+    expect(
+      buildDocumentPrintRequest("ppo-z", { ...target, branchId: " 01a0-branch " }),
+    ).toMatchObject({ branchId: "01a0-branch" });
+    expect(buildDocumentPrintRequest("ppo-z", { ...target, branchId: "  " })).not.toHaveProperty("branchId");
   });
 
   it("omits blanks rather than sending them empty", () => {

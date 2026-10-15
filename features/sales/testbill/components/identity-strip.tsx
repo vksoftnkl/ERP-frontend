@@ -20,6 +20,7 @@ import quotationStyles from "@/features/sales/quotation/page.module.scss";
 import { SOURCE_KIND_COLOURS, SOURCE_KIND_TAGS } from "@/features/sales/testbill/constants";
 import type { BillSourceSummary, SaleBillDraft } from "@/features/sales/testbill/types";
 import styles from "@/features/sales/testbill/page.module.scss";
+import { formatClock12 } from "@/lib/time-format";
 
 const STATUS_BADGE_CLASS: Record<string, string> = {
   DRAFT: "statusDraft",
@@ -34,12 +35,13 @@ const GST_BADGE_CLASS: Record<string, string> = {
   PENDING: styles.postingBadgePending,
 };
 
-function ddMMHHmm(iso: string | null): string {
+/** `dd/MM hh:mm AM` — the IRN ack stamp, as Qt's `dd/MM hh:mm AP`. */
+function ddMMClock12(iso: string | null): string {
   if (!iso) return "";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
   const pad = (value: number) => String(value).padStart(2, "0");
-  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)} ${formatClock12(date)}`;
 }
 
 /** The chips: `/get`'s `sources[]` first, else the header trail. */
@@ -113,7 +115,7 @@ export function IdentityStrip({ draft, onBack }: IdentityStripProps) {
             title={posting.irn.message ?? (posting.irn.number ? `IRN ${posting.irn.number}` : undefined)}
           >
             IRN {posting.irn.status}
-            {posting.irn.ackNo ? ` · ack ${posting.irn.ackNo}${posting.irn.ackOn ? ` · ${ddMMHHmm(posting.irn.ackOn)}` : ""}` : ""}
+            {posting.irn.ackNo ? ` · ack ${posting.irn.ackNo}${posting.irn.ackOn ? ` · ${ddMMClock12(posting.irn.ackOn)}` : ""}` : ""}
             {posting.irn.status !== "GENERATED" && posting.irn.message ? ` · ${posting.irn.message}` : ""}
           </span>
           <span

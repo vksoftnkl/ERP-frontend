@@ -40,6 +40,15 @@ export const PURPOSE_CODE = {
   SALE_INVOICE: "SALE_INVOICE",
   RECEIPT_VOUCHER: "RECEIPT_VOUCHER",
   EXPENSE_VOUCHER: "EXPENSE_VOUCHER",
+  /** docId = the ledger (led_id); the period and the screen's switches are the revision's prompts. */
+  LEDGER_STATEMENT: "LEDGER_STATEMENT",
+  /** docId = the company (the report names no document); the filters are the revision's prompts. */
+  PARTY_OUTSTANDING: "PARTY_OUTSTANDING",
+  /** Notes 117 §7 — docId = tss_id: a closed session's Z, a live one's X read. */
+  TILL_SESSION_Z: "TILL_SESSION_Z",
+  TILL_SESSION_X: "TILL_SESSION_X",
+  /** Notes 117 §7 — docId = tbd_id: the day X while open, the store Z once closed. */
+  TILL_DAY_Z: "TILL_DAY_Z",
 } as const;
 
 export type PurposeCode = (typeof PURPOSE_CODE)[keyof typeof PURPOSE_CODE];
@@ -65,10 +74,13 @@ export function purposeNotConfigured(code: string): string {
 /**
  * The document, and nothing about who is printing it.
  *
- * There is no branch and no counter here, and there is deliberately nowhere to
- * put one: both are claims on the access token and both are the rungs the
- * assignment ladder resolves by, so a screen able to name them would be a
- * screen choosing its own design. The counter is the one that used to bite —
+ * There is no counter here, and there is deliberately nowhere to put one: it
+ * is a claim on the access token and a rung the assignment ladder resolves by,
+ * so a screen able to name it would be a screen choosing its own design. The
+ * branch is the same claim, and is left out by every screen but the till's
+ * prints, which name the DOCUMENT's branch (Qt c77f3f1) because a session or a
+ * day is printed from the office, not the counter it ran on. The counter is the
+ * one that used to bite —
  * this client holds two ids called "device" and only `userInfo.deviceId` is a
  * real `fixed.device_master` row, so sending the other resolved nothing and then
  * failed `fk_plg_device` after the paper had already been rendered.
@@ -96,6 +108,12 @@ export type DocumentPrintTarget = {
    * better answer than a screen restating what it read out of the same session.
    */
   accYear?: string;
+  /**
+   * The DOCUMENT's branch — binds :branch_id and the branch.profile letterhead
+   * (Qt c77f3f1). Left out, the server binds the token's branch, which need not
+   * be the document's: the till prints name it, every other screen leaves it.
+   */
+  branchId?: string;
   /** Recorded on the print log's source quad; each defaults to the purpose's own. */
   srcModule?: string;
   srcDocType?: string;
@@ -125,6 +143,7 @@ export function buildDocumentPrintRequest(
   const docId = trimmed(target.docId);
   const companyId = trimmed(target.companyId);
   const accYear = trimmed(target.accYear);
+  const branchId = trimmed(target.branchId);
 
   if (!docId) {
     throw new Error("There is no saved document to print yet.");
@@ -143,6 +162,7 @@ export function buildDocumentPrintRequest(
     // Only when the document actually carries one. Blank means "the year this
     // session is working in", which the server answers better than this can.
     ...(accYear ? { accYear } : {}),
+    ...(branchId ? { branchId } : {}),
     ...(srcModule ? { srcModule } : {}),
     ...(srcDocType ? { srcDocType } : {}),
     ...(filename ? { filename } : {}),

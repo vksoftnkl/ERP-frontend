@@ -15,6 +15,7 @@ import { TonePill } from "../../components/pill";
 import { describeIssued, issuedKeysOf } from "../domain/row";
 import { issuedStatusLabel, issuedStatusPill } from "../domain/pills";
 import type { IssuedChequeRow } from "../issued.types";
+import { formatClock12 } from "@/lib/time-format";
 import styles from "../../cheques.module.scss";
 
 function when(value: string): string {
@@ -22,13 +23,8 @@ function when(value: string): string {
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return date.toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const day = date.toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return `${day}, ${formatClock12(date)}`;
 }
 
 export function IssuedHistoryDialog({ row, onClose }: { row: IssuedChequeRow; onClose: () => void }) {

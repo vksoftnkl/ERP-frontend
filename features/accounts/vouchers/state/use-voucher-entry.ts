@@ -42,6 +42,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { skipToken } from "@reduxjs/toolkit/query";
 import { toast } from "@/lib/notify";
+import { formatClock12 } from "@/lib/time-format";
 import { useAppDispatch } from "@/store/hooks";
 import {
   useCancelVoucherMutation,
@@ -258,7 +259,7 @@ function keysOfDoc(source: Doc): VoucherKeys | null {
 }
 
 function timeNow(): string {
-  return new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+  return formatClock12(new Date());
 }
 
 function dayMonth(iso: string): string {

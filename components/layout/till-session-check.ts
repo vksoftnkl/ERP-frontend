@@ -16,6 +16,7 @@
  * (`use-till-session-check.ts` keeps the keys asked). What it decides is here.
  */
 import type { TillOpenCheck, TillOpenCheckSession } from "@/features/sales/till/shared/wire/types";
+import { dayMonthTime12Of } from "@/lib/time-format";
 
 export type TillCheckScope = {
   userId: string | null | undefined;
@@ -35,16 +36,9 @@ export type TillCheckOutcome =
   | { kind: "open" }
   | { kind: "info"; text: string };
 
-function pad(value: number): string {
-  return String(value).padStart(2, "0");
-}
-
-/** An ISO instant as the local `dd-MM HH:mm`; blank when it is not one. */
+/** An ISO instant as the local `dd-MM hh:mm AM` (Qt c77f3f1 `dd-MM hh:mm AP`); blank when it is not one. */
 export function openedAtText(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return "";
-  return `${pad(at.getDate())}-${pad(at.getMonth() + 1)} ${pad(at.getHours())}:${pad(at.getMinutes())}`;
+  return dayMonthTime12Of(iso);
 }
 
 function text(value: unknown): string {

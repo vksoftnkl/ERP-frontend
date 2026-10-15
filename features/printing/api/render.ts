@@ -88,6 +88,8 @@ export type RenderPreviewRequest = {
    * current fiscal year rather than making every screen state it.
    */
   accYear?: string;
+  /** The DOCUMENT's branch — binds :branch_id. Left out, the token's branch. */
+  branchId?: string;
   /** Answers to the revision's own prompts (ptvParams), by prompt name. */
   params?: Record<string, unknown>;
   /** Normally omitted: a GRAPHIC design renders as PDF, a GRID one as ESCPOS. */
@@ -164,6 +166,8 @@ export type PrintDocumentRequest = {
    * current one — a reprint of last year's paper.
    */
   accYear?: string;
+  /** The DOCUMENT's branch — binds :branch_id. Left out, the token's branch. */
+  branchId?: string;
   /** Recorded on the print log's source quad; each defaults to the purpose's own. */
   srcModule?: string;
   srcDocType?: string;
@@ -199,6 +203,7 @@ export type RecordPrintRequest = {
   docIds?: string[];
   companyId?: string;
   accYear?: string;
+  branchId?: string;
   /** PRINT — sent to the printer. FILE — saved as a PDF. PREVIEW — opened in the popup. */
   outputMode: "PRINT" | "FILE" | "PREVIEW";
   /** From the render's `X-Print-Pages`; the server keeps it only for one document. */

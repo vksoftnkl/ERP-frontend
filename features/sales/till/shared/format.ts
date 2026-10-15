@@ -3,6 +3,7 @@
  * and flags, the session's clock and dates, a session-key route, the event
  * colours of the till journal.
  */
+import { clock12Of } from "@/lib/time-format";
 import type { GridRow, TillSessionKey } from "./wire/types";
 
 // ─── row readers ─────────────────────────────────────────────────────────────
@@ -69,12 +70,9 @@ export function ddmmyyyy(iso: string | null | undefined): string {
   return match ? `${match[3]}-${match[2]}-${match[1]}` : (iso ?? "");
 }
 
-/** An ISO instant as the local `HH:mm`; blank when it is not one. */
+/** An ISO instant as the local `hh:mm AM` (Qt c77f3f1 `hh:mm AP`); blank when it is not one. */
 export function clockOf(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return "";
-  return `${pad(at.getHours())}:${pad(at.getMinutes())}`;
+  return clock12Of(iso);
 }
 
 /** `opened → ended (or now)` as `7 h 12 m`. */

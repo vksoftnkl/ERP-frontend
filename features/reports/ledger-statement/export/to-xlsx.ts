@@ -153,8 +153,13 @@ function fileSafe(value: string): string {
   return value.replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^_+|_+$/g, "") || "ledger";
 }
 
+/** The name without an extension — the Excel file and the printed PDF share it. */
+export function exportFileStem(ledgerName: string, fromDate: string, toDate: string): string {
+  return `Ledger_${fileSafe(ledgerName)}_${fromDate}_${toDate}`;
+}
+
 export function exportFileName(ledgerName: string, fromDate: string, toDate: string): string {
-  return `Ledger_${fileSafe(ledgerName)}_${fromDate}_${toDate}.xlsx`;
+  return `${exportFileStem(ledgerName, fromDate, toDate)}.xlsx`;
 }
 
 export function toXlsx(

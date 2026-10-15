@@ -452,6 +452,8 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
         docIds={docIds}
         companyId={documentCompanyId || null}
         accYear={primary?.accYear}
+        branchId={primary?.branchId}
+        params={primary?.params}
         filename={downloadName}
         title={heading}
       />

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { TillSessionPayload, TillSessionTender } from "../shared/wire/types";
 import {
+  APPROVAL_TEXT,
   closeBody,
   closeConfirmText,
+  closedText,
   countBody,
   countingOpen,
   endShiftProblem,
@@ -166,5 +168,29 @@ describe("the close", () => {
     expect(closeConfirmText(null)).toMatch(/default float/);
     expect(floatLeftProblem(300000, 200000)).toMatch(/cannot be more/);
     expect(floatLeftProblem(null, 200000)).toBe("");
+  });
+});
+
+describe("after the count and the close", () => {
+  it("tells the cashier where the approval happens", () => {
+    expect(APPROVAL_TEXT).toBe(
+      "Out of tolerance after the last recount: the session waits for a supervisor. Until one approves it in Till " +
+        "Sessions → Cockpit, it holds this counter, cashier and device. Open Till Session shows when it is decided.",
+    );
+  });
+
+  it("asks for the cash to be handed over while its receipt waits", () => {
+    expect(closedText({ tssSessionNo: "C01-261009-01", tssZNo: 41, receiptState: "AWAITING" })).toEqual({
+      text:
+        "Session C01-261009-01 closed — Z 41.\n\nHand the cash to your supervisor to approve: it is not in the safe " +
+        "until they do.",
+      awaiting: true,
+    });
+    for (const receiptState of ["NONE", "APPROVED", "DIFFERENCE", undefined] as const) {
+      expect(closedText({ tssSessionNo: "C01-261009-01", tssZNo: 41, receiptState })).toEqual({
+        text: "Session C01-261009-01 closed — Z 41.",
+        awaiting: false,
+      });
+    }
   });
 });

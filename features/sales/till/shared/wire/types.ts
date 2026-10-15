@@ -113,7 +113,10 @@ export type TillSessionTender = {
 export type TillVariance = {
   tvrId: string;
   tvrAccYear: string;
-  tvrStage: "OPEN" | "CLOSE";
+  /** RECEIVE (notes 113 / 114): a supervisor approved other than was handed over. */
+  tvrStage: "OPEN" | "CLOSE" | "RECEIVE";
+  /** Stage RECEIVE: the hand-over / drop received — decide-variance's `tcmId`. */
+  tvrMovementId?: string | null;
   tvrTenderTypeId: number;
   tvrTenderId: string | null;
   tvrExpected: number;
@@ -175,6 +178,12 @@ export type TillSessionPayload = {
   tssClosedOn: string | null;
   tssClosedBy: string | null;
   tssZNo: number | null;
+  /** Notes 117 — closed by a supervisor in the cashier's place, and why (a FORCE_CLOSE reason). */
+  tssForceClosed?: boolean;
+  tssForceReasonId?: string | null;
+  /** Notes 117 — times reopened; the Z number stays the first close's. */
+  tssReopenCount?: number;
+  tssPrintCount?: number;
   tssVarianceStatus: string;
   totals: {
     billCount: number;
@@ -195,8 +204,44 @@ export type TillSessionPayload = {
   expectedVisible: boolean;
   cashLimit: TillCashLimit | null;
   tenders: TillSessionTender[];
-  movements: unknown[];
+  /** The vouchers this session posted itself (float, hand-over, variance) and its drawer movements. */
+  movements: TillSessionMovement[];
   variances: TillVariance[];
+  /**
+   * Notes 113 / 114 — the cash receipt over the session's hand-over and drops:
+   * NONE when none waited (setting NONE, nothing handed over, closed before
+   * notes 113) · AWAITING while any is unreceived (the TO APPROVE pill) ·
+   * DIFFERENCE when all are received and the total differs from what was
+   * handed over · else APPROVED. Absent from a server before notes 113.
+   */
+  receiptState?: TillCashReceiptState;
+  /** Handed over (hand-over + drops) and not yet received; 0 when nothing waits. */
+  cashAwaiting?: number;
+  /** The supervisor of the latest receipt; null until one. */
+  receivedBy?: string | null;
+  receivedByName?: string | null;
+  receivedOn?: string | null;
+};
+
+export type TillCashReceiptState = "NONE" | "AWAITING" | "APPROVED" | "DIFFERENCE";
+
+/** One of `TillSessionPayload.movements` (server `TillMovementPayload`). */
+export type TillSessionMovement = {
+  tcmId: string;
+  tcmAccYear: string;
+  tcmKind: string;
+  tcmDocNo: string;
+  tcmDocDate?: string;
+  tcmAmount: number;
+  tcmSafeId?: string | null;
+  tcmVoucherId?: string | null;
+  tcmStatus: "POSTED" | "VOIDED" | string;
+  tcmCreatedOn?: string;
+  /** Notes 113: null = straight into the safe · AWAITING a supervisor's receive · RECEIVED. */
+  tcmReceiptStatus?: "AWAITING" | "RECEIVED" | null;
+  /** What the receiver counted, once RECEIVED (≠ tcmAmount = a RECEIVE-stage variance). */
+  tcmReceivedAmount?: number | null;
+  tcmReceivedOn?: string | null;
 };
 
 /** GET /till/movements/supervisors — one person who can sign a pickup / top-up on the session (notes 110 §2). */
@@ -218,6 +263,8 @@ export type TillApprovableTreatment = "EXPENSE" | "RECOVER" | "SUSPENSE";
 
 /** The decision as recorded, and the session after it. */
 export type TillVarianceDecisionResult = {
+  /** Notes 113: the bag whose receive difference was decided; null for a close variance. */
+  tcmId?: string | null;
   /** The till_approval row (A3). */
   tapId: string;
   decision: TillVarianceDecision;
@@ -319,3 +366,57 @@ export type TillDenominationRow = {
 
 /** A configured-grid row: snake_case SQL aliases, numerics as strings. */
 export type GridRow = Record<string, unknown>;
+
+// ─── approve cash (notes 114) ────────────────────────────────────────────────
+
+/** POST /till/sessions/approve-cash — the closed session's hand-over and drops into the safe. */
+export type TillCashApprovalResult = {
+  tssId: string;
+  tssAccYear: string;
+  sessionNo: string;
+  /** Σ of the hand-over and drops that were awaiting receipt. */
+  handedOver: number;
+  received: number;
+  /** received − handed over. */
+  difference: number;
+  /**
+   * APPROVED: no gap · WITHIN_TOLERANCE: posted at once to Cash Short & Excess ·
+   * DECIDED: beyond tolerance, decided in the same step by the caller's grant ·
+   * SENT_FOR_APPROVAL: a PENDING RECEIVE-stage variance for decide-variance with `tcmId`.
+   */
+  outcome: "APPROVED" | "WITHIN_TOLERANCE" | "DECIDED" | "SENT_FOR_APPROVAL";
+  tvrId: string | null;
+  tcmId: string | null;
+  treatment: string | null;
+  tapId: string | null;
+  varianceVoucherId: string | null;
+  varianceVoucherNo: string | null;
+  receivedOn: string;
+  session: TillSessionPayload;
+};
+
+// ─── session exceptions (notes 117) ──────────────────────────────────────────
+
+/** POST /till/sessions/force-close. */
+export type TillForceCloseResult = {
+  /** CLOSED within tolerance · SENT_FOR_APPROVAL beyond it (PENDING_APPROVAL for Approve). */
+  outcome: "CLOSED" | "SENT_FOR_APPROVAL";
+  tapId: string;
+  tctId: string;
+  session: TillSessionPayload;
+};
+
+/** POST /till/sessions/reopen. */
+export type TillSessionReopenResult = {
+  tapId: string;
+  /** The Rev vouchers mirroring the close's hand-over and its posted variances. */
+  reversalVoucherIds: string[];
+  session: TillSessionPayload;
+};
+
+/** POST /till/sessions/x-report — the sessions/expected payload, numbered and journalled. */
+export type TillXReport = TillSessionPayload & {
+  /** 1, 2, … — the session's X reads, this one included. */
+  xNo: number;
+  xReadOn: string;
+};

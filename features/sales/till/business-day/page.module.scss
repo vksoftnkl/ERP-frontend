@@ -101,6 +101,10 @@
 .toneMuted {
   color: var(--text-muted);
 }
+/* A parked figure (a SUSPENSE treatment): the shared session palette's "locked". */
+.toneLocked {
+  color: #475569;
+}
 
 .pill.toneDanger {
   background: #fee2e2;
@@ -125,6 +129,11 @@
 .pill.toneMuted {
   background: var(--page-bg);
   color: var(--text-muted);
+}
+.pill.toneLocked {
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+  color: #334155;
 }
 
 /* ── Tabs ──────────────────────────────────────────────────────────────── */
@@ -634,6 +643,12 @@
   margin: 0;
   font-size: 0.76rem;
   color: var(--text-muted);
+}
+
+/* Close with exception: the drawer picker takes the row's spare width. */
+.dialogGrow {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* ── Narrow ────────────────────────────────────────────────────────────── */

@@ -2,6 +2,9 @@
  * Open Till (S1, menu 272) — everything Qt `TillOpenSessionDialog` decides,
  * without the widgets: which counter, which float, what the count says, the
  * live-session panel, why Open (Ctrl+Enter) would refuse, and the body it would post.
+ * Since Qt c77f3f1 the panel also says when the live session waits for its
+ * approver (the screen re-reads every 15 s) and when it belongs to an earlier
+ * business date (Resume refuses).
  *
  * One read, `GET /till/sessions/open-check`, says everything: whether this
  * device needs a session at all, the business day, the counter (linked, or the
@@ -124,6 +127,14 @@ export type LivePanel = {
   title: string;
   head: string;
   text: string;
+  /** "warning" when the text says why this drawer is stuck (waiting for an approver, the day ended). */
+  textTone: "" | "warning";
+  /**
+   * Its own cashier's session here, PENDING_APPROVAL (Qt c77f3f1): it holds
+   * the drawer until a supervisor decides, so the screen looks again every
+   * `WAIT_POLL_MS` to show the decision without a logout.
+   */
+  waitsForApprover: boolean;
   note: string;
   showResume: boolean;
   showForceClose: boolean;
@@ -141,7 +152,13 @@ export type LivePanel = {
   supervisorMovesTssId: string | null;
 };
 
-export function livePanelOf(check: TillOpenCheck | null, me: string): LivePanel | null {
+/**
+ * The live panel. `liveDate` is the live session's business date as
+ * `/sessions/get` answered it (`liveDateOf`; "" until it has): a session of an
+ * earlier business date bills no more, and the text says so while Resume is
+ * offered.
+ */
+export function livePanelOf(check: TillOpenCheck | null, me: string, liveDate = ""): LivePanel | null {
   const mine = check?.deviceSession ?? null;
   const elsewhere = check?.userSessionElsewhere ?? null;
   const session = mine ?? elsewhere;
@@ -151,8 +168,10 @@ export function livePanelOf(check: TillOpenCheck | null, me: string): LivePanel 
   const status = session.status ?? "";
   const resumable = onThisDevice && ownSession && (status === "OPEN" || status === "SUSPENDED");
   const counting = status === "COUNTING";
+  const waitsForApprover = onThisDevice && ownSession && status === "PENDING_APPROVAL";
 
   let text: string;
+  let textTone: LivePanel["textTone"] = "";
   if (!onThisDevice) {
     text =
       `You have session ${session.sessionNo} open on ${session.deviceName || "another device"}. ` +
@@ -163,10 +182,20 @@ export function livePanelOf(check: TillOpenCheck | null, me: string): LivePanel 
       "A supervisor must force-close it before a new session opens here.";
   } else if (counting) {
     text = "Billing has ended and the drawer waits for its count. Continue count opens End Shift.";
+  } else if (waitsForApprover) {
+    text = pendingApprovalText(session.sessionNo);
+    textTone = "warning";
   } else if (!resumable) {
     text = `The session is ${status}: it waits for an approver, so it cannot take money again.`;
   } else {
     text = "The app was closed without ending the shift. The session and its drawer are still yours.";
+  }
+  // A session of an earlier business date bills no more (TILL_SESSION_DAY_ENDED):
+  // say so before the cashier resumes into a bill the server refuses.
+  const ended = resumable ? dayEndedText(check, liveDate) : "";
+  if (ended) {
+    text = ended;
+    textTone = "warning";
   }
 
   return {
@@ -179,6 +208,8 @@ export function livePanelOf(check: TillOpenCheck | null, me: string): LivePanel 
     title: onThisDevice ? "Live session on this device" : "Your session on another device",
     head: `${session.sessionNo}  ·  ${session.operatorName}  ·  opened ${clockOf(session.openedOn)}  ·  ${status}`,
     text,
+    textTone,
+    waitsForApprover,
     note:
       onThisDevice && ownSession
         ? `Another cashier at this device sees: “Counter ${session.counterCode} has ${session.operatorName}'s live ` +
@@ -194,6 +225,83 @@ export function livePanelOf(check: TillOpenCheck | null, me: string): LivePanel 
     showSuspend: onThisDevice && ownSession && status === "OPEN",
     supervisorMovesTssId: onThisDevice && ownSession ? session.sessionId : null,
   };
+}
+
+export function pendingApprovalText(sessionNo: string): string {
+  return (
+    `The count of session ${sessionNo} did not match, so it waits for a supervisor. It holds this drawer until ` +
+    "then — no new session opens here.\n\nAsk a supervisor to approve it (or send it for a recount) in Till " +
+    "Sessions → Cockpit. This screen checks every 15 seconds: once decided, Continue count closes the session and " +
+    "you can open a new one — no need to log out."
+  );
+}
+
+// ─── waiting for an approver ─────────────────────────────────────────────────
+
+/** How often Open Till looks again at a session waiting for its approver (Qt `m_waitPoll`). */
+export const WAIT_POLL_MS = 15_000;
+
+/**
+ * Whether the next look is due: a session waiting for its approver, on a
+ * screen the cashier can see, with nothing posting and no End shift / Cash
+ * movement dialog over it. The timer is single-shot, armed again by each
+ * answer that still shows the wait (Qt: `m_waitPoll->start()` in showLivePanel).
+ */
+export function waitPollDue(
+  panel: LivePanel | null,
+  state: { visible: boolean; busy: boolean; dialogOpen: boolean },
+): boolean {
+  return Boolean(panel?.waitsForApprover) && state.visible && !state.busy && !state.dialogOpen;
+}
+
+// ─── the live session's business date ───────────────────────────────────────
+
+/** A live date asked for that came back blank: unknown — the server judges on Resume. */
+export const LIVE_DATE_UNKNOWN = "?";
+
+/** The live session's business date from `/sessions/get`, `yyyy-MM-dd` ("" when it sent none). */
+export function liveDateOf(payload: Pick<TillSessionPayload, "tssBusinessDate"> | null | undefined): string {
+  return (payload?.tssBusinessDate ?? "").slice(0, 10);
+}
+
+/**
+ * Empty while the live session belongs to today's business date (or its date
+ * is not known yet); otherwise why it cannot bill and what to do (Qt
+ * `dayEndedText`).
+ */
+export function dayEndedText(check: TillOpenCheck | null, liveDate: string): string {
+  const today = (check?.businessDay?.date ?? "").slice(0, 10);
+  if (!liveDate || liveDate === LIVE_DATE_UNKNOWN || !today || liveDate === today) return "";
+  return (
+    `Session ${check?.deviceSession?.sessionNo ?? ""} belongs to business date ${ddmmyyyy(liveDate)} — today is ` +
+    `${ddmmyyyy(today)}. It cannot take bills any more.\n\nEnd shift: count the drawer and close it, then open ` +
+    "a session for today."
+  );
+}
+
+/**
+ * What Resume does (Qt `resumeSession`):
+ *   none      — nothing here to resume
+ *   readDate  — the live panel's `/sessions/get` has not answered: read the
+ *               business date first (blank → `LIVE_DATE_UNKNOWN`), then decide again
+ *   dayEnded  — an earlier business date: refuse, with the text as a warning
+ *   adopt     — OPEN: nothing to tell the server, the session is this app's again
+ *   resume    — SUSPENDED: `POST /till/sessions/resume`
+ */
+export type ResumePlan =
+  | { kind: "none" }
+  | { kind: "readDate" }
+  | { kind: "dayEnded"; text: string }
+  | { kind: "adopt" }
+  | { kind: "resume" };
+
+export function resumePlan(check: TillOpenCheck | null, me: string, liveDate: string): ResumePlan {
+  const session = check?.deviceSession ?? null;
+  if (!session || !livePanelOf(check, me)?.resumable) return { kind: "none" };
+  if (!liveDate) return { kind: "readDate" };
+  const ended = dayEndedText(check, liveDate);
+  if (ended) return { kind: "dayEnded", text: ended };
+  return session.status === "SUSPENDED" ? { kind: "resume" } : { kind: "adopt" };
 }
 
 /** The live session's facts from `/sessions/get`: bills, float, the cash gauge. */

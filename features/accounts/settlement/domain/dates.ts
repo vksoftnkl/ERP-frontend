@@ -7,6 +7,8 @@
  * through `Date#getHours`, which is the browser's zone. Date-only values
  * (`2026-10-08`) are calendar days and are only re-ordered for display.
  */
+import { clock12FromHhmm } from "@/lib/time-format";
+
 const IST_OFFSET_MS = 330 * 60_000;
 
 const STAMP =
@@ -47,16 +49,16 @@ function istParts(value: string | null | undefined): IstParts | null {
   };
 }
 
-/** Qt `clock()`: the time of day, "HH:mm" — blank when there is no time. */
+/** Qt `clock()`: the time of day, "hh:mm AM" — blank when there is no time. */
 export function istClock(value: string | null | undefined): string {
   const p = istParts(value);
-  return p ? `${pad(p.hh)}:${pad(p.mi)}` : "";
+  return p ? clock12FromHhmm(`${pad(p.hh)}:${pad(p.mi)}`) : "";
 }
 
-/** "dd-MM-yyyy HH:mm" on the IST clock. */
+/** "dd-MM-yyyy hh:mm AM" on the IST clock. */
 export function istDateTime(value: string | null | undefined): string {
   const p = istParts(value);
-  return p ? `${pad(p.d)}-${pad(p.m)}-${p.y} ${pad(p.hh)}:${pad(p.mi)}` : "";
+  return p ? `${pad(p.d)}-${pad(p.m)}-${p.y} ${clock12FromHhmm(`${pad(p.hh)}:${pad(p.mi)}`)}` : "";
 }
 
 /**

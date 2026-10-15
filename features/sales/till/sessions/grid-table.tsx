@@ -6,13 +6,20 @@
  * with what headings and alignment is the grid's own config
  * (`/configured-grid-sql/columns`), so Grid Master moves them without touching
  * this file; the fallback list stands in until it is read.
+ *
+ * Given `onSelect`, the table is a pick list (Qt's current index, c77f3f1 —
+ * the cockpit's Bills tab drives Re-tender with it): a click picks a row,
+ * ↑ / ↓ / Home / End move the pick while the table has the focus.
  */
-import { useMemo, type ReactNode } from "react";
+import { useMemo, type KeyboardEvent, type ReactNode } from "react";
 import { cx } from "@/components/design-system/cx";
 import { useGridId, type ConfiguredGridKey } from "@/lib/configured-grids";
 import { useGetGridColumnsQuery } from "@/store/api/metadataApi";
+import { textOf } from "../shared/format";
 import type { GridRow } from "../shared/wire/types";
 import styles from "../shared/till.module.scss";
+import { pickedIndexAfter } from "./cockpit";
+import local from "./sessions.module.scss";
 
 export type GridColumn = { field: string; header: string; align: "left" | "center" | "right" };
 
@@ -26,6 +33,11 @@ export type GridTableProps = {
   loading?: boolean;
   error?: string;
   emptyText: string;
+  /** The picked row's id (`idField`); a pick list only with `onSelect`. */
+  selectedId?: string | null;
+  onSelect?: (row: GridRow) => void;
+  /** The pick list's accessible name. */
+  label?: string;
 };
 
 export function useConfiguredColumns(grid: ConfiguredGridKey, fallback: readonly GridColumn[]): GridColumn[] {
@@ -45,10 +57,39 @@ export function useConfiguredColumns(grid: ConfiguredGridKey, fallback: readonly
   }, [data, fallback]);
 }
 
-export function GridTable({ grid, rows, fallbackColumns, idField, cell, loading, error, emptyText }: GridTableProps) {
+export function GridTable({
+  grid,
+  rows,
+  fallbackColumns,
+  idField,
+  cell,
+  loading,
+  error,
+  emptyText,
+  selectedId,
+  onSelect,
+  label,
+}: GridTableProps) {
   const columns = useConfiguredColumns(grid, fallbackColumns);
+  const selectable = Boolean(onSelect);
+  const selectedIndex = selectable && selectedId ? rows.findIndex((row) => textOf(row, idField) === selectedId) : -1;
+
+  const onKeyDown = (event: KeyboardEvent<HTMLTableElement>) => {
+    if (!onSelect || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    const next = pickedIndexAfter(event.key, selectedIndex, rows.length);
+    if (next < 0) return;
+    event.preventDefault();
+    onSelect(rows[next]);
+    event.currentTarget.querySelectorAll("tbody tr")[next]?.scrollIntoView({ block: "nearest" });
+  };
+
   return (
-    <table className={styles.table}>
+    <table
+      className={cx(styles.table, selectable && local.pickTable)}
+      tabIndex={selectable ? 0 : undefined}
+      aria-label={label}
+      onKeyDown={selectable ? onKeyDown : undefined}
+    >
       <thead>
         <tr>
           {columns.map((column) => (
@@ -60,7 +101,11 @@ export function GridTable({ grid, rows, fallbackColumns, idField, cell, loading,
       </thead>
       <tbody>
         {rows.map((row, index) => (
-          <tr key={String(row[idField] ?? index)}>
+          <tr
+            key={String(row[idField] ?? index)}
+            aria-selected={selectable ? index === selectedIndex : undefined}
+            onClick={onSelect ? () => onSelect(row) : undefined}
+          >
             {columns.map((column) => (
               <td key={column.field} className={cx(column.align === "right" && styles.right, column.align === "center" && styles.center)}>
                 {cell(row, column.field)}

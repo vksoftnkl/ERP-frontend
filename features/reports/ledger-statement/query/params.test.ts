@@ -4,6 +4,7 @@ import {
   checkFilters,
   defaultRange,
   parseFilters,
+  printPrompts,
   reportKey,
   TABS,
   vouchersQuery,
@@ -83,6 +84,23 @@ describe("request queries", () => {
       withBillRefs: false,
       withLegs: false,
       page: 2,
+    });
+  });
+
+  it("print prompts carry the applied period and switches, and no branch for All branches", () => {
+    const filters = parseFilters(new URLSearchParams(`ledger=${LEDGER}&branch=all&cancelled=0&legs=1`), defaults);
+    expect(printPrompts(filters, { narration: false })).toEqual({
+      from_date: "2026-04-01",
+      to_date: "2026-09-25",
+      include_cancelled: "false",
+      with_bill_refs: "true",
+      show_narration: "false",
+      show_legs: "true",
+    });
+    const oneBranch = parseFilters(new URLSearchParams(`ledger=${LEDGER}`), defaults);
+    expect(printPrompts(oneBranch, { narration: true })).toMatchObject({
+      stmt_branch_id: BRANCH,
+      show_narration: "true",
     });
   });
 

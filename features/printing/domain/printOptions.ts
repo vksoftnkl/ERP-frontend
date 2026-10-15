@@ -192,8 +192,13 @@ export type DocumentPreviewInput = {
    * company's current fiscal year, which is right for everything else.
    */
   accYear?: string | null;
+  /**
+   * The DOCUMENT's branch — binds :branch_id and the branch.profile letterhead.
+   * Left out, the server binds the token's branch (the till prints send it).
+   */
+  branchId?: string | null;
   /** Answers to this revision's own prompts, by prompt name. */
-  params?: Record<string, string>;
+  params?: Record<string, unknown>;
   /** Filename stem for the rendered file, without extension. */
   filename?: string | null;
 };
@@ -212,10 +217,11 @@ export type DocumentPreviewInput = {
  * DRAFT-versus-published rule the server enforces cannot be tripped, so a
  * frozen revision and a draft are rendered by exactly the same request.
  *
- * The company is the DOCUMENT's, off the row. The branch and the counter are
- * absent — both are claims on the access token, and both are rungs of the
- * assignment ladder, so a print button that named one would be choosing its
- * own design.
+ * The company is the DOCUMENT's, off the row. The counter is absent — a claim
+ * on the access token and a rung of the assignment ladder. The branch is absent
+ * too, except where a screen prints a document of a branch it may not be sat
+ * at (the till's session Z / X and day Z, Qt c77f3f1): there the DOCUMENT's
+ * branch binds :branch_id and the letterhead, and narrows the ladder with it.
  *
  * -- ONE DOCUMENT SENDS `docId`; SEVERAL SEND `docIds` ---------------------
  *
@@ -246,6 +252,7 @@ export function buildDocumentPreviewRequest(
 
   const companyId = trimmed(input.companyId);
   const accYear = trimmed(input.accYear);
+  const branchId = trimmed(input.branchId);
   const filename = trimmed(input.filename);
 
   return {
@@ -253,6 +260,7 @@ export function buildDocumentPreviewRequest(
     ...(docIds.length === 1 ? { docId: docIds[0] } : { docIds }),
     ...(companyId ? { companyId } : {}),
     ...(accYear ? { accYear } : {}),
+    ...(branchId ? { branchId } : {}),
     ...(filename ? { filename } : {}),
     ...(input.params && Object.keys(input.params).length > 0
       ? { params: input.params }

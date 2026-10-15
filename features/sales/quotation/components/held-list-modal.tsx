@@ -39,6 +39,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FiCheckCircle, FiRefreshCw, FiTrash2, FiUnlock } from "react-icons/fi";
 import { toast } from "@/lib/notify";
+import { dateTime12Of } from "@/lib/time-format";
 import { cx } from "@/components/design-system/cx";
 import {
   useDeleteTxnHoldMutation,
@@ -87,13 +88,7 @@ function heldAt(value: string | null): string {
   if (!value) {
     return "";
   }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return "";
-  }
-  const date = `${`${parsed.getDate()}`.padStart(2, "0")}-${`${parsed.getMonth() + 1}`.padStart(2, "0")}-${parsed.getFullYear()}`;
-  const time = `${`${parsed.getHours()}`.padStart(2, "0")}:${`${parsed.getMinutes()}`.padStart(2, "0")}`;
-  return `${date} ${time}`;
+  return dateTime12Of(value);
 }
 export function HeldListModal(props: HeldListModalProps) {
   const {

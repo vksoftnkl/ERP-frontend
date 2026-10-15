@@ -126,7 +126,7 @@ describe("Not received → write off", () => {
 
 describe("Unexplained → resolve", () => {
   it("heads the panel with the line", () => {
-    expect(unexplainedHead(UNEXPLAINED)).toBe("Line 15:12 · 500.00 · UPI-QR2");
+    expect(unexplainedHead(UNEXPLAINED)).toBe("Line 03:12 PM · 500.00 · UPI-QR2");
     expect(unexplainedHead(null)).toBe("Pick a line above");
     expect(unexplainedFacts(UNEXPLAINED)).toBe(
       "Payout 08-10-2026 (tst00014) · RRN / UTR 428111026638 · payer anand.r@okicici · 2 day(s) in suspense",

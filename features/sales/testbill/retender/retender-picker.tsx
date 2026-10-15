@@ -15,6 +15,7 @@ import { todayIso, toNumber } from "@/features/sales/quotation/quotation.utils";
 import quotationStyles from "@/features/sales/quotation/page.module.scss";
 import { useListRetenderBillsQuery, type RetenderPickRow } from "@/features/sales/testbill/api/bills";
 import type { BillKey } from "@/features/sales/testbill/types";
+import { formatClock12 } from "@/lib/time-format";
 
 export type RetenderPickerProps = {
   isOpen: boolean;
@@ -35,7 +36,7 @@ function timeOf(value: string | null): string {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  return formatClock12(date);
 }
 
 export function RetenderPicker({ isOpen, companyId, branchId, accYear, deviceId, onClose, onPick }: RetenderPickerProps) {

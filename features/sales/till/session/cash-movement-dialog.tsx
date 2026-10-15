@@ -24,12 +24,12 @@ import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent 
 import { NexDropdownSingle } from "@/components/design-system/dropdown";
 import { cx } from "@/components/design-system/cx";
 import { getAuthUserId } from "@/lib/auth/session";
+import { clock12Of } from "@/lib/time-format";
 import { useDropdownId } from "@/lib/configured-dropdowns";
 import { getMessages, subscribeToMessages, toast } from "@/lib/notify";
 import { useTillSessionClient } from "../shared/api/till-session-api";
 import { EMPTY_COUNT, toDenominations, type Denomination } from "../shared/denom";
 import { tillErrorOf } from "../shared/errors";
-import { clockOf } from "../shared/format";
 import { amountInputPaise, formatMoney, isAmountDraft, paiseOf } from "../shared/money";
 import { reasonGridParams, toReasons, type TillReason } from "../shared/reasons";
 import { selectOnFocus } from "../shared/select-on-focus";
@@ -145,7 +145,8 @@ function CashMovementBody({
   const [busy, setBusy] = useState(false);
   /** The declared amount as typed (a drop): kept as text so "2000." survives a keystroke. */
   const [amountText, setAmountText] = useState("");
-  const [time] = useState(() => clockOf(new Date().toISOString()));
+  /** The time the dialog opened, `hh:mm AM` (Qt c77f3f1 `hh:mm AP`). */
+  const [time] = useState(() => clock12Of(new Date()));
   const me = getAuthUserId() ?? "";
   const companyId = sessionKey.companyId;
 

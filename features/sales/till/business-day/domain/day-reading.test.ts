@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { LiveSession } from "../../shared/live-cash";
 import { MINUS } from "./decimal";
 import {
+  NOT_ON_SERVER,
   blankHead,
   checkLines,
   dayHead,
@@ -10,9 +11,10 @@ import {
   noDayReading,
   plural,
   readDay,
+  sessionKeysById,
   type RowsState,
 } from "./day-reading";
-import type { GridRow, TillDay } from "./wire";
+import type { CloseCheckItem, GridRow, TillCloseCheck, TillDay } from "./wire";
 
 const CONTEXT = { companyName: "Acme Foods Pvt Ltd", cutoff: "04:00" };
 
@@ -26,13 +28,46 @@ const DAY: TillDay = {
   tbdOpenedOn: new Date(2026, 9, 7, 8, 58).toISOString(),
   tbdOpenedBy: "u1",
   tbdClosedOn: null,
+  tbdClosedByName: "",
   tbdZNo: "",
   tbdReopenCount: 0,
   sessions: [
     { status: "CLOSED", count: 4 },
     { status: "PENDING_APPROVAL", count: 1 },
   ],
+  handoverReceipt: "NONE",
+  awaitingReceipt: { thisDay: 0, earlierDays: 0, oldestOn: null },
 };
+
+const OPEN_DAY: TillDay = { ...DAY, tbdStatus: "OPEN" };
+
+function item(code: string, tone: CloseCheckItem["tone"], detail: string, sessionIds: string[] = []): CloseCheckItem {
+  return { code, tone, count: sessionIds.length, detail, sessionIds };
+}
+
+function serverCheck(items: CloseCheckItem[], over: Partial<TillCloseCheck> = {}): TillCloseCheck {
+  return {
+    tbdId: "d1",
+    tbdAccYear: "2026-2027",
+    tbdBusinessDate: "2026-10-07",
+    tbdStatus: "OPEN",
+    items,
+    canClose: false,
+    canCloseWithException: false,
+    ...over,
+  };
+}
+
+const ALL_GREEN = [
+  item("SESSIONS_LIVE", "GREEN", "No session is open"),
+  item("SESSIONS_PENDING_APPROVAL", "GREEN", "No session waits for a variance decision"),
+  item("CASH_TO_APPROVE", "GREEN", "All cash handed over has been approved into the safe"),
+  item("VARIANCE_UNDECIDED", "GREEN", "Every cash difference is decided"),
+  item("MOVEMENTS_UNPOSTED", "GREEN", "Every movement and variance is posted"),
+  item("SLIP_GAPS", "GREEN", "No slip gap is open"),
+  item("HELD_BILLS", "GREEN", "No held bill is parked"),
+  item("SAFE_OVER_INSURED", "GREEN", "No safe is over its insured limit"),
+];
 
 function session(overrides: GridRow): GridRow {
   return {
@@ -71,17 +106,25 @@ describe("the head", () => {
   it("reads an open day as Qt shows it", () => {
     const head = dayHead({ ...DAY, tbdStatus: "OPEN" }, CONTEXT);
     expect(head.title).toBe("Business Day  07-10-2026");
-    expect(head.sub).toBe("Acme Foods Pvt Ltd · opened 08:58");
+    expect(head.sub).toBe("Acme Foods Pvt Ltd · opened 08:58 AM");
     expect(head.pill).toBe("OPEN");
     expect(head.pillTone).toBe("info");
     expect(head.facts).toEqual({
       status: "OPEN — sessions may open",
-      opened: "08:58",
+      opened: "08:58 AM",
       sessions: "5 · 4 closed",
       storeZ: "issued on close",
-      cutoff: "04:00",
+      cutoff: "04:00 AM",
       reopened: "0",
     });
+  });
+
+  it("says who closed a CLOSED day and when", () => {
+    const closed = dayHead(
+      { ...DAY, tbdStatus: "CLOSED", tbdClosedOn: new Date(2026, 9, 7, 22, 42).toISOString(), tbdClosedByName: "MEENA T" },
+      CONTEXT,
+    );
+    expect(closed.facts.status).toBe("CLOSED 10:42 PM by MEENA T");
   });
 
   it("tones CLOSING and CLOSED", () => {
@@ -136,12 +179,15 @@ describe("readDay", () => {
     );
     expect(reading.verdict.pill).toBe("READY");
     expect(reading.verdict.tone).toBe("success");
+    expect(reading.verdict.text).toBe(
+      "Nothing waits by the screen's own reading — the server's check could not be read, so F10 waits for it.",
+    );
     expect(checkLines(reading.checks)).toEqual([
       "GREEN Sessions closed — All 2 sessions closed",
       "GREEN Approvals pending — None waiting",
       "GREEN Remittance — No safe over its insured limit",
-      "LATER Drop bags verified · safe counted — The cash office (S9: bag verification, safe count) is not on the server yet",
-      "LATER Server close-check — GET /till/days/close-check is not built — this list is the screen's own reading of the sessions",
+      "LATER Cash to approve — Hand-over receipt is off (till.handover_receipt = NONE): hand-overs go straight to the safe",
+      "LATER Safe counted — The safe count waits for the server (till notes 118)",
     ]);
     const lines = Object.fromEntries(
       reading.numbers.flatMap((section) => section.lines.map((line) => [`${section.name}/${line.name}`, line])),
@@ -172,12 +218,11 @@ describe("readDay", () => {
     );
     expect(sessions.action?.session?.tssId).toBe("s-C01-261007-01");
     expect(approvals.tone).toBe("amber");
-    expect(approvals.detail).toBe(
-      "1 session wait for an approver: C03-261007-01 · PRIYA M — the approval gate is phase 3",
-    );
+    expect(approvals.detail).toBe("1 session wait for an approver: C03-261007-01 · PRIYA M");
     expect(approvals.action?.session?.tssId).toBe("s-p");
     expect(reading.verdict.pill).toBe("1 RED");
     expect(reading.verdict.tone).toBe("danger");
+    expect(reading.verdict.text).toBe("Blocks the day close: Sessions closed. Clear each from its row above.");
   });
 
   it("is AMBER when sessions are counted but not closed", () => {
@@ -188,6 +233,9 @@ describe("readDay", () => {
     expect(reading.checks[0].tone).toBe("amber");
     expect(reading.checks[0].detail).toBe("1 session counted but not closed: C02-261007-01 · SURESH B (counting)");
     expect(reading.verdict.pill).toBe("1 AMBER");
+    expect(reading.verdict.text).toBe(
+      "No red item by the screen's own reading — the server's check could not be read, so F10 waits for it.",
+    );
   });
 
   it("raises a remittance for a safe over its insured limit, with nothing to do it yet", () => {
@@ -244,17 +292,23 @@ describe("readDay", () => {
       }),
       live("y2", { sessionNo: "C03-261005-01", cashier: "SURESH B", status: "COUNTING", cashPaise: null }),
     ]);
-    expect(checkLines(reading.checks).slice(0, 3)).toEqual([
+    expect(checkLines(reading.checks)).toEqual([
       "RED Sessions closed — 1 session still billing or being counted: C01-261007-01 · RAVI K",
+      "GREEN Approvals pending — None waiting",
+      "GREEN Remittance — No safe over its insured limit",
+      "LATER Cash to approve — Hand-over receipt is off (till.handover_receipt = NONE): hand-overs go straight to the safe",
       "RED Drawers still out from an earlier day — 2 sessions opened before today and not closed: " +
         "C02-261006-01 · MEENA T · ₹ 7,450.00, C03-261005-01 · SURESH B · cash hidden",
-      "GREEN Approvals pending — None waiting",
+      "LATER Safe counted — The safe count waits for the server (till notes 118)",
     ]);
-    expect(reading.checks[1].action).toEqual({
+    expect(reading.checks[4].action).toEqual({
       label: "Open cockpit  →",
       session: { companyId: "c1", branchId: "b1", accYear: "2025-2026", tssId: "y1" },
     });
     expect(reading.verdict.pill).toBe("2 RED");
+    expect(reading.verdict.text).toBe(
+      "Blocks the day close: Sessions closed, Drawers still out from an earlier day. Clear each from its row above.",
+    );
   });
 
   it("looking back at an older day, flags only drawers opened before it", () => {
@@ -289,6 +343,214 @@ describe("readDay", () => {
   it("says when the safes could not be read instead of a false green", () => {
     const reading = readDay(ready([]), { status: "error", rows: [] });
     expect(reading.checks.find((check) => check.title === "Remittance")?.tone).toBe("grey");
+  });
+
+  it("says on a grey row why the server's close-check is not behind the list", () => {
+    const reading = readDay(ready([]), NO_SAFES, null, "2026-10-07", {
+      day: OPEN_DAY,
+      check: null,
+      checkError: "This user may not check the business day",
+    });
+    expect(checkLines(reading.checks)).toContain(
+      "LATER Server close-check — Could not be read (This user may not check the business day) — " +
+        "this list is the screen's own reading of the sessions",
+    );
+  });
+});
+
+describe("cash to approve (the screen's own reading)", () => {
+  const NOW = new Date(2026, 9, 15, 18, 0);
+  const required = (awaiting: TillDay["awaitingReceipt"]): TillDay => ({
+    ...OPEN_DAY,
+    handoverReceipt: "REQUIRED",
+    awaitingReceipt: awaiting,
+  });
+  const cashCheck = (day: TillDay, rows: GridRow[] = []) =>
+    readDay(ready(rows), NO_SAFES, null, "2026-10-07", { day, now: NOW }).checks.find(
+      (check) => check.title === "Cash to approve",
+    );
+
+  it("is green when nothing waits", () => {
+    expect(cashCheck(required({ thisDay: 0, earlierDays: 0, oldestOn: null }))).toEqual({
+      tone: "green",
+      title: "Cash to approve",
+      detail: "Every closed session's cash is approved into the safe",
+    });
+  });
+
+  it("is red with today's and earlier counts, the oldest as a clock when it is today", () => {
+    const check = cashCheck(
+      required({ thisDay: 2, earlierDays: 1, oldestOn: new Date(2026, 9, 15, 9, 5).toISOString() }),
+    );
+    expect(check?.tone).toBe("red");
+    expect(check?.detail).toBe(
+      "3 hand-overs / drops not yet approved by a supervisor: 2 today · 1 from earlier days · oldest 09:05 AM",
+    );
+    // Not on this day's list: Till Sessions finds it.
+    expect(check?.action).toEqual({ label: "Till Sessions  →", session: null, href: "/sales/till/sessions" });
+  });
+
+  it("dates an oldest one from an earlier day, and opens the newest listed row TO APPROVE", () => {
+    const check = cashCheck(
+      required({ thisDay: 1, earlierDays: 0, oldestOn: new Date(2026, 9, 14, 18, 17).toISOString() }),
+      [
+        session({ tss_session_no: "A", cash_receipt: "TO APPROVE", tss_id: "s-a" }),
+        session({ tss_session_no: "B", cash_receipt: "APPROVED" }),
+        session({ tss_session_no: "C", cash_receipt: "TO APPROVE", tss_id: "s-c" }),
+      ],
+    );
+    expect(check?.detail).toBe("1 hand-over / drop not yet approved by a supervisor: 1 today · oldest 14-10 06:17 PM");
+    expect(check?.action?.session?.tssId).toBe("s-c");
+  });
+});
+
+describe("with the server's close-check", () => {
+  const rows = [session({ tss_session_no: "C01-261007-01", cashier: "RAVI K", tss_status: "OPEN", tss_id: "s1" })];
+
+  it("lists the server's items under the screen's titles, with their jumps", () => {
+    const check = serverCheck(
+      [
+        item("SESSIONS_LIVE", "RED", "1 session(s) still open or being counted: C01-261007-01", ["s1"]),
+        item("SESSIONS_PENDING_APPROVAL", "GREEN", "No session waits for a variance decision"),
+        item("CASH_TO_APPROVE", "RED", "1 hand-over not approved", ["s-elsewhere"]),
+        item("VARIANCE_UNDECIDED", "GREEN", "Every cash difference is decided"),
+        item("MOVEMENTS_UNPOSTED", "GREEN", "Every movement and variance is posted"),
+        item("SLIP_GAPS", "AMBER", "1 slip gap open"),
+        item("HELD_BILLS", "GREEN", "No held bill is parked"),
+        item("SAFE_OVER_INSURED", "AMBER", "S1 over its insured limit"),
+        item("SOMETHING_NEW", "AMBER", "A code the screen does not know"),
+      ],
+      { canCloseWithException: false },
+    );
+    const reading = readDay(ready(rows), NO_SAFES, null, "2026-10-07", { day: OPEN_DAY, check });
+    expect(checkLines(reading.checks)).toEqual([
+      "RED Sessions closed — 1 session(s) still open or being counted: C01-261007-01",
+      "GREEN Approvals pending — No session waits for a variance decision",
+      "RED Cash to approve — 1 hand-over not approved",
+      "GREEN Cash differences decided — Every cash difference is decided",
+      "GREEN Everything posted — Every movement and variance is posted",
+      "AMBER Slip gaps — 1 slip gap open",
+      "GREEN Held bills — No held bill is parked",
+      "AMBER Remittance — S1 over its insured limit — raise a remittance",
+      "AMBER SOMETHING_NEW — A code the screen does not know",
+      "LATER Safe counted — The safe count waits for the server (till notes 118)",
+    ]);
+    // The day's own row …
+    expect(reading.checks[0].action).toEqual({
+      label: "Open cockpit  →",
+      session: { companyId: "c1", branchId: "b1", accYear: "2026-2027", tssId: "s1" },
+    });
+    // … or a key made from the day for one not on its list.
+    expect(reading.checks[2].action?.session).toEqual({
+      companyId: "c1",
+      branchId: "b1",
+      accYear: "2026-2027",
+      tssId: "s-elsewhere",
+    });
+    expect(reading.checks[7].action).toEqual({ label: "Remit  →", session: null });
+    expect(reading.checks[5].action).toBeUndefined();
+    expect(reading.verdict).toEqual({
+      pill: "2 RED",
+      tone: "danger",
+      text: "Blocks the day close: Sessions closed, Cash to approve. Clear each from its row above.",
+    });
+  });
+
+  it("says Close with exception when only live sessions block", () => {
+    const check = serverCheck(
+      [item("SESSIONS_LIVE", "RED", "1 session(s) still open", ["s1"]), ...ALL_GREEN.slice(1)],
+      { canCloseWithException: true },
+    );
+    const reading = readDay(ready(rows), NO_SAFES, null, "2026-10-07", { day: OPEN_DAY, check });
+    expect(reading.verdict.text).toBe(
+      "Only sessions still open block the close. Close them from the cockpit, or Close with exception: " +
+        "count their drawers there and a store manager approves.",
+    );
+  });
+
+  it("makes a drawer from an earlier day amber beside the server's check", () => {
+    const check = serverCheck(ALL_GREEN, { canClose: true });
+    const reading = readDay(ready([]), NO_SAFES, [live("y1", { sessionNo: "C02-261006-01" })], "2026-10-07", {
+      day: OPEN_DAY,
+      check,
+    });
+    const older = reading.checks.find((entry) => entry.title === "Drawers still out from an earlier day");
+    expect(older?.tone).toBe("amber");
+    expect(reading.checks.map((entry) => entry.title)).not.toContain("Server close-check");
+    expect(reading.verdict).toEqual({
+      pill: "1 AMBER",
+      tone: "warning",
+      text: "No red item: F10 closes the day. Look at what is amber first — it is not checked again.",
+    });
+  });
+
+  it("is READY for F10 when every item is green", () => {
+    const reading = readDay(ready([]), NO_SAFES, [], "2026-10-07", {
+      day: OPEN_DAY,
+      check: serverCheck(ALL_GREEN, { canClose: true }),
+    });
+    expect(reading.verdict).toEqual({
+      pill: "READY",
+      tone: "success",
+      text: "Every session is closed and nothing waits: F10 closes the day.",
+    });
+  });
+
+  it("ignores a check read for another day", () => {
+    const reading = readDay(ready([]), NO_SAFES, [], "2026-10-07", {
+      day: OPEN_DAY,
+      check: serverCheck(ALL_GREEN, { tbdId: "another-day", canClose: true }),
+    });
+    expect(reading.checks[0].detail).toBe("No till session today");
+    expect(reading.verdict.text).toContain("the server's check could not be read");
+  });
+
+  it("shows the server's list while the day's sessions are still being read", () => {
+    const reading = readDay({ status: "loading", rows: [] }, NO_SAFES, [live("y1")], "2026-10-07", {
+      day: OPEN_DAY,
+      check: serverCheck(ALL_GREEN, { canClose: true }),
+    });
+    expect(reading.checks).toHaveLength(ALL_GREEN.length + 1);
+    expect(reading.numbers).toEqual([]);
+    expect(reading.verdict.pill).toBe("READY");
+  });
+
+  it("names a session by id from the day's list, else from the day", () => {
+    expect(sessionKeysById("s1", rows, OPEN_DAY)?.accYear).toBe("2026-2027");
+    expect(sessionKeysById("zz", [], OPEN_DAY)).toEqual({
+      companyId: "c1",
+      branchId: "b1",
+      accYear: "2026-2027",
+      tssId: "zz",
+    });
+    expect(sessionKeysById("zz", [], null)).toBeNull();
+  });
+});
+
+describe("a closed day", () => {
+  it("says who closed it and how to reopen it, whatever the checklist", () => {
+    const closed: TillDay = {
+      ...DAY,
+      tbdStatus: "CLOSED",
+      tbdClosedOn: new Date(2026, 9, 7, 23, 5).toISOString(),
+      tbdClosedByName: "ANITA S",
+      tbdZNo: "14",
+    };
+    const reading = readDay(ready([]), NO_SAFES, [], "2026-10-07", {
+      day: closed,
+      check: serverCheck([item("SESSIONS_LIVE", "RED", "late")], { tbdStatus: "CLOSED" }),
+    });
+    expect(reading.verdict).toEqual({
+      pill: "CLOSED",
+      tone: "success",
+      text: "Closed 11:05 PM by ANITA S — store Z 14. Reopen day opens it again (an area manager's PIN).",
+    });
+    // Even before the sessions are read.
+    expect(readDay({ status: "loading", rows: [] }, NO_SAFES, null, "", { day: closed }).verdict.pill).toBe("CLOSED");
+  });
+
+  it("disables a jump with nothing behind it with the reason", () => {
+    expect(NOT_ON_SERVER).toBe("Waits for the server (till notes 118: safe count and remittance)");
   });
 });
 

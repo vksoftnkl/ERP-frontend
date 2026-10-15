@@ -19,6 +19,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { toast } from "@/lib/notify";
+import { dateTime12Of } from "@/lib/time-format";
 import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
 import { PURPOSE_CODE } from "@/features/printing/domain/documentPrint";
 import { moveHeaderFocus } from "@/features/sales/quotation/components/header-focus";
@@ -147,17 +148,12 @@ const OPTION_LABELS: Partial<Record<keyof SaleOrderHeader, string>> = {
 type OptionQuestion = { field: keyof SaleOrderHeader; label: string; checked: boolean };
 type DuplicateQuestion = { rowKey: string; pick: ItemPick; rowNo: number };
 
-/** "created VIJI · 02-10-2026 14:05" — the title bar's audit line. */
+/** "created VIJI · 02-10-2026 02:05 PM" — the title bar's audit line. */
 function formatAuditStamp(iso: string | null): string {
   if (!iso) {
     return "";
   }
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return iso;
-  }
-  const two = (value: number) => String(value).padStart(2, "0");
-  return `${two(date.getDate())}-${two(date.getMonth() + 1)}-${date.getFullYear()} ${two(date.getHours())}:${two(date.getMinutes())}`;
+  return dateTime12Of(iso) || iso;
 }
 
 /** Enter walks the header the way the Qt dialog's Enter-as-Tab does. */

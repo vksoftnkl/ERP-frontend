@@ -73,6 +73,18 @@ export type DocumentPreviewDialogProps = {
    * company's current fiscal year, so nothing here restates it.
    */
   accYear?: string | null;
+  /**
+   * The DOCUMENT's branch — binds :branch_id and the branch.profile letterhead.
+   * Only the till's prints send it (a session or day printed away from its
+   * counter); left out, the server binds the token's branch.
+   */
+  branchId?: string | null;
+  /**
+   * Answers to the revision's own prompts, by prompt name — a report's period
+   * and switches (the Ledger Statement's from_date / to_date ...). Documents
+   * send none.
+   */
+  params?: Record<string, unknown> | null;
   /** What the header calls this — "Quotation quo00034", or "3 Bills". */
   title: string;
   /** Filename stem the Download button saves under, without extension. */
@@ -118,6 +130,8 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
     docIds,
     companyId,
     accYear,
+    branchId,
+    params,
     title,
     filename,
     autoPrint,
@@ -129,8 +143,11 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
    * `docIds` is a fresh array on every parent render, so it cannot be a
    * dependency or the render-once guard below would fire forever. The joined
    * string is what actually changes when the operator ticks a different set.
+   * The prompt answers are the same kind of fresh object, so they travel as
+   * their JSON for the same reason.
    */
   const docKey = docIds.join(",");
+  const paramsKey = params && Object.keys(params).length > 0 ? JSON.stringify(params) : "";
 
   // `/print-template/get` — the revisions live on the template, and which one
   // to render is not something a print button can know.
@@ -190,7 +207,7 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
     (outputMode: RecordPrintRequest["outputMode"]): void => {
       const current = rendered.current;
       if (!current) return;
-      const { versionId, docId, docIds, companyId, accYear } = current.request;
+      const { versionId, docId, docIds, companyId, accYear, branchId } = current.request;
 
       recordPrint({
         versionId,
@@ -199,6 +216,7 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
         ...(docIds ? { docIds } : {}),
         ...(companyId ? { companyId } : {}),
         ...(accYear ? { accYear } : {}),
+        ...(branchId ? { branchId } : {}),
         ...(current.result.pageCount !== null
           ? { pageCount: current.result.pageCount }
           : {}),
@@ -227,7 +245,9 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
         docIds: docKey.split(","),
         companyId,
         accYear,
+        branchId,
         filename,
+        ...(paramsKey ? { params: JSON.parse(paramsKey) as Record<string, unknown> } : {}),
       });
       const result = await renderPreview(request).unwrap();
 
@@ -253,10 +273,12 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
   }, [
     accYear,
     autoPrint,
+    branchId,
     companyId,
     docKey,
     filename,
     logPrint,
+    paramsKey,
     renderPreview,
     replaceObjectUrl,
     versionId,
@@ -276,12 +298,13 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
     // Keyed on the DOCUMENTS as well as the revision. Keyed on the revision
     // alone, reopening the popup on a different set of ticked rows would find
     // the guard already satisfied and leave the previous render on screen.
-    const renderKey = `${versionId}::${docKey}`;
+    // The prompt answers likewise: the same ledger over another period.
+    const renderKey = `${versionId}::${docKey}::${paramsKey}`;
     if (versionId && rannedFor.current !== renderKey) {
       rannedFor.current = renderKey;
       void run();
     }
-  }, [docKey, run, versionId]);
+  }, [docKey, paramsKey, run, versionId]);
 
   // The blob outlives this component unless it is revoked; the viewer is gone
   // by then, so nothing can be reading it — UNLESS it was handed to the

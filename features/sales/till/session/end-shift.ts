@@ -244,8 +244,8 @@ export function recountText(attemptsLeft: number): string {
 }
 
 export const APPROVAL_TEXT =
-  "Out of tolerance after the last recount: the session waits for a supervisor. The approval gate is not on the " +
-  "server yet (till build phase 3) — until it is, this session holds its counter, cashier and device (notes 97 §1.2).";
+  "Out of tolerance after the last recount: the session waits for a supervisor. Until one approves it in Till " +
+  "Sessions → Cockpit, it holds this counter, cashier and device. Open Till Session shows when it is decided.";
 
 export const END_BILLING_CONFIRM =
   "After this no bill, return or receipt can take money in this session, and only a supervisor can reopen it. " +
@@ -267,6 +267,24 @@ export function closeConfirmText(floatLeft: number | null): string {
 
 export function closeBody(key: TillSessionKey, floatLeft: number | null): TillCloseBody {
   return { ...key, floatLeft: floatLeft === null ? null : paiseToNumber(floatLeft) };
+}
+
+/**
+ * What a successful close says. Notes 113 / 114 (Qt c77f3f1): under
+ * till.handover_receipt REQUIRED the hand-over waits for a supervisor's
+ * Approve Cash (`receiptState` AWAITING) before it is the safe's — the cashier
+ * is told to hand it over, and the message waits for them (`awaiting`).
+ */
+export function closedText(payload: Pick<TillSessionPayload, "tssSessionNo" | "tssZNo" | "receiptState">): {
+  text: string;
+  awaiting: boolean;
+} {
+  const closed = `Session ${payload.tssSessionNo} closed — Z ${payload.tssZNo ?? ""}.`;
+  const awaiting = payload.receiptState === "AWAITING";
+  return {
+    text: awaiting ? `${closed}\n\nHand the cash to your supervisor to approve: it is not in the safe until they do.` : closed,
+    awaiting,
+  };
 }
 
 /** The Float left box, read: blank = counter default (null), else paise. */

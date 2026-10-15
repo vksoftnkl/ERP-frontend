@@ -30,8 +30,10 @@ import { LegsPopover } from "./components/legs-popover";
 import { LedgerDetailPanel, MonthWisePanel, PeriodSummaryPanel } from "./components/panels";
 import { DailyTable, MonthlyTable } from "./components/summary-tables";
 import { VoucherGrid } from "./components/voucher-grid";
-import { exportFileName, toXlsx } from "./export/to-xlsx";
+import { exportFileName, exportFileStem, toXlsx } from "./export/to-xlsx";
 import { writeXlsx, XLSX_MIME } from "@/features/reports/shared/export/xlsx-writer";
+import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
+import { PURPOSE_CODE, type DocumentPrintTarget } from "@/features/printing/domain/documentPrint";
 import { buildGridModel } from "./grid/grid-model";
 import { NO_SCREEN_MESSAGE, drillTarget } from "./nav/drill-target";
 import { loadedRows } from "./query/pages";
@@ -41,6 +43,7 @@ import {
   defaultRange,
   exportQuery,
   parseFilters,
+  printPrompts,
   scopeQuery,
   type Filters,
   type Session,
@@ -55,7 +58,7 @@ import type { LedgerPickItem, VoucherRow } from "./wire/types";
 export const LEDGER_STATEMENT_HREF = "/reports/ledger-statement";
 const DISPLAY_STORAGE_KEY = "erp.ledgerStatement.display";
 const RETURN_STORAGE_PREFIX = "erp.ledgerStatement.return:";
-const PRINT_TIP = "Arrives with the printing module";
+const WHATSAPP_TIP = "Sending by WhatsApp is not available yet";
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: "vouchers", label: "Vouchers" },
   { id: "daily", label: "Daily" },
@@ -447,16 +450,49 @@ export default function LedgerStatementScreen() {
     }
   }, [activeCompany, branches, client, exporting, filters, session]);
 
+  /* ---- Print / PDF (F11): the LEDGER_STATEMENT design, through the print dialog.
+   * The report on screen is what prints — the applied filters, never the
+   * strip's draft — so it waits until that report's /header has arrived. */
+  const [printOpen, setPrintOpen] = useState(false);
+  const printTarget = useMemo<DocumentPrintTarget | null>(() => {
+    if (!filters.ledgerId || !sessionReady || !header || header.ledger.ledgerId !== filters.ledgerId) return null;
+    return {
+      docId: filters.ledgerId,
+      companyId: session.companyId,
+      accYear: session.accYear,
+      filename: exportFileStem(header.ledger.name, filters.fromDate, filters.toDate),
+      params: printPrompts(filters, display),
+    };
+  }, [display, filters, header, session.accYear, session.companyId, sessionReady]);
+  const canPrint = permissions.permissions.canPrint;
+  const openPrint = useCallback(() => {
+    if (printTarget && canPrint) setPrintOpen(true);
+  }, [canPrint, printTarget]);
+  const closePrint = useCallback(() => setPrintOpen(false), []);
+
   const onClose = useCallback(() => router.push("/home"), [router]);
 
   /* ---- keys (the screen's own; the grid keys its rows) */
-  const keys = useRef({ onShow, walkLedger, openLegs, onClose, popoverOpen: false, popoverRow: null as string | null });
+  const keys = useRef({
+    onShow,
+    walkLedger,
+    openLegs,
+    onClose,
+    openPrint,
+    closePrint,
+    printOpen: false,
+    popoverOpen: false,
+    popoverRow: null as string | null,
+  });
   useEffect(() => {
     keys.current = {
       onShow,
       walkLedger,
       openLegs,
       onClose,
+      openPrint,
+      closePrint,
+      printOpen,
       popoverOpen: popover !== null,
       popoverRow: popover?.row.voucherId ?? null,
     };
@@ -467,10 +503,25 @@ export default function LedgerStatementScreen() {
       const k = keys.current;
       if (event.key === "F5") {
         event.preventDefault();
-        k.onShow();
+        if (!k.printOpen) k.onShow();
+        return;
+      }
+      // The print dialogs take no keys of their own: while one is up, Escape
+      // closes it (not the screen) and the report's keys stay quiet under it.
+      if (k.printOpen) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          k.closePrint();
+        }
         return;
       }
       if (event.defaultPrevented) return;
+      if (event.key === "F11") {
+        // The browser's own F11 goes full-screen.
+        event.preventDefault();
+        k.openPrint();
+        return;
+      }
       if (event.ctrlKey && !event.altKey && event.key.toLowerCase() === "l") {
         event.preventDefault();
         ledgerInputRef.current?.focus();
@@ -672,7 +723,7 @@ export default function LedgerStatementScreen() {
         <div className={styles.footerHints}>
           <kbd>F5</kbd> Show · <kbd>Ctrl+L</kbd> Ledger · <kbd>PgUp</kbd>/<kbd>PgDn</kbd> Ledger in group ·{" "}
           <kbd>Enter</kbd> Open voucher · <kbd>Space</kbd> Legs · <kbd>Alt+F1</kbd> All legs · <kbd>End</kbd> Last
-          row · <kbd>Esc</kbd> Close
+          row · <kbd>F11</kbd> Print · <kbd>Esc</kbd> Close
         </div>
         <div className={styles.footerActions}>
           <button type="button" className={styles.button} onClick={onClose}>
@@ -687,17 +738,39 @@ export default function LedgerStatementScreen() {
           >
             {exporting ? "Exporting…" : "Excel"}
           </button>
-          <button type="button" className={styles.button} disabled title={PRINT_TIP}>
+          <button
+            type="button"
+            className={styles.button}
+            onClick={openPrint}
+            disabled={!printTarget || !canPrint}
+            title={canPrint ? "Preview or save the statement as a PDF" : "You do not have print rights"}
+          >
             PDF
           </button>
-          <button type="button" className={styles.button} disabled title={PRINT_TIP}>
+          <button type="button" className={styles.button} disabled title={WHATSAPP_TIP}>
             WhatsApp
           </button>
-          <button type="button" className={styles.button} disabled title={PRINT_TIP}>
-            Print
+          <button
+            type="button"
+            className={styles.button}
+            onClick={openPrint}
+            disabled={!printTarget || !canPrint}
+            title={canPrint ? "Print the statement on A5" : "You do not have print rights"}
+          >
+            Print<span className={styles.key}>F11</span>
           </button>
         </div>
       </footer>
+
+      {printOpen && printTarget ? (
+        <PrintOptionsDialog
+          open
+          onClose={closePrint}
+          purposeCode={PURPOSE_CODE.LEDGER_STATEMENT}
+          documentLabel={`Ledger Statement ${header?.ledger.name ?? ""}`.trim()}
+          targets={[printTarget]}
+        />
+      ) : null}
 
       {popover ? (
         <LegsPopover

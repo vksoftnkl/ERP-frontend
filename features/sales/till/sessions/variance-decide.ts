@@ -10,6 +10,11 @@
  * says so with TILL_APPROVER_PIN). Who may decide is the server's call: never
  * the cashier, a 276 grant at the rule's level and amount, or a super admin.
  * Approved, the session is COUNTING again and End Shift closes it.
+ *
+ * Bag mode (Qt c77f3f1 `setBag`, notes 113): a received bag's RECEIVE-stage
+ * difference instead — any session status, APPROVE only (the receiver's
+ * count stands, so no Recount), `tcmId` in the body; neither that receiver
+ * nor the session's cashier decides it.
  */
 import type { TillDecideVarianceBody } from "../shared/api/till-session-api";
 import { CASH_TENDER_TYPE_ID } from "../shared/denom";
@@ -22,11 +27,14 @@ import type {
   TillSessionPayload,
   TillVarianceDecision,
 } from "../shared/wire/types";
-import { pendingVariance } from "./cockpit";
+import { bagDocNo, pendingReceive, pendingVariance } from "./cockpit";
 
 export type VarianceEvent = "CASH_VARIANCE" | "NONCASH_VARIANCE";
 
 // ─── what the cockpit opens it on ────────────────────────────────────────────
+
+/** A received bag whose RECEIVE-stage difference is decided (notes 113). */
+export type DecideBag = { tcmId: string; docNo: string };
 
 /** What the dialog is opened on: the session's facts and the gap it decides. */
 export type DecideRequest = {
@@ -35,6 +43,8 @@ export type DecideRequest = {
   variancePaise: number;
   sessionNo: string;
   cashier: string;
+  /** Set: a bag's receive difference — APPROVE only, `tcmId` in the body. */
+  bag?: DecideBag | null;
 };
 
 /**
@@ -51,6 +61,28 @@ export function decideRequestOf(s: TillSessionPayload, key: TillSessionKey): Dec
     sessionNo: s.tssSessionNo ?? "",
     cashier: s.operatorName ?? "",
   };
+}
+
+/**
+ * A received bag's pending difference (Qt `decideVariance` → `setBag`): a cash
+ * gap of the bag's variance, on the bag the variance names.
+ */
+export function bagDecideRequestOf(s: TillSessionPayload, key: TillSessionKey): DecideRequest {
+  const receive = pendingReceive(s);
+  const tcmId = receive?.tvrMovementId ?? "";
+  return {
+    key,
+    event: "CASH_VARIANCE",
+    variancePaise: paiseOf(receive?.tvrVariance),
+    sessionNo: s.tssSessionNo ?? "",
+    cashier: s.operatorName ?? "",
+    bag: { tcmId, docNo: bagDocNo(s, tcmId) },
+  };
+}
+
+/** The Event fact: the gap's event, or `RECEIVE_VARIANCE · <bag doc no>`. */
+export function decideEventText(request: DecideRequest): string {
+  return request.bag ? `RECEIVE_VARIANCE · ${request.bag.docNo}` : request.event;
 }
 
 /** What the cockpit says once the server took the decision. */
@@ -109,8 +141,11 @@ export function decideButtonLabel(decision: TillVarianceDecision): string {
   return decision === "APPROVE" ? "Approve - Ctrl+Enter" : "Send to recount - Ctrl+Enter";
 }
 
-/** The request: the key and the decision; APPROVE adds its treatment and reason; the PIN only when typed. */
-export function decideBody(key: TillSessionKey, form: DecideForm): TillDecideVarianceBody {
+/**
+ * The request: the key and the decision; APPROVE adds its treatment and
+ * reason; the PIN only when typed; a bag's `tcmId` when deciding one.
+ */
+export function decideBody(key: TillSessionKey, form: DecideForm, tcmId = ""): TillDecideVarianceBody {
   const approve = form.decision === "APPROVE";
   return {
     companyId: key.companyId,
@@ -121,6 +156,7 @@ export function decideBody(key: TillSessionKey, form: DecideForm): TillDecideVar
     ...(approve ? { treatment: form.treatment, reasonId: form.reasonId } : {}),
     note: form.note.trim(),
     ...(form.pin ? { approverPin: form.pin } : {}),
+    ...(tcmId ? { tcmId } : {}),
   };
 }
 
@@ -132,6 +168,11 @@ export function decideAmount(paise: number): { text: string; tone: "danger" | "w
 export const DECIDE_HINT =
   "Approve: the session is ready to close again — End Shift closes it and posts the variance. Recount: the cashier " +
   "counts once more.";
+
+/** Bag mode's hint (Qt `setBag`). */
+export const BAG_DECIDE_HINT =
+  "The cash was approved for other than was handed over. Approve books the difference at once — the supervisor's " +
+  "count stands, so there is no recount. Not that supervisor, not the cashier.";
 
 export type DecideRefusal = {
   /** The red line under the form. */

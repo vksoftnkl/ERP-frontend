@@ -435,6 +435,47 @@ export function exportQuery(session: Session, f: Filters, shape: ExportShape): E
   return { ...base, shape, partyId: f.selected ?? base.partyId };
 }
 
+/**
+ * PARTY_OUTSTANDING_A5's prompt for each query key. Complete by construction
+ * (`satisfies`): a filter added to `FilterQuery` fails the build here until the
+ * print design is told about it. `branchId` is NOT the prompt `branch_id` —
+ * unanswered, that one falls back to the session's branch, and "All branches"
+ * would print one.
+ */
+const PRINT_PROMPT_OF = {
+  asOn: "as_on",
+  side: "side",
+  branchId: "filter_branch_id",
+  groupId: "group_id",
+  areaId: "area_id",
+  collectionDay: "collection_day",
+  salesmanId: "salesman_id",
+  partyId: "party_id",
+  ageBy: "age_by",
+  buckets: "buckets",
+  onlyOverdue: "only_overdue",
+  includeOnAccount: "include_on_account",
+  deductPdc: "deduct_pdc",
+  hideZero: "hide_zero",
+  minDueDays: "min_due_days",
+  maxDueDays: "max_due_days",
+} as const satisfies Record<Exclude<keyof FilterQuery, "companyId">, string>;
+
+/**
+ * The print's prompts: the PARTIES export query of the applied filters (the
+ * Party-wise list, whatever the tab), spelled as the design's ptv_params. Values
+ * go as text — the server coerces each to its declared type.
+ */
+export function printPrompts(session: Session, f: Filters): Record<string, string> {
+  const query = exportQuery(session, f, "PARTIES") as Record<string, unknown>;
+  const prompts: Record<string, string> = { sort: f.sort, dir: f.dir };
+  for (const [key, prompt] of Object.entries(PRINT_PROMPT_OF)) {
+    const value = query[key];
+    if (value !== undefined && value !== null && value !== "") prompts[prompt] = String(value);
+  }
+  return prompts;
+}
+
 export function billHistoryQuery(
   session: Session,
   bill: { billId: string; accYear: string },

@@ -19,6 +19,7 @@ import {
   type DropdownDirectoryRow,
 } from "@/lib/configured-dropdowns/dropdown-registry";
 import { baseApi } from "@/store/api/baseApi";
+import { runAllPages } from "@/store/api/run-all-pages";
 export type GridColumnsQueryArg = {
   gridId: number;
 };
@@ -34,13 +35,6 @@ export type GridColumnsQueryArg = {
  */
 export const GRID_MASTER_LIST_GRID_ID = 34;
 export const UI_TABLE_MASTER_GRID_ID = 38;
-/**
- * The runner caps `limit` at 100 per page, and both masters are well inside that
- * (~25 ui tables, ~66 Desktop grids), so one page is the whole directory. A
- * deployment that grows past 100 would need these to page; until it does, the
- * registries keep their fallback ids for whatever fell off the end.
- */
-const UI_TABLE_DIRECTORY_PAGE_SIZE = 100;
 export const metadataApi = baseApi.injectEndpoints({
   overrideExisting: true,
   endpoints: (builder) => ({
@@ -61,21 +55,15 @@ export const metadataApi = baseApi.injectEndpoints({
      * ids are never hardcoded per screen.
      */
     getUiTableDirectory: builder.query<UiTableDirectoryRow[], void>({
-      query: () => ({
-        url: "/configured-grid-sql/run",
-        params: {
-          grid_id: UI_TABLE_MASTER_GRID_ID,
-          page: 1,
-          limit: UI_TABLE_DIRECTORY_PAGE_SIZE,
-        },
-      }),
-      transformResponse: (payload: unknown) => {
-        const rows = normalizeUiTableDirectoryPayload(payload);
+      queryFn: async (_arg, _api, _extra, baseQuery) => {
+        const result = await runAllPages(UI_TABLE_MASTER_GRID_ID, baseQuery);
+        if (result.error !== undefined) return { error: result.error };
+        const rows = normalizeUiTableDirectoryPayload(result.data);
         // Screens read ids through React; the builders that assemble a grid's
         // save payload cannot. Priming the registry here is what lets those read
         // the same answer synchronously.
         primeUiTableDirectory(rows);
-        return rows;
+        return { data: rows };
       },
       providesTags: ["UiTableDirectory"],
       // Tables are created and renamed in the master screen, not during entry,
@@ -87,18 +75,12 @@ export const metadataApi = baseApi.injectEndpoints({
      * resolves its grid through this (see `lib/configured-grids`).
      */
     getGridDirectory: builder.query<GridDirectoryRow[], void>({
-      query: () => ({
-        url: "/configured-grid-sql/run",
-        params: {
-          grid_id: GRID_MASTER_LIST_GRID_ID,
-          page: 1,
-          limit: UI_TABLE_DIRECTORY_PAGE_SIZE,
-        },
-      }),
-      transformResponse: (payload: unknown) => {
-        const rows = normalizeGridDirectoryPayload(payload);
+      queryFn: async (_arg, _api, _extra, baseQuery) => {
+        const result = await runAllPages(GRID_MASTER_LIST_GRID_ID, baseQuery);
+        if (result.error !== undefined) return { error: result.error };
+        const rows = normalizeGridDirectoryPayload(result.data);
         primeGridDirectory(rows);
-        return rows;
+        return { data: rows };
       },
       providesTags: ["GridDirectory"],
       keepUnusedDataFor: 600,
@@ -110,18 +92,12 @@ export const metadataApi = baseApi.injectEndpoints({
      * registry has already resolved "MAIN LIST - DROPDOWN".
      */
     getDropdownDirectory: builder.query<DropdownDirectoryRow[], void>({
-      query: () => ({
-        url: "/configured-grid-sql/run",
-        params: {
-          grid_id: getGridId("dropdownMasterList"),
-          page: 1,
-          limit: UI_TABLE_DIRECTORY_PAGE_SIZE,
-        },
-      }),
-      transformResponse: (payload: unknown) => {
-        const rows = normalizeDropdownDirectoryPayload(payload);
+      queryFn: async (_arg, _api, _extra, baseQuery) => {
+        const result = await runAllPages(getGridId("dropdownMasterList"), baseQuery);
+        if (result.error !== undefined) return { error: result.error };
+        const rows = normalizeDropdownDirectoryPayload(result.data);
         primeDropdownDirectory(rows);
-        return rows;
+        return { data: rows };
       },
       providesTags: ["DropdownDirectory"],
       keepUnusedDataFor: 600,

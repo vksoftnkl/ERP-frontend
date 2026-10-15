@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * A `dd-MM-yyyy HH:mm` field — the freeze window's QDateTimeEdit with its
+ * A `dd-MM-yyyy hh:mm AM` field — the freeze window's QDateTimeEdit with its
  * calendar popup. A text input owns the format (a native datetime input
  * renders in the browser's locale); the calendar button borrows the native
  * picker, as the quotation's DateField does.
@@ -45,7 +45,7 @@ export function DateTimeField({ id, label, value, disabled, title, onChange }: D
           id={id}
           className={cx(quotationStyles.input, quotationStyles.dateInput)}
           value={text}
-          placeholder="dd-mm-yyyy hh:mm"
+          placeholder="dd-mm-yyyy hh:mm AM"
           inputMode="numeric"
           autoComplete="off"
           disabled={disabled}

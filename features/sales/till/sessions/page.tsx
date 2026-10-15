@@ -17,9 +17,12 @@
  * No cash movement from here (Qt a449b8c, notes 110): a pickup / top-up is
  * signed at the counter by the cashier and the supervisor together.
  *
- * Filters: Status (`istatus`) and Variance (`ivariance`), and the business
- * dates, seven days back. All six grid tokens are always sent
- * (`session-list.ts`).
+ * Filters: Status (`istatus`) and Variance (`ivariance` — TO_APPROVE since
+ * Qt c77f3f1: cash awaiting Approve Cash), and the business dates, seven days
+ * back. All six grid tokens are always sent (`session-list.ts`).
+ *
+ * Pills: Status, Treatment and Cash (`cash_receipt`, notes 114) in the shared
+ * session palette (`../shared/session-badges.ts`).
  *
  * The live line (Qt `TillSessionsView`, a449b8c) on the toolbar: every session
  * of the branch still holding a drawer, any date, and the cash in them; and in
@@ -38,18 +41,18 @@ import receiptStyles from "@/features/accounts/receipt/page.module.scss";
 import { addDaysIso, cockpitHref, textOf, todayIso } from "../shared/format";
 import { LiveCashLine } from "../shared/live-cash-line";
 import { formatFigure, formatMoney, formatSignedMoney, toPaise } from "../shared/money";
-import { TonePill, overlayOpen } from "../shared/till-dialog";
+import { overlayOpen } from "../shared/till-dialog";
 import type { TillSessionKey } from "../shared/wire/types";
 import tillStyles from "../shared/till.module.scss";
 import { useLiveCash } from "../shared/use-live-cash";
 import { EndShiftDialog } from "../session/end-shift-dialog";
 import { JournalDialog } from "./journal-dialog";
+import { SessionBadge } from "./session-badge";
 import {
   DEFAULT_DAYS_BACK,
   STATUS_OPTIONS,
   VARIANCE_OPTIONS,
   awaitsCount,
-  badgeTone,
   rowHint,
   sessionGridParams,
   sessionRowOf,
@@ -98,14 +101,10 @@ function sourceOf(row: MasterTableRow | null): Record<string, unknown> | null {
 
 /** Per-column formatting, keyed by grid 144's own SQL field names. */
 const COLUMN_RENDER_OVERRIDES = {
-  status_text: (row: MasterTableRow) => {
-    const text = textOf(sourceOf(row), "status_text");
-    return text ? <TonePill tone={badgeTone("status_text", text)}>{text}</TonePill> : null;
-  },
-  treatment: (row: MasterTableRow) => {
-    const text = textOf(sourceOf(row), "treatment");
-    return text ? <TonePill tone={badgeTone("treatment", text)}>{text}</TonePill> : null;
-  },
+  status_text: (row: MasterTableRow) => <SessionBadge value={textOf(sourceOf(row), "status_text")} />,
+  treatment: (row: MasterTableRow) => <SessionBadge value={textOf(sourceOf(row), "treatment")} />,
+  // Notes 114: the hand-over waiting for Approve Cash (TO APPROVE · APPROVED · DIFFERENCE).
+  cash_receipt: (row: MasterTableRow) => <SessionBadge value={textOf(sourceOf(row), "cash_receipt")} />,
   net_sales: (row: MasterTableRow) => formatFigure(sourceOf(row)?.net_sales),
   cash_counted: (row: MasterTableRow) => formatFigure(sourceOf(row)?.cash_counted),
   cash_variance: (row: MasterTableRow) => {

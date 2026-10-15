@@ -1,0 +1,72 @@
+/*
+ * What the Till Sessions screens add over the shared till sheet
+ * (`../shared/till.module.scss`): the session pill's slate tone (the
+ * `locked` bucket of `../shared/session-badges.ts` — SUSPENSE, a gap parked
+ * for a journal), the Bills tab's current row, and a message that keeps its
+ * paragraph breaks.
+ */
+
+/* Qt `TxnBadgePalette::Bucket::Locked` — cool and quiet, not a warning. */
+.pillSlate {
+  border-color: hsl(215deg 20% 80%);
+  background: hsl(215deg 22% 91%);
+  color: hsl(215deg 25% 32%);
+}
+
+/* The Bills tab: a selectable list (click, ↑ / ↓) driving Re-tender. */
+.pickTable {
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--primary) 45%, transparent);
+    outline-offset: -2px;
+  }
+
+  tbody tr[aria-selected] {
+    cursor: pointer;
+  }
+
+  tbody tr[aria-selected="true"] td {
+    background: color-mix(in srgb, var(--primary) 12%, var(--card-bg, #fff));
+  }
+}
+
+/* "…\n\nWithin tolerance …": the cockpit's info sentences keep their breaks. */
+.preLine {
+  white-space: pre-line;
+}
+
+/* The Received box: a figure, right-aligned, about as wide as Qt's 180 px. */
+.receivedRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.receivedInput {
+  width: 180px;
+  max-width: 100%;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Two lines kept for a hint whose text changes with the amount. */
+.hint {
+  min-height: 2.6em;
+}
+
+/* Force close: Counted under the count, right-aligned as Qt's. */
+.countedRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-right: 12px;
+}
+
+/* X read: Note left, the drawer's cash right. */
+.xFoot {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}

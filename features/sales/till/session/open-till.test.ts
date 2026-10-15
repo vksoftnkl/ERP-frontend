@@ -3,16 +3,22 @@ import { EMPTY_COUNT, toDenominations, withQty } from "../shared/denom";
 import type { TillReason } from "../shared/reasons";
 import type { TillOpenCheck, TillOpenCheckSession } from "../shared/wire/types";
 import {
+  LIVE_DATE_UNKNOWN,
+  WAIT_POLL_MS,
   carriedFromOf,
   chosenCounterId,
   counterDisplay,
+  dayEndedText,
   dayText,
   gaugeText,
   isCarried,
+  liveDateOf,
   livePanelOf,
   openBody,
   openFigures,
   openProblem,
+  resumePlan,
+  waitPollDue,
   type OpenTillInputs,
 } from "./open-till";
 
@@ -237,9 +243,98 @@ describe("the live panel", () => {
     expect(livePanelOf(check({ userSessionElsewhere: live() }), "u-me")?.supervisorMovesTssId).toBeNull();
   });
 
+  it("reads the opening time on a 12-hour clock", () => {
+    const panel = livePanelOf(check({ deviceSession: live({ openedOn: new Date(2026, 9, 9, 14, 5).toISOString() }) }), "u-me");
+    expect(panel?.head).toBe("C01-261009-01  ·  RAVI K  ·  opened 02:05 PM  ·  OPEN");
+  });
+
+  it("says plainly when the session waits for its approver, and looks again", () => {
+    const panel = livePanelOf(check({ deviceSession: live({ status: "PENDING_APPROVAL" }) }), "u-me");
+    expect(panel).toMatchObject({ resumable: false, endShiftEnabled: false, waitsForApprover: true, textTone: "warning" });
+    expect(panel?.text).toBe(
+      "The count of session C01-261009-01 did not match, so it waits for a supervisor. It holds this drawer until " +
+        "then — no new session opens here.\n\nAsk a supervisor to approve it (or send it for a recount) in Till " +
+        "Sessions → Cockpit. This screen checks every 15 seconds: once decided, Continue count closes the session " +
+        "and you can open a new one — no need to log out.",
+    );
+    // Not another cashier's, nor one on another device.
+    expect(livePanelOf(check({ deviceSession: live({ status: "PENDING_APPROVAL", operatorId: "u-other" }) }), "u-me")).toMatchObject({
+      waitsForApprover: false,
+      textTone: "",
+    });
+    expect(livePanelOf(check({ userSessionElsewhere: live({ status: "PENDING_APPROVAL" }) }), "u-me")?.waitsForApprover).toBe(false);
+    // Any other wait keeps the old words.
+    const other = livePanelOf(check({ deviceSession: live({ status: "CLOSED" }) }), "u-me");
+    expect(other).toMatchObject({ waitsForApprover: false, textTone: "" });
+    expect(other?.text).toBe("The session is CLOSED: it waits for an approver, so it cannot take money again.");
+    expect(livePanelOf(check({ deviceSession: live() }), "u-me")).toMatchObject({ waitsForApprover: false, textTone: "" });
+  });
+
+  it("looks again every 15 s only while visible, idle and undisturbed", () => {
+    const waiting = livePanelOf(check({ deviceSession: live({ status: "PENDING_APPROVAL" }) }), "u-me");
+    const idle = { visible: true, busy: false, dialogOpen: false };
+    expect(WAIT_POLL_MS).toBe(15_000);
+    expect(waitPollDue(waiting, idle)).toBe(true);
+    expect(waitPollDue(waiting, { ...idle, visible: false })).toBe(false);
+    expect(waitPollDue(waiting, { ...idle, busy: true })).toBe(false);
+    expect(waitPollDue(waiting, { ...idle, dialogOpen: true })).toBe(false);
+    expect(waitPollDue(livePanelOf(check({ deviceSession: live({ status: "COUNTING" }) }), "u-me"), idle)).toBe(false);
+    expect(waitPollDue(null, idle)).toBe(false);
+  });
+
   it("draws the gauge in quarters", () => {
     expect(gaugeText(2, "NORMAL")).toBe("●●○○");
     expect(gaugeText(4, "ALERT")).toBe("●●●●  pickup due");
     expect(gaugeText(null, "BLOCKED")).toBe("○○○○  billing blocked");
+  });
+});
+
+describe("a session of an earlier business date", () => {
+  const today = check({ deviceSession: live() }); // business date 2026-10-09
+  const ENDED =
+    "Session C01-261009-01 belongs to business date 08-10-2026 — today is 09-10-2026. It cannot take bills any " +
+    "more.\n\nEnd shift: count the drawer and close it, then open a session for today.";
+
+  it("reads the date off sessions/get", () => {
+    expect(liveDateOf({ tssBusinessDate: "2026-10-08" })).toBe("2026-10-08");
+    expect(liveDateOf({ tssBusinessDate: "2026-10-08T00:00:00.000Z" })).toBe("2026-10-08");
+    expect(liveDateOf({ tssBusinessDate: "" })).toBe("");
+    expect(liveDateOf(null)).toBe("");
+  });
+
+  it("says nothing while the date is today's, or not known", () => {
+    expect(dayEndedText(today, "2026-10-09")).toBe("");
+    expect(dayEndedText(today, "")).toBe("");
+    expect(dayEndedText(today, LIVE_DATE_UNKNOWN)).toBe("");
+    expect(dayEndedText(check({ deviceSession: live(), businessDay: { ...check().businessDay, date: "" } }), "2026-10-08")).toBe("");
+  });
+
+  it("says why it cannot bill, and what to do", () => {
+    expect(dayEndedText(today, "2026-10-08")).toBe(ENDED);
+  });
+
+  it("takes over the live text while Resume is offered", () => {
+    expect(livePanelOf(today, "u-me", "2026-10-08")).toMatchObject({ text: ENDED, textTone: "warning", resumable: true });
+    expect(livePanelOf(today, "u-me", "2026-10-09")?.text).toMatch(/still yours/);
+    // Not resumable: its own words stay.
+    const counting = livePanelOf(check({ deviceSession: live({ status: "COUNTING" }) }), "u-me", "2026-10-08");
+    expect(counting?.text).toMatch(/^Billing has ended/);
+    expect(counting?.textTone).toBe("");
+  });
+
+  it("decides Resume: read the date first, refuse an ended day, else adopt or resume", () => {
+    expect(resumePlan(today, "u-me", "")).toEqual({ kind: "readDate" });
+    expect(resumePlan(today, "u-me", "2026-10-08")).toEqual({ kind: "dayEnded", text: ENDED });
+    expect(resumePlan(today, "u-me", "2026-10-09")).toEqual({ kind: "adopt" });
+    // Blank on the read: the server judges.
+    expect(resumePlan(today, "u-me", LIVE_DATE_UNKNOWN)).toEqual({ kind: "adopt" });
+    const suspended = check({ deviceSession: live({ status: "SUSPENDED" }) });
+    expect(resumePlan(suspended, "u-me", "2026-10-09")).toEqual({ kind: "resume" });
+    expect(resumePlan(suspended, "u-me", "2026-10-07").kind).toBe("dayEnded");
+    // Nothing of this cashier's to resume here.
+    expect(resumePlan(check({ deviceSession: live({ status: "COUNTING" }) }), "u-me", "")).toEqual({ kind: "none" });
+    expect(resumePlan(check({ deviceSession: live({ operatorId: "u-other" }) }), "u-me", "")).toEqual({ kind: "none" });
+    expect(resumePlan(check({ userSessionElsewhere: live() }), "u-me", "")).toEqual({ kind: "none" });
+    expect(resumePlan(null, "u-me", "")).toEqual({ kind: "none" });
   });
 });

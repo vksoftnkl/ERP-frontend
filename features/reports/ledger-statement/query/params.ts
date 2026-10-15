@@ -154,6 +154,26 @@ export function vouchersQuery(
   return { ...exportQuery(session, filters, ledgerId), page, pageSize };
 }
 
+/**
+ * The print design's prompts (LEDGER_STATEMENT_A5's ptv_params), from the
+ * APPLIED filters — the paper is the report on screen, not the strip's draft.
+ * The ledger is the print's docId and company / year its own fields, so none
+ * of them is here. Flags go as "true" / "false": the server's BOOLEAN prompt
+ * reads text, and a blank flag means its default there.
+ */
+export function printPrompts(filters: Filters, display: { narration: boolean }): Record<string, string> {
+  return {
+    from_date: filters.fromDate,
+    to_date: filters.toDate,
+    // Absent = All branches (combined), as on the screen's own queries.
+    ...(filters.branchId ? { stmt_branch_id: filters.branchId } : {}),
+    include_cancelled: String(filters.includeCancelled),
+    with_bill_refs: String(filters.withBillRefs),
+    show_narration: String(display.narration),
+    show_legs: String(filters.withLegs),
+  };
+}
+
 /* ------------------------------------------------------------------ defaults */
 
 /** From = year begin; To = today, or the year's end when today is past it. */

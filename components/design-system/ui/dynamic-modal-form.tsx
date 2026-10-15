@@ -15,6 +15,7 @@ import { cx } from "@/components/design-system/cx";
 import { ERPColorPicker } from "@/components/design-system/ui/color-picker";
 import ModalPortal from "@/components/ui/modal-portal";
 import { SHOW_DROPDOWN_ADD_BUTTON } from "@/config/ui";
+import { formatClock12 } from "@/lib/time-format";
 import styles from "./dynamic-modal-form.module.scss";
 import {
   FIELD_CONTAINER_SELECTOR,
@@ -144,7 +145,7 @@ function collectDraftLabels(
 
 function formatDraftSavedAt(savedAt: number): string {
   const saved = new Date(savedAt);
-  const time = saved.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  const time = formatClock12(saved);
   return saved.toDateString() === new Date().toDateString()
     ? `today ${time}`
     : `${saved.toLocaleDateString(undefined, { day: "2-digit", month: "short" })} ${time}`;

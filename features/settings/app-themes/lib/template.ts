@@ -10,6 +10,7 @@
  * match the editor. Ported from `AppThemeEntry::validateTemplate`.
  */
 
+import { dateTime12Of } from "@/lib/time-format";
 import { KNOWN_PLACEHOLDER_KEYS } from "./token-catalogue";
 
 /** The largest template the server takes, in UTF-8 bytes. */
@@ -117,16 +118,10 @@ export function templateFigures(qss: string): TemplateFigures {
   };
 }
 
-/** `dd-MM-yyyy HH:mm` in local time; the raw text when it is not a date. */
+/** `dd-MM-yyyy hh:mm AM` in local time; the raw text when it is not a date. */
 export function formatSavedOn(iso: string | null | undefined): string {
   if (!iso) return "";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return (
-    `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()} ` +
-    `${pad(date.getHours())}:${pad(date.getMinutes())}`
-  );
+  return dateTime12Of(iso) || iso;
 }
 
 /** The 0-based character offsets where `line` (1-based) starts and ends. */

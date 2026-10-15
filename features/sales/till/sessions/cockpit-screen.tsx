@@ -11,45 +11,72 @@
  * session's own cashier) it falls back to the blind `/sessions/get`. The four
  * grids under the reconciliation are 146 bills · 147 money documents · 148
  * counts · 145 timeline. What it decides is `cockpit.ts`; Approve opens the
- * approver's decision (`variance-decide-dialog.tsx`).
+ * approver's decision (`variance-decide-dialog.tsx`) — on a received bag's
+ * difference in bag mode — or, on a closed session whose cash waits, Approve
+ * Cash (`approve-cash-dialog.tsx`).
  *
- * Keys: F5 refresh, Esc close.
+ * Qt c77f3f1 (notes 117): Force close… (`force-close-dialog.tsx`), Reopen
+ * (`reopen-dialog.tsx`), X read (`x-read-dialog.tsx`, then its 80 mm print),
+ * Print Z (purpose TILL_SESSION_Z), and Re-tender on the Bills tab's posted
+ * bill (`cockpit-retender.tsx`). Each re-reads the session when it is done.
+ *
+ * Keys: F5 refresh, Esc close; on the Bills tab ↑ / ↓ pick the bill.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { cx } from "@/components/design-system/cx";
 import { getAuthUserId } from "@/lib/auth/session";
 import { toast } from "@/lib/notify";
+import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
+import { PURPOSE_CODE } from "@/features/printing/domain/documentPrint";
 import { useTillSessionClient } from "../shared/api/till-session-api";
 import { tillErrorOf } from "../shared/errors";
-import { TILL_SESSIONS_HREF, sortRowsBy } from "../shared/format";
+import { TILL_SESSIONS_HREF, sortRowsBy, textOf } from "../shared/format";
 import { reasonGridParams, toReasons, type TillReason } from "../shared/reasons";
 import { TonePill, overlayOpen } from "../shared/till-dialog";
 import type { GridRow, TillSessionKey, TillSessionPayload, TillVarianceDecision } from "../shared/wire/types";
 import styles from "../shared/till.module.scss";
 import { EndShiftDialog } from "../session/end-shift-dialog";
+import { approveCashOutcome } from "./approve-cash";
+import { ApproveCashDialog, type ApproveCashRequest } from "./approve-cash-dialog";
 import {
+  BAG_DECIDED_MESSAGE,
   REC_HINT,
   REC_NOTE,
   TENDER_FIGURES,
-  WAITING_TIPS,
   approvalBand,
   approveButton,
   cockpitButtons,
   cockpitFacts,
   cockpitHeader,
   cockpitTiles,
+  exceptionButtons,
   footNote,
   gridCellText,
+  isMine,
+  printZLabel,
+  retenderButton,
+  retenderTargetOf,
+  retenderableBill,
+  type RetenderTarget,
+  sessionPrintTarget,
   shouldFallBackToBlind,
   slipTenders,
   tenderRows,
+  xReadLabel,
 } from "./cockpit";
+import { CockpitRetender } from "./cockpit-retender";
+import { forceCloseMessage } from "./force-close";
+import { ForceCloseDialog, type SessionDialogRequest } from "./force-close-dialog";
 import { FALLBACK_COLUMNS, GridTable } from "./grid-table";
 import { EventCell } from "./journal-dialog";
+import { reopenMessage } from "./reopen";
+import { ReopenDialog } from "./reopen-dialog";
+import local from "./sessions.module.scss";
 import { SlipCheckDialog } from "./slip-check-dialog";
 import { VarianceDecideDialog } from "./variance-decide-dialog";
-import { decideRequestOf, decidedMessage, type DecideRequest } from "./variance-decide";
+import { bagDecideRequestOf, decideRequestOf, decidedMessage, type DecideRequest } from "./variance-decide";
+import { XReadDialog, type XReadRequest } from "./x-read-dialog";
 
 type DocTab = "bills" | "money" | "counts";
 
@@ -81,6 +108,16 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
   const [countOpen, setCountOpen] = useState(false);
   const [slipOpen, setSlipOpen] = useState(false);
   const [decide, setDecide] = useState<DecideRequest | null>(null);
+  const [approveCash, setApproveCash] = useState<ApproveCashRequest | null>(null);
+  const [forceClose, setForceClose] = useState<SessionDialogRequest | null>(null);
+  const [reopen, setReopen] = useState<SessionDialogRequest | null>(null);
+  const [xRead, setXRead] = useState<XReadRequest | null>(null);
+  /** The X read is on the wire: the button waits (Qt disables it). */
+  const [xReading, setXReading] = useState(false);
+  const [printZOpen, setPrintZOpen] = useState(false);
+  const [retender, setRetender] = useState<RetenderTarget | null>(null);
+  /** The Bills tab's current row (its `tb_id`), kept across a reload while the bill is still listed. */
+  const [pickedBillId, setPickedBillId] = useState<string | null>(null);
 
   /** Bumped by F5 / Refresh and after a dialog: the effect below re-reads everything. */
   const [tick, setTick] = useState(0);
@@ -202,13 +239,44 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
   const band = session ? approvalBand(session) : null;
   const buttons = cockpitButtons(session);
   const approve = approveButton(session, me);
-  const mine = session?.tssOperatorId === me;
+  const exceptions = exceptionButtons(session, me);
+  const mine = isMine(session, me);
+  const pickedBill = retenderableBill(pickedBillId ? grids.bills.find((row) => textOf(row, "tb_id") === pickedBillId) : null);
+  const retenderState = retenderButton(pickedBill);
+  const sessionNo = session?.tssSessionNo ?? "";
+
+  // Approve (Qt `decideVariance`, c77f3f1): the closed session's cash, a
+  // received bag's difference, or the session's pending gap.
+  const onApprove = () => {
+    if (!session) return;
+    if (approve.action === "approveCash") setApproveCash({ key, session });
+    else if (approve.action === "bag") setDecide(bagDecideRequestOf(session, key));
+    else setDecide(decideRequestOf(session, key));
+  };
 
   const decided = (decision: TillVarianceDecision) => {
+    const bag = Boolean(decide?.bag);
     setDecide(null);
     load();
-    toast.info(decidedMessage(decision));
+    toast.info(bag ? BAG_DECIDED_MESSAGE : decidedMessage(decision));
   };
+
+  // X read (notes 117 §6): the server journals it and answers the figures.
+  const takeXRead = async () => {
+    if (!session || xReading) return;
+    setXReading(true);
+    try {
+      const report = await client.xReport(key);
+      setXRead({ report, target: sessionPrintTarget(key, sessionNo, "x"), label: xReadLabel(sessionNo) });
+    } catch (error) {
+      toast.error(tillErrorOf(error, "The X read could not be taken.").text);
+    } finally {
+      setXReading(false);
+    }
+  };
+
+  /** "…\n\n…" as Qt's info box shows it: the paragraph break kept. */
+  const info = (text: string) => toast.info(<span className={local.preLine}>{text}</span>);
 
   const docGrid =
     tab === "bills"
@@ -365,6 +433,14 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
                 error={gridsError}
                 emptyText={docGrid.empty}
                 cell={(row, field) => gridCellText(row, field)}
+                // The Bills tab picks the bill Re-tender acts on.
+                {...(tab === "bills"
+                  ? {
+                      selectedId: pickedBillId,
+                      onSelect: (row: GridRow) => setPickedBillId(textOf(row, "tb_id") || null),
+                      label: "Bills and returns — pick a posted bill to re-tender it",
+                    }
+                  : {})}
               />
             </div>
           </div>
@@ -402,16 +478,8 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
       </div>
 
       <div className={styles.buttonRow}>
-        <button
-          type="button"
-          className={styles.primaryButton}
-          disabled={!approve.enabled}
-          title={approve.tip}
-          onClick={() => {
-            if (session) setDecide(decideRequestOf(session, key));
-          }}
-        >
-          Approve
+        <button type="button" className={styles.primaryButton} disabled={!approve.enabled} title={approve.tip} onClick={onApprove}>
+          {approve.label}
         </button>
         <button
           type="button"
@@ -433,19 +501,57 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
         >
           Slip check…
         </button>
-        <button type="button" className={styles.secondaryButton} disabled title={WAITING_TIPS.retender}>
+        <button
+          type="button"
+          className={styles.secondaryButton}
+          disabled={!retenderState.enabled}
+          title={retenderState.tip}
+          onClick={() => {
+            if (pickedBill) {
+              setRetender(retenderTargetOf(pickedBill, key));
+            }
+          }}
+        >
           Re-tender
         </button>
-        <button type="button" className={styles.dangerButton} disabled title={WAITING_TIPS.forceClose}>
+        <button
+          type="button"
+          className={styles.dangerButton}
+          disabled={!exceptions.forceClose.enabled}
+          title={exceptions.forceClose.tip}
+          onClick={() => {
+            if (session) setForceClose({ key, session });
+          }}
+        >
           Force close…
         </button>
-        <button type="button" className={styles.secondaryButton} disabled title={WAITING_TIPS.reopen}>
+        <button
+          type="button"
+          className={styles.secondaryButton}
+          disabled={!exceptions.reopen.enabled}
+          title={exceptions.reopen.tip}
+          onClick={() => {
+            if (session) setReopen({ key, session });
+          }}
+        >
           Reopen
         </button>
-        <button type="button" className={styles.secondaryButton} disabled title={WAITING_TIPS.printZ}>
+        <button
+          type="button"
+          className={styles.secondaryButton}
+          disabled={!exceptions.printZ.enabled}
+          title={exceptions.printZ.tip}
+          onClick={() => setPrintZOpen(true)}
+        >
           Print Z
         </button>
-        <button type="button" className={styles.secondaryButton} disabled title={WAITING_TIPS.xRead}>
+        <button
+          type="button"
+          className={styles.secondaryButton}
+          disabled={!exceptions.xRead.enabled || xReading}
+          title={exceptions.xRead.tip}
+          onClick={() => void takeXRead()}
+        >
           X read
         </button>
         <span className={styles.spacer} />
@@ -466,6 +572,60 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
         }}
       />
       <VarianceDecideDialog request={decide} reasons={reasons} onClose={() => setDecide(null)} onDecided={decided} />
+      <ApproveCashDialog
+        request={approveCash}
+        reasons={reasons}
+        onClose={() => setApproveCash(null)}
+        onApproved={(result) => {
+          setApproveCash(null);
+          load();
+          toast.info(approveCashOutcome(result));
+        }}
+      />
+      <ForceCloseDialog
+        request={forceClose}
+        reasons={reasons}
+        onClose={() => setForceClose(null)}
+        onForceClosed={(result) => {
+          setForceClose(null);
+          load();
+          info(forceCloseMessage(result));
+        }}
+      />
+      <ReopenDialog
+        request={reopen}
+        reasons={reasons}
+        onClose={() => setReopen(null)}
+        onReopened={(result) => {
+          setReopen(null);
+          load();
+          info(reopenMessage(result));
+        }}
+      />
+      <XReadDialog
+        request={xRead}
+        onClose={() => {
+          setXRead(null);
+          load();
+        }}
+      />
+      {printZOpen && session ? (
+        <PrintOptionsDialog
+          open
+          onClose={() => setPrintZOpen(false)}
+          purposeCode={PURPOSE_CODE.TILL_SESSION_Z}
+          documentLabel={printZLabel(sessionNo)}
+          targets={[sessionPrintTarget(key, sessionNo, "z")]}
+        />
+      ) : null}
+      <CockpitRetender
+        target={retender}
+        onClose={() => setRetender(null)}
+        onRetendered={() => {
+          setRetender(null);
+          load();
+        }}
+      />
       <SlipCheckDialog
         sessionKey={slipOpen ? key : null}
         tenders={slipTenders(session)}

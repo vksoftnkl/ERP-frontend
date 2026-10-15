@@ -34,6 +34,7 @@ const TONE_CLASS: Record<Exclude<CellTone, "">, string> = {
   warning: styles.toneWarning,
   info: styles.toneInfo,
   muted: styles.toneMuted,
+  locked: styles.toneLocked,
 };
 
 function toneClass(tone: CellTone): string | undefined {

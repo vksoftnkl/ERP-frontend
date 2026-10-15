@@ -17,11 +17,17 @@
  * of or put into the drawer (Qt 2026-10-12), so it is questioned before the
  * count.
  *
+ * Qt c77f3f1: a session PENDING_APPROVAL holds the drawer until a supervisor
+ * decides, so while the panel shows that wait the screen looks again every
+ * 15 s (visible, nothing posting, no dialog over it) with the QUIET reads —
+ * a polled GET-as-mutation would fire the data-freshness bus on every tick.
+ * A live session of an earlier business date is said so, and Resume refuses it.
+ *
  * Keys: Enter = next field · Ctrl+Enter = open (from any field; Qt
  * 2026-10-12, was F10) · F5 = reload · Esc = not now. Every figure box
  * selects its text on focus.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { cx } from "@/components/design-system/cx";
 import { useBusinessContext } from "@/components/layout/business-context";
@@ -46,7 +52,9 @@ import { EndShiftDialog } from "./end-shift-dialog";
 import { SupervisorMoves } from "./supervisor-moves";
 import {
   FORCE_CLOSE_TIP,
+  LIVE_DATE_UNKNOWN,
   MISMATCH_NOTE,
+  WAIT_POLL_MS,
   businessDateText,
   carriedAvailable,
   carriedFromOf,
@@ -57,11 +65,14 @@ import {
   dayText,
   floatWords,
   isCarried,
+  liveDateOf,
   liveFacts,
   livePanelOf,
   openBody,
   openFigures,
   openProblem,
+  resumePlan,
+  waitPollDue,
   type OpenTillForm,
   type OpenTillInputs,
 } from "./open-till";
@@ -69,6 +80,19 @@ import {
 const ID_PREFIX = "till-open";
 const NOT_A_DEVICE =
   "This PC is not a registered device, so it cannot hold a till. Register it in Device Master and log in again.";
+
+/** The page is on screen (not a background browser tab): the wait re-check runs only then. */
+function subscribeVisibility(onChange: () => void): () => void {
+  document.addEventListener("visibilitychange", onChange);
+  return () => document.removeEventListener("visibilitychange", onChange);
+}
+const pageVisible = () => document.visibilityState !== "hidden";
+const pageVisibleOnServer = () => true;
+
+/** A warning popup whose text keeps its paragraph break. */
+function warnLines(text: string) {
+  toast.warn(<span style={{ whiteSpace: "pre-line" }}>{text}</span>);
+}
 
 const EMPTY_FORM: OpenTillForm = {
   pickedCounterId: "",
@@ -96,36 +120,60 @@ export default function OpenTillScreen() {
   const [denominations, setDenominations] = useState<Denomination[]>([]);
   const [denomsLoading, setDenomsLoading] = useState(true);
   const [reasons, setReasons] = useState<TillReason[]>([]);
-  const [livePayload, setLivePayload] = useState<TillSessionPayload | null>(null);
+  /** The live session's facts (`/sessions/get`), by the session they were read for. */
+  const [livePayload, setLivePayload] = useState<{ tssId: string; payload: TillSessionPayload } | null>(null);
+  /**
+   * The live session's business date, `yyyy-MM-dd` (Qt `m_liveDate`), by
+   * session: from the facts read, or Resume's own read ("?" = it came back
+   * blank — the server judges). A session's business date never changes.
+   */
+  const [liveDate, setLiveDate] = useState<{ tssId: string; date: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [endShiftKey, setEndShiftKey] = useState<TillSessionKey | null>(null);
   const [movementKey, setMovementKey] = useState<TillSessionKey | null>(null);
-  /** Bumped on every open-check answer: the supervisor's movements re-read with it (Qt showLivePanel). */
+  /** Bumped on every open-check answer: arms the next wait re-check, and COUNTING focuses Continue count. */
   const [checkTick, setCheckTick] = useState(0);
+  /** Bumped by a wait re-check that failed: it looks again, the screen as it was. */
+  const [waitTick, setWaitTick] = useState(0);
+  /**
+   * Bumped on every open-check answer but the quiet re-check: the supervisor's
+   * movements re-read with it (Qt showLivePanel). Nothing moves cash while the
+   * session waits for its approver, and a grid read is a mutation (it would
+   * announce a data change every 15 s).
+   */
+  const [movesTick, setMovesTick] = useState(0);
+  const visible = useSyncExternalStore(subscribeVisibility, pageVisible, pageVisibleOnServer);
+  /** open-check reads in flight: the wait re-check skips a tick while one is out. */
+  const reading = useRef(0);
   /** The picked counter, as the last open-check was asked with. */
   const pickedRef = useRef("");
   const generation = useRef(0);
   const openButton = useRef<HTMLButtonElement | null>(null);
   const reasonSelect = useRef<HTMLSelectElement | null>(null);
+  const endShiftButton = useRef<HTMLButtonElement | null>(null);
 
   const inputs: OpenTillInputs = { check, checkError, form, denominations, reasons, me };
-  const live = livePanelOf(check, me);
+  const deviceSessionId = check?.deviceSession?.sessionId ?? "";
+  const knownLiveDate = liveDate && liveDate.tssId === deviceSessionId ? liveDate.date : "";
+  const live = livePanelOf(check, me, knownLiveDate);
   const carried = isCarried(inputs);
   const figures = openFigures(inputs);
   const problem = openProblem(inputs);
   const words = floatWords(carried);
   const counterView = counterDisplay(check);
   const carriedFrom = carriedFromOf(check, form.pickedCounterId);
-  const facts = liveFacts(livePayload);
+  const facts = liveFacts(livePayload && livePayload.tssId === deviceSessionId ? livePayload.payload : null);
   const canOpen = !busy && problem === "" && permissions.canCreate;
   const noScope = !companyId || !branchId;
 
   // ── Loading ─────────────────────────────────────────────────────────────
   const applyCheck = useCallback(
-    (data: TillOpenCheck) => {
+    (data: TillOpenCheck, quiet: boolean) => {
+      const ticket = generation.current;
       setCheck(data);
       setCheckError("");
       setCheckTick((tick) => tick + 1);
+      if (!quiet) setMovesTick((tick) => tick + 1);
       const counter = chosenCounter(data, pickedRef.current);
       setForm((current) => {
         const next = { ...current, pickedCounterId: chosenCounterId(data, pickedRef.current) };
@@ -136,28 +184,42 @@ export default function OpenTillScreen() {
         return next;
       });
       if (counter) setIssuedText(paiseToInput(paiseOf(counter.defaultFloat)));
-      // The live session's facts: bills, float, the cash gauge (a nicety).
-      setLivePayload(null);
+      // The live session's facts: bills, float, the cash gauge (a nicety) —
+      // and its business date. A read blanks the facts until they land (Qt);
+      // the quiet re-check keeps them, so they do not flicker every 15 s.
+      if (!quiet) setLivePayload(null);
       const mine = data.deviceSession;
       if (mine) {
-        client
-          .get({ companyId, branchId, accYear: mine.accYear, tssId: mine.sessionId })
-          .then(setLivePayload)
+        const key = { companyId, branchId, accYear: mine.accYear, tssId: mine.sessionId };
+        (quiet ? client.getQuiet(key) : client.get(key))
+          .then((payload) => {
+            if (ticket !== generation.current) return;
+            setLivePayload({ tssId: mine.sessionId, payload });
+            setLiveDate({ tssId: mine.sessionId, date: liveDateOf(payload) });
+          })
           .catch(() => undefined);
       }
     },
     [branchId, client, companyId],
   );
 
+  /** `quiet` — the wait re-check: the quiet reads, and a failure leaves the screen as it was. */
   const loadCheck = useCallback(
-    async (counterId: string) => {
+    async (counterId: string, quiet = false) => {
       if (!companyId || !branchId) return;
       const ticket = (generation.current += 1);
+      reading.current += 1;
       try {
-        const data = await client.openCheck({ companyId, branchId, counterId: counterId || undefined });
-        if (ticket === generation.current) applyCheck(data);
+        const scope = { companyId, branchId, counterId: counterId || undefined };
+        const data = await (quiet ? client.openCheckQuiet(scope) : client.openCheck(scope));
+        if (ticket === generation.current) applyCheck(data, quiet);
       } catch (error) {
         if (ticket !== generation.current) return;
+        if (quiet) {
+          // Looks again in 15 s; F5 says what went wrong.
+          setWaitTick((tick) => tick + 1);
+          return;
+        }
         setCheck(null);
         const refusal = tillErrorOf(error, "The till could not be checked.");
         // The two answers that mean "this PC cannot hold a till", said plainly.
@@ -169,12 +231,38 @@ export default function OpenTillScreen() {
           setCheckError(refusal.text);
           toast.error(refusal.text);
         }
+      } finally {
+        reading.current -= 1;
       }
     },
     [applyCheck, branchId, client, companyId],
   );
 
   const reload = useCallback(() => void loadCheck(pickedRef.current), [loadCheck]);
+
+  // ── Waiting for the approver ────────────────────────────────────────────
+  // A count out of tolerance leaves the session PENDING_APPROVAL: it holds the
+  // drawer until a supervisor decides in Till Sessions (273). Single-shot,
+  // armed again by every answer that still shows the wait (Qt m_waitPoll).
+  const pollDue = waitPollDue(live, { visible, busy, dialogOpen: endShiftKey !== null || movementKey !== null });
+  useEffect(() => {
+    if (!pollDue) return;
+    const timer = window.setTimeout(() => {
+      // A read already out answers instead — and arms the next look.
+      if (reading.current > 0) return;
+      void loadCheck(pickedRef.current, true);
+    }, WAIT_POLL_MS);
+    return () => window.clearTimeout(timer);
+  }, [pollDue, checkTick, waitTick, loadCheck]);
+
+  // Billing ended and the drawer waits for its count: Continue count takes the
+  // focus on every answer that says so (Qt showLivePanel) — also when the
+  // approver's decision lands while the screen is open.
+  const counting = live?.counting ?? false;
+  useEffect(() => {
+    if (!counting || overlayOpen()) return;
+    endShiftButton.current?.focus();
+  }, [counting, checkTick]);
 
   useEffect(() => {
     if (!companyId || !branchId) return;
@@ -239,8 +327,29 @@ export default function OpenTillScreen() {
 
   const resumeSession = async () => {
     const s = check?.deviceSession;
-    if (!s || !live?.resumable || busy) return;
-    if (s.status !== "SUSPENDED") {
+    if (!s || busy) return;
+    let plan = resumePlan(check, me, knownLiveDate);
+    if (plan.kind === "readDate") {
+      // The live panel's sessions/get has not answered yet: its business date decides.
+      let date: string;
+      setBusy(true);
+      try {
+        const payload = await client.get({ companyId, branchId, accYear: s.accYear, tssId: s.sessionId });
+        date = liveDateOf(payload) || LIVE_DATE_UNKNOWN;
+      } catch (error) {
+        toast.error(tillErrorOf(error, "The session could not be read.").text);
+        return;
+      } finally {
+        setBusy(false);
+      }
+      setLiveDate({ tssId: s.sessionId, date });
+      plan = resumePlan(check, me, date);
+    }
+    if (plan.kind === "dayEnded") {
+      warnLines(plan.text);
+      return;
+    }
+    if (plan.kind === "adopt") {
       // OPEN: nothing to tell the server — the session is simply this app's again.
       setTillSession({
         id: s.sessionId,
@@ -256,6 +365,7 @@ export default function OpenTillScreen() {
       close();
       return;
     }
+    if (plan.kind !== "resume") return;
     setBusy(true);
     try {
       adopt(await client.resume({ companyId, branchId, accYear: s.accYear, tssId: s.sessionId }));
@@ -559,7 +669,12 @@ export default function OpenTillScreen() {
                 {live.resumable ? <TonePill tone="blue">RESUME</TonePill> : null}
               </div>
               <span className={styles.strong}>{live.head}</span>
-              <p className={styles.muted}>{live.text}</p>
+              <p
+                className={cx(styles.muted, live.textTone === "warning" && styles.toneAmber)}
+                style={{ whiteSpace: "pre-line" }}
+              >
+                {live.text}
+              </p>
               <div className={styles.facts}>
                 <div className={styles.fact}>
                   <span className={styles.cap}>BILLS</span>
@@ -597,10 +712,10 @@ export default function OpenTillScreen() {
                 ) : null}
                 {live.showEndShift ? (
                   <button
+                    ref={endShiftButton}
                     type="button"
                     className={styles.secondaryButton}
                     disabled={!live.endShiftEnabled || busy}
-                    autoFocus={live.counting}
                     onClick={() => setEndShiftKey(liveKey)}
                   >
                     {live.endShiftLabel}
@@ -618,7 +733,7 @@ export default function OpenTillScreen() {
                   </button>
                 ) : null}
               </div>
-              <SupervisorMoves tssId={live.supervisorMovesTssId} reloadKey={checkTick} />
+              <SupervisorMoves tssId={live.supervisorMovesTssId} reloadKey={movesTick} />
               {live.note ? <p className={styles.muted}>{live.note}</p> : null}
             </section>
           ) : null}

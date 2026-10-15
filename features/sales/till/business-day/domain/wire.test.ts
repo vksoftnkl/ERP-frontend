@@ -3,15 +3,24 @@ import { describe, expect, it } from "vitest";
 import {
   addDaysIso,
   businessDateAt,
+  checkOfDay,
   clockOf,
   cockpitHref,
+  compactDate,
+  dayKeyOf,
   dayPickOf,
   dayQuery,
   daysGridParams,
   displayDate,
   errorStatus,
+  firstErrorOf,
+  listOf,
+  parseCloseCheck,
+  parseCloseResult,
   parseDay,
   parseGridPage,
+  parseReopenResult,
+  parseSupervisors,
   safesGridParams,
   sessionGridParams,
   sessionKeysOf,
@@ -48,10 +57,32 @@ describe("parseDay", () => {
     expect(day?.tbdBusinessDate).toBe("2026-10-07");
     expect(day?.tbdZNo).toBe("");
     expect(day?.tbdClosedOn).toBeNull();
+    expect(day?.tbdClosedByName).toBe("");
     expect(day?.sessions).toEqual([
       { status: "CLOSED", count: 4 },
       { status: "PENDING_APPROVAL", count: 1 },
     ]);
+    // A server before notes 113: no receipt, nothing waiting.
+    expect(day?.handoverReceipt).toBe("");
+    expect(day?.awaitingReceipt).toEqual({ thisDay: 0, earlierDays: 0, oldestOn: null });
+  });
+
+  it("reads who closed the day and the cash waiting for approval (notes 113 / 117)", () => {
+    const day = parseDay({
+      data: {
+        ...PAYLOAD.data,
+        tbdStatus: "CLOSED",
+        tbdClosedOn: "2026-10-07T17:12:00.000Z",
+        tbdClosedByName: "MEENA T",
+        tbdZNo: 3,
+        handoverReceipt: "required",
+        awaitingReceipt: { thisDay: 2, earlierDays: "1", oldestOn: "2026-10-06T12:47:09.276Z" },
+      },
+    });
+    expect(day?.tbdClosedByName).toBe("MEENA T");
+    expect(day?.tbdZNo).toBe("3");
+    expect(day?.handoverReceipt).toBe("REQUIRED");
+    expect(day?.awaitingReceipt).toEqual({ thisDay: 2, earlierDays: 1, oldestOn: "2026-10-06T12:47:09.276Z" });
   });
 
   it("keeps a Z number as text", () => {
@@ -190,11 +221,18 @@ describe("dates", () => {
     expect(addDaysIso("2026-12-31", 1)).toBe("2027-01-01");
   });
 
-  it("reads a clock in local time", () => {
-    const at = new Date(2026, 9, 7, 8, 58);
-    expect(clockOf(at.toISOString())).toBe("08:58");
+  it("reads a clock in local time, 12-hour (Qt hh:mm AP)", () => {
+    expect(clockOf(new Date(2026, 9, 7, 8, 58).toISOString())).toBe("08:58 AM");
+    expect(clockOf(new Date(2026, 9, 7, 0, 30).toISOString())).toBe("12:30 AM");
+    expect(clockOf(new Date(2026, 9, 7, 14, 5).toISOString())).toBe("02:05 PM");
     expect(clockOf("")).toBe("");
+    expect(clockOf(null)).toBe("");
     expect(clockOf("not a time")).toBe("");
+  });
+
+  it("packs a date for a file name", () => {
+    expect(compactDate("2026-10-07")).toBe("20261007");
+    expect(compactDate("")).toBe("");
   });
 
   it("puts the small hours on yesterday's business date", () => {
@@ -204,5 +242,127 @@ describe("dates", () => {
     // Unread or malformed: the server's default 04:00.
     expect(businessDateAt(new Date(2026, 9, 8, 3, 59), null)).toBe("2026-10-07");
     expect(businessDateAt(new Date(2026, 9, 8, 12, 0), "noon")).toBe("2026-10-08");
+  });
+});
+
+describe("the close (notes 117)", () => {
+  const DAY = parseDay(PAYLOAD)!;
+  const CHECK = {
+    success: true,
+    message: "Business day 2026-10-07 has items open",
+    data: {
+      tbdId: "019c-day",
+      tbdAccYear: "2026-2027",
+      tbdBusinessDate: "2026-10-07",
+      tbdStatus: "OPEN",
+      items: [
+        { code: "SESSIONS_LIVE", tone: "RED", count: 1, detail: "1 session(s) still open", sessionIds: ["s1"] },
+        { code: "HELD_BILLS", tone: "amber", count: "2", detail: "2 held bills", sessionIds: null },
+        { code: "SLIP_GAPS", tone: "GREEN", count: 0, detail: "No slip gap is open", sessionIds: [] },
+      ],
+      canClose: false,
+      canCloseWithException: true,
+    },
+  };
+
+  it("keys the day by its own company, branch and year", () => {
+    expect(dayKeyOf(DAY, { companyId: "header-c", branchId: "header-b" })).toEqual({
+      companyId: "c1",
+      branchId: "b1",
+      accYear: "2026-2027",
+      tbdId: "019c-day",
+    });
+    expect(dayKeyOf({ ...DAY, tbdCompanyId: "", tbdBranchId: "" }, { companyId: "hc", branchId: "hb" })).toEqual({
+      companyId: "hc",
+      branchId: "hb",
+      accYear: "2026-2027",
+      tbdId: "019c-day",
+    });
+  });
+
+  it("reads the close-check", () => {
+    const check = parseCloseCheck(CHECK);
+    expect(check?.tbdId).toBe("019c-day");
+    expect(check?.canClose).toBe(false);
+    expect(check?.canCloseWithException).toBe(true);
+    expect(check?.items).toEqual([
+      { code: "SESSIONS_LIVE", tone: "RED", count: 1, detail: "1 session(s) still open", sessionIds: ["s1"] },
+      { code: "HELD_BILLS", tone: "AMBER", count: 2, detail: "2 held bills", sessionIds: [] },
+      { code: "SLIP_GAPS", tone: "GREEN", count: 0, detail: "No slip gap is open", sessionIds: [] },
+    ]);
+    expect(parseCloseCheck({ data: { tbdId: "x" } })).toBeNull();
+    expect(parseCloseCheck(null)).toBeNull();
+  });
+
+  it("lets a check speak only for its own day", () => {
+    const check = parseCloseCheck(CHECK);
+    expect(checkOfDay(check, DAY)).toBe(check);
+    expect(checkOfDay(check, { ...DAY, tbdId: "other" })).toBeNull();
+    expect(checkOfDay(check, null)).toBeNull();
+    expect(checkOfDay(null, DAY)).toBeNull();
+  });
+
+  it("reads the close's store Z and force-closed sessions", () => {
+    const closed = parseCloseResult({
+      success: true,
+      data: {
+        day: { ...PAYLOAD.data, tbdStatus: "CLOSED", tbdZNo: 7 },
+        zNo: 7,
+        tapId: "tap",
+        closedOver: [],
+        forceClosed: [{ tssId: "s1", tssAccYear: "2026-2027", sessionNo: "C01" }],
+      },
+    });
+    expect(closed.zNo).toBe("7");
+    expect(closed.day?.tbdStatus).toBe("CLOSED");
+    expect(closed.forcedCount).toBe(1);
+    // A bare day (what Qt read) still yields its Z.
+    expect(parseCloseResult({ data: { ...PAYLOAD.data, tbdZNo: 9 } })).toMatchObject({ zNo: "9", forcedCount: null });
+    expect(parseCloseResult(undefined)).toEqual({ day: null, zNo: "", forcedCount: null });
+  });
+
+  it("reads the reopened day", () => {
+    expect(parseReopenResult({ data: { day: PAYLOAD.data, tapId: "t" } })?.tbdId).toBe("019c-day");
+    expect(parseReopenResult({ data: null })).toBeNull();
+  });
+
+  it("reads the approvers and a list body", () => {
+    expect(
+      parseSupervisors({
+        data: [
+          { userId: "u1", loginName: "VKPOS", fullName: "VK POS", hasPin: true },
+          { userId: "u2", loginName: "ZT", fullName: null, hasPin: false },
+          { loginName: "no id" },
+        ],
+      }),
+    ).toEqual([
+      { userId: "u1", loginName: "VKPOS", fullName: "VK POS", hasPin: true },
+      { userId: "u2", loginName: "ZT", fullName: "", hasPin: false },
+    ]);
+    expect(listOf({ data: { items: [{ a: 1 }] } })).toEqual([{ a: 1 }]);
+    expect(listOf({ data: "nope" })).toEqual([]);
+  });
+
+  it("reads a refusal's first error, flat or nested", () => {
+    const blocked = {
+      status: 409,
+      data: {
+        success: false,
+        message: "The business day cannot be closed",
+        errors: [{ field: "tbdId", code: "TILL_DAY_CLOSE_BLOCKED", message: "1 session is still open" }],
+      },
+    };
+    expect(firstErrorOf(blocked, "fallback")).toEqual({
+      status: 409,
+      code: "TILL_DAY_CLOSE_BLOCKED",
+      field: "tbdId",
+      message: "1 session is still open",
+    });
+    const nested = { status: 403, data: { statusCode: 403, message: { message: "Forbidden", errors: [] } } };
+    expect(firstErrorOf(nested, "fallback")).toEqual({ status: 403, code: "", field: "", message: "Forbidden" });
+    expect(firstErrorOf({ status: "FETCH_ERROR", error: "TypeError: Failed to fetch" }, "fallback").message).toBe(
+      "TypeError: Failed to fetch",
+    );
+    expect(firstErrorOf(undefined, "fallback")).toEqual({ status: null, code: "", field: "", message: "fallback" });
   });
 });

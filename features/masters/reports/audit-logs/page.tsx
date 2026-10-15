@@ -6,6 +6,7 @@ import ModalPortal from "@/components/ui/modal-portal";
 import type { ApiSuccessResponse, ListMeta } from "@/utils/types";
 import styles from "./page.module.scss";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { formatClock12 } from "@/lib/time-format";
 const AUDIT_LOG_LIST_ENDPOINT = "/audit-logs/list";
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
@@ -67,10 +68,6 @@ const DATE_PRESETS: ReadonlyArray<{ key: Exclude<AuditDatePreset, "custom">; lab
   { key: "30d", label: "30 days", days: 30 },
   { key: "all", label: "All", days: null },
 ];
-const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("en-IN", {
-  dateStyle: "medium",
-  timeStyle: "short",
-});
 const DATE_FORMATTER = new Intl.DateTimeFormat("en-IN", {
   dateStyle: "medium",
 });
@@ -173,7 +170,7 @@ function formatDateTime(value: string): string {
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return DATE_TIME_FORMATTER.format(date);
+  return `${DATE_FORMATTER.format(date)}, ${formatClock12(date)}`;
 }
 function formatDateOnly(value: string): string {
   const date = new Date(value);
@@ -187,7 +184,7 @@ function formatTimeOnly(value: string): string {
   if (Number.isNaN(date.getTime())) {
     return "";
   }
-  return date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+  return formatClock12(date);
 }
 function formatActionLabel(value: string): string {
   const normalized = value.trim().toLowerCase();

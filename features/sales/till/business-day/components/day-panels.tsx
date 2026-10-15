@@ -55,20 +55,28 @@ export function FactsStrip({ facts }: { facts: DayHead["facts"] }) {
   );
 }
 
-/** The checklist rows: tone pill, title over detail, and the jump that fixes it. */
+/**
+ * The checklist rows: tone pill, title over detail, and the jump that fixes
+ * it — a session's cockpit, another screen (Till Sessions), or nothing yet
+ * (Remit: off with the reason).
+ */
 export function Checklist({
   checks,
   onOpenSession,
+  onOpenHref,
 }: {
   checks: readonly Check[];
   onOpenSession: (keys: SessionKeys) => void;
+  onOpenHref: (href: string) => void;
 }) {
   return (
     <div className={styles.checks}>
-      {checks.map((check) => {
+      {checks.map((check, index) => {
         const session = check.action?.session ?? null;
+        const href = check.action?.href ?? "";
+        const live = Boolean(session || href);
         return (
-          <div key={check.title} className={cx(styles.checkRow, CHECK_TONE[check.tone])}>
+          <div key={`${index}-${check.title}`} className={cx(styles.checkRow, CHECK_TONE[check.tone])}>
             <span className={cx(styles.pill, styles.checkPill)}>{CHECK_TONE_NAMES[check.tone]}</span>
             <div className={styles.checkText}>
               <span className={styles.checkTitle}>{check.title}</span>
@@ -78,10 +86,11 @@ export function Checklist({
               <button
                 type="button"
                 className={styles.checkAction}
-                disabled={!session}
-                title={session ? undefined : NOT_ON_SERVER}
+                disabled={!live}
+                title={live ? undefined : NOT_ON_SERVER}
                 onClick={() => {
                   if (session) onOpenSession(session);
+                  else if (href) onOpenHref(href);
                 }}
               >
                 {check.action.label}

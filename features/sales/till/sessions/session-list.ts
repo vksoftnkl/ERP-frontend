@@ -10,9 +10,15 @@
  * that is not sent stays a literal word: the date filter then compares a date
  * with the text `ifrom_date` and the list is silently EMPTY. All six are
  * always sent, "" meaning "no bound".
+ *
+ * Qt c77f3f1: the Variance filter gains TO_APPROVE (notes 114 — the cash
+ * awaiting Approve Cash; grid 144 tests it on its `cash_receipt` value), and
+ * `cash_receipt` is the third pill column; the pill colours are the shared
+ * session palette (`../shared/session-badges.ts`).
  */
-import { textOf, type TillTone } from "../shared/format";
+import { textOf } from "../shared/format";
 import { toPaise } from "../shared/money";
+import { sessionBadgeBucket, type SessionBadgeBucket } from "../shared/session-badges";
 import type { GridRow, TillSessionKey } from "../shared/wire/types";
 
 /** Qt `defaultDaysBack = 7`. */
@@ -37,6 +43,8 @@ export const VARIANCE_OPTIONS = [
   { value: "EXCESS", label: "EXCESS" },
   { value: "PENDING", label: "PENDING" },
   { value: "NONE", label: "NONE" },
+  // Notes 114: cash awaiting Approve Cash.
+  { value: "TO_APPROVE", label: "TO_APPROVE" },
 ] as const;
 
 export type SessionListFilters = {
@@ -93,39 +101,26 @@ export function awaitsCount(status: string): boolean {
   return status === "COUNTING";
 }
 
+/** The list's pill tones: the house five, and slate for the `locked` bucket. */
+export type BadgeTone = "green" | "blue" | "grey" | "amber" | "red" | "slate";
+
+const BUCKET_TONES: Record<SessionBadgeBucket, BadgeTone> = {
+  success: "green",
+  progress: "blue",
+  neutral: "grey",
+  warning: "amber",
+  danger: "red",
+  locked: "slate",
+};
+
 /**
- * The badge colours of the two badge columns (Qt badgeOverrides): a closed
- * session is the normal end, not a locked row; the treatments read as the
- * mockup's chips.
+ * A badge column's pill tone (Qt `tillSessionBadges`): the shared session
+ * palette's bucket on this list's pill classes; a value the palette does not
+ * know is a plain grey pill.
  */
-export function badgeTone(column: "status_text" | "treatment", value: string): TillTone {
-  const text = value.trim().toUpperCase();
-  if (column === "status_text") {
-    switch (text) {
-      case "CLOSED":
-        return "green";
-      case "OPEN":
-        return "blue";
-      case "COUNTING":
-      case "PENDING APPROVAL":
-        return "amber";
-      case "VOIDED":
-        return "red";
-      default:
-        return "grey";
-    }
-  }
-  switch (text) {
-    case "EXPENSE":
-      return "blue";
-    case "SUSPENSE":
-    case "PENDING":
-      return "amber";
-    case "RECOVER":
-      return "red";
-    default:
-      return "grey";
-  }
+export function badgeTone(value: string): BadgeTone {
+  const bucket = sessionBadgeBucket(value);
+  return bucket ? BUCKET_TONES[bucket] : "grey";
 }
 
 /** A variance cell's tone: short red, excess green, nil plain. */

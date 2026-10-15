@@ -8,13 +8,27 @@ import { useBusinessContext } from "@/components/layout/business-context";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { getConfirmations } from "@/lib/confirm";
 import { useDataRefresh, type DataRefreshReason } from "@/lib/data-freshness";
-import { getMessages } from "@/lib/notify";
+import { getMessages, toast } from "@/lib/notify";
+import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
+import { PURPOSE_CODE } from "@/features/printing/domain/documentPrint";
 import { useAppSelector } from "@/store/hooks";
 import { selectAppSettingText } from "@/store/slices/appSettingsSlice";
 import { LiveCashLine } from "../shared/live-cash-line";
+import { DayExceptionDialog } from "./components/day-exception-dialog";
 import { DayGrid } from "./components/day-grid";
 import { Checklist, DayNumbers, FactsStrip, VerdictBand, pillToneClass } from "./components/day-panels";
+import { DayReopenDialog } from "./components/day-reopen-dialog";
 import { DAY_COLUMNS_FALLBACK, SESSION_COLUMNS_FALLBACK } from "./domain/columns";
+import {
+  dayButtons,
+  dayLabelOf,
+  dayPrintOf,
+  exceptionClosedText,
+  exceptionPages,
+  reopenedText,
+  type DayPrint,
+  type ExceptionPage,
+} from "./domain/day-close";
 import {
   blankHead,
   dayHead,
@@ -24,7 +38,18 @@ import {
   type DayReading,
   type RowsState,
 } from "./domain/day-reading";
-import { cockpitHref, dayPickOf, sessionKeysOf, text, type GridRow, type SessionKeys } from "./domain/wire";
+import {
+  checkOfDay,
+  cockpitHref,
+  dayKeyOf,
+  dayPickOf,
+  sessionKeysOf,
+  text,
+  type DayCloseResult,
+  type DayKey,
+  type GridRow,
+  type SessionKeys,
+} from "./domain/wire";
 import { useBusinessDay, type DayPick } from "./use-business-day";
 import styles from "./page.module.scss";
 
@@ -33,12 +58,16 @@ export const BUSINESS_DAY_HREF = "/sales/till/business-day";
 
 type Tab = "day" | "list";
 
-/** Day close and its kin wait for the server (README "Not in phase 1": phase 4). */
-const NO_CLOSE_ROUTE = "Day close is not on the server yet (no /till/days/close-check · close · reopen)";
-const NO_PRINT_TEMPLATE = "No day X / store Z print template yet";
+/** What is up over the Day tab: one of the close's dialogs, or the print. */
+type Dialog =
+  | { kind: "exception"; key: DayKey; pages: readonly ExceptionPage[] }
+  | { kind: "reopen"; key: DayKey; label: string }
+  | { kind: "print"; print: DayPrint }
+  | null;
+
 const FOOT_NOTE =
-  "On close (when the server has it): the day is frozen, the store Z is issued, and from then re-tenders, " +
-  "cash cancels and back-dated money documents for the day are refused.";
+  "On close the day is frozen and the store Z is issued: from then no session opens on it, and bills, " +
+  "re-tenders, cash cancels and money documents dated it are refused.";
 
 const REVALIDATE_ON: DataRefreshReason[] = ["focus", "visible", "reconnect", "manual"];
 
@@ -79,15 +108,16 @@ function dayRowKey(row: GridRow, index: number): string {
  * List tab. Ported from the Qt `TillBusinessDayEntry` (NexERP d5c3637,
  * mockup till_day_close_ui_mockup.png, TILL_DESIGN §8 S8).
  *
- * Built on what the server has: `GET /till/days/get`, `POST /till/days/open`
- * and three configured grids, plus the live line (Qt a449b8c: every drawer
- * still out at the branch, any day, `../shared/live-cash.ts`). The checklist
- * is the screen's own reading of those rows; Close day, Close with exception,
- * Cancel closing and Print day X are off with the reason until the server's
- * phase 4 lands.
+ * Built on `GET /till/days/get`, `POST /till/days/open`, three configured
+ * grids, the live line (Qt a449b8c: every drawer still out at the branch, any
+ * day, `../shared/live-cash.ts`) and, since Qt c77f3f1 (notes 117), the
+ * server's close: its close-check drives the checklist and the buttons —
+ * Close day (F10), Close with exception (the live drawers counted and
+ * force-closed), Reopen day — all Business Day (274) EDIT. Print day X / store
+ * Z is the TILL_DAY_Z print of the day.
  *
- * Keys (Qt): F5 Refresh checks (always today) · F8 Day ⇄ List · Enter on a
- * session opens its cockpit, on a day opens that day · Esc closes.
+ * Keys (Qt): F5 Refresh checks (always today) · F8 Day ⇄ List · F10 Close day
+ * · Enter on a session opens its cockpit, on a day opens that day · Esc closes.
  */
 export default function BusinessDayScreen() {
   const router = useRouter();
@@ -99,10 +129,19 @@ export default function BusinessDayScreen() {
   const cutoff = useAppSelector((state) => selectAppSettingText(state, "till.day_cutoff"));
   const [initialPick] = useState(pickFromUrl);
 
-  const model = useBusinessDay({ companyId, branchId, cutoff, initialPick, canCreate: permissions.canCreate });
-  const { dayState, pick, sessions, liveSessions, safes, days, dayBusy, opening, scopeReady } = model;
+  const model = useBusinessDay({
+    companyId,
+    branchId,
+    cutoff,
+    initialPick,
+    canCreate: permissions.canCreate,
+    canEdit: permissions.canEdit,
+  });
+  const { dayState, pick, sessions, liveSessions, safes, days, dayBusy, opening, closing, closeCheck, scopeReady } =
+    model;
 
   const [tab, setTab] = useState<Tab>("day");
+  const [dialog, setDialog] = useState<Dialog>(null);
   const sessionsGridRef = useRef<HTMLDivElement | null>(null);
   const daysGridRef = useRef<HTMLDivElement | null>(null);
 
@@ -113,12 +152,25 @@ export default function BusinessDayScreen() {
     if (dayState.kind === "none") return noDayHead(dayState.businessDate, headContext);
     return blankHead(headContext);
   }, [dayState, headContext]);
+  const shownDay = dayState.kind === "day" ? dayState.day : null;
+  // The server's close-check speaks only for the day it was read for.
+  const check = checkOfDay(closeCheck.check, shownDay);
+  const checkError = shownDay && closeCheck.tbdId === shownDay.tbdId ? closeCheck.error : "";
   const reading = useMemo<DayReading | null>(() => {
     // The live read answering rebuilds the checklist (Qt `updated` → `rebuild`).
-    if (dayState.kind === "day") return readDay(sessions, safes, liveSessions, dayState.day.tbdBusinessDate);
+    if (dayState.kind === "day") {
+      return readDay(sessions, safes, liveSessions, dayState.day.tbdBusinessDate, {
+        day: dayState.day,
+        check,
+        checkError,
+        now: new Date(),
+      });
+    }
     if (dayState.kind === "none") return noDayReading();
     return null;
-  }, [dayState, sessions, safes, liveSessions]);
+  }, [dayState, sessions, safes, liveSessions, check, checkError]);
+  const buttons = dayButtons(shownDay, check, permissions.canEdit);
+  const canCloseDay = buttons.closeDay.enabled && !closing;
 
   const canDayOpen = dayState.kind === "none" && permissions.canCreate && !opening;
   let dayOpenTitle: string | undefined;
@@ -160,7 +212,14 @@ export default function BusinessDayScreen() {
     [openSession],
   );
 
-  const { loadDay, refresh, retrySessions, revalidate, openDay, reloadDays } = model;
+  const openHref = useCallback(
+    (href: string) => {
+      router.push(href);
+    },
+    [router],
+  );
+
+  const { loadDay, refresh, retrySessions, revalidate, openDay, reloadDays, closeDay, reloadShown } = model;
   const openDayRow = useCallback(
     (row: GridRow) => {
       const picked = dayPickOf(row);
@@ -186,10 +245,42 @@ export default function BusinessDayScreen() {
   // own included), and answering those would re-read on every save anywhere.
   useDataRefresh(revalidate, { enabled: scopeReady, reasons: REVALIDATE_ON });
 
-  // ── Keys: F5 refresh · F8 Day ⇄ List · Esc close ────────────────────────
-  const keysRef = useRef({ refresh, close });
+  // ── Close with exception · Reopen day · Print ─────────────────────────
+  const scope = useMemo(() => ({ companyId, branchId }), [companyId, branchId]);
+
+  const openException = () => {
+    if (!shownDay || !buttons.closeException.enabled) return;
+    const pages = exceptionPages(check, sessions.rows);
+    if (pages.length === 0) return;
+    setDialog({ kind: "exception", key: dayKeyOf(shownDay, scope), pages });
+  };
+
+  const openReopen = () => {
+    if (!shownDay || !buttons.reopen.enabled) return;
+    setDialog({ kind: "reopen", key: dayKeyOf(shownDay, scope), label: dayLabelOf(shownDay) });
+  };
+
+  const openPrint = () => {
+    if (!shownDay) return;
+    setDialog({ kind: "print", print: dayPrintOf(shownDay, scope) });
+  };
+
+  const exceptionClosed = (result: DayCloseResult, pages: readonly ExceptionPage[]) => {
+    setDialog(null);
+    toast.success(exceptionClosedText(result.zNo, result.forcedCount ?? pages.length), { autoClose: false });
+    reloadShown();
+  };
+
+  const reopened = (label: string) => {
+    setDialog(null);
+    toast.success(reopenedText(label), { autoClose: false });
+    reloadShown();
+  };
+
+  // ── Keys: F5 refresh · F8 Day ⇄ List · F10 Close day · Esc close ────────
+  const keysRef = useRef({ refresh, close, closeDay, canCloseDay });
   useLayoutEffect(() => {
-    keysRef.current = { refresh, close };
+    keysRef.current = { refresh, close, closeDay, canCloseDay };
   });
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -202,6 +293,10 @@ export default function BusinessDayScreen() {
       } else if (event.key === "F8") {
         event.preventDefault();
         setTab((current) => (current === "day" ? "list" : "day"));
+      } else if (event.key === "F10") {
+        // Never the browser's menu bar; Close day only when its button is on.
+        event.preventDefault();
+        if (keysRef.current.canCloseDay) void keysRef.current.closeDay();
       } else if (event.key === "Escape") {
         event.preventDefault();
         keysRef.current.close();
@@ -273,7 +368,7 @@ export default function BusinessDayScreen() {
                 red blocks · amber needs a decision · green is done · grey waits for the server
               </span>
             </div>
-            <Checklist checks={reading?.checks ?? []} onOpenSession={openSession} />
+            <Checklist checks={reading?.checks ?? []} onOpenSession={openSession} onOpenHref={openHref} />
 
             <div className={styles.capRow}>
               <span className={styles.sectionCap}>Sessions of the day</span>
@@ -319,20 +414,45 @@ export default function BusinessDayScreen() {
           >
             {opening ? "Opening…" : "Day Open"}
           </button>
-          <button type="button" className={styles.primaryButton} disabled title={NO_CLOSE_ROUTE}>
-            <span className={styles.keyLead}>F10</span>Close day
+          <button
+            type="button"
+            className={styles.primaryButton}
+            disabled={!canCloseDay}
+            title={buttons.closeDay.title}
+            onClick={() => void closeDay()}
+          >
+            <span className={styles.keyLead}>F10</span>
+            {closing ? "Closing…" : "Close day"}
           </button>
-          <button type="button" className={styles.warnButton} disabled title={NO_CLOSE_ROUTE}>
+          <button
+            type="button"
+            className={styles.warnButton}
+            disabled={!buttons.closeException.enabled || closing}
+            title={buttons.closeException.title}
+            onClick={openException}
+          >
             Close with exception…
           </button>
           <button type="button" className={styles.secondaryButton} disabled={!scopeReady} onClick={refresh}>
             <span className={styles.keyLead}>F5</span>Refresh checks
           </button>
-          <button type="button" className={styles.secondaryButton} disabled title={NO_PRINT_TEMPLATE}>
-            Print day X
+          <button
+            type="button"
+            className={styles.secondaryButton}
+            disabled={!buttons.print.enabled}
+            title={buttons.print.title}
+            onClick={openPrint}
+          >
+            {buttons.print.label}
           </button>
-          <button type="button" className={styles.secondaryButton} disabled title={NO_CLOSE_ROUTE}>
-            Cancel closing
+          <button
+            type="button"
+            className={styles.secondaryButton}
+            disabled={!buttons.reopen.enabled}
+            title={buttons.reopen.title}
+            onClick={openReopen}
+          >
+            Reopen day
           </button>
           <span className={styles.spacer} />
           <button type="button" className={styles.secondaryButton} onClick={close}>
@@ -356,6 +476,32 @@ export default function BusinessDayScreen() {
           gridRef={daysGridRef}
         />
       </section>
+
+      {dialog?.kind === "exception" ? (
+        <DayExceptionDialog
+          dayKey={dialog.key}
+          pages={dialog.pages}
+          onClose={() => setDialog(null)}
+          onClosed={(result) => exceptionClosed(result, dialog.pages)}
+        />
+      ) : null}
+      {dialog?.kind === "reopen" ? (
+        <DayReopenDialog
+          dayKey={dialog.key}
+          dayLabel={dialog.label}
+          onClose={() => setDialog(null)}
+          onReopened={() => reopened(dialog.label)}
+        />
+      ) : null}
+      {dialog?.kind === "print" ? (
+        <PrintOptionsDialog
+          open
+          onClose={() => setDialog(null)}
+          purposeCode={PURPOSE_CODE.TILL_DAY_Z}
+          documentLabel={dialog.print.label}
+          targets={[dialog.print.target]}
+        />
+      ) : null}
     </div>
   );
 }

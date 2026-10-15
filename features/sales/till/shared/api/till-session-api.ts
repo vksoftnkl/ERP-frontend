@@ -13,6 +13,14 @@
  *
  * Every function returns the envelope's `data`. A refusal throws the RTK error
  * (`{ status, data }`); `../errors.ts#tillErrorOf` reads it.
+ *
+ * The two `…Quiet` reads are the exception: QUERY endpoints dispatched
+ * `initiate(arg, { subscribe: false, forceRefetch: true })`, like the live-cash
+ * reads. They are for a timer (Open Till re-checks a session waiting for its
+ * approver every 15 s): every fulfilled MUTATION is announced as a data change
+ * by the store's `announceMutations`, so a polled GET-as-mutation would make
+ * this tab's `useDataRefresh` subscribers re-read on every tick. Nothing aborts
+ * them, so the pending-key dedupe only ever shares one honest answer.
  */
 import { useMemo } from "react";
 import { baseApi } from "@/store/api/baseApi";
@@ -21,19 +29,23 @@ import type { AppDispatch } from "@/store/store";
 import { getGridId, type ConfiguredGridKey } from "@/lib/configured-grids";
 import type {
   GridRow,
+  TillCashApprovalResult,
   TillCountLine,
   TillCountResult,
   TillDenominationRow,
+  TillForceCloseResult,
   TillMovementDetail,
   TillOpenCheck,
   TillSessionKey,
   TillSessionPayload,
+  TillSessionReopenResult,
   TillSlipCheckPayload,
   TillSlipCheckResult,
   TillSupervisor,
   TillApprovableTreatment,
   TillVarianceDecision,
   TillVarianceDecisionResult,
+  TillXReport,
 } from "../wire/types";
 
 type Params = Record<string, string | number | boolean | undefined>;
@@ -46,8 +58,15 @@ export const tillSessionApi = baseApi.injectEndpoints({
     tillSessionScreenWrite: builder.mutation<unknown, { url: string; body: Record<string, unknown> }>({
       query: ({ url, body }) => ({ url, method: "POST", body }),
     }),
+    tillSessionQuietRead: builder.query<unknown, { url: string; params: Params }>({
+      query: ({ url, params }) => ({ url, params }),
+      keepUnusedDataFor: 0,
+    }),
   }),
 });
+
+/** A fresh read every time, held by nothing once it has answered. */
+const QUIET_READ = { subscribe: false, forceRefetch: true } as const;
 
 const GRID_RUN = "/configured-grid-sql/run";
 /** The runner caps `limit` at 100. */
@@ -75,6 +94,12 @@ async function write<T>(dispatch: AppDispatch, url: string, body: Record<string,
   } finally {
     request.reset();
   }
+}
+
+async function quietRead<T>(dispatch: AppDispatch, url: string, params: Params): Promise<T> {
+  return dataOf<T>(
+    await dispatch(tillSessionApi.endpoints.tillSessionQuietRead.initiate({ url, params }, QUIET_READ)).unwrap(),
+  );
 }
 
 function keyParams(key: TillSessionKey): Params {
@@ -138,12 +163,53 @@ export type TillDecideVarianceBody = TillSessionKey & {
   note: string;
   /** The approver's till PIN — required on a COUNTER channel rule; on EITHER it stands in for remote authority. */
   approverPin?: string | null;
+  /**
+   * Notes 113: decide a received bag's RECEIVE-stage difference instead — the
+   * variance's `tvrMovementId`; APPROVE only (the receiver's count stands).
+   */
+  tcmId?: string;
+};
+
+/**
+ * `ApproveTillCashDto` (notes 114, 273 OVERRIDE): a CLOSED session's hand-over
+ * and drops into the safe. `receivedAmount` left out = exactly what was handed
+ * over; `treatment` + `reasonId` decide a gap beyond tolerance now, left out it
+ * waits for another approver.
+ */
+export type TillApproveCashBody = TillSessionKey & {
+  approverPin?: string;
+  receivedAmount?: number;
+  treatment?: TillApprovableTreatment;
+  reasonId?: string;
+  notes?: string;
+};
+
+/** `ForceCloseTillSessionDto` (notes 117): the supervisor's count closes a session whose cashier has gone. */
+export type TillForceCloseBody = TillSessionKey & {
+  /** A FORCE_CLOSE reason. */
+  reasonId: string;
+  approverPin: string;
+  lines: TillCountLine[];
+  floatLeft?: number | null;
+  notes?: string;
+};
+
+/** `ReopenTillSessionDto` (notes 117): a CLOSED session back to COUNTING. */
+export type TillReopenBody = TillSessionKey & {
+  /** A REOPEN reason. */
+  reasonId: string;
+  approverPin: string;
+  notes?: string;
 };
 
 export type TillSessionClient = {
   openCheck: (scope: { companyId: string; branchId: string; counterId?: string }) => Promise<TillOpenCheck>;
+  /** `openCheck` for a timer: a query, so it is not announced as a data change (see the header). */
+  openCheckQuiet: (scope: { companyId: string; branchId: string; counterId?: string }) => Promise<TillOpenCheck>;
   open: (body: TillOpenBody) => Promise<TillSessionPayload>;
   get: (key: TillSessionKey) => Promise<TillSessionPayload>;
+  /** `get` for a timer: a query, so it is not announced as a data change (see the header). */
+  getQuiet: (key: TillSessionKey) => Promise<TillSessionPayload>;
   /** 273 OVERRIDE: every expected figure; refused to the session's own cashier until it closes. */
   expected: (key: TillSessionKey) => Promise<TillSessionPayload>;
   resume: (key: TillSessionKey) => Promise<TillSessionPayload>;
@@ -153,6 +219,14 @@ export type TillSessionClient = {
   close: (body: TillCloseBody) => Promise<TillSessionPayload>;
   /** Notes 105 A: APPROVE the PENDING variances with a treatment, or send the session back for a RECOUNT. */
   decideVariance: (body: TillDecideVarianceBody) => Promise<TillVarianceDecisionResult>;
+  /** Notes 114 (273 OVERRIDE, never its cashier unless single-operator): a closed session's cash into the safe. */
+  approveCash: (body: TillApproveCashBody) => Promise<TillCashApprovalResult>;
+  /** Notes 117 (273 OVERRIDE + the FORCE_CLOSE rule): OPEN / SUSPENDED / COUNTING closed on the supervisor's count. */
+  forceClose: (body: TillForceCloseBody) => Promise<TillForceCloseResult>;
+  /** Notes 117 (273 OVERRIDE + the SESSION_REOPEN rule): a CLOSED session back to COUNTING, the Z kept. */
+  reopen: (body: TillReopenBody) => Promise<TillSessionReopenResult>;
+  /** Notes 117: a journalled X read of a live session — refused to its own cashier (blind close). */
+  xReport: (key: TillSessionKey) => Promise<TillXReport>;
   slipCheckRows: (key: TillSessionKey, tenderId: string) => Promise<TillSlipCheckPayload>;
   slipCheckRecord: (body: TillSlipCheckBody) => Promise<TillSlipCheckResult>;
   createMovement: (body: TillMovementBody) => Promise<TillMovementDetail>;
@@ -167,8 +241,11 @@ export function createTillSessionClient(dispatch: AppDispatch): TillSessionClien
   return {
     openCheck: ({ companyId, branchId, counterId }) =>
       read(dispatch, "/till/sessions/open-check", { companyId, branchId, ...(counterId ? { counterId } : {}) }),
+    openCheckQuiet: ({ companyId, branchId, counterId }) =>
+      quietRead(dispatch, "/till/sessions/open-check", { companyId, branchId, ...(counterId ? { counterId } : {}) }),
     open: (body) => write(dispatch, "/till/sessions/open", body),
     get: (key) => read(dispatch, "/till/sessions/get", keyParams(key)),
+    getQuiet: (key) => quietRead(dispatch, "/till/sessions/get", keyParams(key)),
     expected: (key) => read(dispatch, "/till/sessions/expected", keyParams(key)),
     resume: (key) => write(dispatch, "/till/sessions/resume", { ...key }),
     suspend: (key) => write(dispatch, "/till/sessions/suspend", { ...key }),
@@ -177,6 +254,10 @@ export function createTillSessionClient(dispatch: AppDispatch): TillSessionClien
     count: (body) => write(dispatch, "/till/sessions/count", body),
     close: (body) => write(dispatch, "/till/sessions/close", body),
     decideVariance: (body) => write(dispatch, "/till/sessions/decide-variance", body),
+    approveCash: (body) => write(dispatch, "/till/sessions/approve-cash", body),
+    forceClose: (body) => write(dispatch, "/till/sessions/force-close", body),
+    reopen: (body) => write(dispatch, "/till/sessions/reopen", body),
+    xReport: (key) => write(dispatch, "/till/sessions/x-report", { ...key }),
     slipCheckRows: (key, tenderId) => read(dispatch, "/till/sessions/slip-check", { ...keyParams(key), tenderId }),
     slipCheckRecord: (body) => write(dispatch, "/till/sessions/slip-check", body),
     createMovement: (body) => write(dispatch, "/till/movements/create", body),

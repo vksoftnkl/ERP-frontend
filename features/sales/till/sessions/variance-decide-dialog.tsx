@@ -6,6 +6,9 @@
  * APPROVE with a treatment and a reason, or RECOUNT; a note always, the till
  * PIN when the rule asks for it. What it decides is `variance-decide.ts`.
  *
+ * Bag mode (`request.bag`, notes 113): a received bag's difference — APPROVE
+ * only (no Recount), the bag named in the Event fact, its `tcmId` sent.
+ *
  * Keys: Ctrl+Enter decides, Esc cancels.
  */
 import { useRef, useState } from "react";
@@ -17,10 +20,12 @@ import { TillDialog } from "../shared/till-dialog";
 import type { TillVarianceDecision } from "../shared/wire/types";
 import styles from "../shared/till.module.scss";
 import {
+  BAG_DECIDE_HINT,
   DECIDE_HINT,
   decideAmount,
   decideBody,
   decideButtonLabel,
+  decideEventText,
   decideProblem,
   decideRefusal,
   initialDecideForm,
@@ -70,7 +75,7 @@ function DecideBody({ request, reasons, onClose, onDecided }: VarianceDecideDial
     setBusy(true);
     setError("");
     try {
-      await client.decideVariance(decideBody(request.key, form));
+      await client.decideVariance(decideBody(request.key, form, request.bag?.tcmId ?? ""));
       onDecided(form.decision);
     } catch (thrown) {
       const refusal = decideRefusal(tillErrorOf(thrown, "The decision could not be recorded."));
@@ -120,7 +125,7 @@ function DecideBody({ request, reasons, onClose, onDecided }: VarianceDecideDial
       <div className={styles.facts}>
         <div className={styles.fact}>
           <span className={styles.cap}>Event</span>
-          <span className={styles.code}>{request.event}</span>
+          <span className={styles.code}>{decideEventText(request)}</span>
         </div>
         <div className={styles.fact}>
           <span className={styles.cap}>Variance</span>
@@ -148,18 +153,21 @@ function DecideBody({ request, reasons, onClose, onDecided }: VarianceDecideDial
               ["APPROVE", "Approve"],
               ["RECOUNT", "Recount"],
             ] as const
-          ).map(([value, label]) => (
-            <label key={value} className={styles.radio}>
-              <input
-                type="radio"
-                name="till-decide-decision"
-                checked={form.decision === value}
-                autoFocus={value === "APPROVE"}
-                onChange={() => patch({ decision: value })}
-              />
-              {label}
-            </label>
-          ))}
+          )
+            // A bag's difference: the receiver's count stands — no recount.
+            .filter(([value]) => !request.bag || value === "APPROVE")
+            .map(([value, label]) => (
+              <label key={value} className={styles.radio}>
+                <input
+                  type="radio"
+                  name="till-decide-decision"
+                  checked={form.decision === value}
+                  autoFocus={value === "APPROVE"}
+                  onChange={() => patch({ decision: value })}
+                />
+                {label}
+              </label>
+            ))}
         </div>
 
         <label className={cx(styles.formLabel, !approve && styles.toneMuted)} htmlFor="till-decide-treatment">
@@ -228,7 +236,7 @@ function DecideBody({ request, reasons, onClose, onDecided }: VarianceDecideDial
         />
       </div>
 
-      <p className={styles.muted}>{DECIDE_HINT}</p>
+      <p className={styles.muted}>{request.bag ? BAG_DECIDE_HINT : DECIDE_HINT}</p>
       {error ? <p className={cx(styles.warn, styles.warnDanger)}>{error}</p> : null}
     </TillDialog>
   );

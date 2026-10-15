@@ -6,8 +6,11 @@
  * config cannot be read, copied from the dev rows of grids 149 and 150.
  *
  * What a column's VALUE looks like is the screen's: money in Indian grouping,
- * a variance with its sign, the status as a pill.
+ * a variance with its sign, the status as a pill. The session pills —
+ * Treatment, Cash, Status — take the colours every session grid shares (Qt
+ * c77f3f1 `tillSessionBadges`, `../../shared/session-badges.ts`).
  */
+import { isSessionBadgeColumn, sessionBadgeBucket, type SessionBadgeBucket } from "../../shared/session-badges";
 import { formatMoney, formatSignedMoney, signOf, toPaise } from "./decimal";
 import { text, type GridRow } from "./wire";
 
@@ -42,8 +45,10 @@ export const SESSION_COLUMNS_FALLBACK: readonly GridColumn[] = [
   { field: "opened_at", header: "Opened", align: "left" },
   { field: "closed_at", header: "Closed", align: "left" },
   { field: "bills", header: "Bills", align: "right" },
-  { field: "cash_variance", header: "Cash variance", align: "right" },
+  { field: "cash_variance", header: "Variance", align: "right" },
   { field: "treatment", header: "Treatment", align: "left" },
+  // Notes 114: the hand-over waiting for a supervisor's Approve Cash.
+  { field: "cash_receipt", header: "Cash", align: "left" },
   { field: "status_text", header: "Status", align: "left" },
 ];
 
@@ -98,7 +103,8 @@ export function resolveColumns(
 
 // ── Cells ─────────────────────────────────────────────────────────────────
 
-export type CellTone = "" | "danger" | "success" | "warning" | "info" | "muted";
+/** `locked` is the slate of a parked figure (a SUSPENSE treatment). */
+export type CellTone = "" | "danger" | "success" | "warning" | "info" | "muted" | "locked";
 
 export type Cell = { kind: "text"; text: string; tone: CellTone } | { kind: "pill"; text: string; tone: CellTone };
 
@@ -106,8 +112,8 @@ export type Cell = { kind: "text"; text: string; tone: CellTone } | { kind: "pil
 const MONEY_FIELDS = new Set(["net_sales", "cash_expected", "cash_counted", "bd_net_sales"]);
 /** Variance columns: the sign is the point. */
 const VARIANCE_FIELDS = new Set(["cash_variance", "bd_cash_variance"]);
-/** Status columns: a pill. */
-const STATUS_FIELDS = new Set(["status_text", "tss_status", "tbd_status"]);
+/** Status columns a session badge does not cover (the raw status, the day's): a pill. */
+const STATUS_FIELDS = new Set(["tss_status", "tbd_status"]);
 
 /** A session's or a day's status → the pill's tone. */
 export function statusTone(value: string): CellTone {
@@ -137,8 +143,35 @@ function treatmentTone(value: string): CellTone {
   return "info";
 }
 
+/** The shared session buckets on this screen's pill tones. */
+const BUCKET_TONE: Record<SessionBadgeBucket, CellTone> = {
+  success: "success",
+  progress: "info",
+  neutral: "muted",
+  warning: "warning",
+  danger: "danger",
+  locked: "locked",
+};
+
+/** A Treatment / Cash / Status value as a pill: the shared colour, else the screen's own. */
+function sessionBadgeCell(field: string, value: string): Cell {
+  const bucket = sessionBadgeBucket(value);
+  let own: CellTone = "";
+  if (field === "treatment") own = treatmentTone(value);
+  else if (field === "status_text") own = statusTone(value);
+  return {
+    kind: "pill",
+    text: field === "status_text" ? value.replace(/_/g, " ") : value,
+    tone: bucket ? BUCKET_TONE[bucket] : own,
+  };
+}
+
 export function cellOf(field: string, row: GridRow): Cell {
   const raw = row[field];
+  if (isSessionBadgeColumn(field)) {
+    const value = text(raw).trim();
+    return value ? sessionBadgeCell(field, value) : { kind: "text", text: "", tone: "" };
+  }
   if (MONEY_FIELDS.has(field)) {
     const paise = toPaise(raw);
     return { kind: "text", text: paise === null ? "" : formatMoney(paise), tone: "" };
@@ -154,10 +187,6 @@ export function cellOf(field: string, row: GridRow): Cell {
     return value
       ? { kind: "pill", text: value.replace(/_/g, " "), tone: statusTone(value) }
       : { kind: "text", text: "", tone: "" };
-  }
-  if (field === "treatment") {
-    const value = text(raw).trim();
-    return value ? { kind: "pill", text: value, tone: treatmentTone(value) } : { kind: "text", text: "", tone: "" };
   }
   return { kind: "text", text: text(raw), tone: "" };
 }

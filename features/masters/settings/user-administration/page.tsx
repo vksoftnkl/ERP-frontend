@@ -15,6 +15,7 @@ import styles from "@/app/master/state-master/page.module.scss";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { type ConfiguredGridKey } from "@/lib/configured-grids";
 import { toast } from "@/lib/notify";
+import { formatClock12 } from "@/lib/time-format";
 import { baseApi } from "@/store/api/baseApi";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { selectAuthUserId } from "@/store/slices/authSlice";
@@ -76,7 +77,7 @@ function sourceText(row: MasterTableRow, key: string): string {
 function whenText(iso: string): string {
   if (!iso) return "";
   const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? iso : `${date.toLocaleDateString()}, ${formatClock12(date)}`;
 }
 
 /**

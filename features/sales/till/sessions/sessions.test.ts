@@ -14,7 +14,15 @@ import {
   slipTenders,
   tenderRows,
 } from "./cockpit";
-import { badgeTone, journalSummary, rowHint, sessionGridParams, sessionRowOf, varianceTone } from "./session-list";
+import {
+  VARIANCE_OPTIONS,
+  badgeTone,
+  journalSummary,
+  rowHint,
+  sessionGridParams,
+  sessionRowOf,
+  varianceTone,
+} from "./session-list";
 import { initialMarks, slipCheckBody, slipFacts, slipResult } from "./slip-check";
 
 function tender(over: Partial<TillSessionTender>): TillSessionTender {
@@ -120,14 +128,39 @@ describe("the Sessions list", () => {
     });
     expect(row?.key).toEqual({ companyId: "co", branchId: "br", accYear: "2026-2027", tssId: "t1" });
     expect(sessionRowOf({})).toBeNull();
-    expect(badgeTone("status_text", "PENDING APPROVAL")).toBe("amber");
-    expect(badgeTone("status_text", "CLOSED")).toBe("green");
-    expect(badgeTone("treatment", "WITHIN TOL.")).toBe("grey");
-    expect(badgeTone("treatment", "RECOVER")).toBe("red");
     expect(varianceTone("-10.00")).toBe("red");
     expect(varianceTone("0.00")).toBe("");
     expect(rowHint(row)).toMatch(/^Out of tolerance/);
     expect(journalSummary(row!, 1)).toEqual(["C01-261009-01", "RAVI K", "C01", "now PENDING APPROVAL", "1 event"]);
+  });
+
+  it("colours the three pill columns from the shared session palette", () => {
+    // status_text
+    expect(badgeTone("PENDING APPROVAL")).toBe("amber");
+    expect(badgeTone("CLOSED")).toBe("green");
+    expect(badgeTone("OPEN")).toBe("blue");
+    expect(badgeTone("SUSPENDED")).toBe("grey");
+    expect(badgeTone("VOIDED")).toBe("red");
+    // treatment: each its own hue (Qt c77f3f1)
+    expect(badgeTone("WITHIN TOL.")).toBe("green");
+    expect(badgeTone("EXPENSE")).toBe("blue");
+    expect(badgeTone("SUSPENSE")).toBe("slate");
+    expect(badgeTone("RECOVER")).toBe("red");
+    expect(badgeTone("PENDING")).toBe("amber");
+    // cash_receipt (notes 114)
+    expect(badgeTone("TO APPROVE")).toBe("amber");
+    expect(badgeTone("APPROVED")).toBe("green");
+    expect(badgeTone("DIFFERENCE")).toBe("red");
+    // a stranger is a plain pill
+    expect(badgeTone("SOMETHING")).toBe("grey");
+  });
+
+  it("offers TO_APPROVE among the variance filters, sent as typed", () => {
+    expect(VARIANCE_OPTIONS.map((o) => o.value)).toEqual(["", "SHORT", "EXCESS", "PENDING", "NONE", "TO_APPROVE"]);
+    expect(
+      sessionGridParams({ companyId: "co", branchId: "br", fromDate: "", toDate: "", status: "CLOSED", variance: "TO_APPROVE" })
+        .ivariance,
+    ).toBe("TO_APPROVE");
   });
 });
 
@@ -208,14 +241,16 @@ describe("the cockpit", () => {
     expect(approveButton(waiting, "019c-supervisor")).toEqual({
       enabled: true,
       tip: "Approve with a treatment, or send it back to recount",
+      label: "Approve",
+      action: "decide",
     });
-    expect(approveButton(waiting, "019c-cashier")).toEqual({
+    expect(approveButton(waiting, "019c-cashier")).toMatchObject({
       enabled: false,
       tip: "You are this session's cashier: another person approves it",
     });
-    expect(approveButton(session({ tssOperatorId: "019c-cashier" }), "019c-supervisor")).toEqual({
+    expect(approveButton(session({ tssOperatorId: "019c-cashier" }), "019c-supervisor")).toMatchObject({
       enabled: false,
-      tip: "Only a session waiting for approval (PENDING_APPROVAL)",
+      tip: "Only a session waiting for approval, its cash to approve, or an approved cash difference",
     });
     expect(approveButton(null, "me").enabled).toBe(false);
   });

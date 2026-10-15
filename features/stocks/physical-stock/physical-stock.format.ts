@@ -3,6 +3,7 @@
  * screen reads and paints them, as pure functions.
  */
 import { formatCurrency } from "@/domain/pricing";
+import { clock12FromHhmm } from "@/lib/time-format";
 import type { WireNumber } from "./physical-stock.types";
 
 // ---------------------------------------------------------------------------
@@ -171,27 +172,41 @@ export function addHoursLocal(value: string, hours: number): string {
   return toLocalDateTime(new Date(date.getTime() + hours * 60 * 60 * 1000));
 }
 
-/** `dd-MM-yyyy HH:mm` — the freeze fields' display format. */
+/** `dd-MM-yyyy hh:mm AM` — the freeze fields' display format (Qt `dd-MM-yyyy hh:mm AP`). */
 export function displayDateTime(value: string): string {
   const match = LOCAL_DATE_TIME.exec((value ?? "").trim());
   if (!match) {
     return "";
   }
-  return `${match[3]}-${match[2]}-${match[1]} ${match[4]}:${match[5]}`;
+  return `${match[3]}-${match[2]}-${match[1]} ${clock12FromHhmm(`${match[4]}:${match[5]}`)}`;
 }
+
+/** A trailing AM / PM marker — `PM`, `pm`, `p.m.`, or just `p`. */
+const MERIDIEM = /([ap])\.?\s*(?:m\.?)?\s*$/i;
 
 /**
  * What an operator types into a freeze field, tolerant of the separator:
- * twelve digits, `ddMMyyyyHHmm`. Null when it is not a real instant.
+ * twelve digits, `ddMMyyyyhhmm`, then AM / PM as the field shows it (`a` / `p`
+ * will do). With no marker the time is read on the 24-hour clock, so
+ * `021020261430` still means 2:30 PM. Null when it is not a real instant.
  */
 export function fromDisplayDateTime(text: string): string | null {
-  const digits = (text ?? "").replace(/[^0-9]/g, "");
+  const raw = (text ?? "").trim();
+  const digits = raw.replace(/[^0-9]/g, "");
   if (digits.length !== 12) {
     return null;
   }
+  let hour = Number(digits.slice(8, 10));
+  const meridiem = MERIDIEM.exec(raw)?.[1]?.toUpperCase();
+  if (meridiem) {
+    if (hour < 1 || hour > 12) {
+      return null;
+    }
+    hour = (hour % 12) + (meridiem === "P" ? 12 : 0);
+  }
   const local =
     `${digits.slice(4, 8)}-${digits.slice(2, 4)}-${digits.slice(0, 2)}` +
-    `T${digits.slice(8, 10)}:${digits.slice(10, 12)}`;
+    `T${pad(hour)}:${digits.slice(10, 12)}`;
   return parseLocalDateTime(local) ? local : null;
 }
 

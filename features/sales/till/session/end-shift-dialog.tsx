@@ -36,6 +36,7 @@ import {
   attemptText,
   closeBody,
   closeConfirmText,
+  closedText,
   countBody,
   countingOpen,
   endShiftProblem,
@@ -230,7 +231,9 @@ function EndShiftBody({ sessionKey, onClose, onChanged }: { sessionKey: TillSess
     try {
       const payload = await client.close(closeBody(sessionKey, floatLeft));
       if (getTillSession()?.id === sessionKey.tssId) clearTillSession(sessionKey.tssId);
-      toast.success(`Session ${payload.tssSessionNo} closed — Z ${payload.tssZNo ?? ""}.`);
+      const closed = closedText(payload);
+      // Cash still to hand over: the message waits for the cashier to read it.
+      toast.success(<span style={{ whiteSpace: "pre-line" }}>{closed.text}</span>, closed.awaiting ? { autoClose: false } : undefined);
       onChanged?.();
       onClose();
     } catch (error) {

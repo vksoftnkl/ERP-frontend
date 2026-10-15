@@ -7,17 +7,21 @@ import { confirm } from "@/lib/confirm";
 import { toast } from "@/lib/notify";
 import { useLiveCash } from "../shared/use-live-cash";
 import { useBusinessDayClient } from "./api/business-day-api";
+import { CLOSE_CONFIRM_NOTE, closeQuestion, closedText, isCloseBlocked } from "./domain/day-close";
 import type { RowsState } from "./domain/day-reading";
 import {
   businessDateAt,
+  dayKeyOf,
   dayQuery,
   daysGridParams,
   errorStatus,
+  firstErrorOf,
   isoDateOfLocal,
   safesGridParams,
   sessionGridParams,
   tillDayErrorText,
   type GridRow,
+  type TillCloseCheck,
   type TillDay,
 } from "./domain/wire";
 
@@ -33,6 +37,12 @@ export type DayState =
   /** The read failed and there is nothing to show (the message has been raised). */
   | { kind: "unknown" };
 
+/**
+ * The server's close-check of one day (Qt `m_closeCheck` / `m_closeCheckError`):
+ * `check` null = not read — yet, or `error` says why not.
+ */
+export type CloseCheckState = { tbdId: string; check: TillCloseCheck | null; error: string };
+
 type Options = {
   companyId: string;
   branchId: string;
@@ -41,12 +51,15 @@ type Options = {
   /** A day the URL names (back from a cockpit); read once per scope. */
   initialPick: DayPick;
   canCreate: boolean;
+  /** Business Day (274) EDIT: Close day, Close with exception, Reopen day. */
+  canEdit: boolean;
 };
 
 type Load = { quiet?: boolean };
 
 const EMPTY_ROWS: readonly GridRow[] = [];
 const LOADING: RowsState = { status: "loading", rows: EMPTY_ROWS };
+const NO_CHECK: CloseCheckState = { tbdId: "", check: null, error: "" };
 
 /**
  * The state behind the Business Day screen — the Qt `fetchDay / showDay /
@@ -63,8 +76,14 @@ const LOADING: RowsState = { status: "loading", rows: EMPTY_ROWS };
  * The live sessions (Qt a449b8c `TillLiveCash`: every drawer still out, any
  * date) are read again each time the day's sessions arrive — unless a read is
  * still on the wire — as Qt does on the sessions grid's `dataLoaded`.
+ *
+ * The server's close-check (Qt c77f3f1 `fetchCloseCheck`, notes 117) is read
+ * each time a day is shown — after Day Open, a close, a reopen, and on the way
+ * back from a cockpit (the screen remounts) — and an answer for a day no
+ * longer shown is dropped. A failure is not a popup: the screen falls back to
+ * its own reading and says why on a grey row.
  */
-export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCreate }: Options) {
+export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCreate, canEdit }: Options) {
   const client = useBusinessDayClient();
   const { sessions: liveSessions, refreshUnlessLoading: refreshLive } = useLiveCash({ companyId, branchId });
   const sessionsGridId = useGridId("tillDaySessions");
@@ -78,6 +97,8 @@ export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCr
   const [days, setDays] = useState<RowsState>(LOADING);
   const [dayBusy, setDayBusy] = useState(false);
   const [opening, setOpening] = useState(false);
+  const [closeCheck, setCloseCheck] = useState<CloseCheckState>(NO_CHECK);
+  const [closing, setClosing] = useState(false);
 
   const scopeReady = Boolean(companyId && branchId);
   const latest = useRef({
@@ -91,6 +112,8 @@ export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCr
     pick,
     dayBusy,
     opening,
+    closeCheck,
+    closing,
   });
   useLayoutEffect(() => {
     latest.current = {
@@ -104,10 +127,17 @@ export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCr
       pick,
       dayBusy,
       opening,
+      closeCheck,
+      closing,
     };
   });
 
-  const gens = useRef({ day: 0, sessions: 0, safes: 0, days: 0 });
+  const gens = useRef({ day: 0, sessions: 0, safes: 0, days: 0, closeCheck: 0 });
+  /**
+   * The day on screen, set the moment it is put there (`latest` only follows
+   * a render later): what a close-check answer is matched against.
+   */
+  const shownTbdId = useRef("");
 
   // The day the URL names (back from a cockpit) is read on the FIRST read of
   // the first scope only — kept in a ref, not consumed by the effect, so a
@@ -185,15 +215,56 @@ export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCr
     [client],
   );
 
-  /** Put a day on screen and read its sessions. */
+  /**
+   * The server's close-check of `day` (Qt `fetchCloseCheck`). An answer for a
+   * day no longer shown is dropped; a failure falls back to the screen's own
+   * reading and says why — unless it was a quiet read and a check of this day
+   * is already on screen, which then stays.
+   */
+  const fetchCloseCheck = useCallback(
+    async (day: TillDay, { quiet }: Load = {}) => {
+      const gen = ++gens.current.closeCheck;
+      const { companyId: company, branchId: branch } = latest.current;
+      try {
+        const check = await client.closeCheck(dayKeyOf(day, { companyId: company, branchId: branch }));
+        if (gen !== gens.current.closeCheck || shownTbdId.current !== day.tbdId) return;
+        // An answer for a day no longer shown (or another day's) is not this day's check.
+        if (check.tbdId !== day.tbdId) return;
+        setCloseCheck({ tbdId: day.tbdId, check, error: "" });
+      } catch (error) {
+        if (gen !== gens.current.closeCheck || shownTbdId.current !== day.tbdId) return;
+        const held = latest.current.closeCheck;
+        if (quiet && held.tbdId === day.tbdId && held.check) return;
+        setCloseCheck({
+          tbdId: day.tbdId,
+          check: null,
+          error: firstErrorOf(error, "the server did not answer").message,
+        });
+      }
+    },
+    [client],
+  );
+
+  /** Put a day on screen, read its sessions and its close-check. */
   const showDay = useCallback(
     (day: TillDay, picked: DayPick, load: Load = {}) => {
+      shownTbdId.current = day.tbdId;
       setDayState({ kind: "day", day });
       setPick(picked);
+      // Another day: its own check (Qt clears it; this day's stays until the new answer).
+      setCloseCheck((current) => (current.tbdId === day.tbdId ? current : { ...NO_CHECK, tbdId: day.tbdId }));
       void loadSessions(day.tbdBusinessDate, load);
+      void fetchCloseCheck(day, load);
     },
-    [loadSessions],
+    [fetchCloseCheck, loadSessions],
   );
+
+  /** No day on screen: no check either, and any answer still on the wire is disowned. */
+  const forgetDay = useCallback(() => {
+    shownTbdId.current = "";
+    gens.current.closeCheck += 1;
+    setCloseCheck(NO_CHECK);
+  }, []);
 
   const fetchDay = useCallback(
     async (picked: DayPick, { quiet }: Load = {}) => {
@@ -211,6 +282,7 @@ export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCr
             if (gen !== gens.current.day) return;
             if (!target && errorStatus(error) === 404) {
               // Nobody has opened today yet.
+              forgetDay();
               setDayState({ kind: "none", businessDate: businessDateAt(new Date(), latest.current.cutoff) });
               setPick(null);
               void loadSessions(null);
@@ -225,7 +297,10 @@ export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCr
               target = null;
               continue;
             }
-            if (shown === "loading") setDayState({ kind: "unknown" });
+            if (shown === "loading") {
+              forgetDay();
+              setDayState({ kind: "unknown" });
+            }
             return;
           }
         }
@@ -233,7 +308,7 @@ export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCr
         if (gen === gens.current.day) setDayBusy(false);
       }
     },
-    [client, loadSessions, showDay],
+    [client, forgetDay, loadSessions, showDay],
   );
 
   /** Today's business day (Qt `loadToday`). */
@@ -280,6 +355,55 @@ export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCr
     void loadSafes({ quiet: true });
   }, [fetchDay, loadDays, loadSafes]);
 
+  /**
+   * The day on screen again, and the List — after a close, a close with
+   * exception or a reopen (Qt `loadDay(tbdId, accYear)` + `m_days->reload()`).
+   * The same pick: today stays "today" in the URL.
+   */
+  const reloadShown = useCallback(() => {
+    const state = latest.current;
+    if (!state.companyId || !state.branchId) return;
+    void fetchDay(state.pick);
+    void loadDays();
+  }, [fetchDay, loadDays]);
+
+  /**
+   * F10 Close day (Qt `closeDay`), after the question. A close refused because
+   * something turned red since the check (TILL_DAY_CLOSE_BLOCKED, any 409) is
+   * a warning with the server's sentence, and the check is read again.
+   */
+  const closeDay = useCallback(async () => {
+    const state = latest.current;
+    if (!canEdit || state.closing || state.dayState.kind !== "day") return;
+    const day = state.dayState.day;
+    const yes = await confirm({
+      title: "Close day",
+      message: closeQuestion(day),
+      note: CLOSE_CONFIRM_NOTE,
+      confirmLabel: "Close day",
+    });
+    if (!yes || latest.current.closing) return;
+    setClosing(true);
+    try {
+      const result = await client.closeDay(
+        dayKeyOf(day, { companyId: latest.current.companyId, branchId: latest.current.branchId }),
+      );
+      toast.success(closedText(day, result.zNo), { autoClose: false });
+      reloadShown();
+    } catch (error) {
+      const refusal = firstErrorOf(error, "The business day could not be closed.");
+      if (isCloseBlocked(refusal)) {
+        // Something changed since the check: say what, and read it again.
+        toast.warn(refusal.message);
+        if (shownTbdId.current === day.tbdId) void fetchCloseCheck(day);
+      } else {
+        toast.error(tillDayErrorText(error, "The business day could not be closed."));
+      }
+    } finally {
+      setClosing(false);
+    }
+  }, [canEdit, client, fetchCloseCheck, reloadShown]);
+
   /** Day Open (Qt `openDay`), after the same question. */
   const openDay = useCallback(async () => {
     const state = latest.current;
@@ -319,12 +443,15 @@ export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCr
     setSessions(LOADING);
     setSafes(LOADING);
     setDays(LOADING);
+    setCloseCheck(NO_CHECK);
   }
   useLayoutEffect(() => {
     gens.current.day += 1;
     gens.current.sessions += 1;
     gens.current.safes += 1;
     gens.current.days += 1;
+    gens.current.closeCheck += 1;
+    shownTbdId.current = "";
   }, [scopeKey]);
   useEffect(() => {
     if (!scopeReady) return;
@@ -358,6 +485,8 @@ export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCr
     days,
     dayBusy,
     opening,
+    closeCheck,
+    closing,
     scopeReady,
     loadToday,
     loadDay,
@@ -365,6 +494,8 @@ export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCr
     retrySessions,
     revalidate,
     openDay,
+    closeDay,
+    reloadShown,
     reloadDays: loadDays,
   };
 }

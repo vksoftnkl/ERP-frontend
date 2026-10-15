@@ -87,7 +87,7 @@ describe("chips and the lines they show", () => {
 describe("a line, as the table shows it", () => {
   it("reads the line on India's clock with fee and GST together", () => {
     expect(lineCells(lineOf("l1"))).toEqual({
-      time: "09:14",
+      time: "09:14 AM",
       terminal: "T1",
       kind: "SALE",
       ref: "428110012340",
@@ -130,14 +130,14 @@ describe("the suggestion panel", () => {
     expect(suggestCaption(lineOf("l5"))).toBe("Unmatched line — pick our row, or ignore it");
     expect(suggestCaption(lineOf("l1"))).toBe("MATCHED line");
     expect(statementSide(suggested).map((fact) => fact.value)).toEqual([
-      "12:18",
+      "12:18 PM",
       "T2",
       "428111022877",
       "K4P9TA · 2207",
       "1,999.00",
     ]);
     expect(rowSide(suggested.tenderRow)?.map((fact) => fact.value)).toEqual([
-      "bil00590 · 12:21",
+      "bil00590 · 12:21 PM",
       "428111028277",
       "K4P9TA · 2207",
       "1,999.00",

@@ -10,6 +10,7 @@ import {
   normaliseBuckets,
   parseFilters,
   partiesQuery,
+  printPrompts,
   reportKey,
   type Filters,
   type Session,
@@ -159,6 +160,35 @@ describe("request queries", () => {
   it("sends no dueOn to the export, which does not take it", () => {
     expect(exportQuery(SESSION, full, "BILLS")).not.toHaveProperty("dueOn");
     expect(exportQuery(SESSION, full, "PARTY_STATEMENT").partyId).toBe(full.selected);
+  });
+
+  it("prints the PARTIES export as prompts — every filter, no company, no customer-only ids on Payable", () => {
+    expect(printPrompts(SESSION, full)).toEqual({
+      as_on: "2026-09-25",
+      side: "RECEIVABLE",
+      filter_branch_id: U(1),
+      group_id: U(2),
+      area_id: U(3),
+      salesman_id: U(4),
+      collection_day: "THU",
+      party_id: U(5),
+      min_due_days: "10",
+      max_due_days: "90",
+      age_by: "DUE_DATE",
+      buckets: "15,45,90",
+      only_overdue: "true",
+      include_on_account: "false",
+      deduct_pdc: "true",
+      hide_zero: "false",
+      sort: "bucket2",
+      dir: "asc",
+    });
+    const payable = printPrompts(SESSION, { ...full, side: "PAYABLE", branchId: null });
+    expect(payable).not.toHaveProperty("area_id");
+    expect(payable).not.toHaveProperty("salesman_id");
+    expect(payable).not.toHaveProperty("collection_day");
+    expect(payable).not.toHaveProperty("filter_branch_id");
+    expect(Object.values(payable)).not.toContain(SESSION.companyId);
   });
 
   it("leaves the view state out of the report's identity", () => {

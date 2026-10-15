@@ -26,6 +26,8 @@ import { toast } from "@/lib/notify";
 import { layoutRect, type LayoutRect } from "@/lib/ui-scale";
 import { isAborted } from "@/features/reports/shared/api/abort";
 import { writeXlsx, XLSX_MIME } from "@/features/reports/shared/export/xlsx-writer";
+import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
+import { PURPOSE_CODE, type DocumentPrintTarget } from "@/features/printing/domain/documentPrint";
 import { displayDate, isoDay, isWithin, todayIso } from "@/features/reports/shared/wire/dates";
 import { buildSearch as buildLedgerSearch } from "@/features/reports/ledger-statement/query/params";
 import styles from "./page.module.scss";
@@ -45,7 +47,7 @@ import { PartyCard } from "./components/party-card";
 import { PartyGrid } from "./components/party-grid";
 import { StatTiles } from "./components/stat-tiles";
 import { SummaryTab } from "./components/summary-tab";
-import { toXlsx } from "./export/to-xlsx";
+import { exportFileStem, toXlsx } from "./export/to-xlsx";
 import { drillTarget, NO_SCREEN_MESSAGE, NO_VOUCHER_SCREEN_MESSAGE, voucherTarget } from "./nav/drill-target";
 import { partOf } from "./query/outstanding-loader";
 import { findLoaded, rowAt } from "./query/pages";
@@ -60,6 +62,7 @@ import {
   exportQuery,
   normaliseBuckets,
   parseFilters,
+  printPrompts,
   reportFiltersOf,
   reportKey,
   type BillSort,
@@ -80,7 +83,7 @@ import type { BillHistoryRow, BillRow, OutstandingSide, PartyRow, SummaryGroupBy
 export const PARTY_OUTSTANDING_HREF = "/reports/party-outstanding";
 const LEDGER_STATEMENT_HREF = "/reports/ledger-statement";
 const RETURN_STORAGE_PREFIX = "erp.partyOutstanding.return:";
-const PRINT_TIP = "Arrives with the printing module";
+const WHATSAPP_TIP = "Sending by WhatsApp is not available yet: one party's statement, to its phone";
 const FIND_HINT =
   "Find needs a party search on the server (/parties takes no search key yet). " +
   "Meanwhile, More filters (F8) › Party narrows the report to the focused party.";
@@ -544,15 +547,57 @@ export default function PartyOutstandingScreen() {
     }
   }, [client, exporting, filters, session, sessionReady]);
 
+  /* ---- Print / PDF (Ctrl+P): the PARTY_OUTSTANDING design — the Party-wise
+   * list of the APPLIED filters, whatever the tab. It waits for that report's
+   * first page, so the paper never runs ahead of the screen. The report names
+   * no document: docId is the company, and the filters are the prompts. */
+  const [printOpen, setPrintOpen] = useState(false);
+  const printTarget = useMemo<DocumentPrintTarget | null>(() => {
+    if (!sessionReady || !head) return null;
+    return {
+      docId: session.companyId,
+      companyId: session.companyId,
+      filename: exportFileStem(filters.side, filters.asOn),
+      params: printPrompts(session, filters),
+    };
+  }, [filters, head, session, sessionReady]);
+  const canPrint = permissions.permissions.canPrint;
+  const openPrint = useCallback(() => {
+    if (printTarget && canPrint) setPrintOpen(true);
+  }, [canPrint, printTarget]);
+  const closePrint = useCallback(() => setPrintOpen(false), []);
+
   const onClose = useCallback(() => router.push("/home"), [router]);
 
   /* ---- keys (the screen's own; the grids key their rows) */
   const openMore = useCallback(() => setMoreOpen(true), []);
   const showHint = useCallback((text: string) => setHint(text), []);
-  const keys = useRef({ onShow, openLedger, openNewVoucher, onClose, openMore, showHint, overlayOpen: false });
-  const overlayOpen = moreOpen || shownPopover !== null;
+  const keys = useRef({
+    onShow,
+    openLedger,
+    openNewVoucher,
+    onClose,
+    openMore,
+    showHint,
+    openPrint,
+    closePrint,
+    printOpen: false,
+    overlayOpen: false,
+  });
+  const overlayOpen = moreOpen || shownPopover !== null || printOpen;
   useEffect(() => {
-    keys.current = { onShow, openLedger, openNewVoucher, onClose, openMore, showHint, overlayOpen };
+    keys.current = {
+      onShow,
+      openLedger,
+      openNewVoucher,
+      onClose,
+      openMore,
+      showHint,
+      openPrint,
+      closePrint,
+      printOpen,
+      overlayOpen,
+    };
   });
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -560,6 +605,15 @@ export default function PartyOutstandingScreen() {
       if (event.key === "F5") {
         event.preventDefault();
         if (!k.overlayOpen) k.onShow();
+        return;
+      }
+      // The print dialogs take no keys of their own: Escape closes them here,
+      // before the screen's own Escape (Close) can see it.
+      if (k.printOpen) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          k.closePrint();
+        }
         return;
       }
       if (event.defaultPrevented || k.overlayOpen) return;
@@ -579,9 +633,9 @@ export default function PartyOutstandingScreen() {
         event.preventDefault();
         k.showHint(FIND_HINT);
       } else if (ctrl && key === "p") {
-        // No window.print() of the grid: printing has its own pipeline.
+        // Never window.print() of the grid: the A5 design, through the print dialog.
         event.preventDefault();
-        k.showHint("Printing arrives with the printing module.");
+        k.openPrint();
       } else if (event.key === "Escape") {
         event.preventDefault();
         k.onClose();
@@ -858,17 +912,39 @@ export default function PartyOutstandingScreen() {
           >
             {exporting ? "Exporting…" : "Excel"}
           </button>
-          <button type="button" className={styles.button} disabled title={PRINT_TIP}>
+          <button
+            type="button"
+            className={styles.button}
+            onClick={openPrint}
+            disabled={!printTarget || !canPrint}
+            title={canPrint ? "Preview or save the party-wise list as a PDF" : "You do not have print rights"}
+          >
             PDF
           </button>
-          <button type="button" className={styles.button} disabled title={`${PRINT_TIP}: one party's statement, to its phone`}>
+          <button type="button" className={styles.button} disabled title={WHATSAPP_TIP}>
             WhatsApp reminder
           </button>
-          <button type="button" className={styles.primaryButton} disabled title={PRINT_TIP}>
+          <button
+            type="button"
+            className={styles.primaryButton}
+            onClick={openPrint}
+            disabled={!printTarget || !canPrint}
+            title={canPrint ? "Print the party-wise list on A5" : "You do not have print rights"}
+          >
             Print<span className={styles.key}>Ctrl+P</span>
           </button>
         </div>
       </footer>
+
+      {printOpen && printTarget ? (
+        <PrintOptionsDialog
+          open
+          onClose={closePrint}
+          purposeCode={PURPOSE_CODE.PARTY_OUTSTANDING}
+          documentLabel={`Party-wise Outstanding (${filters.side === "PAYABLE" ? "Payable" : "Receivable"}) as on ${displayDate(filters.asOn)}`}
+          targets={[printTarget]}
+        />
+      ) : null}
 
       {moreOpen ? (
         <MoreFiltersDialog

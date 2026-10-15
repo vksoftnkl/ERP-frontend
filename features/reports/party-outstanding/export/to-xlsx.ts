@@ -199,8 +199,13 @@ function billsSheet(data: BillsExportPayload): Sheet {
   };
 }
 
+/** The name without an extension — the Excel file and the printed PDF share it. */
+export function exportFileStem(side: OutstandingSide, asOn: string): string {
+  return `Outstanding_${side === "PAYABLE" ? "P" : "R"}_${asOn}`;
+}
+
 export function exportFileName(side: OutstandingSide, asOn: string): string {
-  return `Outstanding_${side === "PAYABLE" ? "P" : "R"}_${asOn}.xlsx`;
+  return `${exportFileStem(side, asOn)}.xlsx`;
 }
 
 export function toXlsx(data: PartiesExportPayload | BillsExportPayload): { fileName: string; sheets: Sheet[] } {

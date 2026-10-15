@@ -24,6 +24,7 @@ import { cx } from "@/components/design-system/cx";
 import { useBusinessContext } from "@/components/layout/business-context";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { toast } from "@/lib/notify";
+import { clock12FromHhmm } from "@/lib/time-format";
 import { isAborted } from "@/features/reports/shared/api/abort";
 import { writeXlsx, XLSX_MIME } from "@/features/reports/shared/export/xlsx-writer";
 import { daysInclusive, displayDate, isoDay, todayIso, weekdayName } from "@/features/reports/shared/wire/dates";
@@ -537,7 +538,7 @@ export default function DaySummaryScreen() {
             <section className={styles.section}>
               <div className={styles.sectionHead}>
                 <span className={styles.sectionTitle}>Checks</span>
-                <span className={styles.sectionNote}>as of {s.scope.asOf ? s.scope.asOf.slice(11, 16) : "now"}</span>
+                <span className={styles.sectionNote}>as of {s.scope.asOf ? clock12FromHhmm(s.scope.asOf.slice(11, 16)) : "now"}</span>
               </div>
               <ChecksPanel checks={s.checks} countDrafts={filters.countDrafts} onShow={setCheckDialog} />
             </section>

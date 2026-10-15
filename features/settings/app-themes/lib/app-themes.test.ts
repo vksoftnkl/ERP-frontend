@@ -110,7 +110,8 @@ describe("template figures", () => {
   });
 
   it("formats the saved-on stamp, and leaves junk alone", () => {
-    expect(formatSavedOn("2026-10-01T08:05:00")).toBe("01-10-2026 08:05");
+    expect(formatSavedOn("2026-10-01T08:05:00")).toBe("01-10-2026 08:05 AM");
+    expect(formatSavedOn("2026-10-01T20:05:00")).toBe("01-10-2026 08:05 PM");
     expect(formatSavedOn("not a date")).toBe("not a date");
     expect(formatSavedOn(null)).toBe("");
   });

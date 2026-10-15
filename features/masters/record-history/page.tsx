@@ -21,6 +21,7 @@ import { notifyGlobalNavigationStart } from "@/lib/navigation/global-loader";
 import type { ApiSuccessResponse, ListMeta } from "@/utils/types";
 import styles from "./record-history-modal.module.scss";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { formatClock12 } from "@/lib/time-format";
 const AUDIT_LOG_LIST_ENDPOINT = "/audit-logs/list";
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
@@ -139,22 +140,16 @@ const HISTORY_SUB_ENTITY_LABELS: Record<string, Record<string, string>> = {
     "Item Price Master": "Price List",
   },
 };
-const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("en-IN", {
-  dateStyle: "medium",
-  timeStyle: "short",
-});
 const DATE_FORMATTER = new Intl.DateTimeFormat("en-IN", {
   dateStyle: "medium",
 });
-const TIME_FORMATTER = new Intl.DateTimeFormat("en-IN", {
-  timeStyle: "short",
-});
+/** "15 Oct 2026, 02:05 PM" — the date as before, the clock 12-hour (Qt `hh:mm AP`). */
 function formatDateTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return DATE_TIME_FORMATTER.format(date);
+  return `${DATE_FORMATTER.format(date)}, ${formatClock12(date)}`;
 }
 function formatDateOnly(value: string): string {
   const date = new Date(value);
@@ -168,7 +163,7 @@ function formatTimeOnly(value: string): string {
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return TIME_FORMATTER.format(date);
+  return formatClock12(date);
 }
 function formatActionLabel(value: string): string {
   const normalized = value.trim().toLowerCase();

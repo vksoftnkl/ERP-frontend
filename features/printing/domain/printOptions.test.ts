@@ -224,7 +224,7 @@ describe("buildDocumentPreviewRequest", () => {
     ).not.toHaveProperty("companyId");
   });
 
-  it("never sends a branch or a counter — the token carries both", () => {
+  it("never sends a counter, nor a branch unless one is named — the token carries both", () => {
     const request = buildDocumentPreviewRequest({
       ...base,
       companyId: "comp-acme",
@@ -234,10 +234,23 @@ describe("buildDocumentPreviewRequest", () => {
     expect(request).not.toHaveProperty("deviceId");
   });
 
+  it("sends the DOCUMENT's branch when named (the till's Z / X prints), omitting a blank one", () => {
+    expect(buildDocumentPreviewRequest({ ...base, branchId: "br-1" })).toMatchObject({ branchId: "br-1" });
+    expect(buildDocumentPreviewRequest({ ...base, branchId: " " })).not.toHaveProperty("branchId");
+    expect(buildDocumentPreviewRequest({ ...base, branchId: null })).not.toHaveProperty("branchId");
+  });
+
   it("omits a blank year rather than sending it empty", () => {
     // Absent means "the year this session is working in", which the server binds
     // from the company's own fy_is_current.
     expect(buildDocumentPreviewRequest({ ...base, accYear: "  " })).not.toHaveProperty("accYear");
+  });
+
+  it("sends a report's prompt answers as given, and nothing for an empty set", () => {
+    // The Ledger Statement: docId is the ledger, the period travels as prompts.
+    const params = { from_date: "2026-04-01", to_date: "2027-03-31", include_cancelled: "false" };
+    expect(buildDocumentPreviewRequest({ ...base, params })).toMatchObject({ docId: "doc-1", params });
+    expect(buildDocumentPreviewRequest({ ...base, params: {} })).not.toHaveProperty("params");
   });
 
   it("refuses a document that has not been saved", () => {

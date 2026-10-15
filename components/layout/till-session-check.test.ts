@@ -58,7 +58,7 @@ describe("the shell's till check", () => {
     expect(tillCheckOutcome(check({ deviceSession: liveSession({ status: "SUSPENDED" }) }), ME, CAN)).toEqual({
       kind: "warn",
       text:
-        "Counter C01 has RAVI K's session C01-261012-01 open (since 12-10 09:05, SUSPENDED).\n\n" +
+        "Counter C01 has RAVI K's session C01-261012-01 open (since 12-10 09:05 AM, SUSPENDED).\n\n" +
         "You cannot bill on this counter until RAVI K ends the shift, or a supervisor force-closes it.",
     });
   });
@@ -67,7 +67,7 @@ describe("the shell's till check", () => {
     expect(tillCheckOutcome(check({ userSessionElsewhere: liveSession({ operatorId: ME }) }), ME, CAN)).toEqual({
       kind: "warn",
       text:
-        "Your session C01-261012-01 is still open on COUNTER PC 2 (since 12-10 09:05).\n\n" +
+        "Your session C01-261012-01 is still open on COUNTER PC 2 (since 12-10 09:05 AM).\n\n" +
         "End that shift there before you open one on this counter.",
     });
     const unnamed = tillCheckOutcome(check({ userSessionElsewhere: liveSession({ deviceName: null }) }), ME, CAN);
@@ -89,8 +89,10 @@ describe("the shell's till check", () => {
     expect(OPEN_TILL_FIRST).toBe("This device takes money: open a till session first (Open Till Session, menu 272).");
   });
 
-  it("reads the opening time as local dd-MM HH:mm", () => {
-    expect(openedAtText(OPENED)).toBe("12-10 09:05");
+  it("reads the opening time as local dd-MM hh:mm AM", () => {
+    expect(openedAtText(OPENED)).toBe("12-10 09:05 AM");
+    expect(openedAtText(new Date(2026, 9, 12, 21, 40).toISOString())).toBe("12-10 09:40 PM");
+    expect(openedAtText(new Date(2026, 9, 12, 0, 15).toISOString())).toBe("12-10 12:15 AM");
     expect(openedAtText("not a date")).toBe("");
     expect(openedAtText(null)).toBe("");
   });
