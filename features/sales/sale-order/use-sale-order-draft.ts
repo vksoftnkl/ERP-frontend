@@ -12,13 +12,25 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/lib/notify";
+import {
+  useForgetIfWritingOnUnmount,
+  useRememberWrite,
+  type ScreenMemoryOption,
+} from "@/lib/use-screen-memory";
+import { screenMemory } from "@/lib/screen-memory";
+import {
+  documentScopeOf,
+  isLineDocumentWorthRemembering,
+  restoredMessage,
+  resumeFromScreenMemory,
+  RESTORED_MESSAGE_OPTIONS,
+} from "@/features/sales/document-memory";
 import { recalcDocument } from "@/domain/pricing";
 import type { DocumentPricing } from "@/domain/pricing";
 import { useBusinessContext } from "@/components/layout/business-context";
-import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { useAppDispatch, useAppSelector, useAppStore } from "@/store/hooks";
 import type { AppDispatch } from "@/store/store";
 import {
-  getAuthSessionId,
   getAuthUserId,
   getOrCreateClientDeviceId,
   getUserInfo,
@@ -152,6 +164,13 @@ export type SaveOutcome =
 
 export type SaleOrderDraftApi = {
   draft: SaleOrderDraft;
+  // ----- screen memory: the order outlives a trip to another screen -----
+  /** The order on screen is the one the operator left here, not a fresh open. */
+  resumed: boolean;
+  /** After a resume: put it back if the slice moved on, and say so once. */
+  finishResume: () => Promise<void>;
+  /** Drop the remembered order — the operator discarded it. */
+  forgetRemembered: () => void;
   dispatch: AppDispatch;
   pricing: DocumentPricing;
   isReady: boolean;
@@ -206,13 +225,24 @@ function useDraftContext() {
   return { companyId, branchId, accYear, loading };
 }
 
+/**
+ * The tenant on the header, as this screen resolves it — what the page asks
+ * screen memory about. The same three values the draft is seeded with.
+ */
+export function useSaleOrderDraftScope(): { companyId: string; branchId: string; accYear: string } {
+  const { companyId, branchId, accYear } = useDraftContext();
+  return useMemo(() => ({ companyId, branchId, accYear }), [accYear, branchId, companyId]);
+}
+
 function useSaveActor(): SaveActor {
   return useMemo(
     () => ({
       userId: getAuthUserId() ?? "",
       userName: getUserInfo()?.userName ?? null,
       // soSessionId: the till session this money goes into (S1), when one is open (Qt d5c3637).
-      sessionId: getTillSessionId() ?? getAuthSessionId(),
+      // No till open: null. Never the LOGIN session id — the server reads it
+      // as a till session and failed on it with a 500 (Qt bec3f98).
+      sessionId: getTillSessionId() ?? null,
       deviceId: getOrCreateClientDeviceId(),
       deviceType: getUserInfo()?.deviceType ?? null,
     }),
@@ -222,11 +252,33 @@ function useSaveActor(): SaveActor {
 
 const ENGLISH_LANGUAGE_CODES = new Set(["en", "eng", "en-in", "en_in", "english"]);
 
-export function useSaleOrderDraft(): SaleOrderDraftApi {
+export function useSaleOrderDraft(
+  opts: { memory?: ScreenMemoryOption } = {},
+): SaleOrderDraftApi {
+  const { memory } = opts;
   const context = useDraftContext();
   const actor = useSaveActor();
   const dispatch = useAppDispatch();
+  const store = useAppStore();
   const draft = useAppSelector(selectSaleOrderDraft);
+  // The draft is a slice, so it outlives the screen — but the screen clears it
+  // on every fresh open. When the page reopened on the order the operator left
+  // here (screen memory), it is resumed instead: decided ONCE, at mount.
+  const [resume] = useState(() =>
+    memory?.resume
+      ? resumeFromScreenMemory(selectSaleOrderDraft(store.getState()), memory.key, {
+          companyId: context.companyId,
+          branchId: context.branchId,
+          accYear: context.accYear,
+        })
+      : null,
+  );
+  const resumed = resume !== null;
+  /**
+   * Until the screen has decided what it shows, the slice still holds whatever
+   * the last visit left in it. Writes wait for a resume, a clear or a load.
+   */
+  const [memoryArmed, setMemoryArmed] = useState(resume?.source === "live");
   const { settings, loaded: settingsLoaded } = useSaleOrderSettings(
     context.companyId,
     context.branchId,
@@ -265,15 +317,34 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
   const [saveSaleOrder] = useSaveSaleOrderMutation();
   const [deleteSaleOrder] = useDeleteSaleOrderMutation();
   const [busy, setBusy] = useState<SaleOrderBusy>("idle");
+  /** `busy` as last committed — what an unmount cleanup can still read. */
+  const busyRef = useRef<SaleOrderBusy>(busy);
+  useEffect(() => {
+    busyRef.current = busy;
+  }, [busy]);
   const inFlight = useRef(false);
   const [unitOptions, setUnitOptions] = useState<Record<string, ItemUnitOption[]>>({});
   const draftRef = useRef(draft);
   draftRef.current = draft;
+  // Screen memory: written through once armed; forgotten when nothing on screen
+  // is worth bringing back, or when the screen goes mid-save.
+  useRememberWrite(memory, draft, {
+    scopeOf: documentScopeOf,
+    shouldKeep: isLineDocumentWorthRemembering,
+    armed: memoryArmed,
+  });
+  useForgetIfWritingOnUnmount(
+    memory,
+    () => inFlight.current || busyRef.current === "saving" || busyRef.current === "deleting",
+    () => documentScopeOf(draftRef.current),
+  );
   const loadUnitOptionsRef = useRef<(itemId: string) => Promise<void>>(async () => {});
 
   // Tenant seeding — the quotation's rule verbatim: pushed in as it arrives,
-  // never over live work.
-  const seededTenant = useRef("");
+  // never over live work. A resumed order already carries its tenant.
+  const seededTenant = useRef(
+    resume ? `${resume.recalled.companyId}|${resume.recalled.branchId}|${resume.recalled.accYear}` : "",
+  );
   useEffect(() => {
     if (!context.companyId || !context.branchId || !context.accYear) {
       return;
@@ -846,6 +917,7 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
 
   const loadDocument = useCallback(
     async (key: SaleOrderDocKey): Promise<SaleOrderDraft | null> => {
+      setMemoryArmed(true);
       setBusy("loading");
       try {
         const payload = await dispatch(
@@ -953,6 +1025,7 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
   );
 
   const clear = useCallback(() => {
+    setMemoryArmed(true);
     dispatch(
       draftReplaced(
         createOrderDraft({
@@ -1056,8 +1129,30 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
     [unitOptions],
   );
 
+  /** The page reopened on the order the operator left here. */
+  const finishResume = useCallback(async () => {
+    if (!resume) {
+      return;
+    }
+    if (resume.source === "recalled") {
+      dispatch(draftReplaced(resume.recalled));
+    }
+    setMemoryArmed(true);
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    toast.info(restoredMessage("order"), RESTORED_MESSAGE_OPTIONS);
+  }, [dispatch, resume]);
+  /** The operator discarded the order: it must not come back. */
+  const forgetRemembered = useCallback(() => {
+    if (memory) {
+      screenMemory.forget(memory.key, documentScopeOf(draftRef.current));
+    }
+  }, [memory]);
+
   return {
     draft,
+    resumed,
+    finishResume,
+    forgetRemembered,
     dispatch,
     pricing,
     isReady: Boolean(draft.companyId && draft.branchId && draft.accYear),

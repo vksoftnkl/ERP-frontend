@@ -3,6 +3,8 @@ import type {
   ItemQtyPricePayload,
   SaveItemQtyPriceDto,
 } from "@/store/api/itemQtyPriceApi";
+import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
+import type { ScreenScope } from "@/lib/screen-memory";
 import type { ItemQtyPriceRow } from "./item-qty-price.types";
 
 let localIdCounter = 0;
@@ -199,4 +201,26 @@ export function buildSavePayload(
     iqp_effective_to: row.effectiveTo || null,
     iqp_is_active: row.isActive,
   };
+}
+
+// The screen-memory slot (lib/screen-memory) unsaved slab rows wait in while
+// the operator is on another menu screen.
+export const ITEM_QTY_PRICE_MEMORY_KEY = "masters/item-qty-price";
+// What the screen keeps across that trip: the item it is scoped to, the grid
+// with its edits, and the item's unit list (the Uom cells only show a label
+// for a unit found in it). The saved rows are not re-read on the way back, so
+// they can be stale — the server checks every row again at Save.
+export type ItemQtyPriceSnapshot = {
+  /** The header's tenant when it was taken. */
+  tenant: ScreenScope;
+  activeItem: { id: string; label: string } | null;
+  rows: ItemQtyPriceRow[];
+  unitOptionsByItemId: Record<string, ERPDynamicSelectOption[]>;
+};
+// Kept while any row holds an unsaved edit; a save, a Clear or an item switch
+// leaves none, and so lets it go.
+export function isQtyPriceWorkWorthRemembering(
+  snapshot: Pick<ItemQtyPriceSnapshot, "rows">,
+): boolean {
+  return snapshot.rows.some((row) => row.isDirty);
 }

@@ -102,6 +102,25 @@ export function collectChangedFormValues(
   return Object.keys(changed).length > 0 ? changed : null;
 }
 
+/**
+ * `values` without the fields a draft must never hold — a typed password
+ * (localStorage is plain text) or a picked file (only its name would survive,
+ * so the field would claim an upload it no longer has). Null when nothing is
+ * left.
+ */
+export function omitFormDraftFields(
+  values: Record<string, string> | null,
+  excluded: ReadonlySet<string>,
+): Record<string, string> | null {
+  if (!values) {
+    return null;
+  }
+  const kept = Object.fromEntries(
+    Object.entries(values).filter(([name]) => !excluded.has(name)),
+  );
+  return Object.keys(kept).length > 0 ? kept : null;
+}
+
 /** Drops drafts past their age, for every user (best effort). */
 function pruneExpiredFormDrafts(storage: FormDraftStorage, now: number): void {
   for (let index = storage.length - 1; index >= 0; index -= 1) {

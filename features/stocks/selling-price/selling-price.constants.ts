@@ -196,6 +196,9 @@ export function isHqUserType(userType: string | null | undefined): boolean {
 export type SrcChipText = "NEW" | "BUCKET·CH" | "BUCKET·BR" | "MASTER";
 
 /** The Src chip's colours — the grid's chips, the legend card and F12's list. */
+/** The screen-memory slot (lib/screen-memory) unsaved price edits wait in. */
+export const SELLING_PRICE_MEMORY_KEY = "stocks/selling-price";
+
 export function chipColours(text: string): { fg: string; bg: string } {
   if (text === "NEW") {
     return { fg: "#15803d", bg: "#e8f5ea" };

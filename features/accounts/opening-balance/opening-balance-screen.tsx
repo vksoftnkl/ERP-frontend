@@ -18,6 +18,7 @@ import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import type { KeyboardShortcutDefinition } from "@/components/design-system/ui/keyboard-shortcut-hints";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { useUiTableId } from "@/lib/ui-tables";
+import { useRecalledOnce, type ScreenMemoryOption } from "@/lib/use-screen-memory";
 import { useGetQuotationGridLayoutQuery } from "@/store/api/quotationApi";
 /*
  * The right-click menu, the Admin-settings dialog and drag-to-widen are the
@@ -33,7 +34,8 @@ import { resolveBillColumns, resolveLedgerColumns } from "./columns";
 import { agreement as computeAgreement, formatMoney, formatSigned, isBlankLedgerRow } from "./derived";
 import type { BillRow, LedgerRow } from "./opening-balance.types";
 import { SCOPE_LABELS, previousAccYear, scopeOf, type ScopeMode } from "./scope";
-import { useOpeningDraft } from "./state/use-opening-draft";
+import type { OpeningMemory } from "./state/memory";
+import { useOpeningDraft, useOpeningTenant } from "./state/use-opening-draft";
 import { Banners } from "./components/banners";
 import { BILL_GRID_NAME, BillPanel } from "./components/bill-panel";
 import { LedgerGrid } from "./components/ledger-grid";
@@ -100,7 +102,16 @@ function caretIsNowhere(): boolean {
   return nowhere && document.querySelector('[aria-modal="true"], [role="dialog"]') === null;
 }
 
-export default function OpeningBalanceScreen() {
+export type OpeningBalanceScreenProps = {
+  /**
+   * Screen memory (lib/screen-memory): the page names the slot, and says whether
+   * it reopened ON a remembered set — the operator coming back from another
+   * screen — rather than on the server's.
+   */
+  memory?: ScreenMemoryOption;
+};
+
+export default function OpeningBalanceScreen({ memory }: OpeningBalanceScreenProps = {}) {
   const { activeCompany, activeBranch, activeFiscalYear, loading: contextLoading } =
     useBusinessContext();
   const { permissions, isLoading: permissionsLoading } = usePagePermissions({
@@ -121,7 +132,12 @@ export default function OpeningBalanceScreen() {
    * A company with no branch selected has only the company-level set to show.
    */
   const router = useRouter();
-  const [mode, setMode] = useState<ScopeMode>("branch");
+  // The header's tenant: the slot screen memory keeps this screen's set in.
+  const tenant = useOpeningTenant();
+  // The set the operator left here, when the page is reopening on it — with the
+  // combo it was on, which decides the scope the draft is for.
+  const recalled = useRecalledOnce<OpeningMemory>(memory, tenant);
+  const [mode, setMode] = useState<ScopeMode>(() => recalled?.mode ?? "branch");
   const effectiveMode: ScopeMode = branchId ? mode : "company";
   const scope = useMemo(
     () => scopeOf(effectiveMode, companyId, branchId, accYear),
@@ -137,7 +153,7 @@ export default function OpeningBalanceScreen() {
   const canWrite = !permissionsLoading && permissions.canEdit;
   const canCreate = !permissionsLoading && permissions.canCreate;
 
-  const api = useOpeningDraft(scope, canWrite);
+  const api = useOpeningDraft(scope, canWrite, { memory, tenant, mode, recalled });
   const { draft, totals, busy } = api;
 
   const ledgerUiTableId = useUiTableId("openingBalanceLedgers");
@@ -211,6 +227,18 @@ export default function OpeningBalanceScreen() {
     () => draft.rows.find((row) => row.ledId === draft.currentParty) ?? null,
     [draft.rows, draft.currentParty],
   );
+
+  // Reopened on the set the operator left here (screen memory): it is already
+  // on screen — only say so, once.
+  const { resumed, finishResume } = api;
+  const resumeAnnounced = useRef(false);
+  useEffect(() => {
+    if (resumeAnnounced.current || !memory?.resume || !resumed) {
+      return;
+    }
+    resumeAnnounced.current = true;
+    void finishResume();
+  }, [finishResume, memory?.resume, resumed]);
 
   // ── Leaving with unsaved work ─────────────────────────────────────────────
   useEffect(() => {
@@ -336,6 +364,7 @@ export default function OpeningBalanceScreen() {
   }, [accYear, api, branchName, draft.dirty, effectiveMode]);
 
   /** Esc with no breakup open: leave, asking first when there is work to lose. */
+  const { forgetRemembered } = api;
   const requestLeave = useCallback(() => {
     if (!draft.dirty) {
       router.back();
@@ -346,9 +375,14 @@ export default function OpeningBalanceScreen() {
       message: "The changes on this screen have not been saved, and leaving discards them.",
       confirmLabel: "Leave",
       iconVariant: "replace",
-      run: () => router.back(),
+      // A confirmed Leave is a discard — unlike a menu trip, the edits must not
+      // be waiting on the next visit.
+      run: () => {
+        forgetRemembered();
+        router.back();
+      },
     });
-  }, [draft.dirty, router]);
+  }, [draft.dirty, forgetRemembered, router]);
 
   /** F7: re-read the set from the server, which throws the screen away. */
   const requestReload = useCallback(() => {

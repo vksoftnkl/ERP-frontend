@@ -5,6 +5,7 @@ import { useApi } from "@/hooks/useApi";
 import {
   ERPDynamicModalForm,
   type ERPDynamicModalController,
+  type ERPDynamicModalDraftAppliedPayload,
   type ERPDynamicModalField,
   type ERPDynamicModalVariant,
   type ERPDynamicSelectOption,
@@ -263,6 +264,8 @@ export default function CityMasterPage() {
   // a picked label and the selection stays visible after a fetch replaces the list.
   const stateOptionsRef = useRef<ERPDynamicSelectOption[]>([DEFAULT_STATE_OPTION]);
   const pinnedStateOptionRef = useRef<ERPDynamicSelectOption | null>(null);
+  // The State the popup opened on (none for a create), for a draft's Discard.
+  const openingStateOptionRef = useRef<ERPDynamicSelectOption | null>(null);
   const stateSearchTimeoutRef = useRef<number | null>(null);
   const applyStateOptions = useCallback((options: ERPDynamicSelectOption[]) => {
     stateOptionsRef.current = options;
@@ -322,12 +325,37 @@ export default function CityMasterPage() {
       const value = stateId.trim();
       if (!value) {
         pinnedStateOptionRef.current = null;
+        openingStateOptionRef.current = null;
         applyStateOptions([DEFAULT_STATE_OPTION]);
         return;
       }
       const option: ERPDynamicSelectOption = { value, label: stateName.trim() || value };
       pinnedStateOptionRef.current = option;
+      openingStateOptionRef.current = option;
       applyStateOptions([DEFAULT_STATE_OPTION, option]);
+    },
+    [applyStateOptions],
+  );
+  // A restored draft (or its Discard) sets the State without the user picking
+  // it. The chosen option joins the list and is pinned so a later lazy fetch
+  // keeps its name; the State the popup opened on is named from its seed, which
+  // a fetch may already have dropped from the list by the time Discard runs.
+  const applyDraftStateSelection = useCallback(
+    ({ values, labels }: ERPDynamicModalDraftAppliedPayload) => {
+      const value = (values.cityStateId ?? "").trim();
+      if (!value) {
+        pinnedStateOptionRef.current = null;
+        return;
+      }
+      const current = stateOptionsRef.current;
+      const opening = openingStateOptionRef.current;
+      const option =
+        current.find((item) => item.value === value) ??
+        (opening?.value === value
+          ? opening
+          : { value, label: labels.cityStateId?.[value] || value });
+      pinnedStateOptionRef.current = option;
+      applyStateOptions(withPinnedOption(current, option));
     },
     [applyStateOptions],
   );
@@ -616,6 +644,8 @@ export default function CityMasterPage() {
   return (
     <>
     <CrudMasterPage
+      modalDraftKey="city-master"
+      onModalDraftApplied={applyDraftStateSelection}
       title="City"
       iconName="city_master"
       auditHistory={{ screenName: "City Master" }}

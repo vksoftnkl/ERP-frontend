@@ -266,6 +266,7 @@ export default function FreightChargesMasterPage() {
 
   return (
     <CrudMasterPage
+      modalDraftKey="freight-charges"
       title="Freight Charges"
       auditHistory={{
         screenName: "Sale Freight Charges",

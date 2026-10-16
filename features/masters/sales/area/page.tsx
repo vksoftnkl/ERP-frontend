@@ -939,6 +939,7 @@ export default function AreaMasterPage() {
   return (
     <>
       <CrudMasterPage
+        modalDraftKey="area-master"
         title="Area"
         iconName="area_master"
         auditHistory={{ screenName: "Area Master" }}

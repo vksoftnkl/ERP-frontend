@@ -71,6 +71,7 @@ const FORM_FIELDS: ERPDynamicModalField[] = [
 export default function GspServiceMasterPage() {
   return (
     <CrudMasterPage
+      modalDraftKey="gsp-service"
       title="GSP Service"
       entityLabel="gsp service"
       entityLabelPlural="gsp services"

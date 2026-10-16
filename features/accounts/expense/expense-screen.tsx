@@ -40,13 +40,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { cx } from "@/components/design-system/cx";
 import { NexDropdownSingle } from "@/components/design-system/dropdown";
-import { useBusinessContext } from "@/components/layout/business-context";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { useDropdownId } from "@/lib/configured-dropdowns";
 import { useGridId } from "@/lib/configured-grids";
 import { documentRights } from "@/lib/permissions/document-rights";
 import { toast } from "@/lib/notify";
 import { useUiTableId } from "@/lib/ui-tables";
+import type { ScreenMemoryOption } from "@/lib/use-screen-memory";
 import { useGetQuotationGridLayoutQuery } from "@/store/api/quotationApi";
 import { todayIso } from "@/features/sales/quotation/quotation.utils";
 import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
@@ -74,11 +74,11 @@ import {
 import { LinesGrid, type PopupColumn } from "./components/lines-grid";
 import { TendersGrid } from "./components/tenders-grid";
 import { EXPENSE_ROUTE } from "./constants";
-import type { ExpenseKeys, ExpensePrintTarget, ExpenseScope } from "./expense.types";
+import type { ExpenseKeys, ExpensePrintTarget } from "./expense.types";
 import { asksBeforeOpeningAnother, isBlankLine, isBlankTender } from "./domain/draft";
 import { defaultRegisterFilters, type RegisterFilters } from "./domain/register";
 import { statusPill, TENDER_NOTE, type Tone } from "./domain/view";
-import { useExpenseVoucher } from "./state/use-expense-voucher";
+import { useExpenseScope, useExpenseVoucher } from "./state/use-expense-voucher";
 import { useExpenseTillSession } from "./till-session";
 import styles from "./expense.module.scss";
 
@@ -144,11 +144,16 @@ export type ExpenseScreenProps = {
    * reached by its own URL, and Close walks the browser back.
    */
   onBackToList?: () => void;
+  /**
+   * Screen memory (lib/screen-memory): the page names the slot, and says whether
+   * it reopened ON a remembered voucher — the operator coming back from another
+   * screen — rather than on an explicit New / Open. A voucher's own URL passes none.
+   */
+  memory?: ScreenMemoryOption;
 };
 
-export default function ExpenseScreen({ initialKeys, onBackToList }: ExpenseScreenProps) {
+export default function ExpenseScreen({ initialKeys, onBackToList, memory }: ExpenseScreenProps) {
   const router = useRouter();
-  const { activeCompany, activeBranch, activeFiscalYear } = useBusinessContext();
   const { permissions } = usePagePermissions({ href: EXPENSE_ROUTE });
   const rights = useMemo(() => documentRights(permissions), [permissions]);
   const session = useExpenseTillSession();
@@ -156,16 +161,9 @@ export default function ExpenseScreen({ initialKeys, onBackToList }: ExpenseScre
   // "app date"; the transaction screens all take today's.
   const [today] = useState(() => todayIso());
 
-  const scope: ExpenseScope = useMemo(
-    () => ({
-      companyId: activeCompany?.id ?? "",
-      branchId: activeBranch?.id ?? "",
-      accYear: (activeFiscalYear?.name ?? "").trim(),
-    }),
-    [activeCompany?.id, activeBranch?.id, activeFiscalYear?.name],
-  );
+  const scope = useExpenseScope();
 
-  const api = useExpenseVoucher({ scope, initialKeys, today, session, rights });
+  const api = useExpenseVoucher({ scope, initialKeys, today, session, rights, memory });
   const { draft, view, editable, busy } = api;
   const { header } = draft;
   const payeeDropdownId = useDropdownId("paymentPayee");
@@ -298,15 +296,19 @@ export default function ExpenseScreen({ initialKeys, onBackToList }: ExpenseScre
     [openVoucher],
   );
 
+  const { forgetRemembered } = api;
   const close = useCallback(() => {
     guardDiscard("Close this voucher?", "Close", () => {
+      // A Close the operator confirmed is a discard — unlike a menu trip, the
+      // voucher must not be waiting on the next visit.
+      forgetRemembered();
       if (onBackToList) {
         onBackToList();
       } else {
         router.back();
       }
     });
-  }, [guardDiscard, onBackToList, router]);
+  }, [forgetRemembered, guardDiscard, onBackToList, router]);
 
   // "+" puts the caret on the trailing blank row — that row IS the new line.
   const addLine = useCallback(() => {
@@ -429,6 +431,16 @@ export default function ExpenseScreen({ initialKeys, onBackToList }: ExpenseScre
   useEffect(() => {
     if (opensNew) focusHeadSoon("paidTo");
   }, [opensNew]);
+
+  // Reopened on the voucher the operator left here (screen memory): it is
+  // already on screen — only say so, once.
+  const { resumed, finishResume } = api;
+  const resumeAnnounced = useRef(false);
+  useEffect(() => {
+    if (resumeAnnounced.current || !memory?.resume || !resumed) return;
+    resumeAnnounced.current = true;
+    void finishResume();
+  }, [finishResume, memory?.resume, resumed]);
 
   // ── the keys ────────────────────────────────────────────────────────────
   const keyTargets = {

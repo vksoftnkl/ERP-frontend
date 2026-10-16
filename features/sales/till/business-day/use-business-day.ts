@@ -368,9 +368,11 @@ export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCr
   }, [fetchDay, loadDays]);
 
   /**
-   * F10 Close day (Qt `closeDay`), after the question. A close refused because
-   * something turned red since the check (TILL_DAY_CLOSE_BLOCKED, any 409) is
-   * a warning with the server's sentence, and the check is read again.
+   * F10 Close day (Qt `closeDay`), after the question. The answer's store Z is
+   * `zNo`, else the day's `tbdZNo` (`parseCloseResult`). Every refusal is the
+   * popup in plain words (Qt bec3f98 `ApiClient::handleError`); one because
+   * something turned red since the check (TILL_DAY_CLOSE_BLOCKED, any 409)
+   * also reads the check again.
    */
   const closeDay = useCallback(async () => {
     const state = latest.current;
@@ -391,14 +393,9 @@ export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCr
       toast.success(closedText(day, result.zNo), { autoClose: false });
       reloadShown();
     } catch (error) {
-      const refusal = firstErrorOf(error, "The business day could not be closed.");
-      if (isCloseBlocked(refusal)) {
-        // Something changed since the check: say what, and read it again.
-        toast.warn(refusal.message);
-        if (shownTbdId.current === day.tbdId) void fetchCloseCheck(day);
-      } else {
-        toast.error(tillDayErrorText(error, "The business day could not be closed."));
-      }
+      toast.apiError(error, { fallback: "The business day could not be closed." });
+      // Something changed since the check: read it again.
+      if (isCloseBlocked(firstErrorOf(error, "")) && shownTbdId.current === day.tbdId) void fetchCloseCheck(day);
     } finally {
       setClosing(false);
     }

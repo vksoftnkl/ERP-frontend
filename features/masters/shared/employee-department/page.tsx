@@ -417,6 +417,7 @@ export default function EmployeeDepartmentMasterPage() {
   return (
     <>
     <CrudMasterPage
+      modalDraftKey="employee-department"
       title="Employee Department"
       iconName="employee_department_master"
       auditHistory={{ screenName: "Employee Department Master" }}

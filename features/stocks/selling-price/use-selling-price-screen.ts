@@ -17,10 +17,17 @@ import { useBusinessContext } from "@/components/layout/business-context";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { confirm, getConfirmations } from "@/lib/confirm";
 import { getMessages, toast } from "@/lib/notify";
+import { RESTORED_MESSAGE_OPTIONS, screenMemory, type ScreenScope } from "@/lib/screen-memory";
+import {
+  useForgetIfWritingOnUnmount,
+  useRecalledOnce,
+  useRememberWrite,
+  type ScreenMemoryOption,
+} from "@/lib/use-screen-memory";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { selectUserInfo } from "@/store/slices/authSlice";
 import { focusCell } from "@/features/sales/quotation/components/grid-focus";
-import { todayIso } from "@/features/sales/quotation/quotation.utils";
+import { accountingYearOf, todayIso } from "@/features/sales/quotation/quotation.utils";
 import {
   sellingPriceApi,
   useGetSellingPriceBranchNamesQuery,
@@ -67,15 +74,18 @@ import {
   hereName,
   insertNewBucketRow,
   isChanged,
+  isPriceWorkWorthRemembering,
   isSameFigure,
   newBucketTemplateIndex,
   parseAcceptable,
   refreshItemRows,
   rowFromServer,
   rowIndexOfItem,
+  sameTenant,
   tracksOf,
   type FourField,
   type PriceGridRow,
+  type SellingPriceSnapshot,
 } from "./selling-price.state";
 import { SAVE_BLOCKED_TOOLTIP, SAVE_TOOLTIP, validateRows } from "./selling-price.validate";
 import { useSellingPriceSettings } from "./use-selling-price-settings";
@@ -120,12 +130,34 @@ function anyOverlayUp(): boolean {
   return getConfirmations().length > 0 || getMessages().length > 0;
 }
 
-export function useSellingPriceScreen() {
+/**
+ * The tenant on the header, as this screen resolves it — the slot screen memory
+ * keeps its edits in. Prices are not kept per accounting year, but a slot is,
+ * so the session's year completes it.
+ */
+export function useSellingPriceScope(): ScreenScope {
+  const { selectedCompanyId, selectedBranchId, activeFiscalYear } = useBusinessContext();
+  const accYear = (activeFiscalYear?.name ?? "").trim() || accountingYearOf(todayIso());
+  return useMemo(
+    () => ({ companyId: selectedCompanyId, branchId: selectedBranchId, accYear }),
+    [accYear, selectedBranchId, selectedCompanyId],
+  );
+}
+
+export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}) {
+  const { memory } = opts;
   const dispatch = useAppDispatch();
   const router = useRouter();
   const business = useBusinessContext();
   const companyId = business.selectedCompanyId;
   const branchId = business.selectedBranchId;
+  const tenant = useSellingPriceScope();
+  const tenantRef = useRef(tenant);
+  tenantRef.current = tenant;
+  // The edits the operator left on this screen, when the page is reopening on
+  // them (lib/screen-memory). Read once; null for every fresh open.
+  const recalled = useRecalledOnce<SellingPriceSnapshot>(memory, tenant);
+  const resumed = recalled !== null;
   const userInfo = useAppSelector(selectUserInfo);
   const { settings } = useSellingPriceSettings(companyId, branchId);
   const belowCostPolicy = settings.belowCostPrice;
@@ -159,7 +191,7 @@ export function useSellingPriceScreen() {
   // ------------------------------------------------------------- the switch
   const userType = userInfo?.userType ?? "";
   const isHq = isHqUserType(userType);
-  const [scopeChoice, setScopeChoice] = useState<PriceScope | null>(null);
+  const [scopeChoice, setScopeChoice] = useState<PriceScope | null>(recalled?.scopeChoice ?? null);
   // All branches is the default for the user types the server lets save a
   // chain row; everyone else is fixed to This branch.
   const scope: PriceScope = isHq ? (scopeChoice ?? "CHAIN") : "BRANCH";
@@ -167,18 +199,18 @@ export function useSellingPriceScreen() {
   scopeRef.current = scope;
 
   // ------------------------------------------------------------- rows
-  const [rows, setRowsState] = useState<PriceGridRow[]>([]);
-  const rowsRef = useRef<PriceGridRow[]>([]);
+  const [rows, setRowsState] = useState<PriceGridRow[]>(() => recalled?.rows ?? []);
+  const rowsRef = useRef<PriceGridRow[]>(recalled?.rows ?? []);
   const commitRows = useCallback((next: PriceGridRow[]) => {
     rowsRef.current = next;
     setRowsState(next);
   }, []);
   /** Items added by search (or scan) — they survive a reload. */
-  const addedItemsRef = useRef<Set<string>>(new Set());
+  const addedItemsRef = useRef<Set<string>>(new Set(recalled?.addedItemIds));
 
-  const [filter, setFilterState] = useState<FilterState>(() => emptyFilterState());
+  const [filter, setFilterState] = useState<FilterState>(() => recalled?.filter ?? emptyFilterState());
   const [current, setCurrent] = useState<CurrentCell>({ rowKey: null, column: null });
-  const [lastLevel, setLastLevel] = useState(0);
+  const [lastLevel, setLastLevel] = useState(recalled?.lastLevel ?? 0);
   const lastLevelRef = useRef(0);
   lastLevelRef.current = lastLevel;
   const [serverProblemKeys, setServerProblemKeys] = useState<ReadonlySet<string>>(() => new Set());
@@ -206,6 +238,46 @@ export function useSellingPriceScreen() {
       mountedRef.current = false;
     };
   }, []);
+
+  // ------------------------------------------------------------- screen memory
+  // Written through on every change, so the edits are there when the operator
+  // comes back from another screen; let go once nothing is changed (saved,
+  // cleared, reloaded) — and when the screen goes mid save, mid the re-read
+  // after one, or mid a load the operator already gave the edits up for.
+  /** A save has answered and its items are being re-read: their rows still read as changed. */
+  const settlingRef = useRef(false);
+  const snapshot = useMemo<SellingPriceSnapshot>(
+    () => ({
+      tenant,
+      rows,
+      // The added items only move together with the rows, in the same callback.
+      addedItemIds: Array.from(addedItemsRef.current),
+      filter,
+      scopeChoice,
+      lastLevel,
+    }),
+    [filter, lastLevel, rows, scopeChoice, tenant],
+  );
+  useRememberWrite(memory, snapshot, {
+    scopeOf: (value) => value.tenant,
+    shouldKeep: isPriceWorkWorthRemembering,
+  });
+  useForgetIfWritingOnUnmount(
+    memory,
+    () => savingRef.current || settlingRef.current || loadingRef.current,
+    () => tenantRef.current,
+  );
+  // The edits follow the header — Save posts to the tenant now on it — so a
+  // switch lets go of the slot they were remembered under.
+  const memoryKey = memory?.key ?? "";
+  const lastTenantRef = useRef(tenant);
+  useEffect(() => {
+    const previous = lastTenantRef.current;
+    lastTenantRef.current = tenant;
+    if (memoryKey && !sameTenant(previous, tenant)) {
+      screenMemory.forget(memoryKey, previous);
+    }
+  }, [memoryKey, tenant]);
 
   const [hint, setHint] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
@@ -930,7 +1002,12 @@ export function useSellingPriceScreen() {
       // Saved. Never a plain "Saved" when a row has no stock behind it.
       toast.info(messageContent(savedMessage(result, confirmed), "Change Selling Price"));
       setServerProblemKeys(new Set());
-      await refreshItemsAfterSave(built.itemIds);
+      settlingRef.current = true;
+      try {
+        await refreshItemsAfterSave(built.itemIds);
+      } finally {
+        settlingRef.current = false;
+      }
     },
     [refreshItemsAfterSave, saveRows, setSaving, showServerRefusal],
   );
@@ -982,13 +1059,32 @@ export function useSellingPriceScreen() {
     refocusCurrent();
   }, [refocusCurrent]);
 
+  // ------------------------------------------------------------- screen memory
+  /** The edits came back from screen memory: say so once. */
+  const finishResume = useCallback(async () => {
+    // One tick first: this runs from the mount effect.
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    // Spelt out: `restoredMessage`'s "was" does not fit a plural noun.
+    toast.info("Your unsaved price changes were restored.", RESTORED_MESSAGE_OPTIONS);
+  }, []);
+
+  /** The operator discarded the edits: they must not come back. */
+  const forgetRemembered = useCallback(() => {
+    if (memoryKey) {
+      screenMemory.forget(memoryKey, tenantRef.current);
+    }
+  }, [memoryKey]);
+
   // ------------------------------------------------------------- close
   const close = useCallback(async () => {
     if (!(await confirmDiscard("Close"))) {
       return;
     }
+    // A confirmed discard — unlike a menu trip, the edits must not be waiting
+    // on the next visit.
+    forgetRemembered();
     router.back();
-  }, [confirmDiscard, router]);
+  }, [confirmDiscard, forgetRemembered, router]);
 
   useEffect(() => {
     if (changed === 0) {
@@ -1119,6 +1215,10 @@ export function useSellingPriceScreen() {
     picker,
     closePicker,
     onPickItem,
+    // screen memory
+    resumed,
+    finishResume,
+    forgetRemembered,
   };
 }
 

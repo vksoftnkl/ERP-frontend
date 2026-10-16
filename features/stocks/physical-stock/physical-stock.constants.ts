@@ -137,3 +137,6 @@ export const LIST_DEFAULT_DAYS_BACK = 30;
 
 /** A castable uuid, so a pre-context list request comes back empty instead of failing. */
 export const NO_TENANT_ID = "00000000-0000-0000-0000-000000000000";
+
+/** The screen-memory slot (lib/screen-memory) an unsaved count waits in. */
+export const PHYSICAL_STOCK_MEMORY_KEY = "stocks/physical-stock";

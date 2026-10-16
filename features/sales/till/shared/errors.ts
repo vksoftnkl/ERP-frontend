@@ -8,7 +8,12 @@
  * grid runner) nests it one level down: `{ statusCode, message: { message,
  * errors } }`. Both are read here, so a screen asks for `code` and never
  * learns which filter answered.
+ *
+ * `refusal` is the same refusal in plain words (Qt ec9d92d, notes 120): render
+ * it inline with `components/feedback/refusal-text`, or raise it as a popup
+ * with `toast.apiError(error)`.
  */
+import { apiRefusalOf, type ApiRefusal } from "@/lib/api/error-text";
 
 export type TillError = {
   /** HTTP status, or null for a network failure. */
@@ -20,6 +25,8 @@ export type TillError = {
   message: string;
   /** Head and reasons in one sentence, for a message popup. */
   text: string;
+  /** The refusal in plain words, with the server's detail for the grey line. */
+  refusal: ApiRefusal;
 };
 
 type JsonRecord = Record<string, unknown>;
@@ -45,7 +52,7 @@ function bodyOf(data: unknown): { message: string; errors: JsonRecord[] } {
 export function tillErrorOf(error: unknown, fallback = "The request failed."): TillError {
   if (!isRecord(error)) {
     const message = text(error) || fallback;
-    return { status: null, code: "", field: "", message, text: message };
+    return { status: null, code: "", field: "", message, text: message, refusal: apiRefusalOf(error, fallback) };
   }
   const status = typeof error.status === "number" ? error.status : null;
   const { message: head, errors } = bodyOf(error.data);
@@ -60,7 +67,7 @@ export function tillErrorOf(error: unknown, fallback = "The request failed."): T
   }
   const joined =
     details.length === 0 ? message : `${message}${/[.!?]$/.test(message) ? " " : ". "}${details.join(" ")}`;
-  return { status, code, field, message, text: joined };
+  return { status, code, field, message, text: joined, refusal: apiRefusalOf(error, fallback) };
 }
 
 /** True for a refusal that means "this session is not there". */

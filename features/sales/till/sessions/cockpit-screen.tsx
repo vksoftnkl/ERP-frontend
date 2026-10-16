@@ -20,7 +20,14 @@
  * Print Z (purpose TILL_SESSION_Z), and Re-tender on the Bills tab's posted
  * bill (`cockpit-retender.tsx`). Each re-reads the session when it is done.
  *
- * Keys: F5 refresh, Esc close; on the Bills tab ↑ / ↓ pick the bill.
+ * Qt bec3f98: Change… carries change between this till and another live one
+ * (`change-dialog.tsx`); Void movement… voids the drop / paid in / exchange /
+ * pickup / top-up picked on the Money documents tab (the shared
+ * `../shared/movement-void-dialog.tsx`). A failed read is said in plain words
+ * (`toast.apiError`, Qt ec9d92d).
+ *
+ * Keys: F5 refresh, Esc close; on the Bills / Money documents tab ↑ / ↓ pick
+ * the row Re-tender / Void movement acts on.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -32,6 +39,8 @@ import { PURPOSE_CODE } from "@/features/printing/domain/documentPrint";
 import { useTillSessionClient } from "../shared/api/till-session-api";
 import { tillErrorOf } from "../shared/errors";
 import { TILL_SESSIONS_HREF, sortRowsBy, textOf } from "../shared/format";
+import { movementVoidMessage, type MovementVoidRequest } from "../shared/movement-void";
+import { MovementVoidDialog } from "../shared/movement-void-dialog";
 import { reasonGridParams, toReasons, type TillReason } from "../shared/reasons";
 import { TonePill, overlayOpen } from "../shared/till-dialog";
 import type { GridRow, TillSessionKey, TillSessionPayload, TillVarianceDecision } from "../shared/wire/types";
@@ -41,11 +50,13 @@ import { approveCashOutcome } from "./approve-cash";
 import { ApproveCashDialog, type ApproveCashRequest } from "./approve-cash-dialog";
 import {
   BAG_DECIDED_MESSAGE,
+  CHANGE_DONE_TITLE,
   REC_HINT,
   REC_NOTE,
   TENDER_FIGURES,
   approvalBand,
   approveButton,
+  changeButton,
   cockpitButtons,
   cockpitFacts,
   cockpitHeader,
@@ -54,6 +65,7 @@ import {
   footNote,
   gridCellText,
   isMine,
+  movementVoidRequestOf,
   printZLabel,
   retenderButton,
   retenderTargetOf,
@@ -63,9 +75,14 @@ import {
   shouldFallBackToBlind,
   slipTenders,
   tenderRows,
+  VOID_DONE_TITLE,
+  voidMovementButton,
+  voidableMovement,
   xReadLabel,
 } from "./cockpit";
 import { CockpitRetender } from "./cockpit-retender";
+import { changeMessage } from "./change";
+import { ChangeDialog } from "./change-dialog";
 import { forceCloseMessage } from "./force-close";
 import { ForceCloseDialog, type SessionDialogRequest } from "./force-close-dialog";
 import { FALLBACK_COLUMNS, GridTable } from "./grid-table";
@@ -118,6 +135,10 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
   const [retender, setRetender] = useState<RetenderTarget | null>(null);
   /** The Bills tab's current row (its `tb_id`), kept across a reload while the bill is still listed. */
   const [pickedBillId, setPickedBillId] = useState<string | null>(null);
+  /** The Money documents tab's current row (its `md_id`), kept the same way. */
+  const [pickedMoveId, setPickedMoveId] = useState<string | null>(null);
+  const [change, setChange] = useState<SessionDialogRequest | null>(null);
+  const [voidMove, setVoidMove] = useState<MovementVoidRequest | null>(null);
 
   /** Bumped by F5 / Refresh and after a dialog: the effect below re-reads everything. */
   const [tick, setTick] = useState(0);
@@ -146,13 +167,12 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
             setLoadError("");
           } catch (blindError) {
             if (cancelled) return;
-            const text = tillErrorOf(blindError, "The session could not be read.").text;
-            setLoadError(text);
-            toast.error(text);
+            setLoadError(tillErrorOf(blindError, "The session could not be read.").text);
+            toast.apiError(blindError, { fallback: "The session could not be read." });
           }
         } else if (!cancelled) {
           setLoadError(refusal.text);
-          toast.error(refusal.text);
+          toast.apiError(error, { fallback: "The session could not be read." });
         }
       }
       if (cancelled) return;
@@ -243,6 +263,9 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
   const mine = isMine(session, me);
   const pickedBill = retenderableBill(pickedBillId ? grids.bills.find((row) => textOf(row, "tb_id") === pickedBillId) : null);
   const retenderState = retenderButton(pickedBill);
+  const pickedMove = voidableMovement(pickedMoveId ? grids.money.find((row) => textOf(row, "md_id") === pickedMoveId) : null);
+  const changeState = changeButton(session);
+  const voidState = voidMovementButton(session, pickedMove);
   const sessionNo = session?.tssSessionNo ?? "";
 
   // Approve (Qt `decideVariance`, c77f3f1): the closed session's cash, a
@@ -269,7 +292,7 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
       const report = await client.xReport(key);
       setXRead({ report, target: sessionPrintTarget(key, sessionNo, "x"), label: xReadLabel(sessionNo) });
     } catch (error) {
-      toast.error(tillErrorOf(error, "The X read could not be taken.").text);
+      toast.apiError(error, { fallback: "The X read could not be taken." });
     } finally {
       setXReading(false);
     }
@@ -433,14 +456,21 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
                 error={gridsError}
                 emptyText={docGrid.empty}
                 cell={(row, field) => gridCellText(row, field)}
-                // The Bills tab picks the bill Re-tender acts on.
+                // The Bills tab picks the bill Re-tender acts on; the Money
+                // documents tab the movement Void movement acts on.
                 {...(tab === "bills"
                   ? {
                       selectedId: pickedBillId,
                       onSelect: (row: GridRow) => setPickedBillId(textOf(row, "tb_id") || null),
                       label: "Bills and returns — pick a posted bill to re-tender it",
                     }
-                  : {})}
+                  : tab === "money"
+                    ? {
+                        selectedId: pickedMoveId,
+                        onSelect: (row: GridRow) => setPickedMoveId(textOf(row, "md_id") || null),
+                        label: "Money documents — pick a drop, paid in, pickup or top-up to void it",
+                      }
+                    : {})}
               />
             </div>
           </div>
@@ -513,6 +543,28 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
           }}
         >
           Re-tender
+        </button>
+        <button
+          type="button"
+          className={styles.secondaryButton}
+          disabled={!changeState.enabled}
+          title={changeState.tip}
+          onClick={() => {
+            if (session) setChange({ key, session });
+          }}
+        >
+          Change…
+        </button>
+        <button
+          type="button"
+          className={styles.secondaryButton}
+          disabled={!voidState.enabled}
+          title={voidState.tip}
+          onClick={() => {
+            if (pickedMove) setVoidMove(movementVoidRequestOf(pickedMove, key));
+          }}
+        >
+          Void movement…
         </button>
         <button
           type="button"
@@ -600,6 +652,27 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
           setReopen(null);
           load();
           info(reopenMessage(result));
+        }}
+      />
+      <ChangeDialog
+        request={change}
+        reasons={reasons}
+        callerId={me}
+        onClose={() => setChange(null)}
+        onChanged={(result) => {
+          setChange(null);
+          load();
+          toast.info(changeMessage(result), { title: CHANGE_DONE_TITLE });
+        }}
+      />
+      <MovementVoidDialog
+        request={voidMove}
+        reasons={reasons}
+        onClose={() => setVoidMove(null)}
+        onVoided={(result) => {
+          setVoidMove(null);
+          load();
+          toast.info(movementVoidMessage(result), { title: VOID_DONE_TITLE });
         }}
       />
       <XReadDialog

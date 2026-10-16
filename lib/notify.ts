@@ -24,6 +24,7 @@
  * copy of it.
  */
 import type { ReactNode } from "react";
+import { apiRefusalOf, refusalMessage } from "@/lib/api/error-text";
 
 export type MessageKind = "success" | "error" | "warn" | "info";
 
@@ -40,6 +41,24 @@ export type MessageOptions = {
    * waits — an error the operator did not read is an error they will hit again.
    */
   autoClose?: number | false;
+  /** The popup's title, in place of the kind's ("Done", "Cannot continue" …). */
+  title?: string;
+  /**
+   * Small grey text under the message — the server's status · code · field and
+   * its own sentence under a refusal's plain words, for support.
+   */
+  detail?: string;
+};
+
+/** `toast.apiError`'s options. */
+export type ApiErrorMessageOptions = MessageOptions & {
+  /**
+   * The screen's "Bill not lost." line: a refusal saved nothing and the work
+   * is still on the screen (Qt's `nexKeptLine`). Added to a 4xx only.
+   */
+  kept?: string;
+  /** The sentence when the thrown value carries none. */
+  fallback?: string;
 };
 
 export type AppMessage = {
@@ -49,6 +68,8 @@ export type AppMessage = {
   autoClose: number | false;
   /** When it was raised, so a repeat of the same message still reads as new. */
   raisedAt: number;
+  title?: string;
+  detail?: string;
 };
 
 /** How long a success stays up before it closes itself. */
@@ -87,6 +108,8 @@ function push(kind: MessageKind, content: ReactNode, options: MessageOptions = {
     content,
     autoClose: options.autoClose ?? defaultAutoClose(kind),
     raisedAt: Date.now(),
+    ...(options.title ? { title: options.title } : {}),
+    ...(options.detail ? { detail: options.detail } : {}),
   };
   const existing = queue.findIndex((entry) => entry.id === id);
   queue = existing >= 0
@@ -115,6 +138,23 @@ export function subscribeToMessages(listener: () => void): () => void {
 }
 
 /**
+ * A refused or failed request, in plain words (Qt `ApiClient::handleError`,
+ * ec9d92d): a known refusal gets a short title, one line and a "Do:" step, with
+ * the server's status · code · field and sentence small and grey underneath;
+ * an unworded one keeps the server's sentence under a title by its status
+ * ("Cannot save", "Not allowed" …), never "409". See `@/lib/api/error-text`.
+ */
+function pushApiError(error: unknown, options: ApiErrorMessageOptions = {}): string {
+  const { kept, fallback, ...rest } = options;
+  const message = refusalMessage(apiRefusalOf(error, fallback), kept);
+  return push(message.kind, message.body, {
+    ...rest,
+    title: rest.title ?? message.title,
+    detail: rest.detail ?? (message.detail || undefined),
+  });
+}
+
+/**
  * The call sites' API, shaped like the toast library's so that raising a message
  * is the same line of code it has always been.
  *
@@ -129,6 +169,8 @@ export const toast = Object.assign(
     warn: (content: ReactNode, options?: MessageOptions) => push("warn", content, options),
     warning: (content: ReactNode, options?: MessageOptions) => push("warn", content, options),
     info: (content: ReactNode, options?: MessageOptions) => push("info", content, options),
+    /** A thrown request error in plain words — see `pushApiError`. */
+    apiError: (error: unknown, options?: ApiErrorMessageOptions) => pushApiError(error, options),
     dismiss: (id?: string) => dismissMessage(id),
   },
 );

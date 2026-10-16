@@ -1,9 +1,30 @@
 "use client";
-import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useApi } from "@/hooks/useApi";
 import { useAppSelector } from "@/store/hooks";
 import { selectAuthInitialized, selectAuthUserId } from "@/store/slices/authSlice";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { useBusinessContext } from "@/components/layout/business-context";
+import { toast } from "@/lib/notify";
+import {
+  RESTORED_MESSAGE_OPTIONS,
+  restoredMessage,
+  screenMemory,
+  type ScreenScope,
+} from "@/lib/screen-memory";
+import {
+  useForgetIfWritingOnUnmount,
+  useRecalledOnce,
+  useRememberWrite,
+  type ScreenMemoryOption,
+} from "@/lib/use-screen-memory";
+import {
+  hasVisibilityChanges,
+  mergeLoadedVisibility,
+  MODULE_ADMINISTRATION_MEMORY_KEY,
+  type MenuVisibilityMaps,
+  type ModuleAdministrationSnapshot,
+} from "./visibility-memory";
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface MenuNode {
   menuId: number;
@@ -20,6 +41,9 @@ interface VisibilityItem {
 // ── API ───────────────────────────────────────────────────────────────────────
 const MENU_ALL_ENDPOINT = "/menu-masters/get";
 const MENU_VISIBILITY_ENDPOINT = "/menu-masters/visibility";
+// Screen memory (lib/screen-memory): the route page always reopens on ticks
+// left here unsaved; an empty slot recalls nothing.
+const SCREEN_MEMORY: ScreenMemoryOption = { key: MODULE_ADMINISTRATION_MEMORY_KEY, resume: true };
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function collectAllNodes(nodes: MenuNode[]): MenuNode[] {
   const result: MenuNode[] = [];
@@ -252,18 +276,40 @@ export default function ModuleAdministrationPage() {
     MENU_VISIBILITY_ENDPOINT,
     { method: "PATCH" },
   );
+  // The header's tenant: the slot unsaved ticks are remembered in. Visibility is
+  // not kept per accounting year, but a slot is, so the session's year completes it.
+  const { selectedCompanyId, selectedBranchId, activeFiscalYear } = useBusinessContext();
+  const accYear = (activeFiscalYear?.name ?? "").trim() || "*";
+  const tenant = useMemo<ScreenScope>(
+    () => ({ companyId: selectedCompanyId, branchId: selectedBranchId, accYear }),
+    [accYear, selectedBranchId, selectedCompanyId],
+  );
+  // The ticks the operator left here unsaved, read once; null for a fresh visit.
+  const recalled = useRecalledOnce<ModuleAdministrationSnapshot>(SCREEN_MEMORY, tenant);
+  const resumed = recalled !== null;
   const [menus, setMenus] = useState<MenuNode[]>([]);
   const [loadingMenus, setLoadingMenus] = useState(true);
-  const [visibility, setVisibility] = useState<Map<number, boolean>>(new Map());
-  const [original, setOriginal] = useState<Map<number, boolean>>(new Map());
+  const [visibility, setVisibility] = useState<Map<number, boolean>>(
+    () => recalled?.visibility ?? new Map(),
+  );
+  const [original, setOriginal] = useState<Map<number, boolean>>(
+    () => recalled?.original ?? new Map(),
+  );
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+  // The ticks on screen, for a load that lands later to lay back over itself —
+  // the remembered ones on the way back, the operator's own on a data refresh.
+  const keptMapsRef = useRef<MenuVisibilityMaps | null>(recalled);
+  useEffect(() => {
+    keptMapsRef.current = { visibility, original };
+  }, [original, visibility]);
   const initMaps = useCallback((nodes: MenuNode[]) => {
     const map = new Map<number, boolean>();
     for (const node of collectAllNodes(nodes)) {
       map.set(node.menuId, node.menuVisibility);
     }
-    setVisibility(new Map(map));
-    setOriginal(new Map(map));
+    const merged = mergeLoadedVisibility(map, keptMapsRef.current);
+    setVisibility(merged.visibility);
+    setOriginal(merged.original);
   }, []);
   // The menu tree is master data - re-read it whenever the app signals that data
   // may have changed instead of only on mount.
@@ -301,6 +347,40 @@ export default function ModuleAdministrationPage() {
     });
     return items;
   })();
+  // Screen memory: written through on every change, so the ticks are there when
+  // the operator comes back from another menu screen; let go once none differs
+  // (saved, reset) — and when the screen goes while a save is still in flight.
+  const memorySnapshot = useMemo<ModuleAdministrationSnapshot>(
+    () => ({ tenant, visibility, original }),
+    [original, tenant, visibility],
+  );
+  useRememberWrite(SCREEN_MEMORY, memorySnapshot, {
+    scopeOf: (value) => value.tenant,
+    shouldKeep: hasVisibilityChanges,
+  });
+  useForgetIfWritingOnUnmount(
+    SCREEN_MEMORY,
+    () => saving,
+    () => tenant,
+  );
+  // The ticks follow the header, so a switch lets go of the slot they were
+  // remembered under.
+  const lastTenantRef = useRef(tenant);
+  useEffect(() => {
+    const previous = lastTenantRef.current;
+    lastTenantRef.current = tenant;
+    if (previous !== tenant) {
+      screenMemory.forget(MODULE_ADMINISTRATION_MEMORY_KEY, previous);
+    }
+  }, [tenant]);
+  // Reopened on ticks left here unsaved: say so once, a tick after mount.
+  useEffect(() => {
+    if (!resumed) return undefined;
+    const timer = window.setTimeout(() => {
+      toast.info(restoredMessage("menu visibility"), RESTORED_MESSAGE_OPTIONS);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [resumed]);
   const handleToggle = useCallback((menuId: number, value: boolean) => {
     setVisibility((prev) => new Map(prev).set(menuId, value));
   }, []);
@@ -331,8 +411,10 @@ export default function ModuleAdministrationPage() {
   const handleSave = useCallback(async () => {
     if (dirtyItems.length === 0 || saving) return;
     await patchVisibility({ body: { menus: dirtyItems } });
+    // Saved: the remembered ticks go now, not on the next commit.
+    screenMemory.forget(MODULE_ADMINISTRATION_MEMORY_KEY, tenant);
     setOriginal(new Map(visibility));
-  }, [dirtyItems, saving, patchVisibility, visibility, userId]);
+  }, [dirtyItems, saving, patchVisibility, visibility, userId, tenant]);
   const hasDirty = dirtyItems.length > 0;
   if (loadingMenus) {
     return (

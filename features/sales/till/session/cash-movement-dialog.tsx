@@ -23,6 +23,8 @@
 import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { NexDropdownSingle } from "@/components/design-system/dropdown";
 import { cx } from "@/components/design-system/cx";
+import RefusalText from "@/components/feedback/refusal-text";
+import type { ApiRefusal } from "@/lib/api/error-text";
 import { getAuthUserId } from "@/lib/auth/session";
 import { clock12Of } from "@/lib/time-format";
 import { useDropdownId } from "@/lib/configured-dropdowns";
@@ -65,6 +67,7 @@ import {
   type MovementMode,
 } from "./cash-movement";
 import { DenomCount, focusFirstQty } from "./denom-count";
+import { refusalLine } from "./refusal-line";
 
 export type CashMovementDialogProps = {
   /** The session the cash moves through; null = closed. */
@@ -140,6 +143,8 @@ function CashMovementBody({
   /** Who may sign a pickup / top-up here (notes 110); null while it is read. */
   const [supervisors, setSupervisors] = useState<TillSupervisor[] | null>(null);
   const [supervisorError, setSupervisorError] = useState("");
+  /** Why the supervisor list did not load, in plain words for the footer line. */
+  const [supervisorRefusal, setSupervisorRefusal] = useState<ApiRefusal | null>(null);
   const [denominations, setDenominations] = useState<Denomination[]>([]);
   const [denomsLoading, setDenomsLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -167,7 +172,7 @@ function CashMovementBody({
         if (!hasDropSafe(payload)) setAmountText("");
       })
       .catch((error) => {
-        if (!cancelled) toast.error(tillErrorOf(error, "The session could not be read.").text);
+        if (!cancelled) toast.apiError(error, { fallback: "The session could not be read." });
       });
     // Notes 110: read on open whatever the mode, as Qt does; the server
     // re-checks the pick (and the PIN) on the post.
@@ -177,10 +182,13 @@ function CashMovementBody({
         if (cancelled) return;
         setSupervisors(rows);
         setSupervisorError("");
+        setSupervisorRefusal(null);
       })
       .catch((error) => {
         if (cancelled) return;
-        setSupervisorError(tillErrorOf(error, "The supervisor list did not load.").text);
+        const { refusal } = tillErrorOf(error, "The supervisor list did not load.");
+        setSupervisorError(refusalLine(refusal, "The supervisor list did not load."));
+        setSupervisorRefusal(refusal);
         setSupervisors([]);
       });
     client
@@ -189,7 +197,7 @@ function CashMovementBody({
         if (!cancelled) setDenominations(toDenominations(rows));
       })
       .catch((error) => {
-        if (!cancelled) toast.error(tillErrorOf(error, "The denominations could not be read.").text);
+        if (!cancelled) toast.apiError(error, { fallback: "The denominations could not be read." });
       })
       .finally(() => {
         if (!cancelled) setDenomsLoading(false);
@@ -208,6 +216,8 @@ function CashMovementBody({
 
   const inputs: MovementInputs = { form, session, reasons, denominations, me, supervisors, supervisorError };
   const problem = movementProblem(inputs);
+  /** The footer line is the supervisor list's refusal: said in plain words (Qt ec9d92d inlineHtml). */
+  const signerRefusal = supervisorRefusal && supervisorError && problem === supervisorError ? supervisorRefusal : null;
   const amount = movementAmount(inputs);
   const supervisor = pickedSupervisor(inputs);
   const words = movementWords(form.mode, session, supervisor ? supervisorLabel(supervisor) : "");
@@ -252,7 +262,7 @@ function CashMovementBody({
       // the box the server named.
       const signer = refusal.field === "supervisorPin" || refusal.field === "supervisorId";
       if (signer) update({ supervisorPin: "" });
-      toast.error(refusal.text);
+      toast.apiError(error, { fallback: "The movement could not be posted." });
       setBusy(false);
       if (signer) focusAfterMessages(refusal.field === "supervisorId" ? SUPERVISOR_ID : PIN_ID);
     }
@@ -319,7 +329,9 @@ function CashMovementBody({
       }}
       footer={
         <>
-          <p className={cx(styles.warn, styles.spacer)}>{problem}</p>
+          <p className={cx(styles.warn, styles.spacer, signerRefusal && styles.warnDanger)}>
+            {signerRefusal ? <RefusalText refusal={signerRefusal} /> : problem}
+          </p>
           <button type="button" className={cx(styles.secondaryButton, styles.verbButton)} disabled={busy} onClick={onClose}>
             Close - Esc
           </button>

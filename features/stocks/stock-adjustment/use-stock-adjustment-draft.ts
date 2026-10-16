@@ -14,6 +14,9 @@ import { skipToken } from "@reduxjs/toolkit/query";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useBusinessContext } from "@/components/layout/business-context";
 import { getUserInfo } from "@/lib/auth/session";
+import { toast } from "@/lib/notify";
+import { RESTORED_MESSAGE_OPTIONS, restoredMessage, screenMemory, type ScreenScope } from "@/lib/screen-memory";
+import { useForgetIfWritingOnUnmount, useRecalledOnce, type ScreenMemoryOption } from "@/lib/use-screen-memory";
 import { accountingYearOf, isRealDate, todayIso } from "@/features/sales/quotation/quotation.utils";
 import {
   useCancelStockAdjustmentMutation,
@@ -41,6 +44,7 @@ import {
   createDraft,
   editCell,
   insertLineBefore,
+  isAdjustmentWorthRemembering,
   isEditable,
   itemDetailFailed,
   nextDocument,
@@ -86,16 +90,42 @@ function useSessionScope(): DraftScope {
   return useMemo(() => ({ companyId, branchId, accYear, deviceId }), [accYear, branchId, companyId, deviceId]);
 }
 
-export function useStockAdjustmentDraft() {
+/**
+ * The tenant on the header, as this screen resolves it — what the page asks
+ * screen memory about. The same three values a new document is raised under,
+ * or a remembered one would never be found again.
+ */
+export function useStockAdjustmentScope(): ScreenScope {
+  const { companyId, branchId, accYear } = useSessionScope();
+  return useMemo(() => ({ companyId, branchId, accYear }), [accYear, branchId, companyId]);
+}
+
+/** The tenant a document belongs to — its own, not the session's. */
+function memoryScopeOf(draft: AdjustmentDraft): ScreenScope {
+  return { companyId: draft.companyId, branchId: draft.branchId, accYear: draft.accYear };
+}
+
+export function useStockAdjustmentDraft(opts: { memory?: ScreenMemoryOption } = {}) {
+  const { memory } = opts;
   const scope = useSessionScope();
   const scopeRef = useRef(scope);
   useEffect(() => {
     scopeRef.current = scope;
   }, [scope]);
 
-  const [draft, setDraft] = useState<AdjustmentDraft>(() => createDraft(scope, todayIso()));
+  // The document the operator left on this screen, when the page is reopening
+  // on it (lib/screen-memory). Read once; null for every fresh open. It is dirty
+  // by definition, so the session-follow effect below leaves it alone.
+  const recalled = useRecalledOnce<AdjustmentDraft>(memory, scope);
+  const resumed = recalled !== null;
+  const [draft, setDraft] = useState<AdjustmentDraft>(() => recalled ?? createDraft(scope, todayIso()));
   const draftRef = useRef(draft);
   const [busy, setBusy] = useState<Busy>(null);
+  /** `busy` as last committed — what an unmount cleanup can still read. */
+  const busyRef = useRef<Busy>(busy);
+  useLayoutEffect(() => {
+    busyRef.current = busy;
+  });
   const [pickKey, setPickKey] = useState<string | null>(null);
   const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
   const focusSeq = useRef(0);
@@ -117,13 +147,38 @@ export function useStockAdjustmentDraft() {
 
   const effectsRef = useRef<(effects: DraftEffect[]) => void>(() => undefined);
 
-  const commit = useCallback((next: AdjustmentDraft, effects: DraftEffect[] = []) => {
-    draftRef.current = next;
-    setDraft(next);
-    if (effects.length > 0) {
-      effectsRef.current(effects);
-    }
-  }, []);
+  // Screen memory is written HERE, in the funnel every change goes through,
+  // rather than from an effect: an answer that lands after the screen is gone
+  // (an availability, an item's unit) still reaches the remembered document.
+  // Kept while it is worth bringing back, dropped once it is not — and never
+  // written again once the operator discarded it.
+  const memoryKey = memory?.key ?? "";
+  const discarded = useRef(false);
+  const commit = useCallback(
+    (next: AdjustmentDraft, effects: DraftEffect[] = []) => {
+      draftRef.current = next;
+      setDraft(next);
+      if (memoryKey && !discarded.current) {
+        if (isAdjustmentWorthRemembering(next)) {
+          screenMemory.remember(memoryKey, memoryScopeOf(next), next);
+        } else {
+          screenMemory.forget(memoryKey, memoryScopeOf(next));
+        }
+      }
+      if (effects.length > 0) {
+        effectsRef.current(effects);
+      }
+    },
+    [memoryKey],
+  );
+  // A save / cancel / delete still in flight when the screen goes lands after
+  // it: the document must not come back to be posted twice. (A refusal that
+  // lands later commits the still-dirty document, and so remembers it again.)
+  useForgetIfWritingOnUnmount(
+    memory,
+    () => busyRef.current === "saving" || busyRef.current === "cancelling" || busyRef.current === "deleting",
+    () => memoryScopeOf(draftRef.current),
+  );
 
   const apply = useCallback((transition: Transition) => commit(transition.draft, transition.effects), [commit]);
 
@@ -246,6 +301,9 @@ export function useStockAdjustmentDraft() {
     draft.companyId ? { companyId: draft.companyId, voucherType: saveType(draft.kind) } : skipToken,
   );
   const appliedReasons = useRef<readonly StockReasonRow[] | null>(null);
+  // A restored document already carries its kind's reasons: the first rows to
+  // land are taken as applied rather than re-applied over it.
+  const keepRestoredReasons = useRef(Boolean(recalled?.reasonsLoaded));
   useEffect(() => {
     if (!reasonRows) {
       return;
@@ -255,6 +313,11 @@ export function useStockAdjustmentDraft() {
       return;
     }
     appliedReasons.current = reasonRows;
+    const keep = keepRestoredReasons.current && current.reasonsLoaded;
+    keepRestoredReasons.current = false;
+    if (keep) {
+      return;
+    }
     commit(applyReasons(current, reasonRows));
   }, [commit, draft.kind, draft.reasonsLoaded, reasonRows]);
 
@@ -618,6 +681,32 @@ export function useStockAdjustmentDraft() {
     [cancelMutation, reloadDamaged, startNextDocument],
   );
 
+  // ------------------------------------------------------ screen memory
+  /**
+   * The document came back from screen memory: say so once, and read every
+   * line's holding again — stock may have moved while the screen was gone.
+   */
+  const finishResume = useCallback(async () => {
+    // One tick first: this runs from the mount effect, and a lazy RTK trigger
+    // fired there is unsubscribed by StrictMode's simulated unmount.
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    toast.info(restoredMessage("stock adjustment"), RESTORED_MESSAGE_OPTIONS);
+    const current = draftRef.current;
+    if (isEditable(current)) {
+      effectsRef.current(
+        current.lines.filter(rowHasItem).map((line) => ({ type: "availability" as const, key: line.key })),
+      );
+    }
+  }, []);
+
+  /** The operator discarded the document: it must not come back. */
+  const forgetRemembered = useCallback(() => {
+    if (memoryKey) {
+      discarded.current = true;
+      screenMemory.forget(memoryKey, memoryScopeOf(draftRef.current));
+    }
+  }, [memoryKey]);
+
   /** deleteDraft (after the confirmation). */
   const deleteDraft = useCallback(async (): Promise<boolean> => {
     const current = draftRef.current;
@@ -679,6 +768,10 @@ export function useStockAdjustmentDraft() {
     load,
     newDocument,
     beginEdit,
+    // screen memory
+    resumed,
+    finishResume,
+    forgetRemembered,
   };
 }
 

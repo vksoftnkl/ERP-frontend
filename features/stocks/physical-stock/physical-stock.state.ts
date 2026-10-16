@@ -382,6 +382,18 @@ export function isEditable(draft: Pick<PhysicalStockDraft, "mode" | "status">): 
   return draft.mode === "entry" && draft.status === STATUS_DRAFT;
 }
 
+/**
+ * Screen memory (lib/screen-memory): a count comes back after a trip to another
+ * screen only while it holds unsaved work that could still be saved. A blank,
+ * saved, posted, cancelled or browsed sheet reloads from the server, or there
+ * is nothing to lose.
+ */
+export function isCountWorthRemembering(
+  draft: Pick<PhysicalStockDraft, "dirty" | "mode" | "status">,
+): boolean {
+  return draft.dirty && isEditable(draft);
+}
+
 function scopeLabel(godownName: string, accYear: string): string {
   return godownName ? `${godownName} · ${accYear}` : accYear;
 }

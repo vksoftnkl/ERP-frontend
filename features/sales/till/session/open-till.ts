@@ -399,6 +399,23 @@ export function carriedLabel(carried: TillCarriedFrom | null): string {
     : "Carried — none on this counter today";
 }
 
+// ─── an open-check refusal ──────────────────────────────────────────────────
+
+/**
+ * The open-check answers that mean "this PC cannot hold a till". They stay on
+ * the screen, in plain words (Qt bec3f98: `ApiErrorText::inlineHtml` in the
+ * warning line); any other refusal is a popup.
+ */
+const DEVICE_REFUSAL_CODES: ReadonlySet<string> = new Set([
+  "TILL_DEVICE_REQUIRED",
+  "TILL_DEVICE_UNKNOWN",
+  "TILL_DEVICE_BLOCKED",
+]);
+
+export function isDeviceRefusal(code: string): boolean {
+  return DEVICE_REFUSAL_CODES.has(code);
+}
+
 // ─── why Open (Ctrl+Enter) would refuse, and what it would post ──────────────
 
 export function openProblem(inputs: OpenTillInputs): string {

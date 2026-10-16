@@ -26,6 +26,7 @@ import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { toast } from "@/lib/notify";
 import { documentRights } from "@/lib/permissions/document-rights";
 import { useUiTableId } from "@/lib/ui-tables";
+import type { ScreenMemoryOption } from "@/lib/use-screen-memory";
 import { todayIso } from "@/features/sales/quotation/quotation.utils";
 import { useGetQuotationGridLayoutQuery } from "@/store/api/quotationApi";
 import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
@@ -132,16 +133,22 @@ export type ReceiptScreenProps = {
   collect?: TempCreditCollect | null;
   /** Set when a report (Party-wise Outstanding's Ctrl+R) asked for a new receipt on one party. */
   openOnParty?: PartyHandoff | null;
+  /**
+   * Screen memory (lib/screen-memory): the page names the slot, and says whether
+   * it reopened ON a remembered receipt — the operator coming back from another
+   * screen — rather than on an explicit Create / Open.
+   */
+  memory?: ScreenMemoryOption;
 };
 
-export default function ReceiptScreen({ initialKeys, onBackToList, collect, openOnParty }: ReceiptScreenProps) {
-  const router = useRouter();
+/**
+ * The tenant on the header, as this screen resolves it — what the page asks
+ * screen memory about. The same three values a new receipt is started with, or
+ * a remembered one would never be found again.
+ */
+export function useReceiptScope(): ReceiptScope {
   const { activeCompany, activeBranch, activeFiscalYear } = useBusinessContext();
-  const { permissions, isLoading: permissionsLoading } = usePagePermissions({
-    menuId: RECEIPT_MENU_ID,
-  });
-
-  const scope: ReceiptScope = useMemo(
+  return useMemo(
     () => ({
       companyId: activeCompany?.id ?? "",
       branchId: activeBranch?.id ?? "",
@@ -149,6 +156,21 @@ export default function ReceiptScreen({ initialKeys, onBackToList, collect, open
     }),
     [activeCompany?.id, activeBranch?.id, activeFiscalYear?.name],
   );
+}
+
+export default function ReceiptScreen({
+  initialKeys,
+  onBackToList,
+  collect,
+  openOnParty,
+  memory,
+}: ReceiptScreenProps) {
+  const router = useRouter();
+  const { permissions, isLoading: permissionsLoading } = usePagePermissions({
+    menuId: RECEIPT_MENU_ID,
+  });
+
+  const scope = useReceiptScope();
 
   /**
    * "Unloaded" is not "denied": the desktop build refused a user with every
@@ -196,6 +218,7 @@ export default function ReceiptScreen({ initialKeys, onBackToList, collect, open
     maySaveDraft,
     confirm,
     prompt,
+    memory,
   });
   const { draft, dispatch, identity, masters, busy, editable } = api;
 
@@ -306,6 +329,22 @@ export default function ReceiptScreen({ initialKeys, onBackToList, collect, open
     void openByKeys(initialKeys);
   }, [initialKeys, openByKeys]);
 
+  // ── Reopened on the receipt left here (screen memory) ─────────────────────
+  // Kept as it was: not cleared, not reloaded. A collection handed over with
+  // it still runs below, OVER it — `collectTempCredit` asks before discarding
+  // unsaved work — so the restore is not announced on top of that question.
+  const resumedInitial = useRef(false);
+  const resumed = Boolean(memory?.resume && api.resumed);
+  const finishResume = api.finishResume;
+  const collecting = Boolean(collect);
+  useEffect(() => {
+    if (!resumed || resumedInitial.current) {
+      return;
+    }
+    resumedInitial.current = true;
+    void finishResume({ announce: !collecting });
+  }, [collecting, finishResume, resumed]);
+
   /**
    * Where the caret starts: RECEIPT NO, on a fresh document and on every new
    * one after a save, a post or a delete.
@@ -389,12 +428,14 @@ export default function ReceiptScreen({ initialKeys, onBackToList, collect, open
   const pickedInitial = useRef(false);
   const pickParty = api.pickParty;
   useEffect(() => {
-    if (!openOnParty || pickedInitial.current) {
+    // Never over a remembered receipt: `pickParty` would re-target it unasked
+    // (the page drops the hand-off then — `initialReceiptView`).
+    if (!openOnParty || pickedInitial.current || resumed) {
       return;
     }
     pickedInitial.current = true;
     void pickParty(openOnParty.partyId, openOnParty.partyName);
-  }, [openOnParty, pickParty]);
+  }, [openOnParty, pickParty, resumed]);
 
   /** 3.0's `tBtnDefTndr`: put this row back on the default tender. */
   const resetRowToDefaultTender = useCallback(() => {
@@ -485,6 +526,7 @@ export default function ReceiptScreen({ initialKeys, onBackToList, collect, open
     });
   }, [canPrint, draft.header.scope, draft.header.voucherId, draft.header.voucherRefno, printable]);
 
+  const forgetRemembered = api.forgetRemembered;
   const closeScreen = useCallback(() => {
     void (async () => {
       if (draft.dirty) {
@@ -497,13 +539,16 @@ export default function ReceiptScreen({ initialKeys, onBackToList, collect, open
           return;
         }
       }
+      // Close (or Esc) is a discard the operator confirmed — unlike a menu
+      // trip, the receipt must not be waiting on the next visit.
+      forgetRemembered();
       if (onBackToList) {
         onBackToList();
         return;
       }
       router.back();
     })();
-  }, [confirm, draft.dirty, onBackToList, router]);
+  }, [confirm, draft.dirty, forgetRemembered, onBackToList, router]);
 
   const openHistory = useCallback(
     (row: { billId: string; billAccYear: string; docRefno: string }, isCredit: boolean) => {

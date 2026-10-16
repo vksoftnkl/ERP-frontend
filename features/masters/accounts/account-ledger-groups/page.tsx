@@ -17,6 +17,7 @@ import { useApi } from "@/hooks/useApi";
 import {
   ERPDynamicModalForm,
   type ERPDynamicModalController,
+  type ERPDynamicModalDraftAppliedPayload,
   type ERPDynamicModalField,
   type ERPDynamicModalVariant,
   type ERPDynamicSelectOption,
@@ -182,6 +183,22 @@ function toNullableReference(value: string): string | null {
 }
 export default function AccountLedgerGroupsMasterPage() {
   const parentGroup = useLazyConfiguredDropdown(PARENT_GROUP_DROPDOWN_CONFIG);
+  // The <id, name> Group Parent was seeded with as the popup opened, so a
+  // draft's Discard can name the record's own parent again.
+  const openingParentRef = useRef({ id: "", name: "" });
+  const seedParentGroup = parentGroup.seedSelected;
+  // A restored draft (or its Discard) sets Group Parent without the user picking
+  // it: re-seed it so it shows a name — the record's own for the value the popup
+  // opened on, else the one the draft saved beside its choice.
+  const applyDraftParentSelection = useCallback(
+    ({ values, labels }: ERPDynamicModalDraftAppliedPayload) => {
+      const id = (values.accGroupParentId ?? "").trim();
+      const opening = openingParentRef.current;
+      const openingName = id && id === opening.id ? opening.name : "";
+      seedParentGroup(id, id ? openingName || labels.accGroupParentId?.[id] || "" : "");
+    },
+    [seedParentGroup],
+  );
   // Silent progressive enhancement: a failed config fetch leaves the form on its
   // hardcoded labels/order (empty map), so don't nag the user with an error toast.
   const { getAll: getWidgetConfig } = useApi<WidgetMastersResponse>(WIDGET_CONFIG_ENDPOINT, {
@@ -448,6 +465,8 @@ export default function AccountLedgerGroupsMasterPage() {
   return (
     <>
     <CrudMasterPage
+      modalDraftKey="account-group"
+      onModalDraftApplied={applyDraftParentSelection}
       title="Account Group"
       iconName="account_group_master"
       auditHistory={{ screenName: "Account Group Master" }}
@@ -492,6 +511,7 @@ export default function AccountLedgerGroupsMasterPage() {
         // selection from a previously edited group lingers (it reloads on open).
         if (open && variantKey === "master-create") {
           parentGroup.seedSelected("", "");
+          openingParentRef.current = { id: "", name: "" };
         }
       }}
       mapFormValues={({ source, defaults }) => {
@@ -499,12 +519,13 @@ export default function AccountLedgerGroupsMasterPage() {
         const accGroupParentId = toDisplayValue(
           getFirstDefinedValue(rowSource, GROUP_PARENT_ID_KEYS),
         );
+        const accGroupParentName = toDisplayValue(
+          getFirstDefinedValue(rowSource, GROUP_PARENT_NAME_KEYS),
+        );
+        openingParentRef.current = { id: accGroupParentId, name: accGroupParentName };
         // Seed the lazy dropdown so the trigger shows the saved parent's name on
         // edit/view, before the list is opened and fetched.
-        parentGroup.seedSelected(
-          accGroupParentId,
-          toDisplayValue(getFirstDefinedValue(rowSource, GROUP_PARENT_NAME_KEYS)),
-        );
+        parentGroup.seedSelected(accGroupParentId, accGroupParentName);
         return {
           ...ACCOUNT_GROUP_INITIAL_FORM_VALUES,
           masterName:

@@ -6,6 +6,7 @@ import type { ReusableTableColumn } from "@/components/ui/table";
 import {
   ERPDynamicModalForm,
   type ERPDynamicModalController,
+  type ERPDynamicModalDraftAppliedPayload,
   type ERPDynamicModalField,
   type ERPDynamicModalVariant,
   type ERPDynamicSelectOption,
@@ -156,6 +157,14 @@ const BRANCH_DROPDOWN_CONFIG = {
 // Source keys to seed the saved selection on edit/view (getById returns id + name).
 const DEV_COMPANY_NAME_KEYS = ["devCompanyName", "dev_company_name", "compName", "comp_name"] as const;
 const DEV_BRANCH_NAME_KEYS = ["devBranchName", "dev_branch_name", "brName", "br_name"] as const;
+// The lazy dropdowns a restored popup draft has to re-seed, and what each was
+// seeded with as the popup opened (nothing, for a create).
+type LazySeededField = "devCompanyId" | "devBranchId";
+type LazyDropdownSeed = { id: string; name: string };
+const EMPTY_OPENING_SEEDS: Record<LazySeededField, LazyDropdownSeed> = {
+  devCompanyId: { id: "", name: "" },
+  devBranchId: { id: "", name: "" },
+};
 const INITIAL_FORM_VALUES = {
   devCompanyId: "",
   devBranchId: "",
@@ -340,6 +349,30 @@ export default function DeviceListMasterPage() {
   const userLabelMap = useMemo(
     () => new Map(userOptions.map((o) => [o.value, o.label])),
     [userOptions],
+  );
+  const openingSeedsRef = useRef(EMPTY_OPENING_SEEDS);
+  const seedCompany = company.seedSelected;
+  const seedBranch = branch.seedSelected;
+  // A restored draft (or its Discard) sets Company/Branch without the user
+  // picking them: re-seed each so it shows a name — the record's own for the
+  // value the popup opened on (what Discard goes back to), else the one the
+  // draft saved beside its choice, else the eager list's.
+  const applyDraftDropdownSelections = useCallback(
+    ({ values, labels }: ERPDynamicModalDraftAppliedPayload) => {
+      const reseed = (
+        field: LazySeededField,
+        knownNames: Map<string, string>,
+        seed: (id: string, name: string) => void,
+      ) => {
+        const id = (values[field] ?? "").trim();
+        const opening = openingSeedsRef.current[field];
+        const openingName = id && id === opening.id ? opening.name : "";
+        seed(id, id ? openingName || labels[field]?.[id] || knownNames.get(id) || "" : "");
+      };
+      reseed("devCompanyId", companyLabelMap, seedCompany);
+      reseed("devBranchId", branchLabelMap, seedBranch);
+    },
+    [branchLabelMap, companyLabelMap, seedBranch, seedCompany],
   );
   const formFields = useMemo(
     () =>
@@ -708,6 +741,8 @@ export default function DeviceListMasterPage() {
   return (
     <>
     <CrudMasterPage
+      modalDraftKey="device-list"
+      onModalDraftApplied={applyDraftDropdownSelections}
       title="Device List"
       auditHistory={{ screenName: "Device List Master" }}
       entityLabel="device"
@@ -758,6 +793,7 @@ export default function DeviceListMasterPage() {
         if (open && variantKey === "master-create") {
           company.seedSelected("", "");
           branch.seedSelected("", "");
+          openingSeedsRef.current = EMPTY_OPENING_SEEDS;
         }
       }}
       mapFormValues={({ source }) => {
@@ -770,18 +806,20 @@ export default function DeviceListMasterPage() {
           INITIAL_FORM_VALUES.devBranchId;
         // Seed the lazy Company/Branch dropdowns so the trigger shows the name on
         // edit/view. Prefer getById's resolved name, fall back to the eager label maps.
-        company.seedSelected(
-          devCompanyId,
+        const devCompanyName =
           toDisplayValue(getFirstDefinedValue(rowSource, DEV_COMPANY_NAME_KEYS)) ||
-            companyLabelMap.get(devCompanyId) ||
-            "",
-        );
-        branch.seedSelected(
-          devBranchId,
+          companyLabelMap.get(devCompanyId) ||
+          "";
+        const devBranchName =
           toDisplayValue(getFirstDefinedValue(rowSource, DEV_BRANCH_NAME_KEYS)) ||
-            branchLabelMap.get(devBranchId) ||
-            "",
-        );
+          branchLabelMap.get(devBranchId) ||
+          "";
+        openingSeedsRef.current = {
+          devCompanyId: { id: devCompanyId, name: devCompanyName },
+          devBranchId: { id: devBranchId, name: devBranchName },
+        };
+        company.seedSelected(devCompanyId, devCompanyName);
+        branch.seedSelected(devBranchId, devBranchName);
         return {
           ...INITIAL_FORM_VALUES,
           devCompanyId,

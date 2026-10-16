@@ -90,6 +90,7 @@ import { requestDataRefresh } from "@/lib/data-freshness";
 import {
   clearFormDraft,
   collectChangedFormValues,
+  omitFormDraftFields,
   readFormDraft,
   writeFormDraft,
   type FormDraftLabels,
@@ -114,6 +115,15 @@ function isTopmostOpenModal(token: symbol): boolean {
  * next open even before their options load. A name the field cannot supply now
  * (its lazy list was reloaded without it) is carried over from `previous`.
  */
+/** Fields a draft never holds: a password, or a picked file (see `omitFormDraftFields`). */
+function unstorableDraftFields(fields: ERPDynamicModalField[]): Set<string> {
+  return new Set(
+    fields
+      .filter((field) => field.type === "password" || field.type === "file")
+      .map((field) => field.name),
+  );
+}
+
 function collectDraftLabels(
   fields: ERPDynamicModalField[],
   values: Record<string, string>,
@@ -326,7 +336,11 @@ export function ERPDynamicModalForm({
         ...(options?.values ?? {}),
       };
       const draftKey = options?.draftKey ?? null;
-      const draft = draftKey ? readFormDraft(draftKey) : null;
+      const stored = draftKey ? readFormDraft(draftKey) : null;
+      // A draft written before passwords and files were left out may still
+      // carry them: never put those back.
+      const storedValues = omitFormDraftFields(stored?.values ?? null, unstorableDraftFields(variant.fields));
+      const draft = stored && storedValues ? { ...stored, values: storedValues } : null;
       const nextFormData = draft ? { ...openingValues, ...draft.values } : openingValues;
       draftKeyRef.current = draftKey;
       draftBaselineRef.current = openingValues;
@@ -384,7 +398,10 @@ export function ERPDynamicModalForm({
     if (!isOpen || !draftKey || !activeVariant) {
       return;
     }
-    const changed = collectChangedFormValues(draftBaselineRef.current, formData);
+    const changed = omitFormDraftFields(
+      collectChangedFormValues(draftBaselineRef.current, formData),
+      unstorableDraftFields(activeVariant.fields),
+    );
     const serialized = changed ? JSON.stringify(changed) : null;
     if (serialized === draftWrittenRef.current) {
       return;

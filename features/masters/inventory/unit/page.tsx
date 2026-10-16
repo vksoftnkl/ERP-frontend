@@ -680,6 +680,7 @@ export default function UnitMasterPage() {
   return (
     <>
     <CrudMasterPage
+      modalDraftKey="unit-master"
       title="Unit"
       iconName="item_unit_master_entry"
       auditHistory={{ screenName: "Units Master" }}

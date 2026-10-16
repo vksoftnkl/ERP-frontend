@@ -11,10 +11,11 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { cx } from "@/components/design-system/cx";
+import RefusalText from "@/components/feedback/refusal-text";
+import type { ApiRefusal } from "@/lib/api/error-text";
 import { toast } from "@/lib/notify";
 import { useTillSessionClient } from "../shared/api/till-session-api";
 import { EMPTY_COUNT, countLines, countedPaise, toDenominations, type DenomCountValue, type Denomination } from "../shared/denom";
-import { tillErrorOf } from "../shared/errors";
 import { formatMoney } from "../shared/money";
 import type { TillReason } from "../shared/reasons";
 import { TillDialog } from "../shared/till-dialog";
@@ -60,7 +61,7 @@ function ForceCloseBody({ request, reasons, onClose, onForceClosed }: ForceClose
   const [count, setCount] = useState<DenomCountValue>(EMPTY_COUNT);
   const [form, setForm] = useState<ForceCloseForm>(EMPTY_FORCE_CLOSE);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [refusal, setRefusal] = useState<ApiRefusal | null>(null);
   const inFlight = useRef(false);
   const pinRef = useRef<HTMLInputElement>(null);
   const reasonRef = useRef<HTMLSelectElement>(null);
@@ -73,7 +74,7 @@ function ForceCloseBody({ request, reasons, onClose, onForceClosed }: ForceClose
         if (!cancelled) setDenominations(toDenominations(rows));
       })
       .catch((failure) => {
-        if (!cancelled) toast.error(tillErrorOf(failure, "The denominations could not be read.").text);
+        if (!cancelled) toast.apiError(failure, { fallback: "The denominations could not be read." });
       })
       .finally(() => {
         if (!cancelled) setDenomsLoading(false);
@@ -93,15 +94,16 @@ function ForceCloseBody({ request, reasons, onClose, onForceClosed }: ForceClose
     if (!canClose || inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
-    setError("");
+    setRefusal(null);
     try {
       const result = await client.forceClose(forceCloseBody(request.key, form, countLines(denominations, count)));
       onForceClosed(result);
     } catch (thrown) {
-      // The server's own sentence: who may (grant, PIN, cashier) is its call.
-      const refusal = dialogRefusal(thrown, "The session could not be force-closed.");
-      setError(refusal.line);
-      if (refusal.pin) {
+      // Who may (grant, PIN, cashier) is the server's call: its refusal in
+      // plain words, its sentence in grey.
+      const refused = dialogRefusal(thrown, "The session could not be force-closed.");
+      setRefusal(refused.refusal);
+      if (refused.pin) {
         patch({ pin: "" });
         pinRef.current?.focus();
       }
@@ -217,7 +219,11 @@ function ForceCloseBody({ request, reasons, onClose, onForceClosed }: ForceClose
       </div>
 
       <p className={cx(styles.muted, local.hint)}>{forceCloseHint(counted)}</p>
-      {error ? <p className={cx(styles.warn, styles.warnDanger)}>{error}</p> : null}
+      {refusal ? (
+        <p className={cx(styles.warn, styles.warnDanger)}>
+          <RefusalText refusal={refusal} />
+        </p>
+      ) : null}
     </TillDialog>
   );
 }

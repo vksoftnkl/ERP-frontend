@@ -11,19 +11,42 @@
  *
  * The register's rights are never menu 262's: each type is judged on its own
  * menu, and `/vouchers/types` (asked without a menu) returns each with them.
+ *
+ * A voucher left half-keyed when the operator went to another screen is kept in
+ * screen memory (lib/screen-memory), one slot per menu, and the menu then
+ * reopens ON it instead of on the register. Opened by keys, the page never
+ * reads or writes it.
  */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { skipToken } from "@reduxjs/toolkit/query";
 import { useBusinessContext } from "@/components/layout/business-context";
+import { screenMemory, type ScreenScope } from "@/lib/screen-memory";
 import { useGetVoucherTypesQuery } from "@/store/api/vouchersApi";
 import { VoucherListView } from "./components/voucher-list-view";
+import { resumeTypeCode, voucherMemoryKey } from "./domain/memory";
+import { useVoucherScope } from "./state/use-voucher-entry";
 import VoucherScreen from "./voucher-screen";
 import type { VoucherKeys } from "./vouchers.types";
 
 type View =
   | { screen: "list" }
   /** `typeCode` "" on the register = the first type it offers. */
-  | { screen: "entry"; keys?: VoucherKeys; typeCode: string; serial: number };
+  | {
+      screen: "entry";
+      keys?: VoucherKeys;
+      typeCode: string;
+      serial: number;
+      /** Reopened on the remembered voucher, not on an explicit New / Open. */
+      resume?: boolean;
+    };
+
+/** The remembered voucher of this menu, as a view — or null when there is none. */
+function resumeView(memoryKey: string, menuTypeCode: string, scope: ScreenScope): View | null {
+  const remembered = screenMemory.recall<{ typeCode: string }>(memoryKey, scope);
+  return remembered
+    ? { screen: "entry", typeCode: resumeTypeCode(menuTypeCode, remembered), serial: 0, resume: true }
+    : null;
+}
 
 export type VoucherPageProps = {
   /** "" = the Voucher Register: every type. */
@@ -41,12 +64,32 @@ export type VoucherPageProps = {
 export default function VoucherPage(props: VoucherPageProps) {
   const { typeCode, menuId, title, subtitle, initialKeys, initialTypeCode } = props;
   const register = typeCode === "";
+  // Opened by keys, the page is a link to one voucher: no memory at all.
+  const memoryKey = initialKeys ? "" : voucherMemoryKey(typeCode);
+  const scope = useVoucherScope();
   const [view, setView] = useState<View>(() =>
     initialKeys
       ? { screen: "entry", keys: initialKeys, typeCode: initialTypeCode ?? typeCode, serial: 0 }
-      : { screen: "list" },
+      : ((memoryKey ? resumeView(memoryKey, typeCode, scope) : null) ?? { screen: "list" }),
   );
   const serial = useRef(0);
+  // The header's tenant can still be resolving on the first render, and a
+  // header switch back to the tenant a voucher was left in brings it into
+  // reach. Until the operator does something here, a remembered voucher that
+  // turns up is reopened — otherwise the next New would write over it.
+  // Adjusted while rendering, when the tenant changes, not one render late.
+  const [operatorActed, setOperatorActed] = useState(false);
+  const [scopeSeen, setScopeSeen] = useState(scope);
+  if (scopeSeen !== scope) {
+    setScopeSeen(scope);
+    const resumed =
+      memoryKey && !operatorActed && view.screen === "list"
+        ? resumeView(memoryKey, typeCode, scope)
+        : null;
+    if (resumed) {
+      setView(resumed);
+    }
+  }
 
   // The register's types, for a new voucher's first type.
   const { activeCompany } = useBusinessContext();
@@ -55,16 +98,24 @@ export default function VoucherPage(props: VoucherPageProps) {
 
   const open = useCallback(
     (keys?: VoucherKeys, rowType?: string) => {
+      setOperatorActed(true);
       serial.current += 1;
       setView({ screen: "entry", keys, typeCode: register ? (rowType ?? "") : typeCode, serial: serial.current });
     },
     [register, typeCode],
   );
   const switchType = useCallback((code: string) => {
+    setOperatorActed(true);
     serial.current += 1;
     setView({ screen: "entry", typeCode: code, serial: serial.current });
   }, []);
-  const back = useCallback(() => setView({ screen: "list" }), []);
+  const back = useCallback(() => {
+    setOperatorActed(true);
+    setView({ screen: "list" });
+  }, []);
+
+  const resume = view.screen === "entry" && Boolean(view.resume);
+  const memory = useMemo(() => (memoryKey ? { key: memoryKey, resume } : undefined), [memoryKey, resume]);
 
   if (view.screen === "list") {
     return (
@@ -81,8 +132,9 @@ export default function VoucherPage(props: VoucherPageProps) {
   return (
     <VoucherScreen
       // A fresh mount per opening and per type: the open-by-keys effect runs
-      // once, and a switched type starts a clean voucher.
-      key={`${view.serial}-${entryType}`}
+      // once, and a switched type starts a clean voucher. A resume is a mount
+      // of its own.
+      key={`${view.resume ? "resume" : view.serial}-${entryType}`}
       typeCode={entryType}
       menuId={menuId}
       title={title}
@@ -90,6 +142,7 @@ export default function VoucherPage(props: VoucherPageProps) {
       initialKeys={view.keys}
       onSwitchType={register ? switchType : undefined}
       onBackToList={back}
+      memory={memory}
     />
   );
 }

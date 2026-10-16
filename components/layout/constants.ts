@@ -60,6 +60,9 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
           { label: "Open Till", href: "/sales/till/open" },
           { label: "Till Sessions", href: "/sales/till/sessions" },
           { label: "Business Day", href: "/sales/till/business-day" },
+          // Menu 287 (notes 118): the safe — balance, count, remittance. The
+          // retired 286 has the same name but is inactive, so this label is 287's.
+          { label: "Cash Office", href: "/sales/till/cash-office" },
           {
             label: "Till Masters",
             children: [

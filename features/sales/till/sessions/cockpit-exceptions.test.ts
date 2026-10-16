@@ -617,7 +617,7 @@ describe("a dialog's refusal", () => {
         errors: [{ field: "approverPin", code: "TILL_RECEIVER_PIN", message: "The till PIN is wrong" }],
       },
     };
-    expect(dialogRefusal(flat, "x")).toEqual({ line: "The till PIN is wrong", pin: true });
+    expect(dialogRefusal(flat, "x")).toMatchObject({ line: "The till PIN is wrong", pin: true });
     const nested = {
       status: 409,
       data: {
@@ -625,8 +625,8 @@ describe("a dialog's refusal", () => {
         message: { message: "Refused", errors: [{ field: "tssId", code: "TILL_CASH_ALREADY_APPROVED", message: "Already in the safe" }] },
       },
     };
-    expect(dialogRefusal(nested, "x")).toEqual({ line: "Already in the safe", pin: false });
-    expect(dialogRefusal({ status: 403, data: { errors: [{ code: "TILL_APPROVER_PIN" }], message: "PIN" } }, "x")).toEqual({
+    expect(dialogRefusal(nested, "x")).toMatchObject({ line: "Already in the safe", pin: false });
+    expect(dialogRefusal({ status: 403, data: { errors: [{ code: "TILL_APPROVER_PIN" }], message: "PIN" } }, "x")).toMatchObject({
       line: "PIN",
       pin: true,
     });

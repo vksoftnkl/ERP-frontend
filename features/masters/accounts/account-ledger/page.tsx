@@ -133,12 +133,34 @@ import { layoutPointer, layoutViewportSize } from "@/lib/ui-scale";
 import { useDataRefresh } from "@/lib/data-freshness";
 import { buildGridDeletedParam, gridRunEndpoint, useGridId } from "@/lib/configured-grids";
 import { getDropdownId } from "@/lib/configured-dropdowns";
+import { useBusinessContext } from "@/components/layout/business-context";
+import { toast } from "@/lib/notify";
+import {
+  RESTORED_MESSAGE_OPTIONS,
+  restoredMessage,
+  screenMemory,
+  type ScreenScope,
+} from "@/lib/screen-memory";
+import {
+  useForgetIfWritingOnUnmount,
+  useRecalledOnce,
+  useRememberWrite,
+  type ScreenMemoryOption,
+} from "@/lib/use-screen-memory";
+import {
+  ACCOUNT_LEDGER_MEMORY_KEY,
+  isLedgerEntryWorthRemembering,
+  type LedgerEntrySnapshot,
+} from "./ledger-memory";
 const GRID_SETTINGS_CONTEXT_MENU_WIDTH = 190;
 const GRID_SETTINGS_CONTEXT_MENU_HEIGHT = 130;
 const GRID_SETTINGS_CONTEXT_MENU_PADDING = 8;
 // The bank-accounts grid lives inline under the Identity tab; this is the tab to
 // raise when a bank-account row fails validation.
 const BANK_ACCOUNTS_TAB_KEY = "identity";
+// Screen memory (lib/screen-memory): the route page always reopens the popup on a
+// ledger left here unsaved; an empty slot recalls nothing.
+const SCREEN_MEMORY: ScreenMemoryOption = { key: ACCOUNT_LEDGER_MEMORY_KEY, resume: true };
 type ContextMenuPosition = Pick<CSSProperties, "left" | "top">;
 function clampContextMenuPosition(value: number, min: number, max: number): number {
   if (max < min) {
@@ -717,24 +739,40 @@ export default function AccountLedgerMasterPage() {
   const { run: runTaxRateDropdown } = useApi<unknown>(DROPDOWN_RUN_ENDPOINT, {
     toast: { error: false },
   });
+  // The header's tenant: the slot an unsaved ledger is remembered in. Ledgers are
+  // not kept per accounting year, but a slot is, so the session's year completes it.
+  const { selectedCompanyId, selectedBranchId, activeFiscalYear } = useBusinessContext();
+  const memoryAccYear = (activeFiscalYear?.name ?? "").trim() || "*";
+  const tenant = useMemo<ScreenScope>(
+    () => ({ companyId: selectedCompanyId, branchId: selectedBranchId, accYear: memoryAccYear }),
+    [memoryAccYear, selectedBranchId, selectedCompanyId],
+  );
+  // The popup the operator left open here with unsaved changes, read once; null
+  // for a fresh visit. The popup state below starts from it.
+  const recalled = useRecalledOnce<LedgerEntrySnapshot>(SCREEN_MEMORY, tenant);
+  const resumed = recalled !== null;
   // State for options
-  const [companyOptions, setCompanyOptions] = useState<ERPDynamicSelectOption[]>([
-    { value: "", label: "" },
-  ]);
-  const [branchOptions, setBranchOptions] = useState<ERPDynamicSelectOption[]>([
-    { value: "", label: "" },
-  ]);
-  const [accountGroupOptions, setAccountGroupOptions] = useState<ERPDynamicSelectOption[]>([
-    { value: "", label: "" },
-  ]);
-  const [stateNameOptions, setStateNameOptions] = useState<ERPDynamicSelectOption[]>([
-    { value: "", label: "" },
-  ]);
-  const [taxRateOptions, setTaxRateOptions] = useState<ERPDynamicSelectOption[]>([
-    { value: "", label: "" },
-  ]);
-  const [stateCodeByName, setStateCodeByName] = useState<Record<string, string>>({});
-  const [stateNameByCode, setStateNameByCode] = useState<Record<string, string>>({});
+  const [companyOptions, setCompanyOptions] = useState<ERPDynamicSelectOption[]>(
+    recalled?.options.company ?? [{ value: "", label: "" }],
+  );
+  const [branchOptions, setBranchOptions] = useState<ERPDynamicSelectOption[]>(
+    recalled?.options.branch ?? [{ value: "", label: "" }],
+  );
+  const [accountGroupOptions, setAccountGroupOptions] = useState<ERPDynamicSelectOption[]>(
+    recalled?.options.accountGroup ?? [{ value: "", label: "" }],
+  );
+  const [stateNameOptions, setStateNameOptions] = useState<ERPDynamicSelectOption[]>(
+    recalled?.options.stateName ?? [{ value: "", label: "" }],
+  );
+  const [taxRateOptions, setTaxRateOptions] = useState<ERPDynamicSelectOption[]>(
+    recalled?.options.taxRate ?? [{ value: "", label: "" }],
+  );
+  const [stateCodeByName, setStateCodeByName] = useState<Record<string, string>>(
+    recalled?.options.stateCodeByName ?? {},
+  );
+  const [stateNameByCode, setStateNameByCode] = useState<Record<string, string>>(
+    recalled?.options.stateNameByCode ?? {},
+  );
   // Per-kind in-flight flag for the lazy dropdowns, keyed by LedgerDropdownKind.
   const [dropdownLoading, setDropdownLoading] = useState<Record<string, boolean>>({});
   // State for table and search
@@ -758,19 +796,33 @@ export default function AccountLedgerMasterPage() {
   const [accountLedgerGridId, setAccountLedgerGridId] = useState<number | null>(null);
   const [accountLedgerGridName, setAccountLedgerGridName] = useState<string | null>(null);
   // State for modal form
-  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState<ModalMode>("create");
+  const [isFormModalOpen, setIsFormModalOpen] = useState(resumed);
+  const [modalMode, setModalMode] = useState<ModalMode>(recalled?.mode ?? "create");
   const [formValues, setFormValues] = useState<LedgerFormValues>(
-    createInitialLedgerFormValues,
+    () => recalled?.formValues ?? createInitialLedgerFormValues(),
     );
-  const [editingItemId, setEditingItemId] = useState<string | number | null>(null);
+  // What the popup opened on (the loaded record, or the create defaults), so an
+  // unsaved change can be told from none — see ledger-memory.
+  const [openingValues, setOpeningValues] = useState<LedgerFormValues>(
+    () => recalled?.openingValues ?? createInitialLedgerFormValues(),
+  );
+  const [editingItemId, setEditingItemId] = useState<string | number | null>(
+    recalled?.editingId ?? null,
+  );
   const [modalError, setModalError] = useState<string | null>(null);
   const [gstLookupError, setGstLookupError] = useState<string | null>(null);
   const [validationFieldName, setValidationFieldName] = useState<LedgerFormFieldName | null>(null);
   // Nested bank accounts edited alongside the ledger. `removedBankAccountIds` tracks
   // saved rows the user deleted so they can be soft-deleted on submit.
-  const [bankAccounts, setBankAccounts] = useState<LedgerBankAccountFormRow[]>([]);
-  const [removedBankAccountIds, setRemovedBankAccountIds] = useState<string[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<LedgerBankAccountFormRow[]>(
+    recalled?.bankAccounts ?? [],
+  );
+  const [openingBankAccounts, setOpeningBankAccounts] = useState<LedgerBankAccountFormRow[]>(
+    recalled?.openingBankAccounts ?? [],
+  );
+  const [removedBankAccountIds, setRemovedBankAccountIds] = useState<string[]>(
+    recalled?.removedBankAccountIds ?? [],
+  );
   const [bankAccountError, setBankAccountError] = useState<{
     rowKey: string;
     field: LedgerBankAccountFieldName;
@@ -780,13 +832,15 @@ export default function AccountLedgerMasterPage() {
   const [searchQueries, setSearchQueries] = useState<Record<string, string>>({});
   const [searchActiveOptionIndex, setSearchActiveOptionIndex] = useState<Record<string, number>>({});
   // State for form sections
-  const [activeSectionKey, setActiveSectionKey] = useState("identity");
+  const [activeSectionKey, setActiveSectionKey] = useState(recalled?.activeSection ?? "identity");
   // Ledger profile resolved from the selected account group (mirrors
   // LedgerEntry::Profile). Drives which sections/tabs are visible and the derived,
   // read-only Ledger Type. "General" is the minimal form shown before a group is
   // chosen. `profileCacheRef` avoids re-fetching a group's profile (== m_profileCache);
   // `groupProfileRequestIdRef` guards against out-of-order async group fetches.
-  const [ledgerProfile, setLedgerProfile] = useState<LedgerProfile>("General");
+  const [ledgerProfile, setLedgerProfile] = useState<LedgerProfile>(
+    recalled?.profile ?? "General",
+  );
   const profileCacheRef = useRef<Record<string, LedgerProfile>>({});
   const groupProfileRequestIdRef = useRef(0);
   // State for delete
@@ -1260,8 +1314,11 @@ export default function AccountLedgerMasterPage() {
     groupProfileRequestIdRef.current += 1;
     setLedgerProfile("General");
     setEditingItemId(null);
-    setFormValues(createInitialLedgerFormValues());
+    const initialValues = createInitialLedgerFormValues();
+    setFormValues(initialValues);
+    setOpeningValues(initialValues);
     setBankAccounts([]);
+    setOpeningBankAccounts([]);
     setRemovedBankAccountIds([]);
     setBankAccountError(null);
     resetLedgerDropdownOptions();
@@ -1300,8 +1357,11 @@ export default function AccountLedgerMasterPage() {
       // detail (with ledGroupLedgerProfile) loads below.
       groupProfileRequestIdRef.current += 1;
       setLedgerProfile("General");
-      setFormValues(createInitialLedgerFormValues());
+      const initialValues = createInitialLedgerFormValues();
+      setFormValues(initialValues);
+      setOpeningValues(initialValues);
       setBankAccounts([]);
+      setOpeningBankAccounts([]);
       setRemovedBankAccountIds([]);
       setBankAccountError(null);
       resetLedgerDropdownOptions();
@@ -1316,6 +1376,7 @@ export default function AccountLedgerMasterPage() {
         const detailSource = extractDetailSource(payload) ?? row.__source;
         const nextValues = toLedgerFormValues(detailSource);
         setFormValues(nextValues);
+        setOpeningValues(nextValues);
         seedLedgerDropdownOptions(detailSource ?? {}, nextValues);
         // Resolve the ledger profile -> section visibility + derived ledger type.
         // The ledger GET embeds ledGroupLedgerProfile, so prefer it; fall back to a
@@ -1332,7 +1393,9 @@ export default function AccountLedgerMasterPage() {
         } else if (nextValues.ledGroupId) {
           resolveGroupProfile(nextValues.ledGroupId);
         }
-        setBankAccounts(extractLedgerBankAccountRows(detailSource));
+        const loadedBankAccounts = extractLedgerBankAccountRows(detailSource);
+        setBankAccounts(loadedBankAccounts);
+        setOpeningBankAccounts(loadedBankAccounts);
         if (mode === "update" && detailSource) {
           const detailId = getFirstDefinedValue(detailSource, ["ledId", "led_id", "id", "_id"]);
           if (typeof detailId === "string" || typeof detailId === "number") {
@@ -1372,6 +1435,84 @@ export default function AccountLedgerMasterPage() {
     setRemovedBankAccountIds([]);
     setBankAccountError(null);
   }, [saveLoading]);
+  // Screen memory: written through on every change, so an open ledger with
+  // unsaved changes is there when the operator comes back from another menu
+  // screen. Closing the popup (Cancel, Esc, ×), a save, or typing the values
+  // back all let it go — and so does the screen going while a save is still in
+  // flight, since it lands after and a create would otherwise be posted twice.
+  const savingRef = useRef(false);
+  const memorySnapshot = useMemo<LedgerEntrySnapshot>(
+    () => ({
+      tenant,
+      open: isFormModalOpen,
+      mode: modalMode,
+      editingId: editingItemId,
+      formValues,
+      openingValues,
+      activeSection: activeSectionKey,
+      profile: ledgerProfile,
+      bankAccounts,
+      openingBankAccounts,
+      removedBankAccountIds,
+      options: {
+        company: companyOptions,
+        branch: branchOptions,
+        accountGroup: accountGroupOptions,
+        stateName: stateNameOptions,
+        taxRate: taxRateOptions,
+        stateCodeByName,
+        stateNameByCode,
+      },
+    }),
+    [
+      accountGroupOptions,
+      activeSectionKey,
+      bankAccounts,
+      branchOptions,
+      companyOptions,
+      editingItemId,
+      formValues,
+      isFormModalOpen,
+      ledgerProfile,
+      modalMode,
+      openingBankAccounts,
+      openingValues,
+      removedBankAccountIds,
+      stateCodeByName,
+      stateNameByCode,
+      stateNameOptions,
+      taxRateOptions,
+      tenant,
+    ],
+  );
+  useRememberWrite(SCREEN_MEMORY, memorySnapshot, {
+    scopeOf: (value) => value.tenant,
+    shouldKeep: isLedgerEntryWorthRemembering,
+  });
+  useForgetIfWritingOnUnmount(
+    SCREEN_MEMORY,
+    () => savingRef.current,
+    () => tenant,
+  );
+  // The ledger follows the header, so a switch lets go of the slot it was
+  // remembered under.
+  const lastTenantRef = useRef(tenant);
+  useEffect(() => {
+    const previous = lastTenantRef.current;
+    lastTenantRef.current = tenant;
+    if (previous !== tenant) {
+      screenMemory.forget(ACCOUNT_LEDGER_MEMORY_KEY, previous);
+    }
+  }, [tenant]);
+  // Reopened on a ledger left here unsaved: the popup is already up on it, so
+  // all that is left is to say so — once, a tick after mount.
+  useEffect(() => {
+    if (!resumed) return undefined;
+    const timer = window.setTimeout(() => {
+      toast.info(restoredMessage("ledger"), RESTORED_MESSAGE_OPTIONS);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [resumed]);
   useEffect(() => {
     if (!isFormModalOpen) return;
     const handleModalShortcuts = (event: KeyboardEvent) => {
@@ -1797,8 +1938,12 @@ export default function AccountLedgerMasterPage() {
       );
       const idsToDelete = shouldUpdate ? removedBankAccountIds : [];
       void (async () => {
+        savingRef.current = true;
         try {
           await upsertRecord({ body: payload });
+          // Saved: the remembered ledger goes now, not when the popup's close
+          // commits — the screen may be gone by then.
+          screenMemory.forget(ACCOUNT_LEDGER_MEMORY_KEY, tenant);
           // The nested upsert is non-destructive, so saved rows removed in the modal
           // must be soft-deleted explicitly. Failures here are non-fatal to the save.
           if (idsToDelete.length > 0) {
@@ -1817,6 +1962,8 @@ export default function AccountLedgerMasterPage() {
           await loadRecords(searchTerm, currentPage, pageSize);
         } catch {
           setModalError("Unable to save account ledger.");
+        } finally {
+          savingRef.current = false;
         }
       })();
     },
@@ -1832,6 +1979,7 @@ export default function AccountLedgerMasterPage() {
       pageSize,
       removedBankAccountIds,
       searchTerm,
+      tenant,
       upsertRecord,
     ],
   );

@@ -15,6 +15,13 @@ import { getAuthUserId } from "@/lib/auth/session";
 import type { DocumentRights } from "@/lib/permissions/document-rights";
 import { useAppDispatch } from "@/store/hooks";
 import { toast } from "@/lib/notify";
+import { RESTORED_MESSAGE_OPTIONS, restoredMessage, screenMemory } from "@/lib/screen-memory";
+import {
+  useForgetIfWritingOnUnmount,
+  useRecalledOnce,
+  useRememberWrite,
+  type ScreenMemoryOption,
+} from "@/lib/use-screen-memory";
 import { useGetTenderMastersQuery } from "@/store/api/saleOrderApi";
 import {
   paymentApi,
@@ -67,6 +74,12 @@ import {
   type PaymentDraft,
   type PaymentDraftAction,
 } from "./draft";
+import {
+  isVoucherWorthRemembering,
+  isVoucherWriteInFlight,
+  voucherScopeOf,
+} from "@/features/accounts/receipt/state/memory";
+import type { PaymentSnapshot } from "./memory";
 
 /** `useReducer` over a reducer that also returns refusals and notes. */
 function reducerWithRefusal(state: PaymentDraft, action: PaymentDraftAction): PaymentDraft {
@@ -96,14 +109,22 @@ export type UsePaymentDraftOptions = {
   rights: DocumentRights;
   confirm: (request: ConfirmRequest) => Promise<boolean>;
   prompt: (request: PromptRequest) => Promise<string | null>;
+  /** Screen memory (lib/screen-memory) — passed by the menu route only, never a deep link. */
+  memory?: ScreenMemoryOption;
 };
 
 export type UsePaymentDraft = ReturnType<typeof usePaymentDraft>;
 
 export function usePaymentDraft(options: UsePaymentDraftOptions) {
-  const { scope, appDate, settings, canWrite, rights, confirm, prompt } = options;
-  const [draft, dispatch] = useReducer(reducerWithRefusal, undefined, () =>
-    initialPaymentDraft(scope, appDate),
+  const { scope, appDate, settings, canWrite, rights, confirm, prompt, memory } = options;
+  // The payment the operator left on this screen, when the page is reopening
+  // on it. Read once; null for every fresh open.
+  const recalled = useRecalledOnce<PaymentSnapshot>(memory, scope);
+  const resumed = recalled !== null;
+  const [draft, dispatch] = useReducer(
+    reducerWithRefusal,
+    undefined,
+    () => recalled?.draft ?? initialPaymentDraft(scope, appDate),
   );
   const [busy, setBusy] = useState<PaymentBusy>("idle");
   // A write in flight (Qt `m_saving`). The keyboard reaches Save and Post
@@ -112,9 +133,28 @@ export function usePaymentDraft(options: UsePaymentDraftOptions) {
   const writing = useRef(false);
 
   const latest = useRef(draft);
+  /** `busy` as last painted — what an unmount cleanup can still read. */
+  const busyRef = useRef(busy);
   useEffect(() => {
     latest.current = draft;
+    busyRef.current = busy;
   });
+
+  // ── Screen memory ─────────────────────────────────────────────────────────
+  // The receipt's: written through on every change, forgotten once nothing on
+  // screen is unsaved, and forgotten when the screen goes with a write still
+  // out — it lands after the screen is gone, and the payment must not come
+  // back to be paid twice.
+  const snapshot = useMemo<PaymentSnapshot>(() => ({ draft }), [draft]);
+  useRememberWrite(memory, snapshot, {
+    scopeOf: voucherScopeOf,
+    shouldKeep: isVoucherWorthRemembering,
+  });
+  useForgetIfWritingOnUnmount(
+    memory,
+    () => writing.current || isVoucherWriteInFlight(busyRef.current),
+    () => latest.current.header.scope,
+  );
 
   // ── Reads go through `initiate` — see the receipt's note on lazy triggers ──
   const storeDispatch = useAppDispatch();
@@ -193,8 +233,9 @@ export function usePaymentDraft(options: UsePaymentDraftOptions) {
   );
 
   // ── A fresh payment starts with one instrument on the default tender ──────
-  // Not dirty: an untouched row is furniture.
-  const seededTender = useRef(false);
+  // Not dirty: an untouched row is furniture. A payment brought back from
+  // screen memory counts as seeded: whatever rows it has are the operator's.
+  const seededTender = useRef(resumed);
   useEffect(() => {
     if (draft.tenders.length > 0 || masters.length === 0 || draft.header.voucherId) {
       return;
@@ -524,7 +565,8 @@ export function usePaymentDraft(options: UsePaymentDraftOptions) {
       resetToNew();
       return true;
     } catch (error) {
-      toast.error(paymentError(error));
+      // A refusal saved nothing: the payment is still on the screen (Qt nexKeptLine).
+      toast.apiError(error, { kept: "Payment not lost." });
       return false;
     } finally {
       writing.current = false;
@@ -616,13 +658,14 @@ export function usePaymentDraft(options: UsePaymentDraftOptions) {
       if (statusOf(error) === 409) {
         // The server worked something out differently — a bill moved, the
         // TDS rate or the year's base changed, a book ran out. Show both.
-        toast.error(
-          `${paymentError(error)} This screen made it ${formatTotal(figures.allocated)} ` +
-            `allocated and ${formatTotal(figures.onAccount)} on account. Press F6 to re-read ` +
-            "the bills and try again.",
-        );
+        toast.apiError(error, {
+          kept:
+            `This screen made it ${formatTotal(figures.allocated)} allocated and ` +
+            `${formatTotal(figures.onAccount)} on account. Press F6 to re-read the bills and try again.\n` +
+            "Payment not lost.",
+        });
       } else {
-        toast.error(paymentError(error));
+        toast.apiError(error, { kept: "Payment not lost." });
       }
       return false;
     } finally {
@@ -881,6 +924,36 @@ export function usePaymentDraft(options: UsePaymentDraftOptions) {
     [confirm, fetchAdjacent, openByKeys, scope],
   );
 
+  // ── Back from screen memory ───────────────────────────────────────────────
+  /**
+   * The payment came back from screen memory: say so once, and re-read the
+   * payee's context panels. Not the bills — `/open-items` replaces them and
+   * every allocation with them (the receipt's `finishResume` says more).
+   */
+  const finishResume = useCallback(async () => {
+    // One tick first: this runs from the mount effect, and a request fired
+    // there is dropped by StrictMode's simulated unmount.
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    toast.info(restoredMessage("payment"), RESTORED_MESSAGE_OPTIONS);
+    const { header } = latest.current;
+    if (!header.partyId || !header.scope.companyId) {
+      return;
+    }
+    void fetchPartyContext({ partyId: header.partyId, companyId: header.scope.companyId })
+      .then((context) =>
+        dispatch({ type: "CONTEXT_LOADED", partyId: header.partyId, payload: context }),
+      )
+      // A failed re-read keeps the panels it came back with.
+      .catch(() => undefined);
+  }, [fetchPartyContext]);
+
+  /** The operator discarded the payment: it must not come back. */
+  const forgetRemembered = useCallback(() => {
+    if (memory) {
+      screenMemory.forget(memory.key, voucherScopeOf({ draft: latest.current }));
+    }
+  }, [memory]);
+
   return {
     draft,
     dispatch,
@@ -890,6 +963,9 @@ export function usePaymentDraft(options: UsePaymentDraftOptions) {
     canWrite,
     editable: isPaymentEditable(draft),
     identityHint: paymentIdentityHint(identity),
+    resumed,
+    finishResume,
+    forgetRemembered,
     pickParty,
     setVoucherDate,
     reloadItems,

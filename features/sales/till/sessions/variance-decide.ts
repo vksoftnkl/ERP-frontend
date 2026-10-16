@@ -175,7 +175,10 @@ export const BAG_DECIDE_HINT =
   "count stands, so there is no recount. Not that supervisor, not the cashier.";
 
 export type DecideRefusal = {
-  /** The red line under the form. */
+  /**
+   * The code and the server's sentence. The dialog shows the plain words
+   * (`TillError.refusal`, Qt ec9d92d) — this stays for the log and the tests.
+   */
   line: string;
   /** The control it is about, to take the focus. */
   focus: "pin" | "treatment" | "reason" | null;

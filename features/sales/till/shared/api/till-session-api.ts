@@ -1,7 +1,8 @@
 /**
- * The till session's routes — `/till/sessions/*`, `/till/movements/create`,
- * `/till/denominations/list` — and the configured grids the session screens
- * read (144–148, 134), one typed function each.
+ * The till session's routes — `/till/sessions/*`, `/till/movements/*`,
+ * `/till/denominations/list` — the safe's (`/till/safes/*`, remit, notes 118)
+ * and the configured grids the till screens read (134, 144–148, 157, 158),
+ * one typed function each.
  *
  * The requests ride `baseApi` for the bearer token and its refresh-on-401.
  * Both endpoints are MUTATIONS: a read is a mutation that sends a GET (the
@@ -30,12 +31,21 @@ import { getGridId, type ConfiguredGridKey } from "@/lib/configured-grids";
 import type {
   GridRow,
   TillCashApprovalResult,
+  TillChangeResult,
   TillCountLine,
   TillCountResult,
   TillDenominationRow,
   TillForceCloseResult,
   TillMovementDetail,
+  TillMovementFull,
   TillOpenCheck,
+  TillRemitConfirmResult,
+  TillRemitMode,
+  TillRemitResult,
+  TillSafeBalance,
+  TillSafeCountResult,
+  TillSafeDecisionResult,
+  TillSafeGapTreatment,
   TillSessionKey,
   TillSessionPayload,
   TillSessionReopenResult,
@@ -202,6 +212,103 @@ export type TillReopenBody = TillSessionKey & {
   notes?: string;
 };
 
+/**
+ * `TillChangeDto` (273 OVERRIDE): change carried between two live counters — a
+ * PICKUP on `fromTssId` and a TOP_UP on `toTssId`, both through the counters'
+ * safe. The giving cashier always signs (`fromWitnessPin`); the taking one too
+ * (`toWitnessPin`) unless the caller is that cashier. A PICKUP reason.
+ */
+export type TillChangeBody = {
+  companyId: string;
+  branchId: string;
+  accYear: string;
+  fromTssId: string;
+  toTssId: string;
+  lines: TillCountLine[];
+  reasonId: string;
+  fromWitnessPin?: string | null;
+  toWitnessPin?: string | null;
+  notes?: string | null;
+};
+
+/**
+ * `VoidTillMovementDto`: a hand-posted movement (273 OVERRIDE) or a remittance
+ * (287 OVERRIDE) voided — its voucher mirrored, the row VOIDED. A MOVEMENT_VOID reason.
+ */
+export type TillVoidMovementBody = {
+  companyId: string;
+  branchId: string;
+  accYear: string;
+  tcmId: string;
+  reasonId: string;
+  notes?: string | null;
+};
+
+/** `CountTillSafeDto` (287 CREATE): a blind count of the safe, an optional witness with their till PIN. */
+export type TillSafeCountBody = {
+  companyId: string;
+  branchId: string;
+  safeId: string;
+  lines: TillCountLine[];
+  notes?: string | null;
+  witnessId?: string | null;
+  witnessPin?: string | null;
+  /** Deciding the gap in the same step (287 OVERRIDE) — the web screen, like Qt, never sends it. */
+  treatment?: TillSafeGapTreatment | null;
+  reasonId?: string | null;
+  approverPin?: string | null;
+};
+
+/** `DecideTillSafeVarianceDto` (287 OVERRIDE): a PENDING safe gap, two-person as shipped. */
+export type TillSafeDecideBody = {
+  companyId: string;
+  branchId: string;
+  accYear: string;
+  tvrId: string;
+  treatment: TillSafeGapTreatment;
+  /** A VARIANCE reason. */
+  reasonId: string;
+  approverPin?: string | null;
+  secondId?: string | null;
+  secondPin?: string | null;
+  notes?: string | null;
+};
+
+/** `RemitTillCashDto` (287 CREATE): cash from the safe to the bank. */
+export type TillRemitBody = {
+  companyId: string;
+  branchId: string;
+  safeId: string;
+  amount: number;
+  bankLedgerId: string;
+  mode: TillRemitMode;
+  bagNo?: string | null;
+  sealNo?: string | null;
+  citAgency?: string | null;
+  slipNo?: string | null;
+  /** yyyy-MM-dd. */
+  slipDate?: string | null;
+  /** The notes sent (optional); must make `amount`. */
+  lines?: TillCountLine[] | null;
+  notes?: string | null;
+  approverId?: string | null;
+  approverPin?: string | null;
+};
+
+/** `ConfirmTillRemitDto` (287 CREATE): a CIT remittance against the bank statement. */
+export type TillRemitConfirmBody = {
+  companyId: string;
+  branchId: string;
+  accYear: string;
+  tcmId: string;
+  /** yyyy-MM-dd. */
+  bankDate: string;
+  bankRef: string;
+  /** Left out = what was sent. */
+  bankAmount?: number | null;
+  notes?: string | null;
+};
+
 export type TillSessionClient = {
   openCheck: (scope: { companyId: string; branchId: string; counterId?: string }) => Promise<TillOpenCheck>;
   /** `openCheck` for a timer: a query, so it is not announced as a data change (see the header). */
@@ -232,6 +339,16 @@ export type TillSessionClient = {
   createMovement: (body: TillMovementBody) => Promise<TillMovementDetail>;
   /** Notes 110: who may sign a pickup / top-up on the session — 273 OVERRIDE, active, never its cashier. */
   supervisors: (key: TillSessionKey) => Promise<TillSupervisor[]>;
+  /** A supervisor's change between two live counters (273 OVERRIDE). */
+  movementChange: (body: TillChangeBody) => Promise<TillChangeResult>;
+  /** A supervisor's void of a hand-posted movement (273 OVERRIDE) or a remittance (287 OVERRIDE). */
+  movementVoid: (body: TillVoidMovementBody) => Promise<TillMovementFull>;
+  /** Notes 118 — the branch's safes and the CIT remittances in transit (287 / 273 VIEW). */
+  safeBalance: (scope: { companyId: string; branchId: string; safeId?: string }) => Promise<TillSafeBalance>;
+  safeCount: (body: TillSafeCountBody) => Promise<TillSafeCountResult>;
+  safeDecideVariance: (body: TillSafeDecideBody) => Promise<TillSafeDecisionResult>;
+  remit: (body: TillRemitBody) => Promise<TillRemitResult>;
+  remitConfirm: (body: TillRemitConfirmBody) => Promise<TillRemitConfirmResult>;
   denominations: (companyId: string) => Promise<TillDenominationRow[]>;
   /** Every row of a configured grid, every page of it. */
   gridRows: (grid: ConfiguredGridKey, params: Record<string, string>) => Promise<GridRow[]>;
@@ -265,6 +382,14 @@ export function createTillSessionClient(dispatch: AppDispatch): TillSessionClien
       const data = await read<TillSupervisor[] | null>(dispatch, "/till/movements/supervisors", keyParams(key));
       return Array.isArray(data) ? data : [];
     },
+    movementChange: (body) => write(dispatch, "/till/movements/change", body),
+    movementVoid: (body) => write(dispatch, "/till/movements/void", body),
+    safeBalance: ({ companyId, branchId, safeId }) =>
+      read(dispatch, "/till/safes/balance", { companyId, branchId, ...(safeId ? { safeId } : {}) }),
+    safeCount: (body) => write(dispatch, "/till/safes/count", body),
+    safeDecideVariance: (body) => write(dispatch, "/till/safes/decide-variance", body),
+    remit: (body) => write(dispatch, "/till/movements/remit", body),
+    remitConfirm: (body) => write(dispatch, "/till/movements/remit-confirm", body),
     denominations: async (companyId) => {
       const data = await read<TillDenominationRow[] | { items?: TillDenominationRow[] }>(
         dispatch,

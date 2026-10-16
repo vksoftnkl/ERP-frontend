@@ -1,9 +1,10 @@
 "use client";
 
 /**
- * Close with exception — Qt `TillDayExceptionDialog` (c77f3f1, notes 117):
- * the day closes while sessions are still live, the only RED an exception
- * may cover. Opened only when the close-check says `canCloseWithException`.
+ * Close with exception — Qt `TillDayExceptionDialog` (c77f3f1, notes 117;
+ * bec3f98, notes 118): the day closes over the REDs an exception may cover —
+ * sessions still live, and the safe not counted. Opened only when the
+ * close-check says `canCloseWithException`.
  *
  * One drawer count per live session (the picker switches between them), a
  * DAY_CLOSE reason, and an approver — a store manager other than the caller,
@@ -11,13 +12,21 @@
  * Sessions (273) OVERRIDE holders. `POST /till/days/close` with
  * `exception { reasonId, approverId, approverPin, counts: [{ tssId, lines }] }`
  * force-closes each session on its count; a forced count out of tolerance
- * rolls the whole close back, and the server says so here.
+ * rolls the whole close back, and the server says so here — in plain words,
+ * its own sentence grey under them.
+ *
+ * With NO live session (only the safe not counted) there is nothing to count:
+ * the count frame is hidden, the intro says so, and the approvers are the
+ * company's active users (dropdown 68 TILL APPROVER USERS, the caller left
+ * out); `counts` goes empty.
  *
  * Keys: Enter walks a count (then on to the approver), Ctrl+Enter closes the
  * day, Esc cancels.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cx } from "@/components/design-system/cx";
+import RefusalText from "@/components/feedback/refusal-text";
+import type { ApiRefusal } from "@/lib/api/error-text";
 import { getAuthUserId } from "@/lib/auth/session";
 import { DenomCount } from "../../session/denom-count";
 import {
@@ -28,16 +37,19 @@ import {
   type DenomCountValue,
   type Denomination,
 } from "../../shared/denom";
+import { tillErrorOf } from "../../shared/errors";
 import { TillDialog } from "../../shared/till-dialog";
 import tillStyles from "../../shared/till.module.scss";
 import { useBusinessDayClient } from "../api/business-day-api";
 import {
   EXCEPTION_HINT,
   approverChoices,
+  approverUsersOf,
   countsDoneLine,
   dayReasonParams,
   exceptionBody,
   exceptionIntro,
+  exceptionModeOf,
   exceptionProblem,
   isPinRefusal,
   reasonChoices,
@@ -55,7 +67,7 @@ const APPROVER_ID = `${ID}-approver`;
 
 export type DayExceptionDialogProps = {
   dayKey: DayKey;
-  /** The SESSIONS_LIVE sessions, one count each. */
+  /** The SESSIONS_LIVE sessions, one count each; none = the exception covers only the safe. */
   pages: readonly ExceptionPage[];
   onClose: () => void;
   /** The server closed the day. */
@@ -64,17 +76,22 @@ export type DayExceptionDialogProps = {
 
 const EMPTY_DRAFT: ExceptionDraft = { reasonId: "", note: "", approverId: "", pin: "" };
 
+/** The red line: a sentence of the dialog's own, or the server's refusal in plain words. */
+type ErrorLine = { text: string } | { refusal: ApiRefusal } | null;
+
 export function DayExceptionDialog({ dayKey, pages, onClose, onClosed }: DayExceptionDialogProps) {
   const client = useBusinessDayClient();
+  const mode = exceptionModeOf(pages);
   const [denominations, setDenominations] = useState<Denomination[]>([]);
-  const [denomsLoading, setDenomsLoading] = useState(true);
+  // Nothing to count with nothing live: the notes and coins are not read.
+  const [denomsLoading, setDenomsLoading] = useState(mode === "sessions");
   const [reasons, setReasons] = useState<ReasonChoice[]>([]);
   const [approvers, setApprovers] = useState<ApproverChoice[]>([]);
   const [page, setPage] = useState(0);
   const [counts, setCounts] = useState<Readonly<Record<string, DenomCountValue>>>({});
   const [draft, setDraft] = useState<ExceptionDraft>(EMPTY_DRAFT);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<ErrorLine>(null);
   /** Two Ctrl+Enters inside one render must not send two closes. */
   const inFlight = useRef(false);
   const pinRef = useRef<HTMLInputElement>(null);
@@ -84,17 +101,21 @@ export function DayExceptionDialog({ dayKey, pages, onClose, onClosed }: DayExce
 
   useEffect(() => {
     let cancelled = false;
-    client
-      .denominations(companyId)
-      .then((rows) => {
-        if (!cancelled) setDenominations(toDenominations(rows));
-      })
-      .catch((thrown) => {
-        if (!cancelled) setError(`The denominations could not be read: ${firstErrorOf(thrown, "no answer").message}`);
-      })
-      .finally(() => {
-        if (!cancelled) setDenomsLoading(false);
-      });
+    if (mode === "sessions") {
+      client
+        .denominations(companyId)
+        .then((rows) => {
+          if (!cancelled) setDenominations(toDenominations(rows));
+        })
+        .catch((thrown) => {
+          if (!cancelled) {
+            setError({ text: `The denominations could not be read: ${firstErrorOf(thrown, "no answer").message}` });
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setDenomsLoading(false);
+        });
+    }
     // No reasons: the dialog says a reason is needed and the close waits (Qt swallows it too).
     client
       .gridRows("tillReasonList", null, dayReasonParams(companyId, "DAY_CLOSE"))
@@ -105,22 +126,35 @@ export function DayExceptionDialog({ dayKey, pages, onClose, onClosed }: DayExce
     return () => {
       cancelled = true;
     };
-  }, [client, companyId]);
+  }, [client, companyId, mode]);
 
   // Who may sign for the first live session (not its cashier) — the caller
-  // left out, as the rule wants someone else.
+  // left out, as the rule wants someone else. Nothing live: the company's
+  // active users (dropdown 68); the server judges the grant.
   useEffect(() => {
-    if (!firstTssId) return;
     let cancelled = false;
     const me = getAuthUserId() ?? "";
-    client
-      .supervisors({ companyId, branchId, accYear, tssId: firstTssId })
-      .then((rows) => {
-        if (!cancelled) setApprovers(approverChoices(rows, me));
-      })
-      .catch((thrown) => {
-        if (!cancelled) setError(`The approvers could not be listed: ${firstErrorOf(thrown, "no answer").message}`);
-      });
+    if (!firstTssId) {
+      client
+        .approverUsers(companyId)
+        .then((rows) => {
+          if (!cancelled) setApprovers(approverUsersOf(rows, me));
+        })
+        .catch((thrown) => {
+          if (!cancelled) setError({ refusal: tillErrorOf(thrown, "The approvers could not be listed.").refusal });
+        });
+    } else {
+      client
+        .supervisors({ companyId, branchId, accYear, tssId: firstTssId })
+        .then((rows) => {
+          if (!cancelled) setApprovers(approverChoices(rows, me));
+        })
+        .catch((thrown) => {
+          if (!cancelled) {
+            setError({ text: `The approvers could not be listed: ${firstErrorOf(thrown, "no answer").message}` });
+          }
+        });
+    }
     return () => {
       cancelled = true;
     };
@@ -145,13 +179,14 @@ export function DayExceptionDialog({ dayKey, pages, onClose, onClosed }: DayExce
     if (!canClose || inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
-    setError("");
+    setError(null);
     try {
       onClosed(await client.closeDay(exceptionBody(dayKey, draft, counted)));
     } catch (thrown) {
-      // The server's own sentence: approver, PIN, a missing or out-of-tolerance count are its calls.
-      const refusal = firstErrorOf(thrown, "The business day could not be closed.");
-      setError(refusal.message);
+      // Approver, PIN, a missing or out-of-tolerance count are the server's
+      // calls: its refusal in plain words, its sentence in grey.
+      const refusal = tillErrorOf(thrown, "The business day could not be closed.");
+      setError({ refusal: refusal.refusal });
       if (isPinRefusal(refusal)) {
         patch({ pin: "" });
         pinRef.current?.focus();
@@ -227,40 +262,42 @@ export function DayExceptionDialog({ dayKey, pages, onClose, onClosed }: DayExce
         />
       </div>
 
-      <div className={tillStyles.card}>
-        <div className={tillStyles.inlineRow}>
-          <label className={tillStyles.formLabel} htmlFor={`${ID}-session`}>
-            Drawer of
-          </label>
-          <select
-            id={`${ID}-session`}
-            className={cx(tillStyles.select, styles.dialogGrow)}
-            value={String(at)}
-            onChange={(event) => setPage(Number(event.target.value))}
-          >
-            {pages.map((entry, index) => (
-              <option key={entry.tssId} value={String(index)}>
-                {entry.label}
-              </option>
-            ))}
-          </select>
-          <span className={tillStyles.cap}>Counted</span>
-          <span className={tillStyles.figure}>{formatMoney(BigInt(current?.paise ?? 0))}</span>
+      {mode === "sessions" ? (
+        <div className={tillStyles.card}>
+          <div className={tillStyles.inlineRow}>
+            <label className={tillStyles.formLabel} htmlFor={`${ID}-session`}>
+              Drawer of
+            </label>
+            <select
+              id={`${ID}-session`}
+              className={cx(tillStyles.select, styles.dialogGrow)}
+              value={String(at)}
+              onChange={(event) => setPage(Number(event.target.value))}
+            >
+              {pages.map((entry, index) => (
+                <option key={entry.tssId} value={String(index)}>
+                  {entry.label}
+                </option>
+              ))}
+            </select>
+            <span className={tillStyles.cap}>Counted</span>
+            <span className={tillStyles.figure}>{formatMoney(BigInt(current?.paise ?? 0))}</span>
+          </div>
+          {current ? (
+            <DenomCount
+              // A page of its own per drawer: the Qt stacked widget.
+              key={current.tssId}
+              idPrefix={`${ID}-${at}`}
+              denominations={denominations}
+              loading={denomsLoading}
+              value={counts[current.tssId] ?? EMPTY_COUNT}
+              onChange={(next) => setCounts((all) => ({ ...all, [current.tssId]: next }))}
+              onDone={() => document.getElementById(APPROVER_ID)?.focus()}
+            />
+          ) : null}
+          {pages.length > 1 ? <p className={tillStyles.muted}>{countsDoneLine(counted)}</p> : null}
         </div>
-        {current ? (
-          <DenomCount
-            // A page of its own per drawer: the Qt stacked widget.
-            key={current.tssId}
-            idPrefix={`${ID}-${at}`}
-            denominations={denominations}
-            loading={denomsLoading}
-            value={counts[current.tssId] ?? EMPTY_COUNT}
-            onChange={(next) => setCounts((all) => ({ ...all, [current.tssId]: next }))}
-            onDone={() => document.getElementById(APPROVER_ID)?.focus()}
-          />
-        ) : null}
-        {pages.length > 1 ? <p className={tillStyles.muted}>{countsDoneLine(counted)}</p> : null}
-      </div>
+      ) : null}
 
       <div className={tillStyles.formGrid}>
         <label className={tillStyles.formLabel} htmlFor={APPROVER_ID}>
@@ -299,7 +336,7 @@ export function DayExceptionDialog({ dayKey, pages, onClose, onClosed }: DayExce
       <p className={tillStyles.muted}>{EXCEPTION_HINT}</p>
       {error ? (
         <p className={cx(tillStyles.warn, tillStyles.warnDanger)} role="alert">
-          {error}
+          {"refusal" in error ? <RefusalText refusal={error.refusal} /> : error.text}
         </p>
       ) : null}
     </TillDialog>

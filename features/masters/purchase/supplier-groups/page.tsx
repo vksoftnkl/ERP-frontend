@@ -430,6 +430,7 @@ export default function SupplierGroupsPage() {
   return (
     <>
     <CrudMasterPage
+      modalDraftKey="supplier-group"
       title="Supplier Group"
       iconName="supplier_group_master"
       auditHistory={{ screenName: "Supplier Group Master" }}

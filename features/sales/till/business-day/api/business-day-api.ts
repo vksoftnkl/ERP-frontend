@@ -9,6 +9,8 @@
  *   POST /till/days/reopen            Reopen day (274 EDIT)
  *   GET  /till/movements/supervisors  the exception's approvers
  *   GET  /till/denominations/list     the exception's drawer counts
+ *   GET  /dropdown-details/run        TILL APPROVER USERS (68): the exception's approvers
+ *                                     when no session is live (notes 118)
  *   GET  /configured-grid-sql/run     TILL DAY SESSIONS · MAIN LIST - TILL BUSINESS DAYS ·
  *                                     MAIN LIST - TILL SAFES · MAIN LIST - TILL REASONS
  *
@@ -33,10 +35,12 @@
  */
 import { useMemo } from "react";
 import { baseApi } from "@/store/api/baseApi";
+import { buildDropdownRunQuery } from "@/components/design-system/dropdown/api";
+import { getDropdownId } from "@/lib/configured-dropdowns";
 import { getGridId, type ConfiguredGridKey } from "@/lib/configured-grids";
 import { useAppDispatch } from "@/store/hooks";
 import type { AppDispatch } from "@/store";
-import type { CloseDayBody, ReopenDayBody } from "../domain/day-close";
+import { approverDropdownParams, type CloseDayBody, type ReopenDayBody } from "../domain/day-close";
 import type { TillDenominationRow } from "../../shared/wire/types";
 import {
   listOf,
@@ -62,6 +66,7 @@ const DAY_REOPEN_ENDPOINT = "/till/days/reopen";
 const SUPERVISORS_ENDPOINT = "/till/movements/supervisors";
 const DENOMINATIONS_ENDPOINT = "/till/denominations/list";
 const GRID_RUN_ENDPOINT = "/configured-grid-sql/run";
+const DROPDOWN_RUN_ENDPOINT = "/dropdown-details/run";
 /** The runner caps `limit` at 100. */
 const GRID_PAGE_LIMIT = 100;
 /** A guard, not a business limit: a branch does not run 1,000 sessions a day. */
@@ -95,6 +100,19 @@ export const businessDayApi = baseApi.injectEndpoints({
     }),
     tillDayDenominations: builder.query<unknown, { companyId: string }>({
       query: (params) => ({ url: DENOMINATIONS_ENDPOINT, params }),
+      keepUnusedDataFor: 0,
+    }),
+    tillDayApproverUsers: builder.query<unknown, { dropdownId: string; companyId: string }>({
+      // One page of 100, as Qt reads it: the approver is picked from a plain list.
+      query: ({ dropdownId, companyId }) => ({
+        url: DROPDOWN_RUN_ENDPOINT,
+        params: buildDropdownRunQuery({
+          dropdownId,
+          page: 1,
+          limit: GRID_PAGE_LIMIT,
+          params: approverDropdownParams(companyId),
+        }),
+      }),
       keepUnusedDataFor: 0,
     }),
     tillDayGridRun: builder.query<unknown, GridRunArgs>({
@@ -131,6 +149,8 @@ export type BusinessDayClient = {
   reopenDay: (body: ReopenDayBody) => Promise<TillDay | null>;
   /** Who may sign for a session (Till Sessions 273 OVERRIDE), its cashier left out by the server. */
   supervisors: (key: { companyId: string; branchId: string; accYear: string; tssId: string }) => Promise<Supervisor[]>;
+  /** The company's active users (dropdown 68 TILL APPROVER USERS) — the approvers when nothing is live. */
+  approverUsers: (companyId: string) => Promise<GridRow[]>;
   /** The company's notes and coins, for a drawer count. */
   denominations: (companyId: string) => Promise<TillDenominationRow[]>;
   /** Every page of one configured grid. */
@@ -185,6 +205,15 @@ export function createBusinessDayClient(dispatch: AppDispatch): BusinessDayClien
       parseSupervisors(
         await dispatch(
           businessDayApi.endpoints.tillDaySupervisors.initiate({ companyId, branchId, accYear, tssId }, READ),
+        ).unwrap(),
+      ),
+    approverUsers: async (companyId) =>
+      listOf(
+        await dispatch(
+          businessDayApi.endpoints.tillDayApproverUsers.initiate(
+            { dropdownId: getDropdownId("tillApproverUser"), companyId },
+            READ,
+          ),
         ).unwrap(),
       ),
     denominations: async (companyId) =>

@@ -4,7 +4,9 @@
  * Decide variance — Qt `TillVarianceDecideDialog`: the approver's decision on
  * a PENDING_APPROVAL session, opened from the Session Cockpit's Approve.
  * APPROVE with a treatment and a reason, or RECOUNT; a note always, the till
- * PIN when the rule asks for it. What it decides is `variance-decide.ts`.
+ * PIN when the rule asks for it. What it decides is `variance-decide.ts`; a
+ * refusal is said in plain words beside the form, the server's sentence grey
+ * beneath (Qt ec9d92d), and the control it is about takes the focus.
  *
  * Bag mode (`request.bag`, notes 113): a received bag's difference — APPROVE
  * only (no Recount), the bag named in the Event fact, its `tcmId` sent.
@@ -13,6 +15,8 @@
  */
 import { useRef, useState } from "react";
 import { cx } from "@/components/design-system/cx";
+import RefusalText from "@/components/feedback/refusal-text";
+import type { ApiRefusal } from "@/lib/api/error-text";
 import { useTillSessionClient } from "../shared/api/till-session-api";
 import { tillErrorOf } from "../shared/errors";
 import type { TillReason } from "../shared/reasons";
@@ -53,7 +57,7 @@ function DecideBody({ request, reasons, onClose, onDecided }: VarianceDecideDial
   const client = useTillSessionClient();
   const [form, setForm] = useState<DecideForm>(() => initialDecideForm(request.event));
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [refusal, setRefusal] = useState<ApiRefusal | null>(null);
   /** Two Ctrl+Enters inside one render must not send two decisions. */
   const inFlight = useRef(false);
   const pinRef = useRef<HTMLInputElement>(null);
@@ -73,17 +77,18 @@ function DecideBody({ request, reasons, onClose, onDecided }: VarianceDecideDial
     if (!canDecide || inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
-    setError("");
+    setRefusal(null);
     try {
       await client.decideVariance(decideBody(request.key, form, request.bag?.tcmId ?? ""));
       onDecided(form.decision);
     } catch (thrown) {
-      const refusal = decideRefusal(tillErrorOf(thrown, "The decision could not be recorded."));
-      setError(refusal.line);
-      if (refusal.clearPin) patch({ pin: "" });
+      const read = tillErrorOf(thrown, "The decision could not be recorded.");
+      const refused = decideRefusal(read);
+      setRefusal(read.refusal);
+      if (refused.clearPin) patch({ pin: "" });
       // The fields stay enabled while the request is out (only the button
       // waits, as in Qt), so the control the refusal is about takes the focus now.
-      const target = refusal.focus === "pin" ? pinRef : refusal.focus === "treatment" ? treatmentRef : refusal.focus === "reason" ? reasonRef : null;
+      const target = refused.focus === "pin" ? pinRef : refused.focus === "treatment" ? treatmentRef : refused.focus === "reason" ? reasonRef : null;
       target?.current?.focus();
     } finally {
       inFlight.current = false;
@@ -237,7 +242,11 @@ function DecideBody({ request, reasons, onClose, onDecided }: VarianceDecideDial
       </div>
 
       <p className={styles.muted}>{request.bag ? BAG_DECIDE_HINT : DECIDE_HINT}</p>
-      {error ? <p className={cx(styles.warn, styles.warnDanger)}>{error}</p> : null}
+      {refusal ? (
+        <p className={cx(styles.warn, styles.warnDanger)}>
+          <RefusalText refusal={refusal} />
+        </p>
+      ) : null}
     </TillDialog>
   );
 }

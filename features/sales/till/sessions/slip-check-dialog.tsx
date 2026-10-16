@@ -11,7 +11,6 @@ import { useEffect, useState } from "react";
 import { cx } from "@/components/design-system/cx";
 import { toast } from "@/lib/notify";
 import { useTillSessionClient } from "../shared/api/till-session-api";
-import { tillErrorOf } from "../shared/errors";
 import { amountInputPaise, formatMoney, isAmountDraft } from "../shared/money";
 import { TillDialog, TonePill } from "../shared/till-dialog";
 import type { TillSessionKey, TillSlipCheckPayload } from "../shared/wire/types";
@@ -68,7 +67,7 @@ function SlipCheckBody({ sessionKey, tenders, onClose }: { sessionKey: TillSessi
         if (cancelled) return;
         setData(null);
         setMarks([]);
-        toast.error(tillErrorOf(error, "The slip check could not be read.").text);
+        toast.apiError(error, { fallback: "The slip check could not be read." });
       });
     return () => {
       cancelled = true;
@@ -104,7 +103,7 @@ function SlipCheckBody({ sessionKey, tenders, onClose }: { sessionKey: TillSessi
           `${answer.slipsWithoutRow} slip(s) with no row.`,
       );
     } catch (error) {
-      toast.error(tillErrorOf(error, "The slip check could not be recorded.").text);
+      toast.apiError(error, { fallback: "The slip check could not be recorded." });
     } finally {
       setBusy(false);
     }

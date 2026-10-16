@@ -3,7 +3,6 @@
 import { cx } from "@/components/design-system/cx";
 import {
   CHECK_TONE_NAMES,
-  NOT_ON_SERVER,
   type Check,
   type CheckTone,
   type DayHead,
@@ -57,8 +56,9 @@ export function FactsStrip({ facts }: { facts: DayHead["facts"] }) {
 
 /**
  * The checklist rows: tone pill, title over detail, and the jump that fixes
- * it — a session's cockpit, another screen (Till Sessions), or nothing yet
- * (Remit: off with the reason).
+ * it — a session's cockpit, or another screen (Till Sessions; the Cash Office
+ * on its count or remit tab). A jump with nowhere to go (a session the day
+ * cannot name) is off.
  */
 export function Checklist({
   checks,
@@ -87,7 +87,6 @@ export function Checklist({
                 type="button"
                 className={styles.checkAction}
                 disabled={!live}
-                title={live ? undefined : NOT_ON_SERVER}
                 onClick={() => {
                   if (session) onOpenSession(session);
                   else if (href) onOpenHref(href);

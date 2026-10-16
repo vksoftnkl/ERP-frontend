@@ -5,7 +5,8 @@
  *
  *   GET  /till/days/get   ?companyId&branchId[&tbdId&accYear]   → TillDayPayload
  *                         no tbdId = today's business date (now − till.day_cutoff);
- *                         404 when nobody has opened it yet
+ *                         404 when nobody has opened it yet; `safe` = the day's
+ *                         safe figures (notes 118)
  *   POST /till/days/open  { companyId, branchId }               → TillDayPayload
  *                         idempotent: an open day comes back as it is
  *   GET  /till/days/close-check ?companyId&branchId&tbdId&accYear → TillDayCloseCheckPayload
@@ -18,6 +19,8 @@
  *                         → TillDayReopenPayload { day, tapId }
  *   GET  /till/movements/supervisors ?companyId&branchId&accYear&tssId → TillSupervisorPayload[]
  *   GET  /till/denominations/list    ?companyId                        → the cash count's notes and coins
+ *   GET  /dropdown-details/run       TILL APPROVER USERS (68), `icompany_id` → the exception's
+ *                                    approvers when no session is live (notes 118)
  *
  * Every DTO is whitelisted with forbidNonWhitelisted, so nothing else is sent.
  * A refusal is the till module's own body (till-exception.filter.ts):
@@ -32,6 +35,7 @@
  * silently filters to nothing — the builders below always send all of them.
  */
 import { clock12Of } from "@/lib/time-format";
+import { paiseOrZero, toPaise } from "./decimal";
 
 export type DayStatus = "OPEN" | "CLOSING" | "CLOSED";
 
@@ -62,6 +66,23 @@ export type TillDay = {
   handoverReceipt: string;
   /** Notes 113 — hand-overs and drops nobody has approved yet (no amount: the receive is blind). */
   awaitingReceipt: AwaitingReceipt;
+  /** Notes 118 — the day's safe figures; `null` from a server that does not send them. */
+  safe: DaySafe | null;
+};
+
+/**
+ * Notes 118 — the day's `safe` block, in paise: kept current by every safe
+ * count and remittance, frozen at the close. `counted` is null while no safe
+ * was counted that day (`expected` is then the safes' expected balance);
+ * `opening` is written at the close.
+ */
+export type DaySafe = {
+  opening: bigint;
+  /** What the safes should hold — what a count is judged against. */
+  expected: bigint;
+  counted: bigint | null;
+  /** The day's live remittances (sent to bank). */
+  remitted: bigint;
 };
 
 export type AwaitingReceipt = {
@@ -131,6 +152,18 @@ export function parseDay(raw: unknown): TillDay | null {
     sessions,
     handoverReceipt: text(data.handoverReceipt).trim().toUpperCase(),
     awaitingReceipt: awaitingOf(data.awaitingReceipt),
+    safe: daySafeOf(data.safe),
+  };
+}
+
+/** The `safe` block; `null` when there is none (Qt: an empty object shows nothing). */
+function daySafeOf(raw: unknown): DaySafe | null {
+  if (!isRecord(raw) || Object.keys(raw).length === 0) return null;
+  return {
+    opening: paiseOrZero(raw.opening),
+    expected: paiseOrZero(raw.expected),
+    counted: toPaise(raw.counted),
+    remitted: paiseOrZero(raw.remitted),
   };
 }
 
@@ -234,7 +267,8 @@ export type DayCloseResult = {
 export function parseCloseResult(raw: unknown): DayCloseResult {
   const data = unwrap(raw);
   if (!isRecord(data)) return { day: null, zNo: "", forcedCount: null };
-  // `{ day, zNo, … }`; a bare day is read too (Qt read `tbdZNo` straight off `data`).
+  // `{ day, zNo, … }`: the Z is `zNo`, else the day's `tbdZNo` (Qt bec3f98 —
+  // no top-level tbdZNo is sent). A bare day is still read, for an older body.
   const day = parseDay(isRecord(data.day) ? data.day : data);
   const zNo = text(data.zNo).trim() || day?.tbdZNo || text(data.tbdZNo).trim();
   return { day, zNo, forcedCount: Array.isArray(data.forceClosed) ? data.forceClosed.length : null };

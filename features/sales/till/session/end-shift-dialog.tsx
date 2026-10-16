@@ -21,7 +21,6 @@ import { confirm } from "@/lib/confirm";
 import { toast } from "@/lib/notify";
 import { useTillSessionClient } from "../shared/api/till-session-api";
 import { EMPTY_COUNT, countLines, countedPaise, toDenominations, type DenomCountValue, type Denomination } from "../shared/denom";
-import { tillErrorOf } from "../shared/errors";
 import { formatMoney, isAmountDraft } from "../shared/money";
 import { clearTillSession, getTillSession, patchTillSessionStatus } from "../shared/session-store";
 import { TillDialog, TonePill } from "../shared/till-dialog";
@@ -85,6 +84,8 @@ function EndShiftBody({ sessionKey, onClose, onChanged }: { sessionKey: TillSess
   /** Bumped by every reload: the supervisor's movements are re-read with the session (Qt reload). */
   const [movesTick, setMovesTick] = useState(0);
   const answerRef = useRef<EndShiftAnswer>("");
+  /** tssVarianceStatus as last read: a supervisor's decision shows in it (Qt bec3f98). */
+  const varianceRef = useRef("");
 
   const showOutcome = useCallback((outcome: EndShiftAnswer, attemptsLeft: number, slipGap: boolean) => {
     answerRef.current = outcome === "RECOUNT_REQUIRED" ? "" : outcome;
@@ -92,7 +93,7 @@ function EndShiftBody({ sessionKey, onClose, onChanged }: { sessionKey: TillSess
     if (outcome === "ACCEPTED") {
       // The close frame mounts with this answer; its Float left box takes the
       // focus (`autoFocus` — a rAF focus races the portal's late mount).
-      setAnswerText(acceptedText(slipGap));
+      setAnswerText(acceptedText(slipGap, varianceRef.current));
     } else if (outcome === "RECOUNT_REQUIRED") {
       // Every attempt is kept on the server; the boxes stay as counted.
       setAnswerText(recountText(attemptsLeft));
@@ -104,6 +105,7 @@ function EndShiftBody({ sessionKey, onClose, onChanged }: { sessionKey: TillSess
   const showSession = useCallback(
     (payload: TillSessionPayload) => {
       const next = endShiftView(payload, answerRef.current);
+      varianceRef.current = payload.tssVarianceStatus ?? "";
       setSession(payload);
       setView(next);
       setStatus(next.status);
@@ -129,7 +131,7 @@ function EndShiftBody({ sessionKey, onClose, onChanged }: { sessionKey: TillSess
     try {
       showSession(await client.get(sessionKey));
     } catch (error) {
-      toast.error(tillErrorOf(error, "The session could not be read.").text);
+      toast.apiError(error, { fallback: "The session could not be read." });
     }
   }, [client, sessionKey, showSession]);
 
@@ -141,7 +143,7 @@ function EndShiftBody({ sessionKey, onClose, onChanged }: { sessionKey: TillSess
         if (!cancelled) showSession(payload);
       })
       .catch((error) => {
-        if (!cancelled) toast.error(tillErrorOf(error, "The session could not be read.").text);
+        if (!cancelled) toast.apiError(error, { fallback: "The session could not be read." });
       });
     client
       .denominations(sessionKey.companyId)
@@ -149,7 +151,7 @@ function EndShiftBody({ sessionKey, onClose, onChanged }: { sessionKey: TillSess
         if (!cancelled) setDenominations(toDenominations(rows));
       })
       .catch((error) => {
-        if (!cancelled) toast.error(tillErrorOf(error, "The denominations could not be read.").text);
+        if (!cancelled) toast.apiError(error, { fallback: "The denominations could not be read." });
       })
       .finally(() => {
         if (!cancelled) setDenomsLoading(false);
@@ -182,7 +184,7 @@ function EndShiftBody({ sessionKey, onClose, onChanged }: { sessionKey: TillSess
       showSession(payload);
       onChanged?.();
     } catch (error) {
-      toast.error(tillErrorOf(error, "Billing could not be ended.").text);
+      toast.apiError(error, { fallback: "Billing could not be ended." });
     } finally {
       setBusy(false);
     }
@@ -206,12 +208,8 @@ function EndShiftBody({ sessionKey, onClose, onChanged }: { sessionKey: TillSess
       showOutcome(result.outcome, result.attemptsLeft, Boolean(result.slipCheckRequired));
       onChanged?.();
     } catch (error) {
-      const refusal = tillErrorOf(error, "The count could not be submitted.");
-      if (refusal.code === "TILL_RECOUNT_LIMIT") {
-        toast.warn(`No recount is left on this session: it needs a supervisor (${refusal.message}).`);
-      } else {
-        toast.error(refusal.text);
-      }
+      // TILL_RECOUNT_LIMIT too: "Too many counts. Do: Call supervisor." (Qt bec3f98).
+      toast.apiError(error, { fallback: "The count could not be submitted." });
       void reload();
     } finally {
       setBusy(false);
@@ -237,7 +235,7 @@ function EndShiftBody({ sessionKey, onClose, onChanged }: { sessionKey: TillSess
       onChanged?.();
       onClose();
     } catch (error) {
-      toast.error(tillErrorOf(error, "The session could not be closed.").text);
+      toast.apiError(error, { fallback: "The session could not be closed." });
       setBusy(false);
       void reload();
     }
@@ -435,7 +433,9 @@ function EndShiftBody({ sessionKey, onClose, onChanged }: { sessionKey: TillSess
           <TonePill tone="green">ACCEPTED</TonePill>
           <span className={styles.strong}>Count accepted.</span>
           <span className={styles.muted}>
-            {answer === "ACCEPTED" ? answerText || acceptedText(slipCheck) : "Within the tolerance: the shift can be closed."}
+            {answer === "ACCEPTED"
+              ? answerText || acceptedText(slipCheck, session?.tssVarianceStatus)
+              : "Within the tolerance: the shift can be closed."}
           </span>
         </div>
         <div className={cx(styles.answer, styles.answerAmber, answer === "RECOUNT_REQUIRED" && styles.answerOn)}>

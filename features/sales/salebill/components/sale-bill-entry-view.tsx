@@ -126,6 +126,7 @@ import type {
   SavedBillRef,
 } from "../salebill.types";
 import { useSaleBillDraft, type SaveOutcome } from "../use-sale-bill-draft";
+import type { ScreenMemoryOption } from "@/lib/use-screen-memory";
 import { AdjustPanel } from "./adjust-panel";
 import { AskText } from "./ask-text";
 import { BillQuickStrip } from "./bill-quick-strip";
@@ -188,6 +189,12 @@ export type SaleBillEntryViewProps = {
   initialDocument?: SaleBillDocKey;
   initialMode?: "browse" | "entry";
   onClose: () => void;
+  /**
+   * Screen memory (lib/screen-memory): the page names the slot, and says whether
+   * it reopened ON the bill the operator left here — coming back from another
+   * screen — rather than on an explicit Create / Open.
+   */
+  memory?: ScreenMemoryOption;
 };
 
 const NEW_DOCUMENT = " new";
@@ -196,8 +203,9 @@ export function SaleBillEntryView({
   initialDocument,
   initialMode = "browse",
   onClose,
+  memory,
 }: SaleBillEntryViewProps) {
-  const api = useSaleBillDraft();
+  const api = useSaleBillDraft({ memory });
   const {
     draft,
     dispatch,
@@ -363,7 +371,9 @@ export function SaleBillEntryView({
 
   // Load-on-mount. The draft is global (a slice, not a `useReducer`), so it
   // outlives the form and starting a new document is an EXPLICIT act rather than
-  // a consequence of mounting.
+  // a consequence of mounting. The one exception is the page reopening on the
+  // bill the operator left here (screen memory): that one is resumed, not
+  // cleared, loaded or offered a crash recovery over.
   const openedDocument = useRef<string | null>(null);
   useEffect(() => {
     const opening = initialDocument?.sbId ?? NEW_DOCUMENT;
@@ -371,6 +381,10 @@ export function SaleBillEntryView({
       return;
     }
     openedDocument.current = opening;
+    if (memory?.resume && api.resumed) {
+      void api.finishResume();
+      return;
+    }
     api.clear();
     if (!initialDocument) {
       // A fresh bill: offer back whatever this device left behind when it died.
@@ -391,7 +405,7 @@ export function SaleBillEntryView({
         }
       }
     });
-  }, [api, initialDocument, initialMode]);
+  }, [api, initialDocument, initialMode, memory?.resume]);
 
   /**
    * The grids read a merged `{line, priced}` view by flat key, so the readonly
@@ -1175,6 +1189,9 @@ export function SaleBillEntryView({
           api.clear();
           break;
         case "back":
+          // Leaving through Back (or Esc) is a discard the operator confirmed —
+          // unlike a menu trip, the bill must not be waiting on the next Create.
+          api.forgetRemembered();
           onClose();
           break;
         case "list":

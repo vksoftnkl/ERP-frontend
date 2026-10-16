@@ -250,6 +250,7 @@ export default function LedgerBankAccountMasterPage() {
   );
   return (
     <CrudMasterPage
+      modalDraftKey="ledger-bank-account"
       title="Ledger Bank Account"
       iconName="bank_list"
       auditHistory={{ screenName: "Ledger Bank Account" }}

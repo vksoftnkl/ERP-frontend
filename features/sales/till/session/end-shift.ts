@@ -231,7 +231,23 @@ export function stepStates(status: string, answer: EndShiftAnswer): {
   };
 }
 
-export function acceptedText(slipCheck: boolean): string {
+/**
+ * A cash difference a supervisor decided (Cockpit → Approve), by the
+ * session's `tssVarianceStatus` (ck_tss_variance_status), in plain words.
+ */
+const SUPERVISOR_DECISION: Readonly<Record<string, string>> = {
+  ACCEPTED: "booked as shop expense",
+  RECOVER: "to be recovered from the cashier",
+  INVESTIGATE: "kept in suspense to check later",
+};
+
+/**
+ * The ACCEPTED card's line. A difference a supervisor decided is not "within
+ * the tolerance": it says what was decided instead (Qt bec3f98).
+ */
+export function acceptedText(slipCheck: boolean, varianceStatus?: string | null): string {
+  const decided = SUPERVISOR_DECISION[(varianceStatus ?? "").trim().toUpperCase()];
+  if (decided) return `A supervisor approved the cash difference: ${decided}. Close the session below.`;
   return slipCheck
     ? "The cash is within the tolerance. A slip total differs: hand the slips over — the supervisor checks them " +
         "after close. Close the session below."

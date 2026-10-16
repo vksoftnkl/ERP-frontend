@@ -16,6 +16,7 @@ import { cx } from "@/components/design-system/cx";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { useDropdownId } from "@/lib/configured-dropdowns";
 import { documentRights } from "@/lib/permissions/document-rights";
+import type { ScreenMemoryOption } from "@/lib/use-screen-memory";
 import { useUiTableId } from "@/lib/ui-tables";
 import { useGetQuotationGridLayoutQuery } from "@/store/api/quotationApi";
 import { settingsColumnsFromLayout, useGridSettings } from "@/features/sales/quotation/components/grid-settings";
@@ -130,6 +131,12 @@ export type StockAdjustmentEntryViewProps = {
   initialMode?: "browse" | "entry";
   expiryGraceDays: number;
   onBackToList: () => void;
+  /**
+   * Screen memory (lib/screen-memory): the page names the slot, and says whether
+   * it reopened ON a remembered document — the operator coming back from another
+   * screen — rather than on an explicit Create / Open.
+   */
+  memory?: ScreenMemoryOption;
 };
 
 export function StockAdjustmentEntryView({
@@ -137,8 +144,9 @@ export function StockAdjustmentEntryView({
   initialMode = "browse",
   expiryGraceDays,
   onBackToList,
+  memory,
 }: StockAdjustmentEntryViewProps) {
-  const api = useStockAdjustmentDraft();
+  const api = useStockAdjustmentDraft({ memory });
   const { draft } = api;
   const { permissions } = usePagePermissions();
   const rights = useMemo(() => documentRights(permissions), [permissions]);
@@ -191,6 +199,8 @@ export function StockAdjustmentEntryView({
   const canEdit = draftStatus && saved && rights.mayEdit;
 
   // ---------------------------------------------------------- open a doc
+  // Reopened on the document the operator left here (screen memory): it is
+  // already on screen, so it is neither loaded nor started over.
   const opened = useRef<string | null>(null);
   useLayoutEffect(() => {
     const target = initialDocument?.svhId ?? " new";
@@ -198,13 +208,17 @@ export function StockAdjustmentEntryView({
       return;
     }
     opened.current = target;
+    if (memory?.resume && api.resumed) {
+      void api.finishResume();
+      return;
+    }
     if (initialDocument) {
       void api.load(initialDocument, initialMode === "entry");
     } else {
       // A new document starts at its date, so the keyboard can begin at once.
       focusDocDate();
     }
-  }, [api, initialDocument, initialMode]);
+  }, [api, initialDocument, initialMode, memory?.resume]);
 
   // ------------------------------------------------------- focus requests
   useEffect(() => {
@@ -436,13 +450,21 @@ export function StockAdjustmentEntryView({
     }
   }, [api]);
 
+  // Both leave for the list on a confirmed discard — unlike a menu trip, the
+  // document must not be waiting on the next visit.
   const runList = useCallback(() => {
-    guardDirty("Open another", "This document has unsaved changes. Discard it and open another?", onBackToList);
-  }, [guardDirty, onBackToList]);
+    guardDirty("Open another", "This document has unsaved changes. Discard it and open another?", () => {
+      api.forgetRemembered();
+      onBackToList();
+    });
+  }, [api, guardDirty, onBackToList]);
 
   const runClose = useCallback(() => {
-    guardDirty("Discard entry", "This document has unsaved changes. Close it anyway?", onBackToList);
-  }, [guardDirty, onBackToList]);
+    guardDirty("Discard entry", "This document has unsaved changes. Close it anyway?", () => {
+      api.forgetRemembered();
+      onBackToList();
+    });
+  }, [api, guardDirty, onBackToList]);
 
   const runPick = useCallback(() => {
     const current = api.draftRef.current;

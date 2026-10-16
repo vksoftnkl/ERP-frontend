@@ -17,11 +17,13 @@ import {
   insertNewBucketRow,
   isChanged,
   isNewRow,
+  isPriceWorkWorthRemembering,
   isSameFigure,
   newBucketTemplateIndex,
   parseAcceptable,
   refreshItemRows,
   rowFromServer,
+  sameTenant,
   setLevelPrice,
   srcOfRow,
   srcText,
@@ -153,6 +155,22 @@ describe("row state", () => {
       items: 2,
       rows: 3,
     });
+  });
+});
+
+describe("screen memory", () => {
+  it("keeps the grid only while a row holds an unsaved change", () => {
+    expect(isPriceWorkWorthRemembering({ rows: [] })).toBe(false);
+    expect(isPriceWorkWorthRemembering({ rows: [row(), row({ itemId: "item-2" })] })).toBe(false);
+    expect(isPriceWorkWorthRemembering({ rows: [row(), setLevelPrice(row(), 1, 1)] })).toBe(true);
+    expect(isPriceWorkWorthRemembering({ rows: [{ ...row(), state: "ADDED" as const }] })).toBe(true);
+  });
+
+  it("tells a header switch from the same tenant", () => {
+    const here = { companyId: "c1", branchId: "b1", accYear: "2026-2027" };
+    expect(sameTenant(here, { ...here })).toBe(true);
+    expect(sameTenant(here, { ...here, branchId: "b2" })).toBe(false);
+    expect(sameTenant(here, { ...here, companyId: "c2" })).toBe(false);
   });
 });
 

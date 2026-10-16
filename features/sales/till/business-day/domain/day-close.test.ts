@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   CLOSE_CONFIRM_NOTE,
   NO_EDIT,
+  SAFE_ONLY_INTRO,
   approverChoices,
+  approverDropdownParams,
+  approverUsersOf,
   closeQuestion,
   closedText,
   countsDoneLine,
@@ -14,6 +17,7 @@ import {
   exceptionBody,
   exceptionClosedText,
   exceptionIntro,
+  exceptionModeOf,
   exceptionPages,
   exceptionProblem,
   isCloseBlocked,
@@ -26,7 +30,7 @@ import {
   type CountedPage,
   type ExceptionDraft,
 } from "./day-close";
-import type { DayKey, TillCloseCheck, TillDay } from "./wire";
+import type { CloseCheckItem, DayKey, TillCloseCheck, TillDay } from "./wire";
 
 const DAY: TillDay = {
   tbdId: "d1",
@@ -44,6 +48,7 @@ const DAY: TillDay = {
   sessions: [],
   handoverReceipt: "REQUIRED",
   awaitingReceipt: { thisDay: 0, earlierDays: 0, oldestOn: null },
+  safe: null,
 };
 
 const CLOSED: TillDay = { ...DAY, tbdStatus: "CLOSED", tbdZNo: "3" };
@@ -63,13 +68,17 @@ function check(over: Partial<TillCloseCheck> = {}): TillCloseCheck {
 
 const KEY: DayKey = { companyId: "c1", branchId: "b1", accYear: "2026-2027", tbdId: "d1" };
 
+function red(code: string, sessionIds: string[] = []): CloseCheckItem {
+  return { code, tone: "RED", count: Math.max(1, sessionIds.length), detail: "", sessionIds };
+}
+
 describe("dayButtons", () => {
   it("closes an open day the server says may close — F10", () => {
     const buttons = dayButtons(DAY, check({ canClose: true }), true);
     expect(buttons.closeDay).toEqual({ enabled: true, title: "Close the business day — F10" });
     expect(buttons.closeException).toEqual({
       enabled: false,
-      title: "Only when every red item is a session still open",
+      title: "Only when every red item is a session still open or the safe not counted",
     });
     expect(buttons.reopen).toEqual({ enabled: false, title: "Only a closed day is reopened" });
     expect(buttons.print).toEqual({
@@ -79,12 +88,24 @@ describe("dayButtons", () => {
     });
   });
 
-  it("offers the exception only when every red is a live session", () => {
-    const buttons = dayButtons(DAY, check({ canCloseWithException: true }), true);
+  it("offers the exception only when every red is one it may cover", () => {
+    const buttons = dayButtons(
+      DAY,
+      check({ items: [red("SESSIONS_LIVE", ["s1"]), red("SAFE_NOT_COUNTED")], canCloseWithException: true }),
+      true,
+    );
     expect(buttons.closeDay).toEqual({ enabled: false, title: "Red items block the close: clear them first" });
     expect(buttons.closeException).toEqual({
       enabled: true,
       title: "Only live sessions block: count their drawers here and close",
+    });
+  });
+
+  it("offers the exception over the safe alone, with nothing live (notes 118)", () => {
+    const buttons = dayButtons(DAY, check({ items: [red("SAFE_NOT_COUNTED")], canCloseWithException: true }), true);
+    expect(buttons.closeException).toEqual({
+      enabled: true,
+      title: "Only the safe count blocks: close over it, a store manager approves",
     });
   });
 
@@ -140,7 +161,7 @@ describe("close day", () => {
     expect(closedText(DAY, "")).toBe("Business day 14-10-2026 is closed.");
   });
 
-  it("treats TILL_DAY_CLOSE_BLOCKED or any 409 as 'something changed', not an error", () => {
+  it("treats TILL_DAY_CLOSE_BLOCKED or any 409 as 'something changed': the check is read again", () => {
     expect(isCloseBlocked({ status: 409, code: "", field: "", message: "" })).toBe(true);
     expect(isCloseBlocked({ status: 422, code: "TILL_DAY_CLOSE_BLOCKED", field: "", message: "" })).toBe(true);
     expect(isCloseBlocked({ status: 403, code: "TILL_RIGHT_EDIT", field: "", message: "" })).toBe(false);
@@ -186,6 +207,25 @@ describe("reasons and approvers", () => {
       { id: "u3", label: "zt-approver  (no till PIN set)" },
     ]);
   });
+
+  it("asks dropdown 68 for the company's users when nothing is live, the caller left out", () => {
+    expect(approverDropdownParams("c1")).toEqual({ icompany_id: "c1" });
+    expect(
+      approverUsersOf(
+        [
+          { usr_id: "ME", usr_name: "VK POS", usr_login_name: "VKPOS", usr_type: "ADMIN" },
+          { usr_id: "u2", usr_name: "Anita S", usr_login_name: "ANITA", usr_type: "" },
+          // '' is not NULL to the dropdown's COALESCE: the login instead.
+          { usr_id: "u3", usr_name: "  ", usr_login_name: "zt-approver-10121202", usr_type: "" },
+          { usr_id: "", usr_name: "no id" },
+        ],
+        "me",
+      ),
+    ).toEqual([
+      { id: "u2", label: "Anita S" },
+      { id: "u3", label: "zt-approver-10121202" },
+    ]);
+  });
 });
 
 describe("close with exception", () => {
@@ -212,6 +252,25 @@ describe("close with exception", () => {
       { tssId: "0123456789ab", label: "01234567" },
     ]);
     expect(exceptionPages(null, [])).toEqual([]);
+    // Only the safe red: nothing to count.
+    expect(exceptionPages(check({ items: [red("SAFE_NOT_COUNTED")], canCloseWithException: true }), [])).toEqual([]);
+  });
+
+  it("counts drawers while sessions are live, and only the safe when none is", () => {
+    expect(exceptionModeOf(pages)).toBe("sessions");
+    expect(exceptionModeOf([])).toBe("safe");
+    expect(exceptionIntro(0)).toBe(SAFE_ONLY_INTRO);
+    expect(SAFE_ONLY_INTRO).toBe(
+      "No till is open on this day. The exception closes the day although its safe was not counted. A store " +
+        "manager other than you approves it with their till PIN.",
+    );
+    // Nothing to count: the reason, the approver and the PIN are all it asks.
+    expect(exceptionProblem({ ...draft, approverId: "" }, reasons, [])).toBe("Pick the approver.");
+    expect(exceptionProblem(draft, reasons, [])).toBe("");
+    expect(exceptionBody(KEY, draft, [])).toEqual({
+      ...KEY,
+      exception: { reasonId: "r1", approverId: "u2", approverPin: "1234", counts: [] },
+    });
   });
 
   it("says what stops the post, in Qt's order", () => {
@@ -252,6 +311,9 @@ describe("close with exception", () => {
     ).toBe("C01-261014-01 · RAVI K  1,250.00   ·   C02-261014-01 · MEENA T  not counted");
     expect(exceptionClosedText("5", 2)).toBe("The day is closed — store Z 5; 2 sessions force-closed on your count.");
     expect(exceptionClosedText("", 1)).toBe("The day is closed; 1 session force-closed on your count.");
+    // Nothing was live (Qt bec3f98).
+    expect(exceptionClosedText("6", 0)).toBe("The day is closed — store Z 6.");
+    expect(exceptionClosedText("", 0)).toBe("The day is closed.");
   });
 });
 

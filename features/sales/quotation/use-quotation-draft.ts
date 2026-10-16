@@ -12,10 +12,24 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/lib/notify";
+import {
+  useForgetIfWritingOnUnmount,
+  useRememberWrite,
+  type ScreenMemoryOption,
+} from "@/lib/use-screen-memory";
+import { screenMemory } from "@/lib/screen-memory";
+import {
+  documentScopeOf,
+  isLineDocumentWorthRemembering,
+  restoredMessage,
+  resumeFromScreenMemory,
+  RESTORED_MESSAGE_OPTIONS,
+} from "@/features/sales/document-memory";
+import { verifyHoldLease } from "@/features/sales/hold-lease";
 import { recalcDocument } from "@/domain/pricing";
 import type { DocumentPricing } from "@/domain/pricing";
 import { useBusinessContext } from "@/components/layout/business-context";
-import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { useAppDispatch, useAppSelector, useAppStore } from "@/store/hooks";
 import type { AppDispatch } from "@/store/store";
 import {
   getAuthSession,
@@ -212,6 +226,13 @@ export type QuotationDraftApi = {
   acceptRecovery: (record: QuotationAutosave) => void;
   /** Declined — the snapshot goes, and the counter starts fresh. */
   discardRecovery: () => void;
+  // ----- screen memory: the quotation outlives a trip to another screen -----
+  /** The quotation on screen is the one the operator left here, not a fresh open. */
+  resumed: boolean;
+  /** After a resume: put it back if needed and re-check a resumed hold's lease. */
+  finishResume: () => Promise<void>;
+  /** Drop the remembered quotation — the operator discarded it. */
+  forgetRemembered: () => void;
   /** The loaded draft, or `null` when the fetch failed. */
   loadDocument: (key: QuotationDocKey) => Promise<QuotationDraft | null>;
   deleteDocument: () => Promise<boolean>;
@@ -235,6 +256,14 @@ function useDraftContext() {
   const accYear = (activeFiscalYear?.name ?? "").trim() || accountingYearOf(todayIso());
   return { companyId, branchId, accYear, loading };
 }
+/**
+ * The tenant on the header, as this screen resolves it — what the page asks
+ * screen memory about. The same three values the draft is seeded with.
+ */
+export function useQuotationDraftScope(): { companyId: string; branchId: string; accYear: string } {
+  const { companyId, branchId, accYear } = useDraftContext();
+  return useMemo(() => ({ companyId, branchId, accYear }), [accYear, branchId, companyId]);
+}
 function useSaveActor(): SaveActor {
   return useMemo(
     () => ({
@@ -251,11 +280,34 @@ function useSaveActor(): SaveActor {
     [],
   );
 }
-export function useQuotationDraft(): QuotationDraftApi {
+export function useQuotationDraft(
+  opts: { memory?: ScreenMemoryOption } = {},
+): QuotationDraftApi {
+  const { memory } = opts;
   const context = useDraftContext();
   const actor = useSaveActor();
   const dispatch = useAppDispatch();
+  const store = useAppStore();
   const draft = useAppSelector(selectQuotationDraft);
+  // The draft is a slice, so it outlives the screen — but the screen clears it
+  // on every fresh open. When the page reopened on the quotation the operator
+  // left here (screen memory), it is resumed instead: decided ONCE, at mount.
+  const [resume] = useState(() =>
+    memory?.resume
+      ? resumeFromScreenMemory(selectQuotationDraft(store.getState()), memory.key, {
+          companyId: context.companyId,
+          branchId: context.branchId,
+          accYear: context.accYear,
+        })
+      : null,
+  );
+  const resumed = resume !== null;
+  /**
+   * Until the screen has decided what it shows, the slice still holds whatever
+   * the last visit left in it — possibly a quotation the operator discarded,
+   * possibly another tenant's. Writes wait for a resume, a clear or a load.
+   */
+  const [memoryArmed, setMemoryArmed] = useState(resume?.source === "live");
   const { data: companyStateCode = "" } = useGetCompanyStateCodeQuery(context.companyId, {
     skip: !context.companyId,
   });
@@ -287,6 +339,11 @@ export function useQuotationDraft(): QuotationDraftApi {
   const [forceReleaseHoldLock] = useForceReleaseTxnHoldMutation();
   const [convertHoldLock] = useConvertTxnHoldMutation();
   const [busy, setBusy] = useState<QuotationBusy>("idle");
+  /** `busy` as last committed — what an unmount cleanup can still read. */
+  const busyRef = useRef<QuotationBusy>(busy);
+  useEffect(() => {
+    busyRef.current = busy;
+  }, [busy]);
   /**
    * `busy` cannot guard re-entry on its own: `setBusy` is asynchronous, so two
    * F5 presses inside one render both see "idle". The voucher number is
@@ -318,12 +375,35 @@ export function useQuotationDraft(): QuotationDraftApi {
   /** The live draft, for effects that must not re-run when it changes. */
   const draftRef = useRef(draft);
   draftRef.current = draft;
+  // --- screen memory -------------------------------------------------------
+  // Every change is written through once armed (see `memoryArmed`). Forgotten
+  // as soon as nothing on screen is worth bringing back, and when the screen
+  // goes while a save or hold is still in flight.
+  useRememberWrite(memory, draft, {
+    scopeOf: documentScopeOf,
+    shouldKeep: isLineDocumentWorthRemembering,
+    armed: memoryArmed,
+  });
+  useForgetIfWritingOnUnmount(
+    memory,
+    () =>
+      inFlight.current ||
+      holdInFlight.current ||
+      busyRef.current === "saving" ||
+      busyRef.current === "holding",
+    () => documentScopeOf(draftRef.current),
+  );
   /** Set below; held in a ref so the unit-prefetch effect has a stable dep list. */
   const loadUnitOptionsRef = useRef<(itemId: string) => Promise<void>>(async () => {});
   // The draft is created before the business context resolves (the screen must
   // render something), so the tenant scope is pushed in as it arrives. This is
   // deliberately not an edit: it must not mark the document dirty.
-  const seededTenant = useRef("");
+  //
+  // A resumed quotation already carries its tenant — it was only resumed because
+  // it matched the header's — so it counts as seeded.
+  const seededTenant = useRef(
+    resume ? `${resume.recalled.companyId}|${resume.recalled.branchId}|${resume.recalled.accYear}` : "",
+  );
   useEffect(() => {
     if (!context.companyId || !context.branchId || !context.accYear) {
       return;
@@ -836,6 +916,7 @@ export function useQuotationDraft(): QuotationDraftApi {
    */
   const loadDocument = useCallback(
     async (key: QuotationDocKey): Promise<QuotationDraft | null> => {
+      setMemoryArmed(true);
       setBusy("loading");
       try {
         // Dispatched through `initiate` rather than a lazy-query trigger: this is
@@ -861,6 +942,7 @@ export function useQuotationDraft(): QuotationDraftApi {
     [companyStateCode, dispatch],
   );
   const clear = useCallback(() => {
+    setMemoryArmed(true);
     dispatch(
       draftReplaced(
         createDraft({
@@ -1309,6 +1391,57 @@ export function useQuotationDraft(): QuotationDraftApi {
   const discardRecovery = useCallback(() => {
     void clearQuotationAutosave(actor.deviceId ?? "");
   }, [actor.deviceId]);
+  /**
+   * The page reopened on the quotation the operator left here. Put it back into
+   * the slice when the slice has moved on to another tenant's, re-check the
+   * lease on a resumed held cart (the `lockedHold` ref died with the screen),
+   * and say so once.
+   */
+  const finishResume = useCallback(async () => {
+    if (!resume) {
+      return;
+    }
+    if (resume.source === "recalled") {
+      dispatch(draftReplaced(resume.recalled));
+    }
+    setMemoryArmed(true);
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    toast.info(restoredMessage("quotation"), RESTORED_MESSAGE_OPTIONS);
+    const restored = draftRef.current;
+    const holdId = restored.holdId;
+    if (!holdId) {
+      return;
+    }
+    const outcome = await verifyHoldLease({
+      txhId: holdId,
+      holdNo: restored.holdNo,
+      deviceMasterId: actor.deviceMasterId,
+      readHold: (txhId) =>
+        dispatch(
+          quotationApi.endpoints.getTxnHold.initiate(
+            { txhId },
+            { subscribe: false, forceRefetch: true },
+          ),
+        ).unwrap(),
+      retake: (lock) => resumeHoldLock(lock).unwrap(),
+      noun: "quotation",
+    });
+    if (draftRef.current.holdId !== holdId) {
+      return;
+    }
+    if (outcome.kind === "held") {
+      lockedHold.current = outcome.lease;
+    } else if (outcome.kind === "lost") {
+      dispatch(holdSet({ holdId: null, holdNo: "" }));
+      toast.warn(outcome.message);
+    }
+  }, [actor.deviceMasterId, dispatch, resume, resumeHoldLock]);
+  /** The operator discarded the quotation: it must not come back. */
+  const forgetRemembered = useCallback(() => {
+    if (memory) {
+      screenMemory.forget(memory.key, documentScopeOf(draftRef.current));
+    }
+  }, [memory]);
 
   return {
     draft,
@@ -1337,6 +1470,9 @@ export function useQuotationDraft(): QuotationDraftApi {
     findRecovery,
     acceptRecovery,
     discardRecovery,
+    resumed,
+    finishResume,
+    forgetRemembered,
     loadDocument,
     deleteDocument,
     clear,

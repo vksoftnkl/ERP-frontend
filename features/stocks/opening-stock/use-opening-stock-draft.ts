@@ -31,6 +31,9 @@ import {
 import { accountingYearOf, isRealDate, todayIso } from "@/features/sales/quotation/quotation.utils";
 import { getUserInfo } from "@/lib/auth/session";
 import { confirm } from "@/lib/confirm";
+import { toast } from "@/lib/notify";
+import { RESTORED_MESSAGE_OPTIONS, restoredMessage, screenMemory, type ScreenScope } from "@/lib/screen-memory";
+import { useForgetIfWritingOnUnmount, useRecalledOnce, type ScreenMemoryOption } from "@/lib/use-screen-memory";
 import {
   useCancelOpeningStockVoucherMutation,
   useLazyGetOpeningStockItemByBarcodeQuery,
@@ -64,6 +67,7 @@ import {
 } from "./opening-stock.payload";
 import {
   createDraft,
+  isOpeningWorthRemembering,
   openingStockReducer,
   splitRefusal,
   type DraftScope,
@@ -124,22 +128,49 @@ function useSessionScope(): DraftScope & { ready: boolean } {
   );
 }
 
+/**
+ * The tenant on the header, as this screen resolves it — what the page asks
+ * screen memory about. The same three values a new document belongs to, or a
+ * remembered one would never be found again.
+ */
+export function useOpeningStockScope(): ScreenScope {
+  const { companyId, branchId, accYear } = useSessionScope();
+  return useMemo(() => ({ companyId, branchId, accYear }), [accYear, branchId, companyId]);
+}
+
+/** The tenant a document belongs to — its own, not the session's. */
+function memoryScopeOf(draft: OpeningStockDraft): ScreenScope {
+  return { companyId: draft.companyId, branchId: draft.branchId, accYear: draft.accYear };
+}
+
 export type UseOpeningStockDraftOptions = {
   initialDocument?: OpeningStockDocKey;
   /** "entry" opens a loaded DRAFT for edit (still read-only for anything else). */
   initialMode: "entry" | "browse";
   /** Leave the voucher screen — back to the list. */
   onLeave: () => void;
+  /** Screen memory (lib/screen-memory): the slot, and whether the page is reopening on it. */
+  memory?: ScreenMemoryOption;
 };
 
-export function useOpeningStockDraft({ initialDocument, initialMode, onLeave }: UseOpeningStockDraftOptions) {
+export function useOpeningStockDraft({
+  initialDocument,
+  initialMode,
+  onLeave,
+  memory,
+}: UseOpeningStockDraftOptions) {
   const session = useSessionScope();
   const sessionRef = useRef(session);
   useLayoutEffect(() => {
     sessionRef.current = session;
   }, [session]);
 
-  const [draft, setDraft] = useState<OpeningStockDraft>(() => createDraft(session, todayIso()));
+  // The document the operator left on this screen, when the page is reopening
+  // on it (lib/screen-memory). Read once; null for every fresh open. It is dirty
+  // by definition, so the re-seed effect below leaves it alone.
+  const recalled = useRecalledOnce<OpeningStockDraft>(memory, session);
+  const resumed = recalled !== null;
+  const [draft, setDraft] = useState<OpeningStockDraft>(() => recalled ?? createDraft(session, todayIso()));
   const draftRef = useRef(draft);
   const [busy, setBusyState] = useState<OpeningStockBusy>(initialDocument ? "loading" : "idle");
   const busyRef = useRef<OpeningStockBusy>(busy);
@@ -153,15 +184,56 @@ export function useOpeningStockDraft({ initialDocument, initialMode, onLeave }: 
   const [saveVoucher] = useSaveOpeningStockVoucherMutation();
   const [cancelVoucherMutation] = useCancelOpeningStockVoucherMutation();
 
-  const apply = useCallback((action: OpeningStockAction) => {
-    draftRef.current = openingStockReducer(draftRef.current, action);
-    setDraft(draftRef.current);
-  }, []);
+  // Screen memory is written HERE, in the funnel every change goes through,
+  // rather than from an effect: an item lookup that answers after the screen is
+  // gone still reaches the remembered document. Kept while it is worth bringing
+  // back, dropped once it is not — and never written again once discarded.
+  const memoryKey = memory?.key ?? "";
+  const discarded = useRef(false);
+  const apply = useCallback(
+    (action: OpeningStockAction) => {
+      draftRef.current = openingStockReducer(draftRef.current, action);
+      setDraft(draftRef.current);
+      const next = draftRef.current;
+      if (memoryKey && !discarded.current) {
+        if (isOpeningWorthRemembering(next)) {
+          screenMemory.remember(memoryKey, memoryScopeOf(next), next);
+        } else {
+          screenMemory.forget(memoryKey, memoryScopeOf(next));
+        }
+      }
+    },
+    [memoryKey],
+  );
 
   const setBusy = useCallback((next: OpeningStockBusy) => {
     busyRef.current = next;
     setBusyState(next);
   }, []);
+
+  // A save / post / cancel still in flight when the screen goes lands after it:
+  // the document must not come back to be posted twice. (A refusal that marks
+  // its lines afterwards remembers it again: nothing was saved.)
+  useForgetIfWritingOnUnmount(
+    memory,
+    () => busyRef.current === "saving" || busyRef.current === "posting" || busyRef.current === "cancelling",
+    () => memoryScopeOf(draftRef.current),
+  );
+
+  /** The document came back from screen memory: say so once. */
+  const finishResume = useCallback(async () => {
+    // One tick first: this runs from the mount effect.
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    toast.info(restoredMessage("opening stock"), RESTORED_MESSAGE_OPTIONS);
+  }, []);
+
+  /** The operator discarded the document: it must not come back. */
+  const forgetRemembered = useCallback(() => {
+    if (memoryKey) {
+      discarded.current = true;
+      screenMemory.forget(memoryKey, memoryScopeOf(draftRef.current));
+    }
+  }, [memoryKey]);
 
   const sessionScope = useCallback((): DraftScope => {
     const { companyId, branchId, accYear, deviceId } = sessionRef.current;
@@ -816,8 +888,10 @@ export function useOpeningStockDraft({ initialDocument, initialMode, onLeave }: 
     ) {
       return;
     }
+    // A confirmed discard — unlike a menu trip, it must not be waiting on the next visit.
+    forgetRemembered();
     onLeave();
-  }, [onLeave]);
+  }, [forgetRemembered, onLeave]);
 
   /** Show List — F8. Opening another document replaces this one, so it asks what Close asks. */
   const showList = useCallback(async () => {
@@ -833,8 +907,9 @@ export function useOpeningStockDraft({ initialDocument, initialMode, onLeave }: 
     ) {
       return;
     }
+    forgetRemembered();
     onLeave();
-  }, [onLeave]);
+  }, [forgetRemembered, onLeave]);
 
   const totals = useMemo(() => computeTotals(draft.lines), [draft.lines]);
 
@@ -868,6 +943,10 @@ export function useOpeningStockDraft({ initialDocument, initialMode, onLeave }: 
     newDocument,
     close,
     showList,
+    // screen memory
+    resumed,
+    finishResume,
+    forgetRemembered,
   };
 }
 

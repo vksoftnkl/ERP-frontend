@@ -113,8 +113,10 @@ function dayRowKey(row: GridRow, index: number): string {
  * day, `../shared/live-cash.ts`) and, since Qt c77f3f1 (notes 117), the
  * server's close: its close-check drives the checklist and the buttons —
  * Close day (F10), Close with exception (the live drawers counted and
- * force-closed), Reopen day — all Business Day (274) EDIT. Print day X / store
- * Z is the TILL_DAY_Z print of the day.
+ * force-closed; since Qt bec3f98 also over the safe not counted, with nothing
+ * live), Reopen day — all Business Day (274) EDIT. Print day X / store Z is
+ * the TILL_DAY_Z print of the day. The safe's count and remittance are the
+ * Cash Office's (menu 287): its rows jump there on the right tab.
  *
  * Keys (Qt): F5 Refresh checks (always today) · F8 Day ⇄ List · F10 Close day
  * · Enter on a session opens its cockpit, on a day opens that day · Esc closes.
@@ -250,8 +252,9 @@ export default function BusinessDayScreen() {
 
   const openException = () => {
     if (!shownDay || !buttons.closeException.enabled) return;
+    // No live session is fine (notes 118): the exception may cover only
+    // SAFE_NOT_COUNTED, and the dialog then has nothing to count.
     const pages = exceptionPages(check, sessions.rows);
-    if (pages.length === 0) return;
     setDialog({ kind: "exception", key: dayKeyOf(shownDay, scope), pages });
   };
 
@@ -267,7 +270,9 @@ export default function BusinessDayScreen() {
 
   const exceptionClosed = (result: DayCloseResult, pages: readonly ExceptionPage[]) => {
     setDialog(null);
-    toast.success(exceptionClosedText(result.zNo, result.forcedCount ?? pages.length), { autoClose: false });
+    // Nothing was live: no session to say was force-closed (Qt `live.isEmpty()`).
+    const forced = pages.length === 0 ? 0 : (result.forcedCount ?? pages.length);
+    toast.success(exceptionClosedText(result.zNo, forced), { autoClose: false });
     reloadShown();
   };
 

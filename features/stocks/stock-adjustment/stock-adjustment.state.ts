@@ -245,6 +245,16 @@ export function isEditable(draft: AdjustmentDraft): boolean {
   return draft.mode === "entry" && draft.status === "DRAFT";
 }
 
+/**
+ * Screen memory (lib/screen-memory): a document comes back after a trip to
+ * another screen only while it holds unsaved work that could still be saved.
+ * A blank, saved, posted, cancelled or browsed one reloads from the server, or
+ * there is nothing to lose.
+ */
+export function isAdjustmentWorthRemembering(draft: AdjustmentDraft): boolean {
+  return draft.dirty && isEditable(draft);
+}
+
 /** The rate source opens only on a plain adjustment that can still be keyed. */
 export function rateSourceEditable(draft: AdjustmentDraft): boolean {
   return draft.kind === "Adjustment" && isEditable(draft);

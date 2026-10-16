@@ -9,12 +9,15 @@
  * The amount handed over is shown; Received starts at it, so an exact one is
  * PIN + Ctrl+Enter. Beyond tolerance the treatment picker appears ("Send to
  * another approver" or decide it now), the reason only once a treatment is
- * chosen. A refusal is the server's own sentence under the form.
+ * chosen. A refusal is said in plain words under the form, the server's
+ * sentence grey beneath (Qt ec9d92d `ApiErrorText::inlineHtml`).
  *
  * Keys: Ctrl+Enter approves, Esc cancels.
  */
 import { useRef, useState } from "react";
 import { cx } from "@/components/design-system/cx";
+import RefusalText from "@/components/feedback/refusal-text";
+import type { ApiRefusal } from "@/lib/api/error-text";
 import { useTillSessionClient } from "../shared/api/till-session-api";
 import { formatMoney, isAmountDraft } from "../shared/money";
 import type { TillReason } from "../shared/reasons";
@@ -56,7 +59,7 @@ function ApproveCashBody({ request, reasons, onClose, onApproved }: ApproveCashD
   const [facts] = useState(() => approveCashFacts(request.session));
   const [form, setForm] = useState<ApproveCashForm>(() => initialApproveCashForm(facts));
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [refusal, setRefusal] = useState<ApiRefusal | null>(null);
   /** Two Ctrl+Enters inside one render must not approve twice. */
   const inFlight = useRef(false);
   const pinRef = useRef<HTMLInputElement>(null);
@@ -70,15 +73,16 @@ function ApproveCashBody({ request, reasons, onClose, onApproved }: ApproveCashD
     if (!canApprove || inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
-    setError("");
+    setRefusal(null);
     try {
       const result = await client.approveCash(approveCashBody(request.key, facts, form));
       onApproved(result);
     } catch (thrown) {
-      // The server's own sentence: who may approve (cashier, PIN, limit) is its call.
-      const refusal = dialogRefusal(thrown, "The cash could not be approved.");
-      setError(refusal.line);
-      if (refusal.pin) {
+      // Who may approve (cashier, PIN, limit) is the server's call: its
+      // refusal in plain words, its sentence in grey.
+      const refused = dialogRefusal(thrown, "The cash could not be approved.");
+      setRefusal(refused.refusal);
+      if (refused.pin) {
         patch({ pin: "" });
         pinRef.current?.focus();
       }
@@ -240,7 +244,11 @@ function ApproveCashBody({ request, reasons, onClose, onApproved }: ApproveCashD
       </div>
 
       <p className={cx(styles.muted, local.hint)}>{state.hint}</p>
-      {error ? <p className={cx(styles.warn, styles.warnDanger)}>{error}</p> : null}
+      {refusal ? (
+        <p className={cx(styles.warn, styles.warnDanger)}>
+          <RefusalText refusal={refusal} />
+        </p>
+      ) : null}
     </TillDialog>
   );
 }

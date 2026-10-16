@@ -137,7 +137,7 @@ export default function MessagePopup() {
         className={`${styles.overlay} ${styles[current.kind]}`}
         role="alertdialog"
         aria-modal="true"
-        aria-label={TITLES[current.kind]}
+        aria-label={current.title ?? TITLES[current.kind]}
       >
         <button
           type="button"
@@ -150,7 +150,7 @@ export default function MessagePopup() {
             <span className={styles.iconWrap} aria-hidden="true">
               <MessageIcon kind={current.kind} />
             </span>
-            <h3 className={styles.title}>{TITLES[current.kind]}</h3>
+            <h3 className={styles.title}>{current.title ?? TITLES[current.kind]}</h3>
             <button type="button" className={styles.close} onClick={close} aria-label="Close message">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true">
                 <path d="M6 18 18 6M6 6l12 12" />
@@ -158,7 +158,17 @@ export default function MessagePopup() {
             </button>
           </div>
 
-          <div className={styles.message}>{current.content}</div>
+          <div
+            className={
+              typeof current.content === "string" && current.content.includes("\n")
+                ? `${styles.message} ${styles.lines}`
+                : styles.message
+            }
+          >
+            {current.content}
+            {/* A refusal's server detail: small and grey, for support — selectable so it can be copied. */}
+            {current.detail ? <div className={styles.detail}>{current.detail}</div> : null}
+          </div>
 
           {autoClose === false ? null : (
             <div className={styles.timerTrack} aria-hidden="true">

@@ -22,16 +22,22 @@
  * the server decides (inventory.below_cost_price): restrict = 422, warning =
  * needsConfirm → "Price below cost" → re-post confirmed, allow = saved and
  * still reported. The toast NAMES the rows priced with no stock on hand.
+ *
+ * Edits left unsaved when the operator went to another screen are kept in
+ * screen memory (lib/screen-memory), and the screen then reopens on them.
  */
+import { useEffect, useMemo, useRef, useState } from "react";
 import { cx } from "@/components/design-system/cx";
 import qs from "@/features/sales/quotation/page.module.scss";
+import { screenMemory } from "@/lib/screen-memory";
 import { BelowCostDialog } from "./components/below-cost-dialog";
 import { BucketListDialog } from "./components/bucket-list-dialog";
 import { FourNumberCard, RowCardView, SrcLegendCard } from "./components/cards";
 import { FilterDialog } from "./components/filter-dialog";
 import { ItemPicker } from "./components/item-picker";
 import { PriceGrid } from "./components/price-grid";
-import { useSellingPriceScreen } from "./use-selling-price-screen";
+import { SELLING_PRICE_MEMORY_KEY } from "./selling-price.constants";
+import { useSellingPriceScope, useSellingPriceScreen } from "./use-selling-price-screen";
 import styles from "./page.module.scss";
 
 const BRANCH_TIP =
@@ -40,7 +46,12 @@ const CHAIN_TIP =
   "An edit lands on the CHAIN row: every branch without its own override moves at once. A row that already has a branch override updates the override.";
 
 export default function ChangeSellingPricePage() {
-  const screen = useSellingPriceScreen();
+  // Reopened on edits left here unsaved? Decided once, at mount: the business
+  // context lives in the root layout, so on the way back it is already resolved.
+  const tenant = useSellingPriceScope();
+  const [resume] = useState(() => screenMemory.has(SELLING_PRICE_MEMORY_KEY, tenant));
+  const memory = useMemo(() => ({ key: SELLING_PRICE_MEMORY_KEY, resume }), [resume]);
+  const screen = useSellingPriceScreen({ memory });
   const {
     scope,
     isHq,
@@ -64,7 +75,18 @@ export default function ChangeSellingPricePage() {
     openBucketList,
     removeCurrentRow,
     close,
+    finishResume,
   } = screen;
+
+  // The restored edits are already on the grid; all that is left is to say so — once.
+  const announceResume = useRef(resume && screen.resumed);
+  useEffect(() => {
+    if (!announceResume.current) {
+      return;
+    }
+    announceResume.current = false;
+    void finishResume();
+  }, [finishResume]);
 
   return (
     <div className={styles.page}>

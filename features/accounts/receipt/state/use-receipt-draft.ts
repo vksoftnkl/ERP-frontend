@@ -18,6 +18,13 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { getAuthUserId } from "@/lib/auth/session";
 import { useAppDispatch } from "@/store/hooks";
 import { toast } from "@/lib/notify";
+import { RESTORED_MESSAGE_OPTIONS, restoredMessage, screenMemory } from "@/lib/screen-memory";
+import {
+  useForgetIfWritingOnUnmount,
+  useRecalledOnce,
+  useRememberWrite,
+  type ScreenMemoryOption,
+} from "@/lib/use-screen-memory";
 import { useGetTenderMastersQuery } from "@/store/api/saleOrderApi";
 import {
   receiptApi,
@@ -68,6 +75,12 @@ import {
   type DraftAction,
   type ReceiptDraft,
 } from "./draft";
+import {
+  isVoucherWorthRemembering,
+  isVoucherWriteInFlight,
+  voucherScopeOf,
+  type ReceiptSnapshot,
+} from "./memory";
 
 /** Save draft's refusal, and its greyed button's tooltip (Qt 6f15977). */
 export const NO_DRAFT_RIGHT_MESSAGE =
@@ -117,16 +130,23 @@ export type UseReceiptDraftOptions = {
   confirm: (request: ConfirmRequest) => Promise<boolean>;
   /** Returns the typed text, or null when the operator backed out. */
   prompt: (request: PromptRequest) => Promise<string | null>;
+  /** Screen memory (lib/screen-memory) — passed by the menu route only, never a deep link. */
+  memory?: ScreenMemoryOption;
 };
 
 export type UseReceiptDraft = ReturnType<typeof useReceiptDraft>;
 
 export function useReceiptDraft(options: UseReceiptDraftOptions) {
-  const { scope, appDate, settings, canWrite, mayPost, maySaveDraft, confirm, prompt } = options;
+  const { scope, appDate, settings, canWrite, mayPost, maySaveDraft, confirm, prompt, memory } =
+    options;
+  // The receipt the operator left on this screen, when the page is reopening
+  // on it. Read once; null for every fresh open.
+  const recalled = useRecalledOnce<ReceiptSnapshot>(memory, scope);
+  const resumed = recalled !== null;
   const [draft, dispatch] = useReducer(
     reducerWithRefusal,
     undefined,
-    () => initialDraft(scope, appDate),
+    () => recalled?.draft ?? initialDraft(scope, appDate),
   );
   const [busy, setBusy] = useState<ReceiptBusy>("idle");
 
@@ -140,8 +160,11 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
    * thing that makes a component not update as expected.
    */
   const latest = useRef(draft);
+  /** `busy` as last painted — what an unmount cleanup can still read. */
+  const busyRef = useRef(busy);
   useEffect(() => {
     latest.current = draft;
+    busyRef.current = busy;
   });
 
   /**
@@ -264,7 +287,10 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
   // It does NOT make the document dirty: an untouched row is furniture, and a
   // screen that considers itself dirty the moment it opens cannot warn
   // usefully about leaving.
-  const seededTender = useRef(false);
+  //
+  // A receipt brought back from screen memory counts as seeded: whatever rows
+  // it has are the operator's, even none.
+  const seededTender = useRef(resumed);
   /**
    * What a collected temp credit ticked, waiting for the first instrument to
    * carry it — the tender masters may still be loading when the register
@@ -318,8 +344,30 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
    * rides along on every re-read — F5, a date change — until it is cleared,
    * and it goes with the party: picking another customer drops it.
    */
-  const [tempCreditMobile, setTempCreditMobileState] = useState("");
-  const tempCreditMobileRef = useRef("");
+  const [tempCreditMobile, setTempCreditMobileState] = useState(
+    () => recalled?.tempCreditMobile ?? "",
+  );
+  const tempCreditMobileRef = useRef(recalled?.tempCreditMobile ?? "");
+
+  // ── Screen memory ─────────────────────────────────────────────────────────
+  // Every change is written through, so the receipt is still here when the
+  // operator comes back from another menu screen. Forgotten as soon as nothing
+  // on screen is unsaved — and when the screen goes while a write is still
+  // out: it lands after the screen is gone, and the receipt must not come back
+  // to be posted twice.
+  const snapshot = useMemo<ReceiptSnapshot>(
+    () => ({ draft, tempCreditMobile }),
+    [draft, tempCreditMobile],
+  );
+  useRememberWrite(memory, snapshot, {
+    scopeOf: voucherScopeOf,
+    shouldKeep: isVoucherWorthRemembering,
+  });
+  useForgetIfWritingOnUnmount(
+    memory,
+    () => isVoucherWriteInFlight(busyRef.current),
+    () => latest.current.header.scope,
+  );
 
   const loadParty = useCallback(
     async (
@@ -714,7 +762,8 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
       dispatch({ type: "NEW_DOCUMENT", scope, voucherDate: appDate });
       return true;
     } catch (error) {
-      toast.error(receiptError(error));
+      // A refusal saved nothing: the receipt is still on the screen (Qt nexKeptLine).
+      toast.apiError(error, { kept: "Receipt not lost." });
       return false;
     } finally {
       setBusy("idle");
@@ -811,13 +860,14 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
         // The server computed a different split. Showing BOTH is the
         // difference between a fixable disagreement and an argument with
         // support.
-        toast.error(
-          `${receiptError(error)} This screen made it ${formatTotal(figures.allocated)} ` +
-            `allocated and ${formatTotal(figures.onAccount)} on account. Press F6 to re-read ` +
-            "the bills and try again.",
-        );
+        toast.apiError(error, {
+          kept:
+            `This screen made it ${formatTotal(figures.allocated)} allocated and ` +
+            `${formatTotal(figures.onAccount)} on account. Press F6 to re-read the bills and try again.\n` +
+            "Receipt not lost.",
+        });
       } else {
-        toast.error(receiptError(error));
+        toast.apiError(error, { kept: "Receipt not lost." });
       }
       return null;
     } finally {
@@ -1065,6 +1115,46 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
     [confirm, fetchAdjacent, openByKeys, scope],
   );
 
+  // ── Back from screen memory ───────────────────────────────────────────────
+  /**
+   * The receipt came back from screen memory: say so once (unless the caller
+   * is about to ask about it anyway), so nobody wonders why the screen is not
+   * blank, and re-read the party's context panels, which may have moved while
+   * it was gone.
+   *
+   * The bills are NOT re-read: `/open-items` replaces them, and with them every
+   * allocation the operator keyed. F6 is there for that, and Post's 409 says
+   * when it is needed.
+   */
+  const finishResume = useCallback(
+    async (options: { announce?: boolean } = {}) => {
+      // One tick first: this runs from the mount effect, and a request fired
+      // there is dropped by StrictMode's simulated unmount.
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      if (options.announce !== false) {
+        toast.info(restoredMessage("receipt"), RESTORED_MESSAGE_OPTIONS);
+      }
+      const { header } = latest.current;
+      if (!header.partyId || !header.scope.companyId) {
+        return;
+      }
+      void fetchPartyContext({ partyId: header.partyId, companyId: header.scope.companyId })
+        .then((context) =>
+          dispatch({ type: "CONTEXT_LOADED", partyId: header.partyId, payload: context }),
+        )
+        // A failed re-read keeps the panels it came back with.
+        .catch(() => undefined);
+    },
+    [fetchPartyContext],
+  );
+
+  /** The operator discarded the receipt: it must not come back. */
+  const forgetRemembered = useCallback(() => {
+    if (memory) {
+      screenMemory.forget(memory.key, voucherScopeOf({ draft: latest.current }));
+    }
+  }, [memory]);
+
   return {
     draft,
     dispatch,
@@ -1074,6 +1164,9 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
     canWrite,
     editable: isEditable(draft),
     identityHint: identityHint(identity),
+    resumed,
+    finishResume,
+    forgetRemembered,
     pickParty,
     collectTempCredit,
     tempCreditMobile,

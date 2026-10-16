@@ -1,8 +1,21 @@
 "use client";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { FiPlus, FiRotateCcw, FiSave, FiTrash2, FiX } from "react-icons/fi";
 import { toast } from "@/lib/notify";
+import { useBusinessContext } from "@/components/layout/business-context";
+import {
+  RESTORED_MESSAGE_OPTIONS,
+  restoredMessage,
+  screenMemory,
+  type ScreenScope,
+} from "@/lib/screen-memory";
+import {
+  useForgetIfWritingOnUnmount,
+  useRecalledOnce,
+  useRememberWrite,
+  type ScreenMemoryOption,
+} from "@/lib/use-screen-memory";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 import { SearchableSelect } from "@/components/design-system/ui/searchable-select";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
@@ -43,14 +56,20 @@ import {
   createBlankRow,
   describeRowScope,
   isFilledRow,
+  isQtyPriceWorkWorthRemembering,
+  ITEM_QTY_PRICE_MEMORY_KEY,
   mapPayloadToRow,
   normalizeListPayload,
   validateRow,
+  type ItemQtyPriceSnapshot,
 } from "./item-qty-price.utils";
 import styles from "./item-qty-price.module.scss";
 // The grid is scoped to exactly one item at a time — picked by barcode or by
 // name — and every row belongs to it.
 type ActiveItem = { id: string; label: string };
+// Screen memory (lib/screen-memory). The route page always reopens on rows left
+// here unsaved; an empty slot recalls nothing, so a fresh visit starts blank.
+const SCREEN_MEMORY: ScreenMemoryOption = { key: ITEM_QTY_PRICE_MEMORY_KEY, resume: true };
 // One page of an item's saved slabs; the list endpoint caps limit at 100.
 const SAVED_ROWS_PAGE_LIMIT = 100;
 type CellRenderCtx = {
@@ -269,19 +288,24 @@ function ensureTrailingRow(
   const lastRow = list[list.length - 1];
   return list.length === 0 || isFilledRow(lastRow) ? [...list, createBlankRow(item)] : list;
 }
-function isSameNavigationTarget(targetHref: string | URL): boolean {
-  if (typeof window === "undefined") return false;
-  const currentUrl = new URL(window.location.href);
-  const nextUrl = new URL(targetHref.toString(), currentUrl);
-  return nextUrl.href === currentUrl.href;
-}
 export default function ItemQtyPricePage() {
   const router = useRouter();
-  const [activeItem, setActiveItem] = useState<ActiveItem | null>(null);
-  const [rows, setRows] = useState<ItemQtyPriceRow[]>([createBlankRow()]);
+  // The header's tenant: the slot unsaved rows are remembered in. Prices are not
+  // kept per accounting year, but a slot is, so the session's year completes it.
+  const { selectedCompanyId, selectedBranchId, activeFiscalYear } = useBusinessContext();
+  const accYear = (activeFiscalYear?.name ?? "").trim() || "*";
+  const tenant = useMemo<ScreenScope>(
+    () => ({ companyId: selectedCompanyId, branchId: selectedBranchId, accYear }),
+    [accYear, selectedBranchId, selectedCompanyId],
+  );
+  // The rows the operator left here unsaved, read once; null for a fresh visit.
+  const recalled = useRecalledOnce<ItemQtyPriceSnapshot>(SCREEN_MEMORY, tenant);
+  const resumed = recalled !== null;
+  const [activeItem, setActiveItem] = useState<ActiveItem | null>(recalled?.activeItem ?? null);
+  const [rows, setRows] = useState<ItemQtyPriceRow[]>(() => recalled?.rows ?? [createBlankRow()]);
   const [unitOptionsByItemId, setUnitOptionsByItemId] = useState<
     Record<string, ERPDynamicSelectOption[]>
-  >({});
+  >(() => recalled?.unitOptionsByItemId ?? {});
   const [isSaving, setIsSaving] = useState(false);
   const [pendingDeleteRow, setPendingDeleteRow] = useState<ItemQtyPriceRow | null>(null);
   const [pendingItemSelection, setPendingItemSelection] = useState<{
@@ -332,6 +356,43 @@ export default function ItemQtyPricePage() {
   useEffect(() => {
     hasUnsavedChangesRef.current = hasUnsavedChanges;
   }, [hasUnsavedChanges]);
+  // Screen memory: written through on every change, so the rows are there when
+  // the operator comes back from another menu screen; let go once no row holds
+  // an edit (saved, cleared, item switched) — and when the screen goes while a
+  // save is still in flight, since it lands after and would come back as unsaved.
+  const savingRef = useRef(false);
+  const memorySnapshot = useMemo<ItemQtyPriceSnapshot>(
+    () => ({ tenant, activeItem, rows, unitOptionsByItemId }),
+    [activeItem, rows, tenant, unitOptionsByItemId],
+  );
+  useRememberWrite(SCREEN_MEMORY, memorySnapshot, {
+    scopeOf: (value) => value.tenant,
+    shouldKeep: isQtyPriceWorkWorthRemembering,
+  });
+  useForgetIfWritingOnUnmount(
+    SCREEN_MEMORY,
+    () => savingRef.current,
+    () => tenant,
+  );
+  // The rows follow the header, so a switch lets go of the slot they were
+  // remembered under.
+  const lastTenantRef = useRef(tenant);
+  useEffect(() => {
+    const previous = lastTenantRef.current;
+    lastTenantRef.current = tenant;
+    if (previous !== tenant) {
+      screenMemory.forget(ITEM_QTY_PRICE_MEMORY_KEY, previous);
+    }
+  }, [tenant]);
+  // Reopened on rows left here unsaved: they are already on the grid, so all
+  // that is left is to say so — once, a tick after mount.
+  useEffect(() => {
+    if (!resumed) return undefined;
+    const timer = window.setTimeout(() => {
+      toast.info(restoredMessage("qty-wise price entry"), RESTORED_MESSAGE_OPTIONS);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [resumed]);
   const enableUnsafeNavigationBypass = useCallback(() => {
     allowUnsafeNavigationRef.current = true;
     if (allowUnsafeNavigationTimeoutRef.current !== null) {
@@ -356,8 +417,11 @@ export default function ItemQtyPricePage() {
     setIsLeaveConfirmOpen(false);
     if (!pendingNavigation) return;
     enableUnsafeNavigationBypass();
+    // A confirmed Leave is a discard — unlike a menu trip, the rows must not
+    // be waiting on the next visit.
+    screenMemory.forget(ITEM_QTY_PRICE_MEMORY_KEY, tenant);
     pendingNavigation();
-  }, [enableUnsafeNavigationBypass]);
+  }, [enableUnsafeNavigationBypass, tenant]);
   useEffect(() => {
     return () => {
       if (allowUnsafeNavigationTimeoutRef.current !== null) {
@@ -374,39 +438,15 @@ export default function ItemQtyPricePage() {
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, []);
+  // Close goes back, and leaves the screen for good: it asks first, and a
+  // confirmed Leave discards the rows. A trip to another menu screen (push,
+  // replace, an in-app link) no longer asks — screen memory keeps the rows and
+  // the screen reopens on them.
   useEffect(() => {
     const mutableRouter = router as typeof router & {
-      push: typeof router.push;
-      replace: typeof router.replace;
       back: typeof router.back;
-      forward: typeof router.forward;
     };
-    const originalPush = router.push;
-    const originalReplace = router.replace;
     const originalBack = router.back;
-    const originalForward = router.forward;
-    mutableRouter.push = ((href, options) => {
-      if (
-        allowUnsafeNavigationRef.current ||
-        !hasUnsavedChangesRef.current ||
-        isSameNavigationTarget(href)
-      ) {
-        originalPush.call(router, href, options);
-        return;
-      }
-      requestLeaveConfirmation(() => originalPush.call(router, href, options));
-    }) as typeof router.push;
-    mutableRouter.replace = ((href, options) => {
-      if (
-        allowUnsafeNavigationRef.current ||
-        !hasUnsavedChangesRef.current ||
-        isSameNavigationTarget(href)
-      ) {
-        originalReplace.call(router, href, options);
-        return;
-      }
-      requestLeaveConfirmation(() => originalReplace.call(router, href, options));
-    }) as typeof router.replace;
     mutableRouter.back = (() => {
       if (allowUnsafeNavigationRef.current || !hasUnsavedChangesRef.current) {
         originalBack.call(router);
@@ -414,18 +454,8 @@ export default function ItemQtyPricePage() {
       }
       requestLeaveConfirmation(() => originalBack.call(router));
     }) as typeof router.back;
-    mutableRouter.forward = (() => {
-      if (allowUnsafeNavigationRef.current || !hasUnsavedChangesRef.current) {
-        originalForward.call(router);
-        return;
-      }
-      requestLeaveConfirmation(() => originalForward.call(router));
-    }) as typeof router.forward;
     return () => {
-      mutableRouter.push = originalPush;
-      mutableRouter.replace = originalReplace;
       mutableRouter.back = originalBack;
-      mutableRouter.forward = originalForward;
     };
   }, [requestLeaveConfirmation, router]);
   useEffect(() => {
@@ -451,20 +481,18 @@ export default function ItemQtyPricePage() {
       const currentUrl = new URL(window.location.href);
       const nextUrl = new URL(anchor.href, currentUrl);
       if (nextUrl.href === currentUrl.href) return;
+      // An in-app link keeps the rows in screen memory (and a full page load
+      // still meets the beforeunload prompt); only leaving the app asks here.
+      if (nextUrl.origin === currentUrl.origin) return;
       event.preventDefault();
       requestLeaveConfirmation(() => {
-        if (nextUrl.origin === currentUrl.origin) {
-          notifyGlobalNavigationStart();
-          router.push(`${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
-          return;
-        }
         notifyGlobalNavigationStart();
         window.location.assign(nextUrl.href);
       });
     };
     document.addEventListener("click", handleDocumentClickCapture, true);
     return () => document.removeEventListener("click", handleDocumentClickCapture, true);
-  }, [requestLeaveConfirmation, router]);
+  }, [requestLeaveConfirmation]);
   const dynamicColumns =
     columnConfig && columnConfig.length > 0
       ? resolveConfiguredColumns(columnConfig)
@@ -695,13 +723,18 @@ export default function ItemQtyPricePage() {
       buildSavePayload(row, savedByUser),
     );
     setIsSaving(true);
+    savingRef.current = true;
     try {
       await saveItemQtyPrices(payload).unwrap();
+      // Saved: the remembered rows go now, not on the reset's commit — the
+      // screen may be gone by then.
+      screenMemory.forget(ITEM_QTY_PRICE_MEMORY_KEY, tenant);
       toast.success(`Saved ${payload.length} item qty price row(s).`);
       resetScreen();
     } catch (error) {
       toast.error(extractApiErrorMessage(error));
     } finally {
+      savingRef.current = false;
       setIsSaving(false);
     }
   }

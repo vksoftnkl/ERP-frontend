@@ -24,12 +24,17 @@
  * Reopen and X read act here (`force-close.ts`, `reopen.ts`, `x-read.ts`);
  * Print Z prints a closed session's Z; Re-tender changes how the Bills tab's
  * posted bill was paid (`cockpit-retender.tsx`). Who may is the server's call.
+ *
+ * Qt bec3f98 — a supervisor's Change between two live counters (`change.ts`)
+ * and the Void of a hand-posted movement picked on the Money documents tab
+ * (`../shared/movement-void.ts`).
  */
 import type { DocumentPrintTarget } from "@/features/printing/domain/documentPrint";
 import type { BillKey } from "@/features/sales/testbill/types";
 import { clockOf, ddmmyyyy, durationText, textOf, type TillTone } from "../shared/format";
-import { formatFigure, formatMoney, formatSignedMoney, paiseOf, toPaise } from "../shared/money";
+import { formatFigure, formatMoney, formatSignedMoney, paiseOf, paiseToNumber, toPaise } from "../shared/money";
 import { CASH_TENDER_TYPE_ID } from "../shared/denom";
+import { VOIDABLE_SESSION_KINDS, type MovementVoidRequest } from "../shared/movement-void";
 import type {
   GridRow,
   TillSessionKey,
@@ -539,6 +544,66 @@ export function retenderButton(bill: GridRow | null): ButtonState {
     ? { enabled: true, tip: `Change how bill ${textOf(bill, "tb_refno")} was paid` }
     : { enabled: false, tip: "Pick a posted bill on the Bills tab to change how it was paid" };
 }
+
+// ─── change and void (Qt bec3f98) ────────────────────────────────────────────
+
+/**
+ * The Money documents tab's row when it is a POSTED hand-posted movement — a
+ * drop, paid in, exchange, pickup or top-up; never the float, the hand-over
+ * or a voucher (Qt `currentMovement`).
+ */
+export function voidableMovement(row: GridRow | null | undefined): GridRow | null {
+  if (!row) return null;
+  const kind = textOf(row, "md_kind");
+  return (VOIDABLE_SESSION_KINDS as readonly string[]).includes(kind) && textOf(row, "md_status") === "POSTED" ? row : null;
+}
+
+/** The void dialog's movement: grid 147's id (`md_id` = tcm_id), the cockpit's company / branch / year. */
+export function movementVoidRequestOf(row: GridRow, scope: TillSessionKey): MovementVoidRequest {
+  return {
+    key: { companyId: scope.companyId, branchId: scope.branchId, accYear: scope.accYear, tcmId: textOf(row, "md_id") },
+    docNo: textOf(row, "md_doc"),
+    kind: textOf(row, "md_kind"),
+    amount: paiseToNumber(paiseOf(row.md_amount)),
+  };
+}
+
+/**
+ * Change…: an OPEN or SUSPENDED session takes or gives change (273 OVERRIDE;
+ * the server judges the rest — the giving cashier is never the caller).
+ */
+export function changeButton(s: TillSessionPayload | null): ButtonState {
+  const status = s?.tssStatus ?? "";
+  const taking = status === "OPEN" || status === "SUSPENDED";
+  return {
+    enabled: taking,
+    tip: taking
+      ? "Carry change from another open till to this one, or from this one"
+      : "Only an open or suspended session takes or gives change",
+  };
+}
+
+/**
+ * Void movement…: the picked hand-posted movement, while the session still
+ * takes money (OPEN, SUSPENDED or COUNTING). The server judges the rest: a
+ * final count, a bag already in the safe.
+ */
+export function voidMovementButton(s: TillSessionPayload | null, move: GridRow | null): ButtonState {
+  const status = s?.tssStatus ?? "";
+  const live = status === "OPEN" || status === "SUSPENDED" || status === "COUNTING";
+  return {
+    enabled: live && move !== null,
+    tip: !live
+      ? "Only while the session still takes money"
+      : !move
+        ? "Pick a drop, paid in, pickup or top-up on the Money documents tab"
+        : `Void ${textOf(move, "md_doc")}`,
+  };
+}
+
+/** The info boxes' titles once a change or a void is done (Qt `AppMessage::showInfo`). */
+export const CHANGE_DONE_TITLE = "Change between counters";
+export const VOID_DONE_TITLE = "Void movement";
 
 // ─── printing (notes 117 §7) ─────────────────────────────────────────────────
 

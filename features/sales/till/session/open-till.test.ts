@@ -12,6 +12,7 @@ import {
   dayText,
   gaugeText,
   isCarried,
+  isDeviceRefusal,
   liveDateOf,
   livePanelOf,
   openBody,
@@ -336,5 +337,15 @@ describe("a session of an earlier business date", () => {
     expect(resumePlan(check({ deviceSession: live({ operatorId: "u-other" }) }), "u-me", "")).toEqual({ kind: "none" });
     expect(resumePlan(check({ userSessionElsewhere: live() }), "u-me", "")).toEqual({ kind: "none" });
     expect(resumePlan(null, "u-me", "")).toEqual({ kind: "none" });
+  });
+});
+
+describe("an open-check refusal", () => {
+  it("keeps the three 'this PC cannot hold a till' answers on the screen", () => {
+    expect(isDeviceRefusal("TILL_DEVICE_REQUIRED")).toBe(true);
+    expect(isDeviceRefusal("TILL_DEVICE_UNKNOWN")).toBe(true);
+    expect(isDeviceRefusal("TILL_DEVICE_BLOCKED")).toBe(true);
+    expect(isDeviceRefusal("TILL_COUNTER_BUSY")).toBe(false);
+    expect(isDeviceRefusal("")).toBe(false);
   });
 });

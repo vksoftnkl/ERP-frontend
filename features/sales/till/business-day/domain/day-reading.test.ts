@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import type { LiveSession } from "../../shared/live-cash";
 import { MINUS } from "./decimal";
 import {
-  NOT_ON_SERVER,
+  CASH_OFFICE_HREF,
   blankHead,
+  cashOfficeHref,
   checkLines,
+  daySafeSection,
   dayHead,
   noDayHead,
   noDayReading,
@@ -14,7 +16,7 @@ import {
   sessionKeysById,
   type RowsState,
 } from "./day-reading";
-import type { CloseCheckItem, GridRow, TillCloseCheck, TillDay } from "./wire";
+import type { CloseCheckItem, DaySafe, GridRow, TillCloseCheck, TillDay } from "./wire";
 
 const CONTEXT = { companyName: "Acme Foods Pvt Ltd", cutoff: "04:00" };
 
@@ -37,9 +39,21 @@ const DAY: TillDay = {
   ],
   handoverReceipt: "NONE",
   awaitingReceipt: { thisDay: 0, earlierDays: 0, oldestOn: null },
+  safe: null,
 };
 
-const OPEN_DAY: TillDay = { ...DAY, tbdStatus: "OPEN" };
+/** Notes 118 — the day's safe, counted: 1,20,000.00 against 1,20,500.00. */
+const COUNTED_SAFE: DaySafe = {
+  opening: BigInt(9500000),
+  expected: BigInt(12050000),
+  counted: BigInt(12000000),
+  remitted: BigInt(5000000),
+};
+
+const OPEN_DAY: TillDay = { ...DAY, tbdStatus: "OPEN", safe: COUNTED_SAFE };
+
+const REMIT = { label: "Remit  →", session: null, href: "/sales/till/cash-office?tab=remit" };
+const COUNT_SAFE = { label: "Count safe  →", session: null, href: "/sales/till/cash-office?tab=count" };
 
 function item(code: string, tone: CloseCheckItem["tone"], detail: string, sessionIds: string[] = []): CloseCheckItem {
   return { code, tone, count: sessionIds.length, detail, sessionIds };
@@ -187,7 +201,6 @@ describe("readDay", () => {
       "GREEN Approvals pending — None waiting",
       "GREEN Remittance — No safe over its insured limit",
       "LATER Cash to approve — Hand-over receipt is off (till.handover_receipt = NONE): hand-overs go straight to the safe",
-      "LATER Safe counted — The safe count waits for the server (till notes 118)",
     ]);
     const lines = Object.fromEntries(
       reading.numbers.flatMap((section) => section.lines.map((line) => [`${section.name}/${line.name}`, line])),
@@ -238,7 +251,7 @@ describe("readDay", () => {
     );
   });
 
-  it("raises a remittance for a safe over its insured limit, with nothing to do it yet", () => {
+  it("raises a remittance for a safe over its insured limit, on the Cash Office's Remit tab", () => {
     const reading = readDay(
       ready([]),
       ready([
@@ -249,7 +262,7 @@ describe("readDay", () => {
     const remittance = reading.checks.find((check) => check.title === "Remittance");
     expect(remittance?.tone).toBe("amber");
     expect(remittance?.detail).toBe("S1 2,08,350.00 over the insured 1,50,000.00 — raise a remittance");
-    expect(remittance?.action).toEqual({ label: "Remit  →", session: null });
+    expect(remittance?.action).toEqual(REMIT);
     expect(reading.checks[0].detail).toBe("No till session today");
     const safeS2 = reading.numbers.find((section) => section.name === "SAFE · S2");
     expect(safeS2?.lines[1].value).toBe("none");
@@ -297,9 +310,8 @@ describe("readDay", () => {
       "GREEN Approvals pending — None waiting",
       "GREEN Remittance — No safe over its insured limit",
       "LATER Cash to approve — Hand-over receipt is off (till.handover_receipt = NONE): hand-overs go straight to the safe",
-      "RED Drawers still out from an earlier day — 2 sessions opened before today and not closed: " +
+      "RED Drawers still out from an earlier day — 2 sessions opened before this day and not closed: " +
         "C02-261006-01 · MEENA T · ₹ 7,450.00, C03-261005-01 · SURESH B · cash hidden",
-      "LATER Safe counted — The safe count waits for the server (till notes 118)",
     ]);
     expect(reading.checks[4].action).toEqual({
       label: "Open cockpit  →",
@@ -311,10 +323,12 @@ describe("readDay", () => {
     );
   });
 
-  it("looking back at an older day, flags only drawers opened before it", () => {
+  it("looking back at an older day, flags only drawers opened before it (Qt bec3f98)", () => {
     const titles = (businessDate: string) =>
       readDay(ready([]), NO_SAFES, [live("x", { businessDate })], "2026-10-07").checks.map((check) => check.title);
     expect(titles("2026-10-06")).toContain("Drawers still out from an earlier day");
+    // On or after the day shown: not that day's business (today's live till on 13-10's page).
+    expect(titles("2026-10-07")).not.toContain("Drawers still out from an earlier day");
     expect(titles("2026-10-14")).not.toContain("Drawers still out from an earlier day");
     // A date it cannot read stays flagged, as Qt flags every live drawer off the day's list.
     expect(titles("")).toContain("Drawers still out from an earlier day");
@@ -433,7 +447,8 @@ describe("with the server's close-check", () => {
       "GREEN Held bills — No held bill is parked",
       "AMBER Remittance — S1 over its insured limit — raise a remittance",
       "AMBER SOMETHING_NEW — A code the screen does not know",
-      "LATER Safe counted — The safe count waits for the server (till notes 118)",
+      // No SAFE_NOT_COUNTED on the check: the day's own safe says it was counted.
+      "GREEN Safe counted — Counted 1,20,000.00 today (should hold 1,20,500.00)",
     ]);
     // The day's own row …
     expect(reading.checks[0].action).toEqual({
@@ -447,8 +462,9 @@ describe("with the server's close-check", () => {
       accYear: "2026-2027",
       tssId: "s-elsewhere",
     });
-    expect(reading.checks[7].action).toEqual({ label: "Remit  →", session: null });
+    expect(reading.checks[7].action).toEqual(REMIT);
     expect(reading.checks[5].action).toBeUndefined();
+    expect(reading.checks[9].action).toBeUndefined();
     expect(reading.verdict).toEqual({
       pill: "2 RED",
       tone: "danger",
@@ -548,9 +564,125 @@ describe("a closed day", () => {
     // Even before the sessions are read.
     expect(readDay({ status: "loading", rows: [] }, NO_SAFES, null, "", { day: closed }).verdict.pill).toBe("CLOSED");
   });
+});
 
-  it("disables a jump with nothing behind it with the reason", () => {
-    expect(NOT_ON_SERVER).toBe("Waits for the server (till notes 118: safe count and remittance)");
+describe("the safe (notes 118)", () => {
+  const titled = (title: string, reading: ReturnType<typeof readDay>) =>
+    reading.checks.filter((check) => check.title === title);
+
+  it("opens the Cash Office on its tab", () => {
+    expect(CASH_OFFICE_HREF).toBe("/sales/till/cash-office");
+    expect(cashOfficeHref("count")).toBe("/sales/till/cash-office?tab=count");
+    expect(cashOfficeHref("remit")).toBe("/sales/till/cash-office?tab=remit");
+  });
+
+  it("takes the server's SAFE_NOT_COUNTED as the Safe counted row, with Count safe while it is not green", () => {
+    const red = serverCheck([...ALL_GREEN, item("SAFE_NOT_COUNTED", "RED", "Not counted today: MAIN SAFE")], {
+      canCloseWithException: true,
+    });
+    const reading = readDay(ready([]), NO_SAFES, [], "2026-10-07", { day: OPEN_DAY, check: red });
+    const rows = titled("Safe counted", reading);
+    expect(rows).toEqual([
+      { tone: "red", title: "Safe counted", detail: "Not counted today: MAIN SAFE", action: COUNT_SAFE },
+    ]);
+    // Only the safe blocks: the verdict says so, not "sessions still open".
+    expect(reading.verdict).toEqual({
+      pill: "1 RED",
+      tone: "danger",
+      text:
+        "Only the safe count blocks the close. Count the safe on the Cash Office, or Close with exception: " +
+        "a store manager approves.",
+    });
+
+    const amber = serverCheck([
+      ...ALL_GREEN,
+      item("SAFE_NOT_COUNTED", "AMBER", "Not counted today: MAIN SAFE (till.day_close_safe_count is off)"),
+    ]);
+    expect(
+      titled("Safe counted", readDay(ready([]), NO_SAFES, [], "2026-10-07", { day: OPEN_DAY, check: amber }))[0].action,
+    ).toEqual(COUNT_SAFE);
+
+    // GREEN from the server: its row, no jump — and not the day's own row beside it.
+    const green = serverCheck([
+      ...ALL_GREEN,
+      item("SAFE_NOT_COUNTED", "GREEN", "Every safe holding cash has been counted"),
+    ]);
+    expect(
+      titled(
+        "Safe counted",
+        readDay(ready([]), NO_SAFES, [], "2026-10-07", { day: { ...OPEN_DAY, safe: null }, check: green }),
+      ),
+    ).toEqual([{ tone: "green", title: "Safe counted", detail: "Every safe holding cash has been counted" }]);
+  });
+
+  it("names both covered reds when sessions are live and the safe is not counted", () => {
+    const check = serverCheck(
+      [
+        item("SESSIONS_LIVE", "RED", "1 session(s) still open", ["s1"]),
+        ...ALL_GREEN.slice(1),
+        item("SAFE_NOT_COUNTED", "RED", "x"),
+      ],
+      { canCloseWithException: true },
+    );
+    expect(readDay(ready([]), NO_SAFES, [], "2026-10-07", { day: OPEN_DAY, check }).verdict.text).toBe(
+      "Only sessions still open and the safe count block the close. Close them from the cockpit and count the " +
+        "safe, or Close with exception: count their drawers there and a store manager approves.",
+    );
+  });
+
+  it("reads the day's own safe when the check does not speak for it", () => {
+    const notCounted: TillDay = { ...OPEN_DAY, safe: { ...COUNTED_SAFE, counted: null } };
+    const check = serverCheck(ALL_GREEN, { canClose: true });
+    const reading = readDay(ready([]), NO_SAFES, [], "2026-10-07", { day: notCounted, check });
+    expect(titled("Safe counted", reading)).toEqual([
+      {
+        tone: "amber",
+        title: "Safe counted",
+        detail: "Not counted today (not needed to close the day)",
+        action: COUNT_SAFE,
+      },
+    ]);
+    expect(reading.verdict.pill).toBe("1 AMBER");
+    // A server that sends no safe block reads as not counted, as Qt reads it.
+    expect(titled("Safe counted", readDay(ready([]), NO_SAFES, [], "", { day: DAY }))[0].tone).toBe("amber");
+    // No day, no safe row.
+    expect(titled("Safe counted", readDay(ready([]), NO_SAFES))).toEqual([]);
+  });
+
+  it("shows SAFE · TODAY from the day's figures, Opening only once it is closed", () => {
+    expect(daySafeSection(OPEN_DAY)).toEqual({
+      name: "SAFE · TODAY",
+      lines: [
+        { name: "Should hold", value: "1,20,500.00", tone: "" },
+        { name: "Counted", value: "1,20,000.00", tone: "" },
+        { name: "Sent to bank", value: "50,000.00", tone: "" },
+      ],
+    });
+    const closed = daySafeSection({ ...OPEN_DAY, tbdStatus: "CLOSED", safe: { ...COUNTED_SAFE, counted: null } });
+    expect(closed?.lines.map((line) => [line.name, line.value])).toEqual([
+      ["Opening", "95,000.00"],
+      ["Should hold", "1,20,500.00"],
+      ["Counted", "not yet"],
+      ["Sent to bank", "50,000.00"],
+    ]);
+    expect(daySafeSection(DAY)).toBeNull();
+    expect(daySafeSection(null)).toBeNull();
+  });
+
+  it("puts SAFE · TODAY after the safes and before EXCEPTIONS", () => {
+    const reading = readDay(ready([]), ready([{ tsf_code: "S1", balance: "10.00", tsf_insured_limit: null }]), [], "", {
+      day: OPEN_DAY,
+    });
+    expect(reading.numbers.map((section) => section.name)).toEqual([
+      "SALES",
+      "CASH IN TILLS",
+      "SAFE · S1",
+      "SAFE · TODAY",
+      "EXCEPTIONS",
+    ]);
+    expect(readDay(ready([]), NO_SAFES, [], "", { day: DAY }).numbers.map((section) => section.name)).not.toContain(
+      "SAFE · TODAY",
+    );
   });
 });
 

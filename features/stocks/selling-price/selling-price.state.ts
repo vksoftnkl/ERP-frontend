@@ -28,6 +28,8 @@ import {
   toNum,
 } from "./selling-price.math";
 import type { BelowCostPolicy, PriceScope, SellingPriceRow } from "./selling-price.types";
+import type { FilterState } from "./selling-price.filter";
+import type { ScreenScope } from "@/lib/screen-memory";
 
 export type LevelFigures = [number, number, number, number];
 
@@ -685,6 +687,33 @@ export function insertNewBucketRow(
     trackSig: signature,
   };
   return { rows: [...rows.slice(0, at), added, ...rows.slice(at)], index: at };
+}
+
+/**
+ * What screen memory (lib/screen-memory) keeps of the screen across a trip to
+ * another one: the grid with its edits, the items added by search, the filter
+ * that drew it, the switch and the level last worked on. The loaded figures are
+ * not re-read on the way back, so they can be stale — the server re-runs every
+ * check at Save.
+ */
+export type SellingPriceSnapshot = {
+  /** The header's tenant when it was taken — Save posts to whichever is on the header. */
+  tenant: ScreenScope;
+  rows: PriceGridRow[];
+  addedItemIds: string[];
+  filter: FilterState;
+  scopeChoice: PriceScope | null;
+  lastLevel: number;
+};
+
+/** Kept while any row holds an unsaved change; a save, a clear or a reload lets it go. */
+export function isPriceWorkWorthRemembering(snapshot: Pick<SellingPriceSnapshot, "rows">): boolean {
+  return changedCount(snapshot.rows) > 0;
+}
+
+/** Whether two tenants are the same one — a header switch moves the edits to the new one. */
+export function sameTenant(a: ScreenScope, b: ScreenScope): boolean {
+  return a.companyId === b.companyId && a.branchId === b.branchId && a.accYear === b.accYear;
 }
 
 /** How many distinct items and rows the grid holds (the subtitle). */

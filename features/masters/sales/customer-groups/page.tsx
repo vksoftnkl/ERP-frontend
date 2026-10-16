@@ -544,6 +544,7 @@ export default function CustomerGroupsPage() {
   return (
     <>
     <CrudMasterPage
+      modalDraftKey="customer-group"
       title="Customer Group"
       iconName="customer_classification"
       auditHistory={{ screenName: "Customer Group Master" }}

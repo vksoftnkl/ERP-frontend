@@ -1,0 +1,217 @@
+/**
+ * What the Cash Office (menu 287) adds over the shared till sheet
+ * (`../shared/till.module.scss`): Qt's two tab panes side by side — the book
+ * and the remittances on the left (3), the desk (count · remit · on the way)
+ * on the right (2) — the safe picker, the decide band's button, and the
+ * on-the-way pick list.
+ *
+ * The screen sizes itself to `.erp-app-content` (`height: 100%` on the shared
+ * `.page`, never a viewport unit). Breakpoints are CONTAINER queries on the
+ * page — a media query sees the raw device width, not the app's zoomed one.
+ */
+
+.page {
+  container-type: inline-size;
+  container-name: cash-office;
+}
+
+.titleBlock {
+  min-width: 0;
+}
+
+/* "Cash Office  Main safe" keeps its two spaces. */
+.title {
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.headRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.safePick {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.safeSelect {
+  min-width: 220px;
+}
+
+.factDanger {
+  color: #b91c1c !important;
+}
+
+/* The decide band's button: Qt's "warn" role, amber on the card. */
+.warnButton {
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: var(--erp-radius);
+  font-size: 0.84rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  background: var(--card-bg);
+  border: 1px solid #e3b25c;
+  color: #92400e;
+
+  &:hover:not(:disabled) {
+    background: #fff7e6;
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+/* ── The two panes ─────────────────────────────────────────────────────── */
+
+/* Fills what the facts leave; on a short screen it keeps 380 px and the page scrolls instead. */
+.body {
+  flex: 1 1 auto;
+  min-height: 380px;
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 12px;
+}
+
+.pane {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 12px 10px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--erp-radius);
+  overflow: hidden;
+}
+
+/* One tab's content: scrolls inside its pane. */
+.deskBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+}
+
+.tableScroll {
+  flex: 1 1 auto;
+  min-height: 120px;
+  overflow: auto;
+}
+
+.filterRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.statusSelect {
+  min-width: 150px;
+}
+
+.countedRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-right: 12px;
+}
+
+.result {
+  margin: 0;
+  font-size: 0.84rem;
+}
+
+/* The tab's button sits at its foot, on the right. */
+.deskButtons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.amountInput {
+  width: 180px;
+  max-width: 100%;
+}
+
+.dateInput {
+  max-width: 180px;
+}
+
+/* Two lines kept for a hint whose text changes with the mode or the amount. */
+.twoLines {
+  min-height: 2.6em;
+}
+
+.wrapCell {
+  white-space: normal !important;
+}
+
+/* On the way: a pick list (click, ↑ / ↓, Enter or a double-click confirms). */
+.pickTable {
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--primary) 45%, transparent);
+    outline-offset: -2px;
+  }
+
+  tbody tr[aria-selected] {
+    cursor: pointer;
+  }
+
+  tbody tr[aria-selected="true"] td {
+    background: color-mix(in srgb, var(--primary) 12%, var(--card-bg, #fff));
+  }
+}
+
+/* ── Foot: the read's refusal, Refresh, Close ──────────────────────────── */
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.footError {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.notice {
+  margin: 0;
+  font-size: 0.86rem;
+  color: #92400e;
+}
+
+/* Narrow: the panes stack and the page scrolls instead. */
+@container cash-office (max-width: 1000px) {
+  .body {
+    flex: 0 0 auto;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pane {
+    overflow: visible;
+  }
+
+  .deskBody {
+    overflow: visible;
+  }
+
+  .tableScroll {
+    max-height: 420px;
+  }
+}

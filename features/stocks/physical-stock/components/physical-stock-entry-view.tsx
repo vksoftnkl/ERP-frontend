@@ -14,6 +14,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cx } from "@/components/design-system/cx";
 import { useDropdownId } from "@/lib/configured-dropdowns";
+import type { ScreenMemoryOption } from "@/lib/use-screen-memory";
 import {
   CheckField,
   DateField,
@@ -59,6 +60,12 @@ export type PhysicalStockEntryViewProps = {
   pendingLoad: PendingLoad | null;
   onShowList: () => void;
   onClose: () => void;
+  /**
+   * Screen memory (lib/screen-memory): the page names the slot, and says whether
+   * it reopened ON a remembered count — the operator coming back from another
+   * screen — rather than on an explicit Create / Open.
+   */
+  memory?: ScreenMemoryOption;
 };
 
 const RATE_SOURCE_OPTIONS = RATE_SOURCES.map((code) => ({ value: code, label: code }));
@@ -90,8 +97,9 @@ export function PhysicalStockEntryView({
   pendingLoad,
   onShowList,
   onClose,
+  memory,
 }: PhysicalStockEntryViewProps) {
-  const api = usePhysicalStockDraft();
+  const api = usePhysicalStockDraft({ memory });
   const { draft, totals, editable, busy, columns, rights } = api;
   const godownDropdownId = useDropdownId(GODOWN_DROPDOWN_KEY);
   const reasonDropdownId = useDropdownId(STOCK_REASON_DROPDOWN_KEY);
@@ -130,6 +138,18 @@ export function PhysicalStockEntryView({
     }
   }, [pendingLoad]);
 
+  // Reopened on the count the operator left here (screen memory): it is already
+  // on screen, so all that is left is to say so — once.
+  const announceResume = useRef(Boolean(memory?.resume && api.resumed));
+  const { finishResume } = api;
+  useEffect(() => {
+    if (!announceResume.current) {
+      return;
+    }
+    announceResume.current = false;
+    void finishResume();
+  }, [finishResume]);
+
   const showList = () =>
     api.guardDirty(
       "Open count sheet",
@@ -140,7 +160,12 @@ export function PhysicalStockEntryView({
     api.guardDirty(
       "Discard count",
       "This count sheet has unsaved changes. Close it anyway?",
-      onClose,
+      () => {
+        // A confirmed discard — unlike a menu trip, the count must not be
+        // waiting on the next visit.
+        api.forgetRemembered();
+        onClose();
+      },
     );
 
   // F9 draws the sheet, F8 shows the list, F5 saves a draft and Ctrl+Enter

@@ -5,12 +5,17 @@
  * `POST /till/days/reopen { reasonId (DAY_REOPEN), approverPin, notes }`. The
  * caller approves under the DAY_REOPEN rule (AREA_MANAGER) with their own
  * PIN — never the one who closed the day. Refused while a later business day
- * is closed (TILL_DAY_LATER_CLOSED). The store Z is kept for the re-close.
+ * is closed (TILL_DAY_LATER_CLOSED). The store Z is kept for the re-close. A
+ * refusal is said in plain words, the server's sentence grey under them (Qt
+ * bec3f98); one about the PIN clears it.
  *
  * Keys: Ctrl+Enter reopens, Esc cancels.
  */
 import { useEffect, useRef, useState } from "react";
 import { cx } from "@/components/design-system/cx";
+import RefusalText from "@/components/feedback/refusal-text";
+import type { ApiRefusal } from "@/lib/api/error-text";
+import { tillErrorOf } from "../../shared/errors";
 import { TillDialog } from "../../shared/till-dialog";
 import tillStyles from "../../shared/till.module.scss";
 import { useBusinessDayClient } from "../api/business-day-api";
@@ -24,7 +29,7 @@ import {
   type ReasonChoice,
   type ReopenDraft,
 } from "../domain/day-close";
-import { firstErrorOf, type DayKey } from "../domain/wire";
+import type { DayKey } from "../domain/wire";
 
 const ID = "bd-reopen";
 
@@ -44,7 +49,7 @@ export function DayReopenDialog({ dayKey, dayLabel, onClose, onReopened }: DayRe
   const [reasons, setReasons] = useState<ReasonChoice[]>([]);
   const [draft, setDraft] = useState<ReopenDraft>(EMPTY_DRAFT);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<ApiRefusal | null>(null);
   const inFlight = useRef(false);
   const pinRef = useRef<HTMLInputElement>(null);
   const { companyId } = dayKey;
@@ -71,13 +76,13 @@ export function DayReopenDialog({ dayKey, dayLabel, onClose, onReopened }: DayRe
     if (!canReopen || inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
-    setError("");
+    setError(null);
     try {
       await client.reopenDay(reopenBody(dayKey, draft));
       onReopened();
     } catch (thrown) {
-      const refusal = firstErrorOf(thrown, "The business day could not be reopened.");
-      setError(refusal.message);
+      const refusal = tillErrorOf(thrown, "The business day could not be reopened.");
+      setError(refusal.refusal);
       if (isPinRefusal(refusal)) {
         patch({ pin: "" });
         pinRef.current?.focus();
@@ -171,7 +176,7 @@ export function DayReopenDialog({ dayKey, dayLabel, onClose, onReopened }: DayRe
 
       {error ? (
         <p className={cx(tillStyles.warn, tillStyles.warnDanger)} role="alert">
-          {error}
+          <RefusalText refusal={error} />
         </p>
       ) : null}
     </TillDialog>

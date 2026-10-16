@@ -217,6 +217,13 @@ export const CONFIGURED_GRIDS = {
   tillApprovalRules: { name: "TILL APPROVAL RULES", fallbackId: "151", deletedParam: null },
   tillApprovalGrants: { name: "TILL APPROVAL GRANTS", fallbackId: "152", deletedParam: null },
   /**
+   * Cash Office (menu 287, notes 118): every remittance of the branch (QUOTED
+   * `'icompany_id'`, `'ibranch_id'`, optional `'ifrom_date'` / `'ito_date'` /
+   * `'istatus'`), and one safe's book since its last count (+ `'isafe_id'`).
+   */
+  tillRemittances: { name: "TILL REMITTANCES", fallbackId: "157", deletedParam: null },
+  tillSafeBook: { name: "TILL SAFE BOOK", fallbackId: "158", deletedParam: null },
+  /**
    * Expense Voucher (menu 277, Qt NexERP d97cdd4): the Reason and Expense
    * ledger cells' popups. Both bind QUOTED `'icompany_id'` — always sent.
    */

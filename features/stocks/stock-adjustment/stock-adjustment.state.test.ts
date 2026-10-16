@@ -23,6 +23,7 @@ import {
   editCell,
   filterReasonsForKind,
   insertLineBefore,
+  isAdjustmentWorthRemembering,
   itemDetailFailed,
   kindSelectable,
   lineNumbers,
@@ -398,6 +399,27 @@ describe("edits", () => {
     const draft = { ...draftOf("Damage"), svhId: "x", refno: "DMG/1", docDate: "2026-09-01" };
     const next = nextDocument(draft, SCOPE);
     expect(next).toMatchObject({ kind: "Damage", godownId: "g-1", docDate: "2026-09-01", svhId: "", refno: "" });
+  });
+});
+
+describe("screen memory", () => {
+  const keyed = () => ({ ...withLines(draftOf("Adjustment"), [itemLine()]), dirty: true });
+
+  it("keeps only unsaved work on a draft still open for keying", () => {
+    expect(isAdjustmentWorthRemembering(draftOf("Adjustment"))).toBe(false);
+    expect(isAdjustmentWorthRemembering(keyed())).toBe(true);
+    // Saved as a draft: it reloads from the server.
+    expect(isAdjustmentWorthRemembering({ ...keyed(), svhId: "x", dirty: false })).toBe(false);
+  });
+
+  it("drops a browsed, posted or cancelled document even when it reads dirty", () => {
+    expect(isAdjustmentWorthRemembering({ ...keyed(), mode: "browse" })).toBe(false);
+    expect(isAdjustmentWorthRemembering({ ...keyed(), status: "POSTED" })).toBe(false);
+    expect(isAdjustmentWorthRemembering({ ...keyed(), status: "CANCELLED" })).toBe(false);
+  });
+
+  it("drops the document once the next one starts clean", () => {
+    expect(isAdjustmentWorthRemembering(nextDocument(keyed(), SCOPE))).toBe(false);
   });
 });
 

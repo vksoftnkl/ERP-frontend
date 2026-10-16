@@ -23,6 +23,11 @@
  * a polled GET-as-mutation would fire the data-freshness bus on every tick.
  * A live session of an earlier business date is said so, and Resume refuses it.
  *
+ * Qt bec3f98: a refusal is said in plain words — "this PC cannot hold a
+ * till" (TILL_DEVICE_*) on the screen's warning line, any other in the popup —
+ * and while the live panel greys the open form, its first live button holds
+ * the cursor.
+ *
  * Keys: Enter = next field · Ctrl+Enter = open (from any field; Qt
  * 2026-10-12, was F10) · F5 = reload · Esc = not now. Every figure box
  * selects its text on focus.
@@ -30,8 +35,10 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { cx } from "@/components/design-system/cx";
+import RefusalText from "@/components/feedback/refusal-text";
 import { useBusinessContext } from "@/components/layout/business-context";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
+import type { ApiRefusal } from "@/lib/api/error-text";
 import { getAuthUserId, getUserInfo } from "@/lib/auth/session";
 import { toast } from "@/lib/notify";
 import { useTillSessionClient } from "../shared/api/till-session-api";
@@ -49,6 +56,7 @@ import styles from "../shared/till.module.scss";
 import { CashMovementDialog } from "./cash-movement-dialog";
 import { DenomCount, focusFirstQty } from "./denom-count";
 import { EndShiftDialog } from "./end-shift-dialog";
+import { refusalLine } from "./refusal-line";
 import { SupervisorMoves } from "./supervisor-moves";
 import {
   FORCE_CLOSE_TIP,
@@ -65,6 +73,7 @@ import {
   dayText,
   floatWords,
   isCarried,
+  isDeviceRefusal,
   liveDateOf,
   liveFacts,
   livePanelOf,
@@ -78,8 +87,6 @@ import {
 } from "./open-till";
 
 const ID_PREFIX = "till-open";
-const NOT_A_DEVICE =
-  "This PC is not a registered device, so it cannot hold a till. Register it in Device Master and log in again.";
 
 /** The page is on screen (not a background browser tab): the wait re-check runs only then. */
 function subscribeVisibility(onChange: () => void): () => void {
@@ -115,6 +122,8 @@ export default function OpenTillScreen() {
 
   const [check, setCheck] = useState<TillOpenCheck | null>(null);
   const [checkError, setCheckError] = useState("");
+  /** A device refusal ("this PC cannot hold a till"): said on the screen, in plain words (Qt bec3f98). */
+  const [checkRefusal, setCheckRefusal] = useState<ApiRefusal | null>(null);
   const [form, setForm] = useState<OpenTillForm>(EMPTY_FORM);
   const [issuedText, setIssuedText] = useState("");
   const [denominations, setDenominations] = useState<Denomination[]>([]);
@@ -151,6 +160,9 @@ export default function OpenTillScreen() {
   const openButton = useRef<HTMLButtonElement | null>(null);
   const reasonSelect = useRef<HTMLSelectElement | null>(null);
   const endShiftButton = useRef<HTMLButtonElement | null>(null);
+  const pageRef = useRef<HTMLDivElement | null>(null);
+  const resumeButton = useRef<HTMLButtonElement | null>(null);
+  const movementButton = useRef<HTMLButtonElement | null>(null);
 
   const inputs: OpenTillInputs = { check, checkError, form, denominations, reasons, me };
   const deviceSessionId = check?.deviceSession?.sessionId ?? "";
@@ -172,6 +184,7 @@ export default function OpenTillScreen() {
       const ticket = generation.current;
       setCheck(data);
       setCheckError("");
+      setCheckRefusal(null);
       setCheckTick((tick) => tick + 1);
       if (!quiet) setMovesTick((tick) => tick + 1);
       const counter = chosenCounter(data, pickedRef.current);
@@ -221,15 +234,15 @@ export default function OpenTillScreen() {
           return;
         }
         setCheck(null);
-        const refusal = tillErrorOf(error, "The till could not be checked.");
-        // The two answers that mean "this PC cannot hold a till", said plainly.
-        if (refusal.code === "TILL_DEVICE_REQUIRED" || refusal.code === "TILL_DEVICE_UNKNOWN") {
-          setCheckError(NOT_A_DEVICE);
-        } else if (refusal.code === "TILL_DEVICE_BLOCKED") {
-          setCheckError(refusal.message);
+        const { refusal } = tillErrorOf(error, "The till could not be checked.");
+        setCheckError(refusalLine(refusal, "The till could not be checked."));
+        // The answers that mean "this PC cannot hold a till" stay on the
+        // screen; any other refusal is a popup (Qt bec3f98).
+        if (isDeviceRefusal(refusal.code)) {
+          setCheckRefusal(refusal);
         } else {
-          setCheckError(refusal.text);
-          toast.error(refusal.text);
+          setCheckRefusal(null);
+          toast.apiError(error, { fallback: "The till could not be checked." });
         }
       } finally {
         reading.current -= 1;
@@ -264,6 +277,32 @@ export default function OpenTillScreen() {
     endShiftButton.current?.focus();
   }, [counting, checkTick]);
 
+  // The live panel greys the open form, so the cursor it held is gone: put it
+  // on the panel's first live button (Resume, Continue count / End shift,
+  // Cash movement), so Enter still reaches the screen (Qt bec3f98). A cursor
+  // that is still on a live control stays where it is.
+  const liveShown = live !== null;
+  useEffect(() => {
+    if (!liveShown || overlayOpen()) return;
+    const active = document.activeElement;
+    const page = pageRef.current;
+    if (
+      active instanceof HTMLElement &&
+      active !== document.body &&
+      page?.contains(active) &&
+      !active.matches(":disabled") &&
+      active.getClientRects().length > 0
+    ) {
+      return;
+    }
+    for (const button of [resumeButton.current, endShiftButton.current, movementButton.current]) {
+      if (button && !button.disabled && button.getClientRects().length > 0) {
+        button.focus();
+        return;
+      }
+    }
+  }, [liveShown, checkTick, busy]);
+
   useEffect(() => {
     if (!companyId || !branchId) return;
     let cancelled = false;
@@ -276,7 +315,7 @@ export default function OpenTillScreen() {
         if (!cancelled) setDenominations(toDenominations(rows));
       })
       .catch((error) => {
-        if (!cancelled) toast.error(tillErrorOf(error, "The denominations could not be read.").text);
+        if (!cancelled) toast.apiError(error, { fallback: "The denominations could not be read." });
       })
       .finally(() => {
         if (!cancelled) setDenomsLoading(false);
@@ -317,7 +356,7 @@ export default function OpenTillScreen() {
       adopt(await client.open(openBody(inputs, { companyId, branchId })));
     } catch (error) {
       const refusal = tillErrorOf(error, "The session could not be opened.");
-      toast.error(refusal.text);
+      toast.apiError(error, { fallback: "The session could not be opened." });
       // Someone took the counter (or the cashier opened elsewhere) meanwhile.
       if (["TILL_COUNTER_BUSY", "TILL_OPERATOR_BUSY", "TILL_NO_FREE_COUNTER"].includes(refusal.code)) reload();
     } finally {
@@ -337,7 +376,7 @@ export default function OpenTillScreen() {
         const payload = await client.get({ companyId, branchId, accYear: s.accYear, tssId: s.sessionId });
         date = liveDateOf(payload) || LIVE_DATE_UNKNOWN;
       } catch (error) {
-        toast.error(tillErrorOf(error, "The session could not be read.").text);
+        toast.apiError(error, { fallback: "The session could not be read." });
         return;
       } finally {
         setBusy(false);
@@ -370,7 +409,7 @@ export default function OpenTillScreen() {
     try {
       adopt(await client.resume({ companyId, branchId, accYear: s.accYear, tssId: s.sessionId }));
     } catch (error) {
-      toast.error(tillErrorOf(error, "The session could not be resumed.").text);
+      toast.apiError(error, { fallback: "The session could not be resumed." });
     } finally {
       setBusy(false);
     }
@@ -387,7 +426,7 @@ export default function OpenTillScreen() {
       toast.success(`Session ${payload.tssSessionNo} suspended — nothing is billed until you resume.`);
       reload();
     } catch (error) {
-      toast.error(tillErrorOf(error, "The session could not be suspended.").text);
+      toast.apiError(error, { fallback: "The session could not be suspended." });
     } finally {
       setBusy(false);
     }
@@ -435,7 +474,7 @@ export default function OpenTillScreen() {
   const warnText = checkError || problem;
 
   return (
-    <div className={styles.page}>
+    <div ref={pageRef} className={styles.page}>
       <div className={styles.titleBar}>
         <div>
           <h1 className={styles.title}>Open Till Session</h1>
@@ -642,7 +681,9 @@ export default function OpenTillScreen() {
               ) : null}
             </fieldset>
 
-            <p className={cx(styles.warn, checkError && styles.warnDanger)}>{warnText}</p>
+            <p className={cx(styles.warn, checkError && styles.warnDanger)}>
+              {checkRefusal ? <RefusalText refusal={checkRefusal} /> : warnText}
+            </p>
             <div className={styles.buttonRow}>
               <span className={styles.spacer} />
               <button type="button" className={styles.secondaryButton} onClick={close}>
@@ -702,6 +743,7 @@ export default function OpenTillScreen() {
                 ) : null}
                 {live.showCashMovement ? (
                   <button
+                    ref={movementButton}
                     type="button"
                     className={styles.secondaryButton}
                     disabled={!live.cashMovementEnabled || busy}
@@ -723,6 +765,7 @@ export default function OpenTillScreen() {
                 ) : null}
                 {live.showResume ? (
                   <button
+                    ref={resumeButton}
                     type="button"
                     className={styles.primaryButton}
                     disabled={!live.resumable || busy}

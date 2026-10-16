@@ -6,7 +6,14 @@
  * Nothing here computes money. `derived.ts` does that, and it is pure.
  */
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useBusinessContext } from "@/components/layout/business-context";
 import { toast } from "@/lib/notify";
+import { RESTORED_MESSAGE_OPTIONS, restoredMessage, screenMemory, type ScreenScope } from "@/lib/screen-memory";
+import {
+  useForgetIfWritingOnUnmount,
+  useRememberWrite,
+  type ScreenMemoryOption,
+} from "@/lib/use-screen-memory";
 import { openingBalanceError } from "../api-errors";
 import {
   useCarryForwardOpeningBalancesMutation,
@@ -20,7 +27,7 @@ import { formatMoney, totals as computeTotals } from "../derived";
 import type { BillRow, LedgerRow, Scope, ShownSide } from "../opening-balance.types";
 import { buildBillsPayload } from "../payload/build-bills-payload";
 import { buildLedgerPayload } from "../payload/build-ledger-payload";
-import { previousAccYear } from "../scope";
+import { previousAccYear, type ScopeMode } from "../scope";
 import { validate } from "../validate";
 import {
   draftReducer,
@@ -29,6 +36,7 @@ import {
   type OpeningDraft,
   type PickedLedger,
 } from "./draft";
+import { isOpeningWorthRemembering, listAnswerAction, type OpeningMemory } from "./memory";
 
 /** `useReducer` over a reducer that also returns refusals. */
 function reducerWithRefusal(state: OpeningDraft, action: DraftAction): OpeningDraft {
@@ -46,9 +54,72 @@ export type OpeningBusy = "idle" | "loading" | "saving" | "carrying" | "checking
 
 export type UseOpeningDraft = ReturnType<typeof useOpeningDraft>;
 
-export function useOpeningDraft(scope: Scope, canWrite: boolean) {
-  const [draft, dispatch] = useReducer(reducerWithRefusal, scope, initialDraft);
+/**
+ * The header's company, branch and year, as the screen reads them — the slot
+ * screen memory keeps the set in. The page asks with the same three values.
+ */
+export function useOpeningTenant(): ScreenScope {
+  const { activeCompany, activeBranch, activeFiscalYear } = useBusinessContext();
+  const companyId = activeCompany?.id ?? "";
+  const branchId = activeBranch?.id ?? "";
+  const accYear = (activeFiscalYear?.name ?? "").trim();
+  return useMemo(() => ({ companyId, branchId, accYear }), [accYear, branchId, companyId]);
+}
+
+/** Screen memory (lib/screen-memory): the set outlives a trip to another screen. */
+export type OpeningMemoryOptions = {
+  memory?: ScreenMemoryOption;
+  tenant: ScreenScope;
+  /** The scope combo, remembered with the set. */
+  mode: ScopeMode;
+  /**
+   * What the screen recalled when it mounted, or null. The screen reads it, not
+   * this hook: the combo it restores decides the scope this hook is given.
+   */
+  recalled: OpeningMemory | null;
+};
+
+export function useOpeningDraft(scope: Scope, canWrite: boolean, remembering?: OpeningMemoryOptions) {
+  const memory = remembering?.memory;
+  const recalled = remembering?.recalled ?? null;
+  const resumed = recalled !== null;
+  const [draft, dispatch] = useReducer(
+    reducerWithRefusal,
+    scope,
+    (initialScope: Scope) => recalled?.draft ?? initialDraft(initialScope),
+  );
   const [busy, setBusy] = useState<OpeningBusy>("idle");
+  /** `busy` as last committed — what an unmount cleanup can still read. */
+  const busyRef = useRef<OpeningBusy>(busy);
+  useEffect(() => {
+    busyRef.current = busy;
+  }, [busy]);
+
+  // ── Screen memory ─────────────────────────────────────────────────────────
+  // Every change is written through, so the set is there when the operator
+  // comes back from another screen; forgotten once it is clean, and when the
+  // screen goes while a save or a carry forward is still in flight — that
+  // write lands after the screen is gone, and the edits must not come back
+  // over what it wrote.
+  const mode = remembering?.mode ?? "branch";
+  const tenant = remembering?.tenant;
+  const snapshot = useMemo<OpeningMemory>(
+    () => ({ mode, draft, tenant: tenant ?? { companyId: "", branchId: "", accYear: "" } }),
+    [draft, mode, tenant],
+  );
+  const snapshotRef = useRef(snapshot);
+  useEffect(() => {
+    snapshotRef.current = snapshot;
+  }, [snapshot]);
+  useRememberWrite(memory, snapshot, {
+    scopeOf: (value) => value.tenant,
+    shouldKeep: isOpeningWorthRemembering,
+  });
+  useForgetIfWritingOnUnmount(
+    memory,
+    () => busyRef.current === "saving" || busyRef.current === "carrying",
+    () => snapshotRef.current.tenant,
+  );
 
   const scopeReady = Boolean(scope.companyId && scope.accYear);
   const listArg = useMemo(
@@ -68,6 +139,13 @@ export function useOpeningDraft(scope: Scope, canWrite: boolean) {
   const [saveBills] = useSaveOpeningBillsMutation();
   const [runCarryForward] = useCarryForwardOpeningBalancesMutation();
 
+  /**
+   * A set restored with unsaved changes keeps them over its first `/list`
+   * answer (`listAnswerAction`). Released by that answer, a reload or a scope
+   * switch.
+   */
+  const keepRestored = useRef(Boolean(recalled?.draft.dirty));
+
   // ── Scope changes clear everything ────────────────────────────────────────
   // A company-level set and a branch set share no rows and no bills, so a
   // cached breakup from one means nothing in the other.
@@ -82,6 +160,7 @@ export function useOpeningDraft(scope: Scope, canWrite: boolean) {
       return;
     }
     currentScope.current = scope;
+    keepRestored.current = false;
     dispatch({ type: "SCOPE_CHANGED", scope });
   }, [scope]);
 
@@ -92,17 +171,24 @@ export function useOpeningDraft(scope: Scope, canWrite: boolean) {
   // needs no bookkeeping in React.
   const seeded = useRef<unknown>(null);
   useEffect(() => {
-    if (!listPayload || seeded.current === listPayload) {
-      return;
-    }
-    if (
-      listPayload.opCompanyId !== scope.companyId ||
-      (listPayload.opBranchId ?? null) !== scope.branchId ||
-      listPayload.opAccYear !== scope.accYear
-    ) {
+    const action = listAnswerAction({
+      payload: listPayload,
+      seeded: seeded.current,
+      forThisScope:
+        listPayload !== undefined &&
+        listPayload.opCompanyId === scope.companyId &&
+        (listPayload.opBranchId ?? null) === scope.branchId &&
+        listPayload.opAccYear === scope.accYear,
+      keepRestored: keepRestored.current,
+    });
+    if (action === "ignore" || !listPayload) {
       return;
     }
     seeded.current = listPayload;
+    if (action === "keep-restored") {
+      keepRestored.current = false;
+      return;
+    }
     // LOADED clears the problem list too: a refusal that outlives the rows it
     // was computed from names ledgers that are no longer on screen.
     dispatch({ type: "LOADED", payload: listPayload });
@@ -225,6 +311,7 @@ export function useOpeningDraft(scope: Scope, canWrite: boolean) {
 
   const reload = useCallback(() => {
     seeded.current = null;
+    keepRestored.current = false;
     void refetchList();
   }, [refetchList]);
 
@@ -431,7 +518,23 @@ export function useOpeningDraft(scope: Scope, canWrite: boolean) {
     [],
   );
 
+  /** The set came back from screen memory: say so once, so nobody wonders why it is edited. */
+  const finishResume = useCallback(async () => {
+    // One tick first: this runs from the mount effect.
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    toast.info(restoredMessage("opening balance set"), RESTORED_MESSAGE_OPTIONS);
+  }, []);
+  /** The operator discarded the set: it must not come back. */
+  const forgetRemembered = useCallback(() => {
+    if (memory) {
+      screenMemory.forget(memory.key, snapshotRef.current.tenant);
+    }
+  }, [memory]);
+
   return {
+    resumed,
+    finishResume,
+    forgetRemembered,
     draft,
     totals,
     problems: draft.problems,

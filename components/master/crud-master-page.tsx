@@ -26,6 +26,9 @@ import { useMasterModule } from "@/store/hooks/useMasterModule";
 import { getConfiguredModuleGridId } from "@/features/masters/shared/configured-grid-detail-ids";
 import { getApiErrorMessage } from "@/store/api/baseApi";
 import { toast } from "@/lib/notify";
+import { readFormDraft } from "@/lib/form-drafts";
+import { screenMemory, type ScreenScope } from "@/lib/screen-memory";
+import { useBusinessContext } from "@/components/layout/business-context";
 import { useGetGridColumnsQuery } from "@/store/api/metadataApi";
 import type { GridColumnConfig } from "@/store/slices/gridColumnsSlice";
 import {
@@ -198,6 +201,8 @@ const PAGE_SIZE_KEYS = [
   "per_page",
 ] as const;
 type ContextMenuPosition = Pick<CSSProperties, "left" | "top">;
+/** Which popup was open when the operator left the screen (screen memory). */
+type MasterModalMarker = { variant: "new" } | { variant: "edit"; id: string | number };
 function clampContextMenuPosition(value: number, min: number, max: number): number {
   if (max < min) {
     return min;
@@ -3019,7 +3024,7 @@ export default function CrudMasterPage({
   // Menu permissions for this screen (User Administration → menu rights). The
   // route resolves to its menu on its own; a page mounted on a route the menu
   // catalogue does not list can name its menu with `permissionMenuId`.
-  const { permissions: menuPermissions } = usePagePermissions({
+  const { permissions: menuPermissions, status: permissionStatus } = usePagePermissions({
     menuId: permissionMenuId,
     href: permissionHref,
     disabled: disablePermissionGating,
@@ -3256,6 +3261,44 @@ export default function CrudMasterPage({
       pendingDeleteRow.masterId
     );
   }, [pendingDeleteRow]);
+  // --- screen memory: the popup the operator left open --------------------
+  // A page with `modalDraftKey` already keeps what was typed (lib/form-drafts).
+  // What it lost on a trip to another menu screen was the popup itself: the
+  // operator came back to the list and had to find the record and reopen it.
+  // So which popup was open is remembered (lib/screen-memory) and reopened on
+  // return. Never for an embedded use (`hideListPage`): that popup belongs to
+  // the screen hosting it, not to this route.
+  const { activeCompany, activeBranch, activeFiscalYear } = useBusinessContext();
+  const reopenMemoryKey = modalDraftKey && !hideListPage ? `master-modal:${modalDraftKey}` : "";
+  const reopenScope = useMemo<ScreenScope>(
+    () => ({
+      companyId: String(activeCompany?.compId ?? activeCompany?.id ?? ""),
+      branchId: String(activeBranch?.id ?? ""),
+      // Masters are not kept per year; any year reads the same slot.
+      accYear: (activeFiscalYear?.name ?? "").trim() || "*",
+    }),
+    [activeBranch?.id, activeCompany?.compId, activeCompany?.id, activeFiscalYear?.name],
+  );
+  /** Set by the openers just before the popup opens: which one it is. */
+  const openingModalRef = useRef<MasterModalMarker | null>(null);
+  const handleModalOpenChange = useCallback(
+    (open: boolean, variantKey: string | null) => {
+      if (reopenMemoryKey) {
+        if (open && openingModalRef.current) {
+          screenMemory.remember(reopenMemoryKey, reopenScope, openingModalRef.current);
+        } else if (!open) {
+          // Closed, saved or discarded: nothing to reopen. (A trip to another
+          // screen unmounts the popup without closing it.)
+          screenMemory.forget(reopenMemoryKey, reopenScope);
+        }
+      }
+      if (open) {
+        openingModalRef.current = null;
+      }
+      onModalOpenChange?.(open, variantKey);
+    },
+    [onModalOpenChange, reopenMemoryKey, reopenScope],
+  );
   const openCreateModal = useCallback((overrideValues?: Record<string, string>) => {
     resetSaveState();
     resetDetailsState();
@@ -3264,6 +3307,8 @@ export default function CrudMasterPage({
     // go OVER the create defaults, not instead of them — replacing them dropped
     // the page's own defaults (Active, the saved form template) from the form.
     const defaults = createInitialValues ?? INITIAL_FORM_STATE;
+    // A seeded create keeps no draft, so there is nothing to reopen it on.
+    openingModalRef.current = overrideValues ? null : { variant: "new" };
     modalControllerRef.current?.openModal("master-create", {
       values: overrideValues ? { ...defaults, ...overrideValues } : defaults,
       // A create seeded by its caller is about that caller's values, not the
@@ -3349,6 +3394,7 @@ export default function CrudMasterPage({
         const resolvedId = resolveRecordId(detailRow, lookupKeys.id);
         setEditingItemId(resolvedId);
         const defaultValues = mapRowToFormState(detailRow, lookupKeys);
+        openingModalRef.current = { variant: "edit", id: resolvedId };
         modalControllerRef.current?.openModal("master-update", {
           values: mapFormValues
             ? mapFormValues({
@@ -3416,6 +3462,7 @@ export default function CrudMasterPage({
           const resolvedId = resolveRecordId(detailRow, lookupKeys.id);
           setEditingItemId(resolvedId);
           const defaultValues = mapRowToFormState(detailRow, lookupKeys);
+          openingModalRef.current = { variant: "edit", id: resolvedId };
           modalControllerRef.current?.openModal("master-update", {
             values: mapFormValues
               ? mapFormValues({
@@ -3443,6 +3490,60 @@ export default function CrudMasterPage({
       resetSaveState,
     ],
   );
+  // Reopen the popup the operator left open here, once per mount — when the
+  // rights are known and its typed draft is still there (a save or Discard
+  // dropped it, and an empty popup is not worth reopening).
+  const reopenAttempted = useRef(false);
+  useEffect(() => {
+    if (reopenAttempted.current || !reopenMemoryKey || permissionStatus === "loading") {
+      return;
+    }
+    const marker = screenMemory.recall<MasterModalMarker>(reopenMemoryKey, reopenScope);
+    if (!marker && !reopenScope.companyId) {
+      return; // the header's tenant is still resolving
+    }
+    reopenAttempted.current = true;
+    if (!marker) {
+      return;
+    }
+    const draftKey =
+      marker.variant === "new" ? `${modalDraftKey}:new` : `${modalDraftKey}:edit:${marker.id}`;
+    if (!readFormDraft(draftKey)) {
+      screenMemory.forget(reopenMemoryKey, reopenScope);
+      return;
+    }
+    // Opened after the commit, as a click would: the popup's controller has
+    // registered by then.
+    let fired = false;
+    const timer = window.setTimeout(() => {
+      fired = true;
+      if (marker.variant === "new") {
+        if (canCreateRecords && !onCreateAction) {
+          openCreateModal();
+        }
+      } else if (canEditRecords) {
+        void openUpdateModalById(marker.id);
+      }
+    }, 0);
+    return () => {
+      // Cancelled before it ran (StrictMode's simulated unmount, a dependency
+      // settling): let the re-run try again. Once it ran, never twice.
+      if (!fired) {
+        window.clearTimeout(timer);
+        reopenAttempted.current = false;
+      }
+    };
+  }, [
+    canCreateRecords,
+    canEditRecords,
+    modalDraftKey,
+    onCreateAction,
+    openCreateModal,
+    openUpdateModalById,
+    permissionStatus,
+    reopenMemoryKey,
+    reopenScope,
+  ]);
   const crudController = useMemo<CrudMasterPageController>(
     () => ({
       closeModal: () => {
@@ -4914,7 +5015,7 @@ export default function CrudMasterPage({
         onControllerReady={(controller) => {
           modalControllerRef.current = controller;
         }}
-        onOpenChange={onModalOpenChange}
+        onOpenChange={handleModalOpenChange}
         onDraftApplied={onModalDraftApplied}
         onSubmit={handleModalSubmit}
         onCancel={handleModalCancel}

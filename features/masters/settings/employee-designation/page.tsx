@@ -414,6 +414,7 @@ export default function EmployeeDesignationMasterPage() {
   return (
     <>
     <CrudMasterPage
+      modalDraftKey="employee-designation"
       title="Designation"
       iconName="employee_designation_master"
       auditHistory={{ screenName: "Employee Designation Master" }}

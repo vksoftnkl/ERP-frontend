@@ -6,6 +6,7 @@ import {
   createDraft,
   ensureTrailingBlank,
   insertHoldings,
+  isCountWorthRemembering,
   isEditable,
   lineFromSheet,
   physicalStockReducer,
@@ -389,5 +390,30 @@ describe("physicalStockReducer", () => {
   it("a status other than DRAFT makes the sheet read-only", () => {
     const posted = physicalStockReducer(fresh(), { type: "statusApplied", status: "POSTED" });
     expect(isEditable(posted)).toBe(false);
+  });
+});
+
+describe("isCountWorthRemembering", () => {
+  const edited = () =>
+    physicalStockReducer(createDraft(SEED), { type: "headerSet", field: "remarks", value: "x" });
+
+  it("keeps only unsaved work on a sheet still open for entry", () => {
+    expect(isCountWorthRemembering(createDraft(SEED))).toBe(false);
+    expect(isCountWorthRemembering(edited())).toBe(true);
+  });
+
+  it("drops a browsed, posted or cancelled sheet even when it reads dirty", () => {
+    const browsed = physicalStockReducer(edited(), { type: "modeSet", mode: "browse" });
+    expect(isCountWorthRemembering(browsed)).toBe(false);
+    for (const status of ["POSTED", "CANCELLED"]) {
+      expect(
+        isCountWorthRemembering(physicalStockReducer(edited(), { type: "statusApplied", status })),
+      ).toBe(false);
+    }
+  });
+
+  it("drops the sheet once a New starts clean", () => {
+    const next = physicalStockReducer(edited(), { type: "reset", seed: SEED });
+    expect(isCountWorthRemembering(next)).toBe(false);
   });
 });

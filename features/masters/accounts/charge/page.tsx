@@ -391,6 +391,7 @@ export default function ChargeMasterPage() {
   );
   return (
     <CrudMasterPage
+      modalDraftKey="charge-master"
       title="Charge Master"
       auditHistory={{
         screenName: "Charge Master",

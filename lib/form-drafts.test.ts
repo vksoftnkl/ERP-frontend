@@ -3,8 +3,23 @@ import { describe, expect, it } from "vitest";
 import {
   FORM_DRAFT_MAX_AGE_MS,
   collectChangedFormValues,
+  omitFormDraftFields,
   parseFormDraft,
 } from "./form-drafts";
+
+describe("omitFormDraftFields", () => {
+  it("never keeps a password or a picked file", () => {
+    const changed = { gspUserName: "API", gspUserPassword: "s3cret", photo: "face.png" };
+    expect(omitFormDraftFields(changed, new Set(["gspUserPassword", "photo"]))).toEqual({
+      gspUserName: "API",
+    });
+  });
+
+  it("is null when nothing else changed", () => {
+    expect(omitFormDraftFields({ gspUserPassword: "s3cret" }, new Set(["gspUserPassword"]))).toBeNull();
+    expect(omitFormDraftFields(null, new Set())).toBeNull();
+  });
+});
 
 describe("collectChangedFormValues", () => {
   it("keeps only the fields that differ from what the form opened on", () => {

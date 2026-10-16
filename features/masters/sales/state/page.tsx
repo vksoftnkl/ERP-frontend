@@ -410,6 +410,7 @@ export default function StateMasterPage() {
   return (
     <>
     <CrudMasterPage
+      modalDraftKey="state-master"
       title="State"
       iconName="state_master"
       auditHistory={{ screenName: "State Master" }}

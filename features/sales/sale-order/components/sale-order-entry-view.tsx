@@ -97,6 +97,7 @@ import {
   useSaleOrderDraft,
   type SavedOrderRef,
 } from "../use-sale-order-draft";
+import type { ScreenMemoryOption } from "@/lib/use-screen-memory";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { documentRights } from "@/lib/permissions/document-rights";
 import { saveAllowed } from "../sale-order.rights";
@@ -175,14 +176,21 @@ export type SaleOrderEntryViewProps = {
   initialDocument?: SaleOrderDocKey;
   initialMode?: "browse" | "entry";
   onBackToList: () => void;
+  /**
+   * Screen memory (lib/screen-memory): the page names the slot, and says whether
+   * it reopened ON the order the operator left here — coming back from another
+   * screen — rather than on an explicit Create / Open.
+   */
+  memory?: ScreenMemoryOption;
 };
 
 export function SaleOrderEntryView({
   initialDocument,
   initialMode = "browse",
   onBackToList,
+  memory,
 }: SaleOrderEntryViewProps) {
-  const api = useSaleOrderDraft();
+  const api = useSaleOrderDraft({ memory });
   const {
     draft,
     dispatch,
@@ -287,6 +295,12 @@ export function SaleOrderEntryView({
       return;
     }
     openedDocument.current = opening;
+    if (memory?.resume && api.resumed) {
+      // The order the operator left here when they went to another screen
+      // (screen memory): kept, not cleared or loaded over.
+      void api.finishResume();
+      return;
+    }
     api.clear();
     if (!target) {
       return;
@@ -296,7 +310,7 @@ export function SaleOrderEntryView({
         api.beginEdit();
       }
     });
-  }, [api, initialDocument, initialMode]);
+  }, [api, initialDocument, initialMode, memory?.resume]);
 
   /**
    * The grids read a merged `{line, priced}` view by flat key, so the readonly
@@ -609,7 +623,10 @@ export function SaleOrderEntryView({
       if (action === "list") setListOpen(true);
       if (action === "import") setImportOpen(true);
       if (action === "clear") api.clear();
-      if (action === "back") onBackToList();
+      if (action === "back") {
+        api.forgetRemembered();
+        onBackToList();
+      }
     },
     [api, draft.isDirty, onBackToList],
   );
@@ -620,7 +637,10 @@ export function SaleOrderEntryView({
     if (action === "list") setListOpen(true);
     if (action === "import") setImportOpen(true);
     if (action === "clear") api.clear();
-    if (action === "back") onBackToList();
+    if (action === "back") {
+      api.forgetRemembered();
+      onBackToList();
+    }
   }, [api, onBackToList, pendingGuard]);
 
   const onPickDocument = useCallback(

@@ -6,15 +6,17 @@
  * functions (notes 117).
  *
  * The close-check decides the close: Close day while nothing is RED
- * (`canClose`), Close with exception while every RED is a live session
- * (`canCloseWithException`) — those drawers are counted in the dialog and
- * force-closed in the same call. All three verbs are Business Day (274) EDIT.
+ * (`canClose`), Close with exception while every RED is one an exception may
+ * cover (`canCloseWithException`): live sessions — counted in the dialog and
+ * force-closed in the same call — and, since Qt bec3f98 (notes 118), the safe
+ * not counted, which may be the only one: the dialog then counts nothing. All
+ * three verbs are Business Day (274) EDIT.
  */
 import type { DocumentPrintTarget } from "@/features/printing/domain/documentPrint";
 import { toReasons } from "../../shared/reasons";
 import type { TillCountLine } from "../../shared/wire/types";
 import { formatMoney } from "./decimal";
-import { plural } from "./day-reading";
+import { isRedOnCheck, plural } from "./day-reading";
 import {
   checkOfDay,
   compactDate,
@@ -63,10 +65,14 @@ export function dayButtons(day: TillDay | null, check: TillCloseCheck | null, ca
   else if (canClose) closeTitle = "Close the business day — F10";
   else closeTitle = "Red items block the close: clear them first";
 
+  // Qt's words assume live sessions; with only the safe red they would name
+  // drawers that are not there.
   let exceptionTitle: string;
   if (!canEdit) exceptionTitle = NO_EDIT;
-  else if (canException) exceptionTitle = "Only live sessions block: count their drawers here and close";
-  else exceptionTitle = "Only when every red item is a session still open";
+  else if (canException && !isRedOnCheck(mine, "SESSIONS_LIVE")) {
+    exceptionTitle = "Only the safe count blocks: close over it, a store manager approves";
+  } else if (canException) exceptionTitle = "Only live sessions block: count their drawers here and close";
+  else exceptionTitle = "Only when every red item is a session still open or the safe not counted";
 
   let reopenTitle: string;
   if (!canEdit) reopenTitle = NO_EDIT;
@@ -140,7 +146,8 @@ export function closedText(day: TillDay, zNo: string): string {
 
 /**
  * Something changed since the check (`TILL_DAY_CLOSE_BLOCKED`, or any 409):
- * say what and read the check again — not an error popup.
+ * after the refusal's popup (plain words, as every refusal — Qt bec3f98), the
+ * check is read again.
  */
 export function isCloseBlocked(error: FirstError): boolean {
   return error.code === "TILL_DAY_CLOSE_BLOCKED" || error.status === 409;
@@ -187,6 +194,28 @@ export function approverChoices(supervisors: readonly Supervisor[], me: string):
     }));
 }
 
+/** Dropdown 68 TILL APPROVER USERS binds a QUOTED `'icompany_id'`: always sent. */
+export function approverDropdownParams(companyId: string): Record<string, string> {
+  return { icompany_id: companyId };
+}
+
+/**
+ * With no live session there is no session to ask the supervisor list for:
+ * the company's active users (dropdown 68), the caller left out; whether they
+ * hold a DAY_CLOSE_EXCEPTION grant is the server's call. A blank name ('' is
+ * not NULL to the dropdown's COALESCE) shows the login.
+ */
+export function approverUsersOf(rows: readonly GridRow[], me: string): ApproverChoice[] {
+  const self = me.trim().toLowerCase();
+  const choices: ApproverChoice[] = [];
+  for (const row of rows) {
+    const id = text(row.usr_id).trim();
+    if (!id || id.toLowerCase() === self) continue;
+    choices.push({ id, label: text(row.usr_name).trim() || text(row.usr_login_name).trim() });
+  }
+  return choices;
+}
+
 function needsNote(reasons: readonly ReasonChoice[], reasonId: string): boolean {
   return reasons.find((reason) => reason.id === reasonId)?.needsNote === true;
 }
@@ -195,6 +224,18 @@ function needsNote(reasons: readonly ReasonChoice[], reasonId: string): boolean 
 
 /** One live session the exception counts and force-closes. */
 export type ExceptionPage = { tssId: string; label: string };
+
+/**
+ * What the exception dialog is for: `sessions` counts each live drawer and
+ * asks the first session's supervisors; `safe` (no live session, notes 118 —
+ * the exception covers only SAFE_NOT_COUNTED) shows no count and asks
+ * dropdown 68 for the approvers.
+ */
+export type ExceptionMode = "sessions" | "safe";
+
+export function exceptionModeOf(pages: readonly ExceptionPage[]): ExceptionMode {
+  return pages.length > 0 ? "sessions" : "safe";
+}
 
 /**
  * The SESSIONS_LIVE item's sessions, named "C01-261014-12 · VKPOS" from the
@@ -217,7 +258,13 @@ export function exceptionPages(check: TillCloseCheck | null, rows: readonly Grid
   return pages;
 }
 
+/** Nothing live (notes 118): the exception covers only the safe not counted. */
+export const SAFE_ONLY_INTRO =
+  "No till is open on this day. The exception closes the day although its safe was not counted. A store " +
+  "manager other than you approves it with their till PIN.";
+
 export function exceptionIntro(count: number): string {
+  if (count === 0) return SAFE_ONLY_INTRO;
   return (
     `${count === 1 ? "1 session is" : `${count} sessions are`} still open. Count each drawer here: the session is ` +
     'force-closed on your count (reason "Day close") and its cash goes into the safe on it. A count out of ' +
@@ -269,8 +316,12 @@ export function countsDoneLine(pages: readonly (CountedPage & { paise: number })
     .join("   ·   ");
 }
 
-/** The info after the close: the store Z and how many sessions were force-closed. */
+/**
+ * The info after the close: the store Z and how many sessions were
+ * force-closed — none when nothing was live (Qt bec3f98).
+ */
 export function exceptionClosedText(zNo: string, forced: number): string {
+  if (forced === 0) return zNo ? `The day is closed — store Z ${zNo}.` : "The day is closed.";
   const sessions = `${plural(forced, "session")} force-closed on your count.`;
   return zNo ? `The day is closed — store Z ${zNo}; ${sessions}` : `The day is closed; ${sessions}`;
 }

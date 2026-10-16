@@ -34,6 +34,7 @@ import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { documentRights } from "@/lib/permissions/document-rights";
 import { toast } from "@/lib/notify";
 import { useUiTableId } from "@/lib/ui-tables";
+import type { ScreenMemoryOption } from "@/lib/use-screen-memory";
 import { todayIso } from "@/features/sales/quotation/quotation.utils";
 import { useGetQuotationGridLayoutQuery } from "@/store/api/quotationApi";
 import { useGridSettings } from "@/features/sales/quotation/components/grid-settings";
@@ -119,16 +120,20 @@ export type PaymentScreenProps = {
   onBackToList?: () => void;
   /** Set when a report (Party-wise Outstanding's Ctrl+R) asked for a new payment on one party. */
   openOnParty?: PartyHandoff | null;
+  /**
+   * Screen memory (lib/screen-memory): the page names the slot, and says whether
+   * it reopened ON a remembered payment rather than on an explicit Create / Open.
+   */
+  memory?: ScreenMemoryOption;
 };
 
-export default function PaymentScreen({ initialKeys, onBackToList, openOnParty }: PaymentScreenProps) {
-  const router = useRouter();
+/**
+ * The tenant on the header, as this screen resolves it — what the page asks
+ * screen memory about, and the same three values a new payment starts with.
+ */
+export function usePaymentScope(): PaymentScope {
   const { activeCompany, activeBranch, activeFiscalYear } = useBusinessContext();
-  const { permissions, isLoading: permissionsLoading } = usePagePermissions({
-    menuId: PAYMENT_MENU_ID,
-  });
-
-  const scope: PaymentScope = useMemo(
+  return useMemo(
     () => ({
       companyId: activeCompany?.id ?? "",
       branchId: activeBranch?.id ?? "",
@@ -136,6 +141,20 @@ export default function PaymentScreen({ initialKeys, onBackToList, openOnParty }
     }),
     [activeCompany?.id, activeBranch?.id, activeFiscalYear?.name],
   );
+}
+
+export default function PaymentScreen({
+  initialKeys,
+  onBackToList,
+  openOnParty,
+  memory,
+}: PaymentScreenProps) {
+  const router = useRouter();
+  const { permissions, isLoading: permissionsLoading } = usePagePermissions({
+    menuId: PAYMENT_MENU_ID,
+  });
+
+  const scope = usePaymentScope();
 
   // "Unloaded" is not "denied": read-only while the menu loads, and the server
   // stays the authority. Post alone is a writing right too (notes 106): a
@@ -165,6 +184,7 @@ export default function PaymentScreen({ initialKeys, onBackToList, openOnParty }
     rights,
     confirm,
     prompt,
+    memory,
   });
   const { draft, dispatch, identity, masters, busy, editable } = api;
 
@@ -276,16 +296,31 @@ export default function PaymentScreen({ initialKeys, onBackToList, openOnParty }
     void openByKeys(initialKeys);
   }, [initialKeys, openByKeys]);
 
+  // Reopened on the payment left here (screen memory): kept as it was, not
+  // cleared, not reloaded.
+  const resumedInitial = useRef(false);
+  const resumed = Boolean(memory?.resume && api.resumed);
+  const finishResume = api.finishResume;
+  useEffect(() => {
+    if (!resumed || resumedInitial.current) {
+      return;
+    }
+    resumedInitial.current = true;
+    void finishResume();
+  }, [finishResume, resumed]);
+
   // Opened by a report on one party (Ctrl+R): a new payment, party picked.
+  // Never over a remembered payment: `pickParty` would re-target it unasked
+  // (the page drops the hand-off then — `initialPaymentView`).
   const pickedInitial = useRef(false);
   const pickParty = api.pickParty;
   useEffect(() => {
-    if (!openOnParty || pickedInitial.current) {
+    if (!openOnParty || pickedInitial.current || resumed) {
       return;
     }
     pickedInitial.current = true;
     void pickParty(openOnParty.partyId, openOnParty.partyName);
-  }, [openOnParty, pickParty]);
+  }, [openOnParty, pickParty, resumed]);
 
   // The caret starts on PAYMENT NO on every new or loaded document.
   useEffect(() => {
@@ -377,6 +412,7 @@ export default function PaymentScreen({ initialKeys, onBackToList, openOnParty }
     }
   }, [api]);
 
+  const forgetRemembered = api.forgetRemembered;
   const closeScreen = useCallback(() => {
     void (async () => {
       if (draft.dirty) {
@@ -389,13 +425,16 @@ export default function PaymentScreen({ initialKeys, onBackToList, openOnParty }
           return;
         }
       }
+      // Close (or Esc) is a discard the operator confirmed — unlike a menu
+      // trip, the payment must not be waiting on the next visit.
+      forgetRemembered();
       if (onBackToList) {
         onBackToList();
         return;
       }
       router.back();
     })();
-  }, [confirm, draft.dirty, onBackToList, router]);
+  }, [confirm, draft.dirty, forgetRemembered, onBackToList, router]);
 
   const openHistory = useCallback((row: BillRow | CreditRow, isHeld: boolean) => {
     setHistoryTarget({

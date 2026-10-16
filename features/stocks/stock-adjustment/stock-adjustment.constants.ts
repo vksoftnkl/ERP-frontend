@@ -436,3 +436,6 @@ export const LIST_STATUS_OPTIONS: readonly { value: string; label: string }[] = 
   { value: "POSTED", label: "POSTED" },
   { value: "CANCELLED", label: "CANCELLED" },
 ];
+
+/** The screen-memory slot (lib/screen-memory) an unsaved adjustment waits in. */
+export const STOCK_ADJUSTMENT_MEMORY_KEY = "stocks/stock-adjustment";

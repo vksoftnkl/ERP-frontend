@@ -13,7 +13,7 @@
   color: hsl(215deg 25% 32%);
 }
 
-/* The Bills tab: a selectable list (click, ↑ / ↓) driving Re-tender. */
+/* The Bills / Money documents tabs: a selectable list (click, ↑ / ↓) driving Re-tender / Void movement. */
 .pickTable {
   &:focus-visible {
     outline: 2px solid color-mix(in srgb, var(--primary) 45%, transparent);

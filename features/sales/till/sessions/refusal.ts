@@ -1,15 +1,20 @@
 /**
  * A refusal as the cockpit's exception dialogs show it (Qt c77f3f1: Approve
- * Cash, Force close, Reopen): the server's own sentence — the FIRST error's
- * message, else the head message — under the form. Who may (the cashier, the
- * grant, the limit, the PIN) is the server's call, so it is said as the
- * server says it. A PIN refusal (any code naming PIN, or the approverPin
- * field) clears the PIN and puts the focus back in it.
+ * Cash, Force close, Reopen). Who may (the cashier, the grant, the limit, the
+ * PIN) is the server's call; since Qt ec9d92d the dialogs say it in plain
+ * words (`refusal`, rendered by `components/feedback/refusal-text`) with the
+ * server's sentence grey under them. `line` is that sentence on its own — the
+ * FIRST error's message, else the head message. A PIN refusal (any code
+ * naming PIN, or the approverPin field) clears the PIN and puts the focus
+ * back in it.
  */
+import type { ApiRefusal } from "@/lib/api/error-text";
 import { tillErrorOf } from "../shared/errors";
 
 export type DialogRefusal = {
   line: string;
+  /** The same refusal in plain words (Qt ec9d92d): render with `components/feedback/refusal-text`. */
+  refusal: ApiRefusal;
   /** The PIN was refused: typed again from empty. */
   pin: boolean;
 };
@@ -34,6 +39,7 @@ export function dialogRefusal(error: unknown, fallback: string): DialogRefusal {
   const read = tillErrorOf(error, fallback);
   return {
     line: firstErrorMessage(error) || read.message,
+    refusal: read.refusal,
     pin: read.code.includes("PIN") || read.field === "approverPin",
   };
 }

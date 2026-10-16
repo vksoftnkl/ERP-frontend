@@ -20,8 +20,15 @@
  */
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useAppDispatch } from "@/store/hooks";
+import { useBusinessContext } from "@/components/layout/business-context";
 import { toast } from "@/lib/notify";
 import type { DocumentRights } from "@/lib/permissions/document-rights";
+import { RESTORED_MESSAGE_OPTIONS, restoredMessage, screenMemory, type ScreenScope } from "@/lib/screen-memory";
+import {
+  useForgetIfWritingOnUnmount,
+  useRecalledOnce,
+  type ScreenMemoryOption,
+} from "@/lib/use-screen-memory";
 import { useGetTenderMastersQuery } from "@/store/api/saleOrderApi";
 import { useGetVoucherTaxRatesQuery } from "@/store/api/vouchersApi";
 import { expenseApi, useExpenseReasonRowsQuery, useExpenseStateRowsQuery } from "../api/expense-api";
@@ -68,6 +75,12 @@ import {
   stateNamesFromRows,
 } from "../domain/pickers";
 import { autoTenderTotalPaise, buildExpenseView, type ExpenseAnswer } from "../domain/view";
+import {
+  expenseMemoryScope,
+  isExpenseWorthRemembering,
+  movedFromScope,
+  type ExpenseMemory,
+} from "../domain/memory";
 
 /** Qt's `m_validateTimer` interval. */
 export const VALIDATE_DEBOUNCE_MS = 400;
@@ -111,11 +124,37 @@ export type UseExpenseVoucherOptions = {
   today: string;
   session: ExpenseTillSession | null;
   rights: DocumentRights;
+  /** Screen memory: the voucher outlives a trip to another screen (lib/screen-memory). */
+  memory?: ScreenMemoryOption;
 };
 
-export function useExpenseVoucher({ scope, initialKeys, today, session, rights }: UseExpenseVoucherOptions) {
+/**
+ * The header's business context, as the screen resolves it — what the page
+ * asks screen memory about, so it must be the same three values.
+ */
+export function useExpenseScope(): ExpenseScope {
+  const { activeCompany, activeBranch, activeFiscalYear } = useBusinessContext();
+  return useMemo(
+    () => ({
+      companyId: activeCompany?.id ?? "",
+      branchId: activeBranch?.id ?? "",
+      accYear: (activeFiscalYear?.name ?? "").trim(),
+    }),
+    [activeCompany?.id, activeBranch?.id, activeFiscalYear?.name],
+  );
+}
+
+export function useExpenseVoucher({ scope, initialKeys, today, session, rights, memory }: UseExpenseVoucherOptions) {
   const dispatch = useAppDispatch();
-  const [typed, dispatchDraft] = useReducer(expenseDraftReducer, today, (day: string) => newDraft(day));
+  // The voucher the operator left on this screen, when the page is reopening
+  // on it (lib/screen-memory). Read once; null for every fresh open.
+  const recalled = useRecalledOnce<ExpenseMemory>(memory, scope);
+  const resumed = recalled !== null;
+  const [typed, dispatchDraft] = useReducer(
+    expenseDraftReducer,
+    today,
+    (day: string) => recalled?.typed ?? newDraft(day),
+  );
   const [answer, setAnswer] = useState<ExpenseAnswer | null>(null);
   const [validateError, setValidateError] = useState<{ bodyKey: string; message: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -193,7 +232,45 @@ export function useExpenseVoucher({ scope, initialKeys, today, session, rights }
   // ── showing a voucher the server answered with ──────────────────────────
   // The GSTIN last filled from the party ledger: a GSTIN the operator typed
   // is never overwritten, one filled for the previous party is (Qt `m_autoGstin`).
-  const autoGstinRef = useRef("");
+  const autoGstinRef = useRef(recalled?.autoGstin ?? "");
+
+  // ── screen memory ───────────────────────────────────────────────────────
+  // Every change is written through, so the voucher is there when the
+  // operator comes back from another screen; forgotten once nothing on screen
+  // is worth bringing back (`domain/memory.ts`), and when the screen goes
+  // while a save, post or cancel is still in flight — that write lands after
+  // the screen is gone, and the voucher must not come back to be posted twice.
+  // The GSTIN ref is read in the effect, not tracked: every fill comes with an edit.
+  const memoryScope = useMemo(() => expenseMemoryScope(typed, scope), [typed, scope]);
+  const memoryScopeRef = useRef(memoryScope);
+  useEffect(() => {
+    memoryScopeRef.current = memoryScope;
+    if (!memory) {
+      return;
+    }
+    const value: ExpenseMemory = { typed, autoGstin: autoGstinRef.current, scope: memoryScope };
+    if (isExpenseWorthRemembering(value)) {
+      screenMemory.remember(memory.key, memoryScope, value);
+    } else {
+      screenMemory.forget(memory.key, memoryScope);
+    }
+  }, [memory, memoryScope, typed]);
+  // A NEW voucher follows the header: the slot it was remembered in before a
+  // switch is dropped, or it would come back in both tenants.
+  const rememberedScope = useRef<ScreenScope | null>(null);
+  useEffect(() => {
+    const moved = movedFromScope(rememberedScope.current, memoryScope);
+    rememberedScope.current = memoryScope;
+    if (memory && moved) {
+      screenMemory.forget(memory.key, moved);
+    }
+  }, [memory, memoryScope]);
+  useForgetIfWritingOnUnmount(
+    memory,
+    () => busyRef.current,
+    () => memoryScopeRef.current,
+  );
+
   const showVoucher = useCallback(
     (voucher: ExpensePayload) => {
       dispatchDraft({ type: "RESET", draft: draftOfVoucher(voucher, today) });
@@ -606,7 +683,26 @@ export function useExpenseVoucher({ scope, initialKeys, today, session, rights }
     return last && isBlankTender(last) ? last.key : null;
   }, [draft.tenders]);
 
+  /**
+   * The voucher came back from screen memory: say so once, so nobody wonders
+   * why the screen is not blank. The server's check re-runs on its own.
+   */
+  const finishResume = useCallback(async () => {
+    // One tick first: this runs from the mount effect.
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    toast.info(restoredMessage("expense voucher"), RESTORED_MESSAGE_OPTIONS);
+  }, []);
+  /** The operator discarded the voucher: it must not come back. */
+  const forgetRemembered = useCallback(() => {
+    if (memory) {
+      screenMemory.forget(memory.key, memoryScopeRef.current);
+    }
+  }, [memory]);
+
   return {
+    resumed,
+    finishResume,
+    forgetRemembered,
     draft,
     view,
     editable,

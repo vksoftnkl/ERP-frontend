@@ -8,7 +8,8 @@
  * this file; the fallback list stands in until it is read.
  *
  * Given `onSelect`, the table is a pick list (Qt's current index, c77f3f1 —
- * the cockpit's Bills tab drives Re-tender with it): a click picks a row,
+ * the cockpit's Bills tab drives Re-tender with it, its Money documents tab
+ * Void movement, bec3f98): a click picks a row,
  * ↑ / ↓ / Home / End move the pick while the table has the focus.
  */
 import { useMemo, type KeyboardEvent, type ReactNode } from "react";

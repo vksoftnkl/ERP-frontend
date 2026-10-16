@@ -65,6 +65,28 @@ describe("parseDay", () => {
     // A server before notes 113: no receipt, nothing waiting.
     expect(day?.handoverReceipt).toBe("");
     expect(day?.awaitingReceipt).toEqual({ thisDay: 0, earlierDays: 0, oldestOn: null });
+    // A server before notes 118: no safe figures.
+    expect(day?.safe).toBeNull();
+  });
+
+  it("reads the day's safe figures in paise (notes 118)", () => {
+    const safe = (block: unknown) => parseDay({ data: { ...PAYLOAD.data, safe: block } })?.safe;
+    expect(
+      safe({
+        opening: 95000,
+        expected: 120500.5,
+        counted: null,
+        remitted: 50000,
+        belowZero: false,
+        awaitingOpening: 0,
+        awaiting: 0,
+      }),
+    ).toEqual({ opening: BigInt(9500000), expected: BigInt(12050050), counted: null, remitted: BigInt(5000000) });
+    expect(safe({ opening: 0, expected: 1200, counted: 1199.99, remitted: 0 })?.counted).toBe(BigInt(119999));
+    // Counted zero is a count, not "not yet".
+    expect(safe({ expected: 0, counted: 0 })?.counted).toBe(BigInt(0));
+    expect(safe({})).toBeNull();
+    expect(safe(null)).toBeNull();
   });
 
   it("reads who closed the day and the cash waiting for approval (notes 113 / 117)", () => {
@@ -319,6 +341,16 @@ describe("the close (notes 117)", () => {
     // A bare day (what Qt read) still yields its Z.
     expect(parseCloseResult({ data: { ...PAYLOAD.data, tbdZNo: 9 } })).toMatchObject({ zNo: "9", forcedCount: null });
     expect(parseCloseResult(undefined)).toEqual({ day: null, zNo: "", forcedCount: null });
+  });
+
+  it("takes the Z from the answer's zNo, else the day's tbdZNo (Qt bec3f98)", () => {
+    const day = { ...PAYLOAD.data, tbdStatus: "CLOSED", tbdZNo: 8 };
+    expect(parseCloseResult({ data: { day, zNo: 11, forceClosed: [] } }).zNo).toBe("11");
+    expect(parseCloseResult({ data: { day, zNo: null, forceClosed: [] } }).zNo).toBe("8");
+    expect(parseCloseResult({ data: { day: { ...day, tbdZNo: null }, forceClosed: [] } })).toMatchObject({
+      zNo: "",
+      forcedCount: 0,
+    });
   });
 
   it("reads the reopened day", () => {

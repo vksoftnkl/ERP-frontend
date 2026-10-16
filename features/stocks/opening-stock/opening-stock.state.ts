@@ -116,6 +116,18 @@ export function createDraft(scope: DraftScope, today: string): OpeningStockDraft
   };
 }
 
+/**
+ * Screen memory (lib/screen-memory): a document comes back after a trip to
+ * another screen only while it holds unsaved work that could still be saved.
+ * A blank, saved, posted, cancelled or browsed one reloads from the server, or
+ * there is nothing to lose.
+ */
+export function isOpeningWorthRemembering(
+  draft: Pick<OpeningStockDraft, "dirty" | "mode" | "status">,
+): boolean {
+  return draft.dirty && draft.mode === "entry" && draft.status === "DRAFT";
+}
+
 /** lblScope — "{godown} · {year}" once a godown is chosen, the year alone before. */
 export function scopeLabelOf(draft: Pick<OpeningStockDraft, "header" | "accYear">): string {
   return draft.header.godownName

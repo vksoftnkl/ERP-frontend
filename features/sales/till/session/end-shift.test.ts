@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { TillSessionPayload, TillSessionTender } from "../shared/wire/types";
 import {
   APPROVAL_TEXT,
+  acceptedText,
   closeBody,
   closeConfirmText,
   closedText,
@@ -192,5 +193,36 @@ describe("after the count and the close", () => {
         awaiting: false,
       });
     }
+  });
+});
+
+describe("the accepted card's words", () => {
+  it("says within the tolerance when nobody had to decide", () => {
+    expect(acceptedText(false)).toBe("Within the tolerance. Hand the drawer and the slips over, or close the session below.");
+    expect(acceptedText(false, "NONE")).toBe(acceptedText(false));
+    expect(acceptedText(false, "WITHIN_TOLERANCE")).toBe(acceptedText(false));
+    expect(acceptedText(true, "PENDING")).toBe(
+      "The cash is within the tolerance. A slip total differs: hand the slips over — the supervisor checks them " +
+        "after close. Close the session below.",
+    );
+  });
+
+  it("names a supervisor's decision on the cash difference instead (Qt bec3f98)", () => {
+    expect(acceptedText(false, "ACCEPTED")).toBe(
+      "A supervisor approved the cash difference: booked as shop expense. Close the session below.",
+    );
+    expect(acceptedText(false, "RECOVER")).toBe(
+      "A supervisor approved the cash difference: to be recovered from the cashier. Close the session below.",
+    );
+    expect(acceptedText(true, "INVESTIGATE")).toBe(
+      "A supervisor approved the cash difference: kept in suspense to check later. Close the session below.",
+    );
+  });
+
+  it("reads the status defensively", () => {
+    expect(acceptedText(false, " recover ")).toContain("to be recovered from the cashier");
+    expect(acceptedText(false, null)).toBe(acceptedText(false));
+    expect(acceptedText(false, undefined)).toBe(acceptedText(false));
+    expect(acceptedText(false, "constructor")).toBe(acceptedText(false));
   });
 });

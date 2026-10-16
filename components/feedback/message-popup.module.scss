@@ -103,6 +103,20 @@
   word-break: break-word;
 }
 
+// A plain-words refusal: its line, "Do: …" and the kept line, one per line.
+.lines {
+  white-space: pre-line;
+}
+
+.detail {
+  margin-top: 10px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #8a8aa8;
+  white-space: pre-line;
+  user-select: text;
+}
+
 .footerRow {
   display: flex;
   align-items: center;

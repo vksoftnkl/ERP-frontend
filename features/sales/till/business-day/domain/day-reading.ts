@@ -6,10 +6,14 @@
  * Since c77f3f1 (notes 117) the checklist is the SERVER's close-check when it
  * could be read — what F10 re-checks — and the screen's own reading of the
  * day's sessions only when it could not, saying so in a grey "Server
- * close-check" row. Two rows stay the client's either way: a drawer still out
- * from an earlier day (amber beside the server's check, which does not count
- * it against this day; red without it) and the safe count, grey until the
- * server has it (notes 118).
+ * close-check" row. A drawer still out from an earlier day stays the client's
+ * either way (amber beside the server's check, which does not count it against
+ * this day; red without it).
+ *
+ * The safe (Qt bec3f98, notes 118): SAFE_NOT_COUNTED / SAFE_OVER_INSURED come
+ * from the close-check; without the first, the day's own safe figures
+ * (`days/get` → `safe`) say whether it was counted. "Count safe" / "Remit"
+ * open the Cash Office (menu 287) on that tab.
  *
  * Money is summed in paise (`decimal.ts`), never as floats.
  *
@@ -167,7 +171,7 @@ export type CheckAction = {
   label: string;
   /** The session the button opens; `null` = it opens no session. */
   session: SessionKeys | null;
-  /** Where the button goes instead of a session (Till Sessions); none + no session = nothing to do it yet. */
+  /** Where the button goes instead of a session (Till Sessions, the Cash Office); none + no session = off. */
   href?: string;
 };
 
@@ -183,10 +187,20 @@ export type DayReading = { checks: Check[]; numbers: NumberSection[]; verdict: V
 /** Which rows the sessions grid has given us so far. */
 export type RowsState = { status: "loading" | "ready" | "error"; rows: readonly GridRow[] };
 
-/** The tooltip of a jump with nothing behind it yet (Remit). */
-export const NOT_ON_SERVER = "Waits for the server (till notes 118: safe count and remittance)";
-
 const OPEN_COCKPIT = "Open cockpit  →";
+
+/** The Cash Office (menu 287, notes 118): the safe's count and its remittance to the bank. */
+export const CASH_OFFICE_HREF = "/sales/till/cash-office";
+
+export type CashOfficeTab = "count" | "remit";
+
+/** The Cash Office opened on one tab (Qt `requestOpenMenu(287, { tab })`). */
+export function cashOfficeHref(tab: CashOfficeTab): string {
+  return `${CASH_OFFICE_HREF}?tab=${tab}`;
+}
+
+const REMIT: CheckAction = { label: "Remit  →", session: null, href: cashOfficeHref("remit") };
+const COUNT_SAFE: CheckAction = { label: "Count safe  →", session: null, href: cashOfficeHref("count") };
 
 /** The server's close-check codes, as the checklist names them (Qt c77f3f1). */
 export const CLOSE_CHECK_TITLES: Readonly<Record<string, string>> = {
@@ -198,6 +212,7 @@ export const CLOSE_CHECK_TITLES: Readonly<Record<string, string>> = {
   SLIP_GAPS: "Slip gaps",
   HELD_BILLS: "Held bills",
   SAFE_OVER_INSURED: "Remittance",
+  SAFE_NOT_COUNTED: "Safe counted",
 };
 
 /** The codes whose sessions the cockpit settles: their row opens the first one. */
@@ -226,8 +241,8 @@ function liveLabel(session: LiveSession): string {
  * `null` when there is none (or the live read has not answered yet).
  *
  * Only drawers opened BEFORE the day shown (`dayDate`, ISO): looking back at
- * an older day, today's open drawers are not "from an earlier day" (Qt, which
- * only filters by the day's own list, would say they were).
+ * an older day, a till opened on a later day is not that day's business (Qt
+ * bec3f98). A session whose date cannot be read stays flagged, as Qt keeps it.
  */
 function olderDrawersCheck(
   rows: readonly GridRow[],
@@ -245,18 +260,54 @@ function olderDrawersCheck(
     tone,
     title: "Drawers still out from an earlier day",
     detail:
-      `${plural(older.length, "session")} opened before today and not closed: ` +
-      older.map(liveLabel).join(", "),
+      `${plural(older.length, "session")} opened before this day and not closed: ` + older.map(liveLabel).join(", "),
     action: { label: OPEN_COCKPIT, session: older[0].key },
   };
 }
 
-/** The row every day carries until the server counts the safe (notes 118). */
-const SAFE_COUNTED: Check = {
-  tone: "grey",
-  title: "Safe counted",
-  detail: "The safe count waits for the server (till notes 118)",
-};
+/**
+ * The safe count (notes 118). Required to close only under
+ * `till.day_close_safe_count`: then the close-check says so itself
+ * (SAFE_NOT_COUNTED, whatever its tone) and this row is not added. Otherwise
+ * the day's own safe figures tell — counted green, not counted amber with the
+ * Cash Office's count. `null` without a day, or when the check has the row.
+ *
+ * A day without a `safe` block (a server before notes 118) reads as not
+ * counted, as Qt reads it.
+ */
+function safeCountedCheck(day: TillDay | null, check: TillCloseCheck | null): Check | null {
+  if (!day || check?.items.some((item) => item.code === "SAFE_NOT_COUNTED")) return null;
+  const counted = day.safe?.counted ?? null;
+  if (counted !== null) {
+    return {
+      tone: "green",
+      title: "Safe counted",
+      detail: `Counted ${formatMoney(counted)} today (should hold ${formatMoney(day.safe?.expected ?? BigInt(0))})`,
+    };
+  }
+  return {
+    tone: "amber",
+    title: "Safe counted",
+    detail: "Not counted today (not needed to close the day)",
+    action: COUNT_SAFE,
+  };
+}
+
+/**
+ * SAFE · TODAY (notes 118): the day's safe figures — Opening once the day is
+ * CLOSED (it is written at the close), Should hold, Counted, Sent to bank.
+ * `null` when the server sent no `safe` block.
+ */
+export function daySafeSection(day: TillDay | null): NumberSection | null {
+  const safe = day?.safe;
+  if (!day || !safe) return null;
+  const lines: NumberLine[] = [];
+  if (day.tbdStatus === "CLOSED") lines.push({ name: "Opening", value: formatMoney(safe.opening), tone: "" });
+  lines.push({ name: "Should hold", value: formatMoney(safe.expected), tone: "" });
+  lines.push({ name: "Counted", value: safe.counted === null ? "not yet" : formatMoney(safe.counted), tone: "" });
+  lines.push({ name: "Sent to bank", value: formatMoney(safe.remitted), tone: "" });
+  return { name: "SAFE · TODAY", lines };
+}
 
 // ── The server's close-check ──────────────────────────────────────────────
 
@@ -302,7 +353,10 @@ function serverCheckRow(item: CloseCheckItem, rows: readonly GridRow[], day: Til
     };
   }
   if (item.tone !== "GREEN" && item.code === "SAFE_OVER_INSURED") {
-    return { tone, title, detail: `${item.detail} — raise a remittance`, action: { label: "Remit  →", session: null } };
+    return { tone, title, detail: `${item.detail} — raise a remittance`, action: REMIT };
+  }
+  if (item.tone !== "GREEN" && item.code === "SAFE_NOT_COUNTED") {
+    return { tone, title, detail: item.detail, action: COUNT_SAFE };
   }
   return { tone, title, detail: item.detail };
 }
@@ -372,12 +426,7 @@ function remittanceCheck(safes: RowsState): Check {
     }
   }
   if (over.length > 0) {
-    return {
-      tone: "amber",
-      title: "Remittance",
-      detail: `${over.join("; ")} — raise a remittance`,
-      action: { label: "Remit  →", session: null },
-    };
+    return { tone: "amber", title: "Remittance", detail: `${over.join("; ")} — raise a remittance`, action: REMIT };
   }
   return { tone: "green", title: "Remittance", detail: "No safe over its insured limit" };
 }
@@ -392,6 +441,38 @@ function closedVerdict(day: TillDay): Verdict {
       `Closed${closed ? ` ${closed}` : ""}${day.tbdZNo ? ` — store Z ${day.tbdZNo}` : ""}. ` +
       "Reopen day opens it again (an area manager's PIN).",
   };
+}
+
+/** Is `code` RED on the server's check? */
+export function isRedOnCheck(check: TillCloseCheck | null, code: string): boolean {
+  return check?.items.some((item) => item.code === code && item.tone === "RED") === true;
+}
+
+/**
+ * The verdict when only what an exception may cover is red: live sessions
+ * (Qt's sentence) and, since notes 118, the safe not counted. Qt bec3f98 kept
+ * the sessions sentence for both; with only the safe red it would name
+ * sessions that are not there, so the safe gets its own.
+ */
+function exceptionVerdictText(check: TillCloseCheck | null): string {
+  const sessions = isRedOnCheck(check, "SESSIONS_LIVE");
+  const safe = isRedOnCheck(check, "SAFE_NOT_COUNTED");
+  if (safe && !sessions) {
+    return (
+      "Only the safe count blocks the close. Count the safe on the Cash Office, or Close with exception: " +
+      "a store manager approves."
+    );
+  }
+  if (safe) {
+    return (
+      "Only sessions still open and the safe count block the close. Close them from the cockpit and count the " +
+      "safe, or Close with exception: count their drawers there and a store manager approves."
+    );
+  }
+  return (
+    "Only sessions still open block the close. Close them from the cockpit, or Close with exception: " +
+    "count their drawers there and a store manager approves."
+  );
 }
 
 /**
@@ -410,8 +491,7 @@ function verdictOf(checks: readonly Check[], context: CloseContext): Verdict {
       pill: `${reds.length} RED`,
       tone: "danger",
       text: exceptionOnly
-        ? "Only sessions still open block the close. Close them from the cockpit, or Close with exception: " +
-          "count their drawers there and a store manager approves."
+        ? exceptionVerdictText(context.check)
         : `Blocks the day close: ${reds.map((check) => check.title).join(", ")}. Clear each from its row above.`,
     };
   }
@@ -601,7 +681,8 @@ export function readDay(
   // Only once the day's own list is in: before it, every live drawer would look older.
   const older = rowsRead ? olderDrawersCheck(rows, liveSessions ?? [], dayDate, serverCheck ? "amber" : "red") : null;
   if (older) checks.push(older);
-  checks.push(SAFE_COUNTED);
+  const safeCounted = safeCountedCheck(context.day, context.check);
+  if (safeCounted) checks.push(safeCounted);
 
   if (!rowsRead) return { checks, numbers: [], verdict: verdictOf(checks, context) };
 
@@ -655,6 +736,9 @@ export function readDay(
       });
     }
   }
+  // The day's safe figures (notes 118): kept current by every count and remittance, frozen at the close.
+  const daySafe = daySafeSection(context.day);
+  if (daySafe) numbers.push(daySafe);
   numbers.push({
     name: "EXCEPTIONS",
     lines: [

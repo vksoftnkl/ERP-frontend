@@ -439,6 +439,7 @@ export default function LedgerShippingAddressMasterPage() {
   );
   return (
     <CrudMasterPage
+      modalDraftKey="ledger-shipping-address"
       title="Ledger Shipping Address"
       auditHistory={{ screenName: "Ledger Shipping Address" }}
       entityLabel="ledger shipping address"

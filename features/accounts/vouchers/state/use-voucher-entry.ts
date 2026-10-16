@@ -41,7 +41,15 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { skipToken } from "@reduxjs/toolkit/query";
+import { useBusinessContext } from "@/components/layout/business-context";
 import { toast } from "@/lib/notify";
+import { RESTORED_MESSAGE_OPTIONS, restoredMessage, screenMemory } from "@/lib/screen-memory";
+import {
+  useForgetIfWritingOnUnmount,
+  useRecalledOnce,
+  useRememberWrite,
+  type ScreenMemoryOption,
+} from "@/lib/use-screen-memory";
 import { formatClock12 } from "@/lib/time-format";
 import { useAppDispatch } from "@/store/hooks";
 import {
@@ -76,6 +84,7 @@ import {
 } from "../domain/bills";
 import { generatedFromDerived, postDatedPaise, readPosted, type GeneratedRow, type PostDatedNote } from "../domain/generated";
 import type { LineInstrument } from "../domain/instruments";
+import { isVoucherWorthRemembering } from "../domain/memory";
 import {
   adoptNames,
   amountPaise,
@@ -115,6 +124,18 @@ const VALIDATE_DELAY_MS = 400;
 
 export type VoucherScope = { companyId: string; branchId: string; accYear: string };
 
+/**
+ * The header's business context, as the screen takes it when it mounts — what
+ * the page asks screen memory about, so it must be the same three values.
+ */
+export function useVoucherScope(): VoucherScope {
+  const { activeCompany, activeBranch, activeFiscalYear } = useBusinessContext();
+  const companyId = activeCompany?.id ?? "";
+  const branchId = activeBranch?.id ?? "";
+  const accYear = (activeFiscalYear?.name ?? "").trim();
+  return useMemo(() => ({ companyId, branchId, accYear }), [accYear, branchId, companyId]);
+}
+
 export type VoucherLink = { voucherId: string; accYear: string; refno: string | null };
 
 export type ConfirmAsk = { title: string; message: string; confirmLabel?: string };
@@ -150,6 +171,8 @@ export type UseVoucherEntryOptions = {
   review: (ask: ReviewAsk) => Promise<string[] | null>;
   /** OK is the only way out of it — it always answers. */
   billwise: (ask: BillwiseAsk) => Promise<BillwiseAnswer>;
+  /** Screen memory: the voucher outlives a trip to another screen (lib/screen-memory). */
+  memory?: ScreenMemoryOption;
 };
 
 /** A bill a posted voucher settled — the read-only card. */
@@ -210,6 +233,9 @@ type Doc = {
 };
 
 type Snapshot = { doc: Doc; lines: VoucherLine[]; bills: Record<string, LineBills> };
+
+/** What screen memory keeps of the voucher on screen, and the type it was keyed on. */
+type Remembered = Snapshot & { dirty: boolean; typeCode: string };
 
 /** A `/validate` answer, the screen state it was asked about, and how that state was sent. */
 type Answered = { answer: ValidatePayload; via: unknown } & Snapshot;
@@ -371,8 +397,12 @@ function postedRecord(payload: VoucherPayload, generated: GeneratedRow[], postDa
 }
 
 export function useVoucherEntry(options: UseVoucherEntryOptions) {
-  const { typeCode, menuId, scope, appDate, confirm, prompt, review, billwise } = options;
+  const { typeCode, menuId, scope, appDate, confirm, prompt, review, billwise, memory } = options;
   const dispatch = useAppDispatch();
+  // The voucher the operator left on this screen, when the page is reopening
+  // on it (lib/screen-memory). Read once; null for every fresh open.
+  const recalled = useRecalledOnce<Remembered>(memory, scope);
+  const resumed = recalled !== null;
 
   // ── The type: rules and the caller's rights on its menu ──────────────────
   const typesQuery = useGetVoucherTypesQuery(
@@ -396,17 +426,44 @@ export function useVoucherEntry(options: UseVoucherEntryOptions) {
         : null;
 
   // ── The document ──────────────────────────────────────────────────────────
-  const [doc, setDoc] = useState<Doc>(() => freshDoc(scope, typeCode, appDate));
-  const [lines, setLines] = useState<VoucherLine[]>(() => [blankLine()]);
-  const [bills, setBills] = useState<Record<string, LineBills>>({});
-  const [dirty, setDirty] = useState(false);
+  const [doc, setDoc] = useState<Doc>(() => recalled?.doc ?? freshDoc(scope, typeCode, appDate));
+  const [lines, setLines] = useState<VoucherLine[]>(() => recalled?.lines ?? [blankLine()]);
+  const [bills, setBills] = useState<Record<string, LineBills>>(() => recalled?.bills ?? {});
+  const [dirty, setDirty] = useState(() => recalled?.dirty ?? false);
   const [busy, setBusy] = useState(false);
+  /** `busy` as last committed — what an unmount cleanup can still read. */
+  const busyRef = useRef(busy);
+  useEffect(() => {
+    busyRef.current = busy;
+  }, [busy]);
   const [note, setNote] = useState<string>("");
 
   const latest = useRef({ doc, lines, bills, dirty });
   useEffect(() => {
     latest.current = { doc, lines, bills, dirty };
   });
+
+  // ── Screen memory ─────────────────────────────────────────────────────────
+  // Every change is written through, under the tenant the screen was opened
+  // in, so the voucher is there when the operator comes back from another
+  // screen; forgotten once nothing on screen is worth bringing back
+  // (`domain/memory.ts`), and when the screen goes while a save, post, cancel
+  // or delete is in flight — that write lands after the screen is gone, and
+  // the voucher must not come back to be posted twice. The work-out is not
+  // kept: it is asked again for the restored lines.
+  const remembered = useMemo<Remembered>(
+    () => ({ doc, lines, bills, dirty, typeCode }),
+    [bills, dirty, doc, lines, typeCode],
+  );
+  useRememberWrite(memory, remembered, {
+    scopeOf: () => scope,
+    shouldKeep: isVoucherWorthRemembering,
+  });
+  useForgetIfWritingOnUnmount(
+    memory,
+    () => busyRef.current,
+    () => scope,
+  );
 
   const rules: VoucherTypeRules | null = doc.rules ?? type;
   const rights: VoucherRights | null = doc.rights ?? type?.rights ?? null;
@@ -1525,7 +1582,23 @@ export function useVoucherEntry(options: UseVoucherEntryOptions) {
     [confirmDiscard, load],
   );
 
+  /** The voucher came back from screen memory: say so once, so nobody wonders why the screen is not blank. */
+  const finishResume = useCallback(async () => {
+    // One tick first: this runs from the mount effect.
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    toast.info(restoredMessage("voucher"), RESTORED_MESSAGE_OPTIONS);
+  }, []);
+  /** The operator discarded the voucher: it must not come back. */
+  const forgetRemembered = useCallback(() => {
+    if (memory) {
+      screenMemory.forget(memory.key, scope);
+    }
+  }, [memory, scope]);
+
   return {
+    resumed,
+    finishResume,
+    forgetRemembered,
     type,
     types,
     typesLoading: typesQuery.isLoading,

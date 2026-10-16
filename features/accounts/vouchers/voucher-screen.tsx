@@ -39,6 +39,7 @@ import { NexDropdownSingle } from "@/components/design-system/dropdown";
 import { useDropdownId } from "@/lib/configured-dropdowns";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import { useUiTableId } from "@/lib/ui-tables";
+import type { ScreenMemoryOption } from "@/lib/use-screen-memory";
 import { todayIso } from "@/features/sales/quotation/quotation.utils";
 import { useGetQuotationGridLayoutQuery } from "@/store/api/quotationApi";
 import { useGetVoucherLedgerBalanceQuery, type LedgerPickRow } from "@/store/api/vouchersApi";
@@ -59,6 +60,7 @@ import { amountPaise, formatPaise } from "./domain/lines";
 import own from "./vouchers.module.scss";
 import {
   useVoucherEntry,
+  useVoucherScope,
   type BillwiseAnswer,
   type BillwiseAsk,
   type ConfirmAsk,
@@ -96,6 +98,12 @@ export type VoucherScreenProps = {
   /** The register's band: start a clean voucher of another type. */
   onSwitchType?: (typeCode: string) => void;
   onBackToList: () => void;
+  /**
+   * Screen memory (lib/screen-memory): the page names the slot, and says whether
+   * it reopened ON a remembered voucher — the operator coming back from another
+   * screen — rather than on an explicit New / Open. Opened by keys, none.
+   */
+  memory?: ScreenMemoryOption;
 };
 
 /** The Exceptions list is about journals and notes: on their menus, and on the register. */
@@ -136,13 +144,10 @@ function displayDate(iso: string): string {
 }
 
 export default function VoucherScreen(props: VoucherScreenProps) {
-  const { typeCode, menuId, title, register = false, initialKeys, onSwitchType, onBackToList } = props;
-  const { activeCompany, activeBranch, activeFiscalYear } = useBusinessContext();
-  const [scope] = useState<VoucherScope>(() => ({
-    companyId: activeCompany?.id ?? "",
-    branchId: activeBranch?.id ?? "",
-    accYear: (activeFiscalYear?.name ?? "").trim(),
-  }));
+  const { typeCode, menuId, title, register = false, initialKeys, onSwitchType, onBackToList, memory } = props;
+  const { activeCompany } = useBusinessContext();
+  const headerScope = useVoucherScope();
+  const [scope] = useState<VoucherScope>(headerScope);
 
   // ── The dialogs the hook asks for, as promises ────────────────────────────
   const [dialog, setDialog] = useState<DialogRequest | null>(null);
@@ -163,7 +168,7 @@ export default function VoucherScreen(props: VoucherScreenProps) {
     [],
   );
 
-  const api = useVoucherEntry({ typeCode, menuId, scope, appDate: todayIso(), confirm, prompt, review, billwise });
+  const api = useVoucherEntry({ typeCode, menuId, scope, appDate: todayIso(), confirm, prompt, review, billwise, memory });
   const { doc, lines, rules, rights, readOnly, totals } = api;
   const employeeDropdownId = useDropdownId("employee");
   const employeeParams = useMemo(() => ({ iemp_branch_id: scope.branchId }), [scope.branchId]);
@@ -329,6 +334,18 @@ export default function VoucherScreen(props: VoucherScreenProps) {
     void load(initialKeys);
   }, [load, initialKeys]);
 
+  // Reopened on the voucher the operator left here (screen memory): it is
+  // already on screen — only say so, once.
+  const { resumed, finishResume, forgetRemembered } = api;
+  const resumeAnnounced = useRef(false);
+  useEffect(() => {
+    if (resumeAnnounced.current || !memory?.resume || !resumed) {
+      return;
+    }
+    resumeAnnounced.current = true;
+    void finishResume();
+  }, [finishResume, memory?.resume, resumed]);
+
   // ── Leaving with unsaved work ─────────────────────────────────────────────
   useEffect(() => {
     if (!api.dirty) {
@@ -374,14 +391,18 @@ export default function VoucherScreen(props: VoucherScreenProps) {
         return;
       }
     }
+    // A Close the operator confirmed is a discard — unlike a menu trip, the
+    // voucher must not be waiting on the next visit.
+    forgetRemembered();
     onBackToList();
-  }, [api.dirty, confirm, onBackToList]);
+  }, [api.dirty, confirm, forgetRemembered, onBackToList]);
 
   const toList = useCallback(async () => {
     if (await api.confirmDiscard("Open a voucher")) {
+      forgetRemembered();
       onBackToList();
     }
-  }, [api, onBackToList]);
+  }, [api, forgetRemembered, onBackToList]);
 
   // ── Keys ──────────────────────────────────────────────────────────────────
   const keyState = {

@@ -22,6 +22,21 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/lib/notify";
+import {
+  useForgetIfWritingOnUnmount,
+  useRememberWrite,
+  type ScreenMemoryOption,
+} from "@/lib/use-screen-memory";
+import { screenMemory } from "@/lib/screen-memory";
+import {
+  documentScopeOf,
+  isLineDocumentWorthRemembering,
+  restoredMessage,
+  RESTORED_MESSAGE_OPTIONS,
+  resumeFromScreenMemory,
+  TESTBILL_MEMORY_KEY,
+} from "@/features/sales/document-memory";
+import { verifyHoldLease } from "@/features/sales/hold-lease";
 import { recalcDocument, type DocumentPricing } from "@/domain/pricing";
 import {
   POS_DROPDOWN_KEY,
@@ -39,7 +54,7 @@ import {
   resolveItemColumnsWith,
   todayIso,
 } from "@/features/sales/quotation/quotation.utils";
-import type { ItemPriceQuery } from "@/store/api/quotationApi";
+import { quotationApi, type ItemPriceQuery } from "@/store/api/quotationApi";
 import {
   useConvertTxnHoldMutation,
   useForceReleaseTxnHoldMutation,
@@ -116,7 +131,6 @@ import {
 } from "@/store/slices/appSettingsSlice";
 import type { AppDispatch } from "@/store/store";
 import {
-  getAuthSessionId,
   getAuthUserId,
   getOrCreateClientDeviceId,
   getUserInfo,
@@ -482,6 +496,13 @@ export type SaleBillDraftApi = {
   findRecovery: () => Promise<BillAutosave | null>;
   acceptRecovery: (record: BillAutosave) => void;
   discardRecovery: () => void;
+  // ----- screen memory: the bill outlives a trip to another screen -----
+  /** The bill on screen is the one the operator left here, not a fresh open. */
+  resumed: boolean;
+  /** After a resume: put the bill back if needed and re-read what may have moved. */
+  finishResume: () => Promise<void>;
+  /** Drop the remembered bill — the operator discarded it. */
+  forgetRemembered: () => void;
   clear: () => void;
   copyAsNew: () => void;
   beginEdit: () => void;
@@ -499,7 +520,9 @@ function useSaveActor(): SaveActor {
       userId: getAuthUserId() ?? "",
       userName: getUserInfo()?.userName ?? null,
       // sbSessionId: the till session this money goes into (S1), when one is open (Qt d5c3637).
-      sessionId: getTillSessionId() ?? getAuthSessionId(),
+      // No till open: null. Never the LOGIN session id — the server reads it
+      // as a till session and failed on it with a 500 (Qt bec3f98).
+      sessionId: getTillSessionId() ?? null,
       deviceId: getOrCreateClientDeviceId(),
       // `txn_hold.txh_device_id` is a real FK into `fixed.device_master`, so a
       // hold names the device the LOGIN registered — never the browser's own
@@ -519,11 +542,54 @@ function useDraftContext() {
     (activeFiscalYear?.name ?? "").trim() || accountingYearOf(todayIso());
   return { companyId, branchId, accYear, loading };
 }
-export function useSaleBillDraft(): SaleBillDraftApi {
+/**
+ * The tenant on the header, as this screen resolves it — what the page asks
+ * screen memory about. It must be the same three values the draft is seeded
+ * with, or a remembered bill would never be found again.
+ */
+export function useBillDraftScope(): { companyId: string; branchId: string; accYear: string } {
+  const { companyId, branchId, accYear } = useDraftContext();
+  return useMemo(() => ({ companyId, branchId, accYear }), [accYear, branchId, companyId]);
+}
+/**
+ * Where the page should reopen from — see `sliceResumeSource`. Shared by the
+ * page (list or bill?) and the hook (which bill?), so the two always agree.
+ */
+export function saleBillResumeSource(
+  liveDraft: SaleBillDraft,
+  memoryKey: string,
+  scope: { companyId: string; branchId: string; accYear: string },
+): { source: "live" | "recalled"; recalled: SaleBillDraft } | null {
+  return resumeFromScreenMemory(liveDraft, memoryKey, scope);
+}
+export function useSaleBillDraft(
+  opts: { memory?: ScreenMemoryOption } = {},
+): SaleBillDraftApi {
+  const { memory } = opts;
   const context = useDraftContext();
   const dispatch = useAppDispatch();
   const store = useAppStore();
   const draft = useAppSelector(selectSaleBillDraft);
+  // The draft is a slice, so it outlives the screen — but the screen clears it
+  // on every fresh open. When the page reopened on the bill the operator left
+  // here (screen memory), it is resumed instead: decided ONCE, at mount.
+  const [resume] = useState(() =>
+    memory?.resume
+      ? saleBillResumeSource(selectSaleBillDraft(store.getState()), memory.key, {
+          companyId: context.companyId,
+          branchId: context.branchId,
+          accYear: context.accYear,
+        })
+      : null,
+  );
+  const resumed = resume !== null;
+  /**
+   * Until the screen has decided what it shows, the slice still holds whatever
+   * the last visit left in it — possibly a bill the operator discarded, possibly
+   * another tenant's. Writing THAT to screen memory would resurrect it, so
+   * writes wait for a resume (of the live bill), a clear or a load.
+   */
+  const [memoryArmed, setMemoryArmed] = useState(resume?.source === "live");
   const { data: companyStateCode = "" } = useGetCompanyStateCodeQuery(
     context.companyId,
     {
@@ -619,6 +685,11 @@ export function useSaleBillDraft(): SaleBillDraftApi {
   const [forceReleaseHoldLock] = useForceReleaseTxnHoldMutation();
   const [convertHoldLock] = useConvertTxnHoldMutation();
   const [busy, setBusy] = useState<SaleBillBusy>("idle");
+  /** `busy` as last committed — what an unmount cleanup can still read. */
+  const busyRef = useRef<SaleBillBusy>(busy);
+  useEffect(() => {
+    busyRef.current = busy;
+  }, [busy]);
   /**
    * `busy` cannot guard re-entry on its own: `setBusy` is asynchronous, so two
    * F5 presses inside one render both see "idle". The voucher number is
@@ -651,6 +722,25 @@ export function useSaleBillDraft(): SaleBillDraftApi {
   /** The live draft, for effects and callbacks that must not re-run when it changes. */
   const draftRef = useRef(draft);
   draftRef.current = draft;
+  // --- screen memory -------------------------------------------------------
+  // Every change is written through once armed (see `memoryArmed`). Forgotten
+  // as soon as nothing on screen is worth bringing back, and when the screen
+  // goes while a save or hold is still in flight: that write lands after the
+  // screen is gone, and the bill must not come back to be billed twice.
+  useRememberWrite(memory, draft, {
+    scopeOf: documentScopeOf,
+    shouldKeep: isLineDocumentWorthRemembering,
+    armed: memoryArmed,
+  });
+  useForgetIfWritingOnUnmount(
+    memory,
+    () =>
+      inFlight.current ||
+      holdInFlight.current ||
+      busyRef.current === "saving" ||
+      busyRef.current === "holding",
+    () => documentScopeOf(draftRef.current),
+  );
   /** `loadDocument` is declared after the lifecycle verbs that reload through it. */
   const loadDocumentRef = useRef<(key: SaleBillDocKey) => Promise<SaleBillDraft | null>>(
     async () => null,
@@ -666,7 +756,13 @@ export function useSaleBillDraft(): SaleBillDraftApi {
   // The draft is created before the business context resolves (the screen must
   // render something), so the tenant scope is pushed in as it arrives. This is
   // deliberately not an edit: it must not mark the document dirty.
-  const seededTenant = useRef("");
+  //
+  // A resumed bill already carries its tenant — it was only resumed because it
+  // matched the header's — so it counts as seeded: a later switch on the header
+  // then takes the "this bill keeps its tenant" branch.
+  const seededTenant = useRef(
+    resume ? `${resume.recalled.companyId}|${resume.recalled.branchId}|${resume.recalled.accYear}` : "",
+  );
   useEffect(() => {
     if (!context.companyId || !context.branchId || !context.accYear) {
       return;
@@ -1413,6 +1509,7 @@ export function useSaleBillDraft(): SaleBillDraftApi {
   // -------------------------------------------------------------------------
   /** Clear (F7) in every state = start a new bill (§17.11). */
   const clear = useCallback(() => {
+    setMemoryArmed(true);
     dispatch(
       draftReplaced(
         resetBillDraft(
@@ -1664,7 +1761,12 @@ export function useSaleBillDraft(): SaleBillDraftApi {
         }).unwrap();
       } catch {
         // The bill is saved. A hold left open is a housekeeping problem, not a
-        // reason to tell the operator their sale failed.
+        // reason to tell the operator their sale failed — but it IS still on
+        // the held list, where another counter could bill it again.
+        const holdNo = draftRef.current.holdNo;
+        toast.warn(
+          `Bill saved, but ${holdNo ? `hold ${holdNo}` : "the hold"} could not be closed — discard it from the held list (F10) so it is not billed again.`,
+        );
       }
       dispatch(holdSet({ holdId: null, holdNo: "" }));
     },
@@ -1827,7 +1929,8 @@ export function useSaleBillDraft(): SaleBillDraftApi {
         setNotesPopupOpen(true);
         return { status: "refused" };
       }
-      toast.error(errorMessageOf(error));
+      // A refusal saved nothing: the bill is still on the screen (Qt nexKeptLine).
+      toast.apiError(error, { kept: "Bill not lost." });
       return { status: "failed" };
     }
   }, [actor, dispatch, finishDocument, saveBill, store]);
@@ -1922,7 +2025,7 @@ export function useSaleBillDraft(): SaleBillDraftApi {
           setNotesPopupOpen(true);
           return { status: "refused" };
         }
-        toast.error(errorMessageOf(error));
+        toast.apiError(error, { kept: "Bill not lost." });
         return { status: "failed" };
       } finally {
         inFlight.current = false;
@@ -1987,7 +2090,7 @@ export function useSaleBillDraft(): SaleBillDraftApi {
           setNotesPopupOpen(true);
           return { status: "refused" };
         }
-        toast.error(errorMessageOf(error));
+        toast.apiError(error, { kept: "Bill not lost." });
         return { status: "failed" };
       } finally {
         inFlight.current = false;
@@ -2212,6 +2315,7 @@ export function useSaleBillDraft(): SaleBillDraftApi {
   // -------------------------------------------------------------------------
   const loadDocument = useCallback(
     async (key: SaleBillDocKey): Promise<SaleBillDraft | null> => {
+      setMemoryArmed(true);
       setBusy("loading");
       try {
         // Dispatched through `initiate` rather than the lazy-query trigger: this
@@ -2670,6 +2774,18 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     ) {
       return null;
     }
+    // Both bill screens autosave into the same device slot. While Testbill
+    // still holds its bill in screen memory, that snapshot is ITS live cart,
+    // not a crashed one — offering it here would put one cart on two screens.
+    if (
+      screenMemory.has(TESTBILL_MEMORY_KEY, {
+        companyId: context.companyId,
+        branchId: context.branchId,
+        accYear: context.accYear,
+      })
+    ) {
+      return null;
+    }
     return readAutosave(deviceId, {
       companyId: context.companyId,
       branchId: context.branchId,
@@ -2686,6 +2802,63 @@ export function useSaleBillDraft(): SaleBillDraftApi {
   const discardRecovery = useCallback(() => {
     void clearAutosave(actor.deviceId ?? "");
   }, [actor.deviceId]);
+  /**
+   * The page reopened on the bill the operator left here. Put it back into the
+   * slice when the slice has moved on to another tenant's bill, then re-read
+   * what may have moved while the screen was gone — the party context, the open
+   * credits its adjustments draw on, and the lease on a resumed held cart (the
+   * `lockedHold` ref died with the screen) — and say so once.
+   */
+  const finishResume = useCallback(async () => {
+    if (!resume) {
+      return;
+    }
+    if (resume.source === "recalled") {
+      dispatch(draftReplaced(resume.recalled));
+    }
+    setMemoryArmed(true);
+    // One tick: this runs from the mount effect, and a lazy RTK trigger fired
+    // there is unsubscribed by StrictMode's simulated unmount.
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    toast.info(restoredMessage("bill"), RESTORED_MESSAGE_OPTIONS);
+    const restored = draftRef.current;
+    await refreshPartyContext();
+    if (restored.adjustments.length > 0) {
+      await refreshOpenCredits();
+    }
+    const holdId = restored.holdId;
+    if (!holdId) {
+      return;
+    }
+    const outcome = await verifyHoldLease({
+      txhId: holdId,
+      holdNo: restored.holdNo,
+      deviceMasterId: actor.deviceMasterId,
+      readHold: (txhId) =>
+        dispatch(
+          quotationApi.endpoints.getTxnHold.initiate(
+            { txhId },
+            { subscribe: false, forceRefetch: true },
+          ),
+        ).unwrap(),
+      retake: (lock) => resumeHoldLock(lock).unwrap(),
+    });
+    if (draftRef.current.holdId !== holdId) {
+      return; // the operator moved on while the lease was being checked
+    }
+    if (outcome.kind === "held") {
+      lockedHold.current = outcome.lease;
+    } else if (outcome.kind === "lost") {
+      dispatch(holdSet({ holdId: null, holdNo: "" }));
+      toast.warn(outcome.message);
+    }
+  }, [actor.deviceMasterId, dispatch, refreshOpenCredits, refreshPartyContext, resume, resumeHoldLock]);
+  /** The operator discarded the bill: it must not come back. */
+  const forgetRemembered = useCallback(() => {
+    if (memory) {
+      screenMemory.forget(memory.key, documentScopeOf(draftRef.current));
+    }
+  }, [memory]);
   return {
     draft,
     dispatch,
@@ -2750,6 +2923,9 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     findRecovery,
     acceptRecovery,
     discardRecovery,
+    resumed,
+    finishResume,
+    forgetRemembered,
     clear,
     copyAsNew,
     beginEdit,

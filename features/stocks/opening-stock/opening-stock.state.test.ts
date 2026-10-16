@@ -3,6 +3,7 @@ import { blankLine } from "./opening-stock.lines";
 import {
   applyLineEdit,
   createDraft,
+  isOpeningWorthRemembering,
   openingStockReducer,
   scopeLabelOf,
   splitRefusal,
@@ -250,6 +251,26 @@ describe("after a write — startNextDocument", () => {
   it("New starts genuinely blank", () => {
     const next = openingStockReducer(pickedDraft(), { type: "reset", scope: SCOPE, today: TODAY });
     expect(next.header.godownId).toBe("");
+  });
+});
+
+describe("screen memory", () => {
+  it("keeps only unsaved work on a draft still open for keying", () => {
+    expect(isOpeningWorthRemembering(createDraft(SCOPE, TODAY))).toBe(false);
+    expect(isOpeningWorthRemembering(pickedDraft())).toBe(true);
+  });
+
+  it("drops a browsed, posted or cancelled document even when it reads dirty", () => {
+    expect(isOpeningWorthRemembering({ ...pickedDraft(), mode: "browse" })).toBe(false);
+    for (const status of ["POSTED", "CANCELLED"]) {
+      const filed = openingStockReducer(pickedDraft(), { type: "statusApplied", status });
+      expect(isOpeningWorthRemembering(filed)).toBe(false);
+    }
+  });
+
+  it("drops the document once the next one starts clean", () => {
+    const next = openingStockReducer(pickedDraft(), { type: "startNext", scope: SCOPE, today: TODAY });
+    expect(isOpeningWorthRemembering(next)).toBe(false);
   });
 });
 

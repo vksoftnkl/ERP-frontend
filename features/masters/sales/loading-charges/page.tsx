@@ -252,6 +252,7 @@ export default function LoadingChargesMasterPage() {
 
   return (
     <CrudMasterPage
+      modalDraftKey="loading-charges"
       title="Loading Charges"
       auditHistory={{
         screenName: "Sale Loading Charges",

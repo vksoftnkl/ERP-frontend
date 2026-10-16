@@ -5,12 +5,15 @@
  * back to COUNTING, opened from the Session Cockpit's Reopen. A REOPEN
  * reason, a note when the reason asks for one, the caller's PIN. What it
  * decides is `reopen.ts`; the refusals (day closed, cash already approved,
- * blocked, the approver rules) are the server's own sentence.
+ * blocked, the approver rules) are said in plain words, the server's sentence
+ * grey beneath (Qt ec9d92d).
  *
  * Keys: Ctrl+Enter reopens, Esc cancels.
  */
 import { useRef, useState } from "react";
 import { cx } from "@/components/design-system/cx";
+import RefusalText from "@/components/feedback/refusal-text";
+import type { ApiRefusal } from "@/lib/api/error-text";
 import { useTillSessionClient } from "../shared/api/till-session-api";
 import type { TillReason } from "../shared/reasons";
 import { TillDialog } from "../shared/till-dialog";
@@ -38,7 +41,7 @@ function ReopenBody({ request, reasons, onClose, onReopened }: ReopenDialogProps
   const [facts] = useState(() => sessionFacts(request.session));
   const [form, setForm] = useState<ReopenForm>(EMPTY_REOPEN);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [refusal, setRefusal] = useState<ApiRefusal | null>(null);
   const inFlight = useRef(false);
   const pinRef = useRef<HTMLInputElement>(null);
 
@@ -51,15 +54,15 @@ function ReopenBody({ request, reasons, onClose, onReopened }: ReopenDialogProps
     if (!canReopen || inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
-    setError("");
+    setRefusal(null);
     try {
       onReopened(await client.reopen(reopenBody(request.key, form)));
     } catch (thrown) {
       // TILL_DAY_CLOSED / TILL_CASH_ALREADY_APPROVED / TILL_REOPEN_BLOCKED and
-      // the approver refusals come as the server's own sentence.
-      const refusal = dialogRefusal(thrown, "The session could not be reopened.");
-      setError(refusal.line);
-      if (refusal.pin) {
+      // the approver refusals: plain words, the server's sentence in grey.
+      const refused = dialogRefusal(thrown, "The session could not be reopened.");
+      setRefusal(refused.refusal);
+      if (refused.pin) {
         patch({ pin: "" });
         pinRef.current?.focus();
       }
@@ -159,7 +162,11 @@ function ReopenBody({ request, reasons, onClose, onReopened }: ReopenDialogProps
       </div>
 
       <p className={styles.muted}>{REOPEN_HINT}</p>
-      {error ? <p className={cx(styles.warn, styles.warnDanger)}>{error}</p> : null}
+      {refusal ? (
+        <p className={cx(styles.warn, styles.warnDanger)}>
+          <RefusalText refusal={refusal} />
+        </p>
+      ) : null}
     </TillDialog>
   );
 }

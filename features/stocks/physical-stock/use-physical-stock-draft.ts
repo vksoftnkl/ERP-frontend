@@ -19,8 +19,16 @@ import {
 import { useBusinessContext } from "@/components/layout/business-context";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { getUserInfo } from "@/lib/auth/session";
+import { toast } from "@/lib/notify";
 import { documentRights, type DocumentRights } from "@/lib/permissions/document-rights";
+import { RESTORED_MESSAGE_OPTIONS, restoredMessage, screenMemory } from "@/lib/screen-memory";
 import { useUiTableId } from "@/lib/ui-tables";
+import {
+  useForgetIfWritingOnUnmount,
+  useRecalledOnce,
+  useRememberWrite,
+  type ScreenMemoryOption,
+} from "@/lib/use-screen-memory";
 import { useGetQuotationGridLayoutQuery } from "@/store/api/quotationApi";
 import { useAppDispatch } from "@/store/hooks";
 import { accountingYearOf, todayIso } from "@/features/sales/quotation/quotation.utils";
@@ -59,6 +67,7 @@ import {
   createDraft,
   hasHoldings,
   insertHoldings,
+  isCountWorthRemembering,
   isEditable,
   physicalStockReducer,
   type DraftSeed,
@@ -103,6 +112,16 @@ function useSessionScope(): SessionScope {
     () => ({ companyId, branchId, accYear, deviceId }),
     [accYear, branchId, companyId, deviceId],
   );
+}
+
+/**
+ * The tenant on the header, as this screen resolves it — what the page asks
+ * screen memory about. The same three values a new sheet is seeded with, or a
+ * remembered count would never be found again.
+ */
+export function usePhysicalStockScope(): PhysicalStockScope {
+  const { companyId, branchId, accYear } = useSessionScope();
+  return useMemo(() => ({ companyId, branchId, accYear }), [accYear, branchId, companyId]);
 }
 
 function seedOf(scope: SessionScope): DraftSeed {
@@ -151,14 +170,31 @@ export type PhysicalStockDraftApi = {
   load: (key: PhysicalStockDocKey, openForEdit: boolean) => void;
   /** Runs `then` unless the operator declines to throw unsaved work away. */
   guardDirty: (title: string, message: string, then: () => void) => void;
+  // ----- screen memory: the count outlives a trip to another screen -----
+  /** The sheet on screen came back from screen memory rather than being opened fresh. */
+  resumed: boolean;
+  /** After a resume: say so once. */
+  finishResume: () => Promise<void>;
+  /** Drop the remembered count — the operator discarded it. */
+  forgetRemembered: () => void;
 };
 
-export function usePhysicalStockDraft(): PhysicalStockDraftApi {
+export function usePhysicalStockDraft(
+  opts: { memory?: ScreenMemoryOption } = {},
+): PhysicalStockDraftApi {
+  const { memory } = opts;
   const session = useSessionScope();
   const sessionRef = useRef(session);
   const appDispatch = useAppDispatch();
-  const [draft, dispatch] = useReducer(physicalStockReducer, session, (scope) =>
-    createDraft(seedOf(scope)),
+  // The count the operator left on this screen, when the page is reopening on
+  // it (lib/screen-memory). Read once; null for every fresh open. It is dirty by
+  // definition, so the late-context `scopeSeeded` below leaves it alone.
+  const recalled = useRecalledOnce<PhysicalStockDraft>(memory, session);
+  const resumed = recalled !== null;
+  const [draft, dispatch] = useReducer(
+    physicalStockReducer,
+    session,
+    (scope) => recalled ?? createDraft(seedOf(scope)),
   );
   // The latest of both, for the async flows below to read after an await.
   const draftRef = useRef(draft);
@@ -178,6 +214,37 @@ export function usePhysicalStockDraft(): PhysicalStockDraftApi {
   const [cancelDocument] = usePhysicalStockCancelMutation();
   const { permissions } = usePagePermissions();
   const rights = useMemo(() => documentRights(permissions), [permissions]);
+
+  // --- screen memory -------------------------------------------------------
+  // Every change is written through, so the count is there when the operator
+  // comes back from another screen; forgotten once nothing on screen is worth
+  // bringing back, and when the screen goes mid save / post / cancel — that
+  // write lands after the screen is gone, and the sheet must not come back to
+  // be posted twice. The sheet cache is not kept: it is refetched on demand.
+  useRememberWrite(memory, draft, {
+    scopeOf: scopeOfDraft,
+    shouldKeep: isCountWorthRemembering,
+  });
+  useForgetIfWritingOnUnmount(
+    memory,
+    () =>
+      busyRef.current === "saving" ||
+      busyRef.current === "posting" ||
+      busyRef.current === "cancelling",
+    () => scopeOfDraft(draftRef.current),
+  );
+  const memoryKey = memory?.key ?? "";
+  const finishResume = useCallback(async () => {
+    // One tick first: this runs from the mount effect.
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    toast.info(restoredMessage("physical stock count"), RESTORED_MESSAGE_OPTIONS);
+  }, []);
+  /** The operator discarded the count: it must not come back. */
+  const forgetRemembered = useCallback(() => {
+    if (memoryKey) {
+      screenMemory.forget(memoryKey, scopeOfDraft(draftRef.current));
+    }
+  }, [memoryKey]);
 
   // The godown's count sheet, fetched ONCE and kept, so picking the twelfth
   // item costs no round trip. Dropped whenever the godown, the document or
@@ -743,5 +810,8 @@ export function usePhysicalStockDraft(): PhysicalStockDraftApi {
     edit,
     load,
     guardDirty,
+    resumed,
+    finishResume,
+    forgetRemembered,
   };
 }

@@ -17,6 +17,7 @@ import { useApi } from "@/hooks/useApi";
 import {
   ERPDynamicModalForm,
   type ERPDynamicModalController,
+  type ERPDynamicModalDraftAppliedPayload,
   type ERPDynamicModalField,
   type ERPDynamicModalVariant,
   type ERPDynamicSelectOption,
@@ -310,6 +311,8 @@ export default function ItemBrandMasterPage() {
   // a picked label and the selection stays visible after a fetch replaces the list.
   const parentOptionsRef = useRef<ERPDynamicSelectOption[]>([DEFAULT_PARENT_OPTION]);
   const pinnedParentOptionRef = useRef<ERPDynamicSelectOption | null>(null);
+  // The parent the popup opened on (none for a create), for a draft's Discard.
+  const openingParentOptionRef = useRef<ERPDynamicSelectOption | null>(null);
   const parentSearchTimeoutRef = useRef<number | null>(null);
   // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
   // can see soft-deleted item brands. Lives beside the list search input.
@@ -400,12 +403,37 @@ export default function ItemBrandMasterPage() {
       const value = parentId.trim();
       if (!value) {
         pinnedParentOptionRef.current = null;
+        openingParentOptionRef.current = null;
         applyParentOptions([DEFAULT_PARENT_OPTION]);
         return;
       }
       const option: ERPDynamicSelectOption = { value, label: parentName.trim() || value };
       pinnedParentOptionRef.current = option;
+      openingParentOptionRef.current = option;
       applyParentOptions([DEFAULT_PARENT_OPTION, option]);
+    },
+    [applyParentOptions],
+  );
+  // A restored draft (or its Discard) sets the Parent Brand without the user
+  // picking it. The chosen option joins the list and is pinned so a later lazy
+  // fetch keeps its name; the parent the popup opened on is named from its seed,
+  // which a fetch may already have dropped from the list by the time Discard runs.
+  const applyDraftParentSelection = useCallback(
+    ({ values, labels }: ERPDynamicModalDraftAppliedPayload) => {
+      const value = (values.parentBrandId ?? "").trim();
+      if (!value) {
+        pinnedParentOptionRef.current = null;
+        return;
+      }
+      const current = parentOptionsRef.current;
+      const opening = openingParentOptionRef.current;
+      const option =
+        current.find((item) => item.value === value) ??
+        (opening?.value === value
+          ? opening
+          : { value, label: labels.parentBrandId?.[value] || value });
+      pinnedParentOptionRef.current = option;
+      applyParentOptions(withPinnedOption(current, option));
     },
     [applyParentOptions],
   );
@@ -643,6 +671,8 @@ export default function ItemBrandMasterPage() {
   return (
     <>
     <CrudMasterPage
+      modalDraftKey="item-brand"
+      onModalDraftApplied={applyDraftParentSelection}
       title="Brand"
       iconName="item_brand_master_entry"
       auditHistory={{ screenName: "Item Brand Master" }}

@@ -600,6 +600,7 @@ export default function ItemSectionMasterPage() {
   return (
     <>
     <CrudMasterPage
+      modalDraftKey="item-section"
       title="Item Section"
       iconName="item_section_master_entry"
       auditHistory={{ screenName: "Item Section Master" }}

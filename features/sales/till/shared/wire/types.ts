@@ -420,3 +420,195 @@ export type TillXReport = TillSessionPayload & {
   xNo: number;
   xReadOn: string;
 };
+
+// ─── the safe (notes 118, Cash Office 287 — Qt NexERP ec9d92d) ───────────────
+// Mirrors `TillSafe*Payload` / `TillRemit*Payload` in the server's
+// src/modules/till/types/till-api.types.ts. Money is a JSON number here.
+
+export type TillVarianceStage = "OPEN" | "CLOSE" | "RECEIVE" | "SAFE" | "REMIT";
+/** A safe gap is booked to Cash Short & Excess or held in suspense — never recovered. */
+export type TillSafeGapTreatment = "EXPENSE" | "SUSPENSE";
+export type TillSafeGapOutcome = "EXACT" | "WITHIN_TOLERANCE" | "DECIDED" | "SENT_FOR_APPROVAL";
+/** BANK_DEPOSIT = staff paid it in (Dr Bank); CIT = an agency took it (Dr Cash in transit, then remit-confirm). */
+export type TillRemitMode = "BANK_DEPOSIT" | "CIT";
+export type TillRemitStatus = "DEPOSITED" | "IN_TRANSIT" | "CONFIRMED";
+
+/** One remittance, as the balance lists the CIT ones still in transit. */
+export type TillRemittance = {
+  tcmId: string;
+  tcmAccYear: string;
+  docNo: string;
+  /** The business date it left the safe. */
+  docDate: string;
+  safeId: string;
+  safeName: string | null;
+  mode: TillRemitMode;
+  status: TillRemitStatus;
+  amount: number;
+  bankLedgerId: string;
+  bankName: string | null;
+  bagNo: string | null;
+  sealNo: string | null;
+  citAgency: string | null;
+  slipNo: string | null;
+  slipDate: string | null;
+  /** Whole days since it left (IST). */
+  ageDays: number;
+  doneBy: string;
+  createdOn: string;
+};
+
+/** A safe gap (stage SAFE / REMIT) still PENDING — decided on `/till/safes/decide-variance`. */
+export type TillSafePendingGap = { tvrId: string; tvrAccYear: string; stage: TillVarianceStage; variance: number };
+
+/**
+ * One safe's figures. Money is null when the caller may not see it
+ * (`figuresVisible` false: till.blind_close and no 287 / 273 OVERRIDE) — the count is blind.
+ */
+export type TillSafeState = {
+  safeId: string;
+  code: string;
+  name: string;
+  ledgerId: string;
+  ledgerName: string | null;
+  isDefault: boolean;
+  isDropSafe: boolean;
+  isActive: boolean;
+  insuredLimit: number;
+  /** Expected over a non-zero insured limit (shown even when the figures are not). */
+  overInsured: boolean;
+  /** Another active safe posts to the same ledger: bookBalance / drift are the ledger's. */
+  ledgerShared: boolean;
+  /** COUNT = the last safe count; BOOK = no count yet, the ledger's balance; ZERO = no count, shared ledger. */
+  openingFrom: "COUNT" | "BOOK" | "ZERO";
+  opening: number | null;
+  in: {
+    handOvers: number;
+    drops: number;
+    pickups: number;
+    transfersIn: number;
+    receipts: number;
+    total: number;
+  } | null;
+  out: {
+    floatIssues: number;
+    topUps: number;
+    remittances: number;
+    transfersOut: number;
+    payments: number;
+    total: number;
+  } | null;
+  /** Notes for notes with a drawer: net zero, counted only. */
+  exchanges: number;
+  expected: number | null;
+  bookBalance: number | null;
+  /** bookBalance − expected. */
+  drift: number | null;
+  lastCount: {
+    tctId: string;
+    tctAccYear: string;
+    countedOn: string;
+    countedBy: string;
+    countedByName: string | null;
+    witnessBy: string | null;
+    counted: number | null;
+    expected: number | null;
+    difference: number | null;
+  } | null;
+  /** Counted on today's business day. */
+  countedToday: boolean;
+  inTransit: { count: number; amount: number };
+  pendingGaps: TillSafePendingGap[];
+};
+
+/** GET /till/safes/balance?companyId&branchId[&safeId]. */
+export type TillSafeBalance = {
+  companyId: string;
+  branchId: string;
+  businessDate: string;
+  figuresVisible: boolean;
+  safes: TillSafeState[];
+  /** CIT remittances not yet confirmed by the bank, oldest first. */
+  inTransit: TillRemittance[];
+};
+
+/** POST /till/safes/count — the blind count, then what it was judged against. */
+export type TillSafeCountResult = {
+  tctId: string;
+  tctAccYear: string;
+  safeId: string;
+  safeName: string;
+  tbdId: string;
+  businessDate: string;
+  countedOn: string;
+  counted: number;
+  /** Shown only now, after the blind count. */
+  expected: number;
+  difference: number;
+  outcome: TillSafeGapOutcome;
+  tvrId: string | null;
+  treatment: string | null;
+  tapId: string | null;
+  varianceVoucherId: string | null;
+  varianceVoucherNo: string | null;
+  witnessBy: string | null;
+  safe: TillSafeState;
+};
+
+/** POST /till/safes/decide-variance. */
+export type TillSafeDecisionResult = {
+  tvrId: string;
+  tvrAccYear: string;
+  stage: TillVarianceStage;
+  safeId: string;
+  safeName: string | null;
+  expected: number;
+  counted: number;
+  variance: number;
+  treatment: TillSafeGapTreatment;
+  tapId: string;
+  secondBy: string | null;
+  varianceVoucherId: string | null;
+  varianceVoucherNo: string | null;
+  decidedOn: string;
+};
+
+/** A movement as /remit, /remit-confirm, /change and /void answer it (the fields the screens read). */
+export type TillMovementFull = TillMovementDetail & {
+  safeName?: string | null;
+  sessionNo?: string | null;
+  tcmRemitMode?: TillRemitMode | null;
+  tcmRemitStatus?: TillRemitStatus | null;
+  tcmBankDate?: string | null;
+  tcmBankRef?: string | null;
+};
+
+/** POST /till/movements/remit. */
+export type TillRemitResult = {
+  movement: TillMovementFull;
+  tapId: string | null;
+  countId: string | null;
+  safe: TillSafeState;
+};
+
+/** POST /till/movements/remit-confirm. */
+export type TillRemitConfirmResult = {
+  tcmId: string;
+  tcmAccYear: string;
+  docNo: string;
+  sent: number;
+  credited: number;
+  difference: number;
+  outcome: TillSafeGapOutcome;
+  confirmVoucherId: string | null;
+  confirmVoucherNo: string | null;
+  tvrId: string | null;
+  treatment: string | null;
+  tapId: string | null;
+  varianceVoucherId: string | null;
+  varianceVoucherNo: string | null;
+  movement: TillMovementFull;
+};
+
+/** POST /till/movements/change — a PICKUP on the giving session and a TOP_UP on the taking one. */
+export type TillChangeResult = { from: TillMovementFull; to: TillMovementFull };

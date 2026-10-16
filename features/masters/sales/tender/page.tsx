@@ -1056,6 +1056,7 @@ export default function TenderMasterPage() {
   return (
     <>
     <CrudMasterPage
+      modalDraftKey="tender-master"
       title="Tender"
       iconName="account_tender_master"
       auditHistory={{ screenName: "Tender Master" }}

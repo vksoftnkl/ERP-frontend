@@ -44,6 +44,7 @@ import { useDropdownId } from "@/lib/configured-dropdowns";
 import { useGridId } from "@/lib/configured-grids";
 import { documentRights } from "@/lib/permissions/document-rights";
 import { useUiTableId } from "@/lib/ui-tables";
+import type { ScreenMemoryOption } from "@/lib/use-screen-memory";
 import { useGetQuotationGridLayoutQuery } from "@/store/api/quotationApi";
 import { useGridSettings } from "@/features/sales/quotation/components/grid-settings";
 import { useColumnResize } from "@/features/sales/quotation/components/use-column-resize";
@@ -91,15 +92,34 @@ export type OpeningStockEntryViewProps = {
   initialDocument?: OpeningStockDocKey;
   initialMode: "entry" | "browse";
   onBackToList: () => void;
+  /**
+   * Screen memory (lib/screen-memory): the page names the slot, and says whether
+   * it reopened ON a remembered document — the operator coming back from another
+   * screen — rather than on an explicit Create / Open.
+   */
+  memory?: ScreenMemoryOption;
 };
 
 export function OpeningStockEntryView({
   initialDocument,
   initialMode,
   onBackToList,
+  memory,
 }: OpeningStockEntryViewProps) {
-  const api = useOpeningStockDraft({ initialDocument, initialMode, onLeave: onBackToList });
+  const api = useOpeningStockDraft({ initialDocument, initialMode, onLeave: onBackToList, memory });
   const { draft, totals, busy } = api;
+
+  // Reopened on the document the operator left here (screen memory): it is
+  // already on screen, so all that is left is to say so — once.
+  const announceResume = useRef(Boolean(memory?.resume && api.resumed));
+  const { finishResume } = api;
+  useEffect(() => {
+    if (!announceResume.current) {
+      return;
+    }
+    announceResume.current = false;
+    void finishResume();
+  }, [finishResume]);
 
   // Menu permissions as document rights, ANDed with the status the way Qt's
   // `applyStatus()` does: Create saves a new draft and Edit a saved one; Post

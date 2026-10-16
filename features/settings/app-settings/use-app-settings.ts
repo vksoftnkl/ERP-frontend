@@ -3,6 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/lib/notify";
 import { useDebounce } from "@/hooks/useDebounce";
+import { useBusinessContext } from "@/components/layout/business-context";
+import { RESTORED_MESSAGE_OPTIONS, screenMemory, type ScreenScope } from "@/lib/screen-memory";
+import {
+  useForgetIfWritingOnUnmount,
+  useRecalledOnce,
+  useRememberWrite,
+  type ScreenMemoryOption,
+} from "@/lib/use-screen-memory";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
   useGetEffectiveSettingsQuery,
@@ -15,6 +23,11 @@ import { appSettingsApplied } from "@/store/slices/appSettingsSlice";
 import { selectAuthUserId, selectBusinessContext, selectUserInfo } from "@/store/slices/authSlice";
 import { buildOverride } from "./lib/build-override";
 import {
+  APP_SETTINGS_MEMORY_KEY,
+  hasPendingDrafts,
+  type AppSettingsSnapshot,
+} from "./lib/draft-memory";
+import {
   deriveScope,
   hasOverrideAtScope,
   isEditableAtScope,
@@ -24,6 +37,10 @@ import {
 import { isSessionScope, sessionQuery, type SessionContext } from "./lib/session-scope";
 import { currentText, isSameValue, toText, validateText } from "./lib/value-text";
 import type { EditableScope, EffectiveSetting, ScopeTarget } from "./types";
+
+/** Screen memory (lib/screen-memory): the screen always reopens on edits left
+ * here unsaved; an empty slot recalls nothing. */
+const SCREEN_MEMORY: ScreenMemoryOption = { key: APP_SETTINGS_MEMORY_KEY, resume: true };
 
 /** Coalesces the burst of reads a company change causes — company repopulates
  * branch and counter, each of which fires its own change, and the Qt screen
@@ -89,16 +106,37 @@ export function useAppSettings() {
     [businessContext?.companyId, businessContext?.branchId, userInfo?.deviceId, userId],
   );
 
+  // The header's tenant: the slot unsaved edits are remembered in. The catalog
+  // is not kept per accounting year, but a slot is, so the session's year
+  // completes it.
+  const { selectedCompanyId, selectedBranchId, activeFiscalYear } = useBusinessContext();
+  const memoryAccYear = (activeFiscalYear?.name ?? "").trim() || "*";
+  const tenant = useMemo<ScreenScope>(
+    () => ({ companyId: selectedCompanyId, branchId: selectedBranchId, accYear: memoryAccYear }),
+    [memoryAccYear, selectedBranchId, selectedCompanyId],
+  );
+  // The edits the operator left here unsaved, read once; null for a fresh visit.
+  const recalled = useRecalledOnce<AppSettingsSnapshot>(SCREEN_MEMORY, tenant);
+  const resumed = recalled !== null;
+
   // The floor read: the bar opens on the session's own company, so the first
   // GET goes out without waiting on the company lookup. The Qt port regressed
   // exactly here — the read was chained off the lookup, and a lookup that
   // failed or came back empty left a screen showing nothing, for ever.
-  const [target, setTarget] = useState<ScopeTarget>(() => ({
-    companyId: session.companyId,
-    branchId: null,
-    deviceId: null,
-  }));
-  const companyTouchedRef = useRef(false);
+  // Coming back on remembered edits, it reopens on the layer they were typed in.
+  const [target, setTarget] = useState<ScopeTarget>(
+    () =>
+      recalled?.target ?? {
+        companyId: session.companyId,
+        branchId: null,
+        deviceId: null,
+      },
+  );
+  // A remembered bar on another company was the operator's choice: the
+  // session's company must not take it back.
+  const companyTouchedRef = useRef(
+    recalled !== null && recalled.target.companyId !== session.companyId,
+  );
 
   // Auth hydrates asynchronously; adopt the session's company when it lands,
   // unless the operator has already chosen one.
@@ -126,10 +164,50 @@ export function useAppSettings() {
   const [saveSettings, { isLoading: isSaving }] = useSaveAppSettingsMutation();
   const [resetSetting, { isLoading: isResetting }] = useResetAppSettingMutation();
 
-  const [draftsByScope, setDraftsByScope] = useState<DraftsByScope>({});
+  const [draftsByScope, setDraftsByScope] = useState<DraftsByScope>(
+    () => recalled?.draftsByScope ?? {},
+  );
   const [search, setSearch] = useState("");
   const [changedOnly, setChangedOnly] = useState(false);
-  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(
+    recalled?.selectedGroup ?? null,
+  );
+
+  // Screen memory: written through on every change, so the edits are there when
+  // the operator comes back from another menu screen; let go once no layer holds
+  // one (saved, discarded) — and when the screen goes while a save is in flight.
+  const memorySnapshot = useMemo<AppSettingsSnapshot>(
+    () => ({ tenant, target, draftsByScope, selectedGroup }),
+    [draftsByScope, selectedGroup, target, tenant],
+  );
+  useRememberWrite(SCREEN_MEMORY, memorySnapshot, {
+    scopeOf: (value) => value.tenant,
+    shouldKeep: hasPendingDrafts,
+  });
+  useForgetIfWritingOnUnmount(
+    SCREEN_MEMORY,
+    () => isSaving,
+    () => tenant,
+  );
+  // The edits follow the header, so a switch lets go of the slot they were
+  // remembered under.
+  const lastTenantRef = useRef(tenant);
+  useEffect(() => {
+    const previous = lastTenantRef.current;
+    lastTenantRef.current = tenant;
+    if (previous !== tenant) {
+      screenMemory.forget(APP_SETTINGS_MEMORY_KEY, previous);
+    }
+  }, [tenant]);
+  // Reopened on edits left here unsaved: say so once, a tick after mount.
+  useEffect(() => {
+    if (!resumed) return undefined;
+    const timer = window.setTimeout(() => {
+      // Spelt out: `restoredMessage`'s "was" does not fit a plural noun.
+      toast.info("Your unsaved setting changes were restored.", RESTORED_MESSAGE_OPTIONS);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [resumed]);
 
   const activeScopeKey = scopeKey(debouncedTarget);
   const drafts = useMemo(() => draftsByScope[activeScopeKey] ?? {}, [draftsByScope, activeScopeKey]);

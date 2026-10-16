@@ -16,7 +16,7 @@
  * re-tender sends none either). Nothing here edits the testbill modules.
  */
 import { useEffect, useRef, useState } from "react";
-import { getAuthSessionId, getAuthUserId, getOrCreateClientDeviceId, getUserInfo } from "@/lib/auth/session";
+import { getAuthUserId, getOrCreateClientDeviceId, getUserInfo } from "@/lib/auth/session";
 import { toast } from "@/lib/notify";
 import { useAppDispatch } from "@/store/hooks";
 import { useGetTenderMastersQuery } from "@/store/api/saleOrderApi";
@@ -35,7 +35,7 @@ function saveActor(): SaveActor {
   return {
     userId: getAuthUserId() ?? "",
     userName: getUserInfo()?.userName ?? null,
-    sessionId: getTillSessionId() ?? getAuthSessionId(),
+    sessionId: getTillSessionId() ?? null,
     deviceId: getOrCreateClientDeviceId(),
     deviceMasterId: getUserInfo()?.deviceId ?? null,
     deviceType: getUserInfo()?.deviceType ?? null,

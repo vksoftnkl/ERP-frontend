@@ -436,6 +436,7 @@ export default function WidgetMasterPage() {
   );
   return (
     <CrudMasterPage
+      modalDraftKey="widget-master"
       title="Widget Master"
       entityLabel="section"
       entityLabelPlural="sections"

@@ -134,6 +134,7 @@ const FORM_FIELDS: ERPDynamicModalField[] = [
 export default function GspProviderMasterPage() {
   return (
     <CrudMasterPage
+      modalDraftKey="gsp-provider"
       title="GSP Provider"
       auditHistory={{ screenName: "GSP Provider Master" }}
       entityLabel="gsp provider"
