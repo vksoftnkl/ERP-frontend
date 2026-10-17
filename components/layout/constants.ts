@@ -59,6 +59,9 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
         children: [
           { label: "Open Till", href: "/sales/till/open" },
           { label: "Till Sessions", href: "/sales/till/sessions" },
+          // Menu 288 (notes 133, Qt 1d3e203): read-only variance / exceptions /
+          // approvers / safe book.
+          { label: "Till Reports", href: "/sales/till/reports" },
           { label: "Business Day", href: "/sales/till/business-day" },
           // Menu 287 (notes 118): the safe — balance, count, remittance. The
           // retired 286 has the same name but is inactive, so this label is 287's.

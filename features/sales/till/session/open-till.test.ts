@@ -12,6 +12,7 @@ import {
   dayEndedText,
   dayText,
   floatApprovalRequest,
+  forceCloseRequestOf,
   gaugeText,
   isCarried,
   isDeviceRefusal,
@@ -281,6 +282,26 @@ describe("the live panel", () => {
     const panel = livePanelOf(check({ deviceSession: live({ operatorId: "u-other" }) }), "u-me");
     expect(panel?.showEndShift).toBe(false);
     expect(panel?.text).toBe("Counter C01 is in use by RAVI K. A supervisor must force-close it before a new session opens here.");
+  });
+
+  it("offers Force close on another cashier's session here, never on one's own (Qt 1d3e203)", () => {
+    const other = livePanelOf(check({ deviceSession: live({ operatorId: "u-other" }) }), "u-me");
+    expect(other).toMatchObject({ showForceClose: true, forceCloseEnabled: true });
+    expect(other?.forceCloseTip).toBe("A supervisor closes RAVI K's session with their count and PIN (never the session's cashier)");
+    const own = livePanelOf(check({ deviceSession: live() }), "u-me");
+    expect(own).toMatchObject({ showForceClose: true, forceCloseEnabled: false, forceCloseTip: "Your own session: End shift counts and closes it" });
+    expect(livePanelOf(check({ userSessionElsewhere: live({ operatorId: "u-other" }) }), "u-me")).toMatchObject({
+      showForceClose: false,
+      forceCloseEnabled: false,
+    });
+  });
+
+  it("keys Force close by the device's session, renamed to the cockpit's fields", () => {
+    expect(forceCloseRequestOf(check(), "co", "br")).toBeNull();
+    expect(forceCloseRequestOf(check({ deviceSession: live({ operatorId: "u-other", status: "SUSPENDED" }) }), "co", "br")).toEqual({
+      key: { companyId: "co", branchId: "br", accYear: "2026-2027", tssId: "tss-1" },
+      session: { tssSessionNo: "C01-261009-01", operatorName: "RAVI K", counterCode: "C01", tssStatus: "SUSPENDED" },
+    });
   });
 
   it("points at the cashier's session on another device", () => {

@@ -29,6 +29,16 @@
  * `tenderId` (notes 126 §6, `domain/contra.ts`). After the pick it goes on
  * as a ledger pick does (`finishPick`).
  *
+ * ── Receipt / Payment: the money line is a tender list too ───────────────
+ * Since notes 130 no cash or bank ledger is listed anywhere, so a receipt's
+ * Dr (a payment's Cr) line opens the same tender list — every tender the
+ * type takes. The pick goes on the open party lines above as their
+ * instrument, and the money line goes once they all have one: the server
+ * generates the Dr Cash / Bank leg (`domain/tender-menu.ts`, Qt 1d3e203).
+ * A tender that asks for details (a cheque, a reference, any non-cash
+ * payment) is put on line by line through the instrument popup — the
+ * screen runs that queue, then `settleMoneyLine`.
+ *
  * ── Bill-wise, on demand ─────────────────────────────────────────────────
  * Enter on a party line's amount opens the bill-wise popup on the server's
  * party leg (on a payment with TDS, the gross), with the party's open bills
@@ -88,9 +98,10 @@ import {
   type BillRow,
   type LineBills,
 } from "../domain/bills";
-import { applyContraTender, contraTenders, isContra } from "../domain/contra";
+import { applyContraTender, isContra } from "../domain/contra";
 import { generatedFromDerived, postDatedPaise, readPosted, type GeneratedRow, type PostDatedNote } from "../domain/generated";
 import type { LineInstrument } from "../domain/instruments";
+import { applyMoneyTender, opensTenderMenu, settleMoneyLine as settledMoneyLines, tenderMenu } from "../domain/tender-menu";
 import { isVoucherWorthRemembering } from "../domain/memory";
 import {
   adoptNames,
@@ -506,8 +517,14 @@ export function useVoucherEntry(options: UseVoucherEntryOptions) {
       : skipToken,
   );
   const tenders = useMemo(() => tendersQuery.data?.tenders ?? [], [tendersQuery.data]);
-  /** What a Contra line may be: the CASH tenders and each bank's BANK tender. */
-  const moneyTenders = useMemo(() => (contra ? contraTenders(tenders) : []), [contra, tenders]);
+  /**
+   * The tender list on the Ledger cell: a Contra line's CASH tenders and each
+   * bank's BANK tender; a receipt's / payment's money line's every tender.
+   */
+  const moneyTenders = useMemo(
+    () => (contra || instrumentsOn ? tenderMenu(tenders, contra) : []),
+    [contra, instrumentsOn, tenders],
+  );
   const booksQuery = useGetVoucherChequeBooksQuery(
     instrumentsOn && paying && scope.companyId ? { companyId: scope.companyId, branchId: scope.branchId } : skipToken,
   );
@@ -940,6 +957,67 @@ export function useVoucherEntry(options: UseVoucherEntryOptions) {
       return finishPick(key, (row) => applyContraTender(row, tender));
     },
     [finishPick, moneyTenders],
+  );
+
+  /** The Ledger cell opens the tender list: every Contra line, a receipt's / payment's money line. */
+  const tenderCell = useCallback((line: VoucherLine | null | undefined) => opensTenderMenu(rules, line), [rules]);
+
+  /**
+   * The tender picked on a receipt's / payment's money line (Qt
+   * `applyMoneyTender`): it goes on the open party lines above as their
+   * instrument. Straight on — and the money line goes — or, where the tender
+   * asks for details, the lines the screen puts it on through the popup one
+   * by one (then `settleMoneyLine`). Refused when no party line is open.
+   */
+  const pickMoneyTender = useCallback(
+    (
+      key: string,
+      tenderId: string,
+    ):
+      | { kind: "none" }
+      | { kind: "refused"; message: string }
+      | { kind: "ask"; open: string[]; ask: string[]; start: LineInstrument }
+      | { kind: "done" } => {
+      const current = rulesRef.current;
+      const tender = moneyTenders.find((candidate) => candidate.tenderId === tenderId);
+      if (!current || !tender || readOnly) {
+        return { kind: "none" };
+      }
+      const picked = applyMoneyTender(latest.current.lines, key, tender, current);
+      if (!picked) {
+        return { kind: "none" };
+      }
+      if ("refused" in picked) {
+        return { kind: "refused", message: picked.refused };
+      }
+      if (picked.ask.length > 0) {
+        return { kind: "ask", open: picked.open, ask: picked.ask, start: picked.start };
+      }
+      setLines((rows) => {
+        const again = applyMoneyTender(rows, key, tender, current);
+        return again && "lines" in again ? again.lines : rows;
+      });
+      touch();
+      return { kind: "done" };
+    },
+    [moneyTenders, readOnly, touch],
+  );
+
+  /**
+   * After the popup queue: every open line has its instrument → the money
+   * line goes and the blank line is back on the party side; a line backed
+   * out of keeps the money line for it.
+   */
+  const settleMoneyLine = useCallback(
+    (moneyKey: string, open: readonly string[]) => {
+      const current = rulesRef.current;
+      if (readOnly || !current) {
+        return;
+      }
+      setLines((rows) => settledMoneyLines(rows, moneyKey, open, current));
+      touch();
+    },
+    [readOnly, touch],
   );
 
   const setTdsBase = useCallback(
@@ -1701,6 +1779,9 @@ export function useVoucherEntry(options: UseVoucherEntryOptions) {
     setSide,
     pickLedger,
     pickTender,
+    tenderCell,
+    pickMoneyTender,
+    settleMoneyLine,
     setTdsBase,
     instrumentBlock,
     setInstrument,

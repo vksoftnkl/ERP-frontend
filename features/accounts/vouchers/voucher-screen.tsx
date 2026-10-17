@@ -58,7 +58,9 @@ import { GstBox } from "./components/gst-box";
 import { ReviewDialog } from "./components/review-dialog";
 import { TenderPicker } from "./components/tender-picker";
 import { VoucherExtras } from "./components/voucher-extras";
+import type { LineInstrument } from "./domain/instruments";
 import { amountPaise, formatPaise } from "./domain/lines";
+import { noTenderMessage } from "./domain/tender-menu";
 import own from "./vouchers.module.scss";
 import {
   useVoucherEntry,
@@ -224,10 +226,20 @@ export default function VoucherScreen(props: VoucherScreenProps) {
   const [currentKey, setCurrentKey] = useState<string | null>(null);
   /** The ledger picker — on a line, or (`key` null) for the header party. */
   const [picker, setPicker] = useState<{ key: string | null; seed: string } | null>(null);
-  /** A Contra line's tender list, in the picker's place (notes 126 §6). */
+  /** The tender list, in the picker's place: a Contra line, a receipt's / payment's money line. */
   const [tenderPick, setTenderPick] = useState<{ key: string; letter: string } | null>(null);
   const [exceptionsOpen, setExceptionsOpen] = useState(false);
-  const [instrumentFor, setInstrumentFor] = useState<string | null>(null);
+  /**
+   * The instrument popup on one party line, opening on `start`. With
+   * `money`: a money line's tender going on its open party lines, one popup
+   * each (Qt `applyMoneyTender`) — OK moves to the next, Cancel stops and the
+   * money line stays for the lines left.
+   */
+  const [instrumentEdit, setInstrumentEdit] = useState<{
+    key: string;
+    start: LineInstrument | null;
+    money: { moneyKey: string; open: string[]; next: string[] } | null;
+  } | null>(null);
   const pageRef = useRef<HTMLDivElement | null>(null);
   const currentLine = lines.find((line) => line.key === currentKey) ?? null;
 
@@ -262,6 +274,14 @@ export default function VoucherScreen(props: VoucherScreenProps) {
     }, 0);
   }, []);
 
+  /** The blank line at the bottom's Ledger — where the next party goes. */
+  const focusLastLedger = useCallback(() => {
+    window.setTimeout(() => {
+      const cells = pageRef.current?.querySelectorAll<HTMLElement>('[data-line-key][data-col="ledger"]');
+      cells?.[cells.length - 1]?.focus();
+    }, 0);
+  }, []);
+
   const focusParty = useCallback(() => {
     window.setTimeout(() => pageRef.current?.querySelector<HTMLElement>('[data-field="party"]')?.focus(), 0);
   }, []);
@@ -283,11 +303,12 @@ export default function VoucherScreen(props: VoucherScreenProps) {
   };
 
   /**
-   * The Ledger cell asks for a pick: on a Contra the tender list (Qt
-   * `openContraTenderMenu`), on any other type the ledger picker.
+   * The Ledger cell asks for a pick: on a Contra line and a receipt's /
+   * payment's money line the tender list (Qt `openTenderMenu`), on any other
+   * line the ledger picker.
    */
   const openLedgerCell = (key: string, seed: string) => {
-    if (!api.contra) {
+    if (!api.tenderCell(lines.find((line) => line.key === key))) {
       setPicker({ key, seed });
       return;
     }
@@ -300,7 +321,7 @@ export default function VoucherScreen(props: VoucherScreenProps) {
       } else if (api.tendersProblem) {
         say(`The tender list has not loaded — ${api.tendersProblem}`);
       } else {
-        toast.warning("There is no Cash or Bank tender to pick. Create one in Tender Master.", { title: "No tender" });
+        toast.warning(noTenderMessage(api.contra), { title: "No tender" });
       }
       return;
     }
@@ -309,9 +330,30 @@ export default function VoucherScreen(props: VoucherScreenProps) {
 
   const onTenderPicked = (key: string, tenderId: string) => {
     setTenderPick(null);
-    const side = api.pickTender(key, tenderId);
-    // On to the amount on the line's own side, as after a ledger pick.
-    focusCell(key, side === null ? "ledger" : side === "CR" ? "credit" : "debit");
+    if (api.contra) {
+      const side = api.pickTender(key, tenderId);
+      // On to the amount on the line's own side, as after a ledger pick.
+      focusCell(key, side === null ? "ledger" : side === "CR" ? "credit" : "debit");
+      return;
+    }
+    // A money line: the tender goes on the open party lines above it.
+    const picked = api.pickMoneyTender(key, tenderId);
+    if (picked.kind === "ask") {
+      setInstrumentEdit({
+        key: picked.ask[0],
+        start: picked.start,
+        money: { moneyKey: key, open: picked.open, next: picked.ask.slice(1) },
+      });
+      return;
+    }
+    if (picked.kind === "done") {
+      focusLastLedger();
+      return;
+    }
+    if (picked.kind === "refused") {
+      say(picked.message);
+    }
+    focusCell(key, "ledger");
   };
 
   /** The next line's Ledger — where the next party, or the bank, goes. */
@@ -341,10 +383,10 @@ export default function VoucherScreen(props: VoucherScreenProps) {
       return;
     }
     if (api.instrumentsOn) {
-      setInstrumentFor(key);
+      setInstrumentEdit({ key, start: null, money: null });
     }
   };
-  const instrumentLine = instrumentFor ? (lines.find((line) => line.key === instrumentFor) ?? null) : null;
+  const instrumentLine = instrumentEdit ? (lines.find((line) => line.key === instrumentEdit.key) ?? null) : null;
 
   // ── The balance of the ledger under the cursor ────────────────────────────
   const balance = useGetVoucherLedgerBalanceQuery(
@@ -450,7 +492,7 @@ export default function VoucherScreen(props: VoucherScreenProps) {
       dialog !== null ||
       picker !== null ||
       tenderPick !== null ||
-      instrumentFor !== null ||
+      instrumentEdit !== null ||
       exceptionsOpen ||
       legSettings.active,
     blocked,
@@ -552,7 +594,11 @@ export default function VoucherScreen(props: VoucherScreenProps) {
   const legsHint = [
     "+ / Insert adds a line",
     "− / Ctrl+Delete removes it",
-    api.contra ? "Enter on Ledger opens the tender list" : "Enter on Ledger opens the picker",
+    api.contra
+      ? "Enter on Ledger opens the tender list"
+      : api.instrumentsOn
+        ? `Enter on Ledger opens the picker (on the ${api.paying ? "Cr" : "Dr"} side, the tender list)`
+        : "Enter on Ledger opens the picker",
     ...(api.instrumentsOn ? ["Ctrl+Q: the line's instrument", "Enter on an amount: its bills"] : []),
     "grey rows are worked out by the server",
   ].join(" · ");
@@ -806,7 +852,15 @@ export default function VoucherScreen(props: VoucherScreenProps) {
                 generatedStale={!readOnly && !api.fresh}
                 nature={rules?.nature ?? null}
                 tenders={api.tenders}
-                tenderPicker={api.contra}
+                tenderHint={(line) =>
+                  !api.tenderCell(line)
+                    ? null
+                    : api.contra
+                      ? "Enter, F2 or a typed letter opens the tender list — Cash, or a bank's tender"
+                      : `Enter, F2 or a typed letter opens the tender list — it goes on the ${
+                          api.paying ? "supplier" : "customer"
+                        } lines above as their instrument`
+                }
                 taxRates={api.taxRates}
                 gstSide={api.gstSide}
                 readOnly={readOnly}
@@ -1056,25 +1110,38 @@ export default function VoucherScreen(props: VoucherScreenProps) {
         />
       ) : null}
 
-      {instrumentLine && api.instrumentsOn ? (
+      {instrumentEdit && instrumentLine && api.instrumentsOn ? (
         <InstrumentDialog
+          // A fresh form for each line of a money line's queue.
+          key={instrumentLine.key}
           title={`Instrument · line ${lines.indexOf(instrumentLine) + 1} · ${instrumentLine.ledgerName}`}
           paying={api.paying}
           tenders={api.tenders}
           books={api.books}
           current={instrumentLine.instrument}
+          start={instrumentEdit.start}
           voucherDate={doc.header.date}
           partyName={instrumentLine.ledgerName}
           linePaise={Number.isFinite(amountPaise(instrumentLine.amount)) ? amountPaise(instrumentLine.amount) : 0}
           onCancel={() => {
-            const key = instrumentLine.key;
-            setInstrumentFor(null);
-            focusCell(key, "instrument");
+            const { key, money } = instrumentEdit;
+            setInstrumentEdit(null);
+            // Backed out of a money line's queue: the lines left keep it open.
+            focusCell(money ? money.moneyKey : key, money ? "ledger" : "instrument");
           }}
           onOk={(instrument) => {
-            const key = instrumentLine.key;
+            const { key, start, money } = instrumentEdit;
             api.setInstrument(key, instrument);
-            setInstrumentFor(null);
+            if (money && money.next.length > 0) {
+              setInstrumentEdit({ key: money.next[0], start, money: { ...money, next: money.next.slice(1) } });
+              return;
+            }
+            setInstrumentEdit(null);
+            if (money) {
+              api.settleMoneyLine(money.moneyKey, money.open);
+              focusLastLedger();
+              return;
+            }
             focusCell(key, "instrument");
           }}
         />
@@ -1111,12 +1178,18 @@ export default function VoucherScreen(props: VoucherScreenProps) {
         />
       ) : null}
 
-      {tenderPick && api.contra ? (
+      {tenderPick ? (
         <TenderPicker
-          title={`Tender — ${
-            (lines.find((line) => line.key === tenderPick.key)?.drCr ?? "DR") === "CR" ? "credit" : "debit"
-          } side of ${typeName}`}
+          title={
+            api.contra
+              ? `Tender — ${
+                  (lines.find((line) => line.key === tenderPick.key)?.drCr ?? "DR") === "CR" ? "credit" : "debit"
+                } side of ${typeName}`
+              : `Tender — for the ${api.paying ? "supplier" : "customer"} lines above`
+          }
           tenders={api.moneyTenders}
+          contra={api.contra}
+          paying={api.paying}
           currentTenderId={lines.find((line) => line.key === tenderPick.key)?.tenderId ?? ""}
           initialLetter={tenderPick.letter}
           onPick={(tenderId) => onTenderPicked(tenderPick.key, tenderId)}

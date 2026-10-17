@@ -138,8 +138,12 @@ export type LegsGridProps = {
   /** RECEIPT / PAYMENT lock a line's side once its ledger is picked. */
   nature: string | null;
   tenders: readonly InstrumentTenderRow[];
-  /** A Contra: the Ledger cell picks a tender (`onPickLedger` opens the tender list). */
-  tenderPicker?: boolean;
+  /**
+   * The Ledger cell's hint where it picks a tender — every Contra line, a
+   * receipt's / payment's money line (`onPickLedger` opens the tender list
+   * there); null where it opens the ledger picker.
+   */
+  tenderHint?: (line: VoucherLine) => string | null;
   /** A GST-band type: the rates, and the side a rate may go on (opposite the party). */
   taxRates: readonly TaxRateRow[];
   gstSide: DrCr | null;
@@ -187,7 +191,7 @@ export function LegsGrid(props: LegsGridProps) {
     generatedStale,
     nature,
     tenders,
-    tenderPicker = false,
+    tenderHint,
     taxRates,
     gstSide,
     readOnly,
@@ -275,9 +279,7 @@ export function LegsGrid(props: LegsGridProps) {
                 ? "This voucher is read-only."
                 : note?.chip
                   ? `${note.chip} — Enter on the amount to change it`
-                  : tenderPicker
-                    ? "Enter, F2 or a typed letter opens the tender list — Cash, or a bank's tender"
-                    : "Enter, F2 or a typed letter opens the ledger picker"
+                  : (tenderHint?.(line) ?? "Enter, F2 or a typed letter opens the ledger picker")
             }
             onFocus={() => onCurrent(line.key)}
             onClick={() => onPickLedger(line.key, "")}

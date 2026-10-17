@@ -9,6 +9,8 @@
  * refuses a Contra line without one (VCH_MONEY_LINE_NO_TENDER) and a
  * `tenderId` on any other type; `/vouchers/ledger-pick` offers no cash or
  * bank ledger at all since notes 130, so the ledger list would be empty here.
+ * The list itself — shared with a receipt's / payment's money line — is
+ * `domain/tender-menu.ts`.
  */
 import type { InstrumentTenderRow, VoucherTypeRules } from "../vouchers.types";
 import type { VoucherLine } from "./lines";
@@ -22,11 +24,6 @@ export function isContra(rules: Pick<VoucherTypeRules, "typeCode"> | null | unde
 /** What a Contra line may be: a tender with a ledger, CASH or BANK — in the server's order. */
 export function contraTenders(tenders: readonly InstrumentTenderRow[]): InstrumentTenderRow[] {
   return tenders.filter((tender) => Boolean(tender.ledgerId) && (tender.isCash || tender.typeName === "BANK"));
-}
-
-/** "Cash  →  Cash in Hand" — a line of the tender list. */
-export function contraTenderLabel(tender: Pick<InstrumentTenderRow, "name" | "ledgerName">): string {
-  return `${tender.name}  →  ${tender.ledgerName}`;
 }
 
 /**
@@ -62,39 +59,4 @@ export function ledgerCellText(
   }
   const tender = line.tenderName || tenders.find((candidate) => candidate.tenderId === line.tenderId)?.name || "";
   return tender ? `${tender} · ${ledger}` : ledger;
-}
-
-/**
- * A letter typed on the open list: the next tender after `from` whose name
- * starts with it, round again from the top — -1 when none does.
- */
-export function tenderAtLetter(list: readonly Pick<InstrumentTenderRow, "name">[], from: number, letter: string): number {
-  const wanted = letter.trim().toLowerCase();
-  if (!wanted) {
-    return -1;
-  }
-  for (let step = 1; step <= list.length; step += 1) {
-    const index = (from + step + list.length) % list.length;
-    if (list[index].name.trim().toLowerCase().startsWith(wanted)) {
-      return index;
-    }
-  }
-  return -1;
-}
-
-/**
- * Where the list opens: on the tender the letter that opened it names, else
- * on the line's own tender (Qt's active action), else the first.
- */
-export function openingTenderIndex(
-  list: readonly Pick<InstrumentTenderRow, "tenderId" | "name">[],
-  currentTenderId: string,
-  seed: string,
-): number {
-  const byLetter = seed ? tenderAtLetter(list, -1, seed) : -1;
-  if (byLetter >= 0) {
-    return byLetter;
-  }
-  const current = currentTenderId ? list.findIndex((tender) => tender.tenderId === currentTenderId) : -1;
-  return Math.max(0, current);
 }

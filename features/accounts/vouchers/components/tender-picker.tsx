@@ -1,26 +1,35 @@
 "use client";
 
 /**
- * A Contra line's tender list — the Qt `openContraTenderMenu` (notes 126 §6).
+ * The tender list on the Ledger cell — the Qt `openTenderMenu` (notes 126 §6,
+ * notes 130; `domain/tender-menu.ts`).
  *
- * The CASH tenders and each bank's BANK tender, "tender → ledger"; the line
- * posts to the picked tender's ledger. Opened from the Ledger cell where any
- * other type opens the ledger picker: a typed letter (which moves to the
- * first tender starting with it), Enter, F2 or a click. It opens on the
- * line's own tender. ↑/↓ move, a letter jumps, Enter picks, Esc closes.
+ * On a Contra: the CASH tenders and each bank's BANK tender, "tender →
+ * ledger"; the line posts to the picked tender's ledger. On the money line of
+ * a Receipt / Payment Voucher: every tender the type takes; the pick goes on
+ * the party lines above as their instrument (a payment's cheque or transfer
+ * shows the tender alone — it is drawn on the bank picked in its popup).
+ * Opened from the Ledger cell where any other line opens the ledger picker:
+ * a typed letter (which moves to the first tender starting with it), Enter,
+ * F2 or a click. It opens on the line's own tender. ↑/↓ move, a letter
+ * jumps, Enter picks, Esc closes.
  */
 import { useEffect, useRef, useState } from "react";
 import { cx } from "@/components/design-system/cx";
 import { ModalShell } from "@/features/sales/quotation/components/modal-shell";
 import styles from "@/features/accounts/cheques/cheques.module.scss";
 import voucherStyles from "../vouchers.module.scss";
-import { contraTenderLabel, openingTenderIndex, tenderAtLetter } from "../domain/contra";
+import { openingTenderIndex, tenderAtLetter, tenderLabel } from "../domain/tender-menu";
 import type { InstrumentTenderRow } from "../vouchers.types";
 
 export type TenderPickerProps = {
   title: string;
-  /** The Contra's tenders — `contraTenders`, never empty here. */
+  /** `tenderMenu` — never empty here. */
   tenders: readonly InstrumentTenderRow[];
+  /** A Contra's line, not a receipt's / payment's money line — what each tender reads. */
+  contra: boolean;
+  /** A payment: a cheque or transfer reads as the tender alone. */
+  paying: boolean;
   /** The line's own tender, highlighted when the list opens. */
   currentTenderId: string;
   /** The letter typed on the cell that opened it. */
@@ -30,7 +39,7 @@ export type TenderPickerProps = {
 };
 
 export function TenderPicker(props: TenderPickerProps) {
-  const { title, tenders, currentTenderId, initialLetter, onPick, onClose } = props;
+  const { title, tenders, contra, paying, currentTenderId, initialLetter, onPick, onClose } = props;
   const [active, setActive] = useState(() => openingTenderIndex(tenders, currentTenderId, initialLetter));
   const at = Math.min(active, Math.max(0, tenders.length - 1));
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -88,7 +97,7 @@ export function TenderPicker(props: TenderPickerProps) {
                 onMouseDown={() => setActive(index)}
                 onClick={() => onPick(tender.tenderId)}
               >
-                <td>{contraTenderLabel(tender)}</td>
+                <td>{tenderLabel(tender, { contra, paying })}</td>
               </tr>
             ))}
           </tbody>

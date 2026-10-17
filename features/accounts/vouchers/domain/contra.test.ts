@@ -1,14 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { InstrumentTenderRow } from "../vouchers.types";
-import {
-  applyContraTender,
-  contraTenderLabel,
-  contraTenders,
-  isContra,
-  ledgerCellText,
-  openingTenderIndex,
-  tenderAtLetter,
-} from "./contra";
+import { applyContraTender, contraTenders, isContra, ledgerCellText } from "./contra";
+import { openingTenderIndex, tenderAtLetter, tenderLabel } from "./tender-menu";
 import { blankLine, buildLines, finishLedgerPick, linesFromDraft, type VoucherLine } from "./lines";
 
 function aTender(partial: Partial<InstrumentTenderRow>): InstrumentTenderRow {
@@ -53,7 +46,7 @@ describe("notes 126 §6 · Contra: Cash and Bank tenders, the ledgers come from 
   });
 
   it("shows each as tender → ledger", () => {
-    expect(contraTenderLabel(KVB)).toBe("KVB NEFT  →  Kvb Current A/c");
+    expect(tenderLabel(KVB, { contra: true, paying: false })).toBe("KVB NEFT  →  Kvb Current A/c");
   });
 
   it("posts each line to its tender's ledger, and the payload carries lines[].tenderId", () => {

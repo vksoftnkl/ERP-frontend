@@ -24,8 +24,16 @@ export type SessionFacts = {
   z: string;
 };
 
+/**
+ * What the facts card reads: a cockpit's `/sessions/get` payload, or Open
+ * Till's open-check session renamed to its keys (`openCheckFacts`).
+ */
+export type SessionFactsSource = Pick<TillSessionPayload, "tssSessionNo" | "operatorName" | "counterCode" | "tssStatus"> & {
+  tssZNo?: number | null;
+};
+
 /** The facts card of the force-close and reopen dialogs. */
-export function sessionFacts(s: TillSessionPayload): SessionFacts {
+export function sessionFacts(s: SessionFactsSource): SessionFacts {
   return {
     sessionNo: s.tssSessionNo ?? "",
     cashier: s.operatorName ?? "",

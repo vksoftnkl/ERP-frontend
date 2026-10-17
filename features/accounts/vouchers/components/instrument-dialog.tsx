@@ -43,7 +43,13 @@ export type InstrumentDialogProps = {
   paying: boolean;
   tenders: readonly InstrumentTenderRow[];
   books: readonly VoucherChequeBook[];
+  /** The line's own instrument — "No instrument" takes it off. */
   current: LineInstrument | null;
+  /**
+   * What the form opens on when it is not the line's own: the tender picked
+   * on a money line, pre-set (Qt `editInstrument(row, start)`).
+   */
+  start?: LineInstrument | null;
   voucherDate: string;
   /** The line's party — a payment cheque's favouring by default. */
   partyName: string;
@@ -58,10 +64,11 @@ function displayDate(iso: string): string {
 }
 
 export function InstrumentDialog(props: InstrumentDialogProps) {
-  const { title, paying, tenders, books, current, voucherDate, partyName, linePaise, onCancel, onOk } = props;
+  const { title, paying, tenders, books, current, start: preset = null, voucherDate, partyName, linePaise, onCancel, onOk } =
+    props;
   const bankDropdownId = useDropdownId("bank");
   const [form, setForm] = useState<InstrumentForm>(() => {
-    const start = formOf(current, voucherDate, partyName, tenders);
+    const start = formOf(preset ?? current, voucherDate, partyName, tenders);
     // A payment: the bank already chosen, else the first one with a book.
     if (paying && !start.bankLedgerId) {
       start.bankLedgerId = payingBanks(books, tenders)[0]?.ledgerId ?? "";

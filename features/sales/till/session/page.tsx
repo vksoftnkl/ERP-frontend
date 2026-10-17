@@ -66,8 +66,9 @@ import { DenomCount, focusFirstQty } from "./denom-count";
 import { EndShiftDialog } from "./end-shift-dialog";
 import { refusalLine } from "./refusal-line";
 import { SupervisorMoves } from "./supervisor-moves";
+import { ForceCloseDialog, type ForceCloseRequest } from "../sessions/force-close-dialog";
+import { forceCloseMessage } from "../sessions/force-close";
 import {
-  FORCE_CLOSE_TIP,
   LIVE_DATE_UNKNOWN,
   MISMATCH_NOTE,
   WAIT_POLL_MS,
@@ -81,6 +82,7 @@ import {
   dayText,
   floatApprovalRequest,
   floatWords,
+  forceCloseRequestOf,
   isCarried,
   isDeviceRefusal,
   liveDateOf,
@@ -139,6 +141,8 @@ export default function OpenTillScreen() {
   const [denominations, setDenominations] = useState<Denomination[]>([]);
   const [denomsLoading, setDenomsLoading] = useState(true);
   const [reasons, setReasons] = useState<TillReason[]>([]);
+  /** Every reason the grid lists (Qt `m_allReasons`): Force close picks its FORCE_CLOSE ones. */
+  const [allReasons, setAllReasons] = useState<TillReason[]>([]);
   /** The live session's facts (`/sessions/get`), by the session they were read for. */
   const [livePayload, setLivePayload] = useState<{ tssId: string; payload: TillSessionPayload } | null>(null);
   /**
@@ -150,6 +154,7 @@ export default function OpenTillScreen() {
   const [busy, setBusy] = useState(false);
   const [endShiftKey, setEndShiftKey] = useState<TillSessionKey | null>(null);
   const [movementKey, setMovementKey] = useState<TillSessionKey | null>(null);
+  const [forceClose, setForceClose] = useState<ForceCloseRequest | null>(null);
   /** The 428's "Needs approval" dialog, while it is up. */
   const [approval, setApproval] = useState<ApprovalRequestState | null>(null);
   /** Bumped on every open-check answer: arms the next wait re-check, and COUNTING focuses Continue count. */
@@ -332,11 +337,14 @@ export default function OpenTillScreen() {
       .finally(() => {
         if (!cancelled) setDenomsLoading(false);
       });
-    // FLOAT_MISMATCH reasons. No reasons: the band says a reason is needed and Open waits.
+    // FLOAT_MISMATCH reasons (and every other, for Force close). No reasons: the band says a reason is needed and Open waits.
     client
       .gridRows("tillReasonList", reasonGridParams(companyId, false))
       .then((rows) => {
-        if (!cancelled) setReasons(reasonsOf(toReasons(rows), "FLOAT_MISMATCH"));
+        if (cancelled) return;
+        const all = toReasons(rows);
+        setAllReasons(all);
+        setReasons(reasonsOf(all, "FLOAT_MISMATCH"));
       })
       .catch(() => undefined);
     return () => {
@@ -752,7 +760,13 @@ export default function OpenTillScreen() {
               </div>
               <div className={styles.buttonRow}>
                 {live.showForceClose ? (
-                  <button type="button" className={styles.dangerButton} disabled title={FORCE_CLOSE_TIP}>
+                  <button
+                    type="button"
+                    className={styles.dangerButton}
+                    disabled={!live.forceCloseEnabled || busy}
+                    title={live.forceCloseTip}
+                    onClick={() => setForceClose(forceCloseRequestOf(check, companyId, branchId))}
+                  >
                     Supervisor: force close…
                   </button>
                 ) : null}
@@ -817,6 +831,20 @@ export default function OpenTillScreen() {
           // When it closes, this screen is the open screen again.
           setEndShiftKey(null);
           reload();
+        }}
+      />
+      <ForceCloseDialog
+        request={forceClose}
+        reasons={allReasons}
+        onClose={() => {
+          setForceClose(null);
+          reload();
+        }}
+        onForceClosed={(result) => {
+          // Closed (or waiting for Approve): the counter is free to open a new session here.
+          setForceClose(null);
+          reload();
+          toast.info(forceCloseMessage(result));
         }}
       />
       <ApprovalRequestDialog

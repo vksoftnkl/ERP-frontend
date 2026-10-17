@@ -187,6 +187,7 @@ export const SLIP_SUB =
 export const SLIP_VERB_NOTE = "The ticks are a screen aid and are not stored; a SLIP_CHECK event keeps the counts and the exceptions.";
 export const SLIP_APPROVAL_NOTE =
   "What the slips cannot explain is the NONCASH_VARIANCE an approver decides (SUSPENSE by default — never EXPENSE " +
-  "at the counter). The approval gate is till build phase 3: until then record the check here; the variance waits " +
-  "on the session.";
-export const SLIP_RETENDER_TIP = "Re-tender the bill from the sale bill (Ctrl+F6) — then recount this check";
+  "at the counter). Record the check here; the variance waits on the session until the approver decides it on the " +
+  "Cockpit (Approve).";
+export const SLIP_RETENDER_TIP =
+  "Re-tender the bill from the Cockpit's Bills tab (Re-tender) or the sale bill (Ctrl+F6) — then check again";

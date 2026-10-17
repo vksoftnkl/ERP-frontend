@@ -224,6 +224,25 @@ export const CONFIGURED_GRIDS = {
   tillRemittances: { name: "TILL REMITTANCES", fallbackId: "157", deletedParam: null },
   tillSafeBook: { name: "TILL SAFE BOOK", fallbackId: "158", deletedParam: null },
   /**
+   * Till Reports (menu 288, notes 133 — Qt 1d3e203): four read-only tabs.
+   * Every grid binds QUOTED tokens, so each one is always sent (`""` = all):
+   * `'icompany_id'` `'ibranch_id'` `'ifrom_date'` `'ito_date'` `'icounter_id'`
+   * `'ioperator_id'`, plus `'inoncash'` (159), `'ievent'` (161–163), `'ihour'`
+   * (163), `'iapprover_id'` (164–166), `'isafe_id'` (167); 168 binds only
+   * company / branch / `'isafe_id'` / `'iday'`, 169 company / branch / `'irole'`.
+   */
+  tillRptCashierVariance: { name: "TILL RPT CASHIER VARIANCE", fallbackId: "159", deletedParam: null },
+  tillRptCashierSessions: { name: "TILL RPT CASHIER SESSIONS", fallbackId: "160", deletedParam: null },
+  tillRptExceptions: { name: "TILL RPT EXCEPTIONS", fallbackId: "161", deletedParam: null },
+  tillRptExceptionHours: { name: "TILL RPT EXCEPTION HOURS", fallbackId: "162", deletedParam: null },
+  tillRptExceptionEvents: { name: "TILL RPT EXCEPTION EVENTS", fallbackId: "163", deletedParam: null },
+  tillRptApprovers: { name: "TILL RPT APPROVERS", fallbackId: "164", deletedParam: null },
+  tillRptApproverDecisions: { name: "TILL RPT APPROVER DECISIONS", fallbackId: "165", deletedParam: null },
+  tillRptUndecided: { name: "TILL RPT UNDECIDED", fallbackId: "166", deletedParam: null },
+  tillRptSafeDays: { name: "TILL RPT SAFE DAYS", fallbackId: "167", deletedParam: null },
+  tillRptSafeDayLines: { name: "TILL RPT SAFE DAY LINES", fallbackId: "168", deletedParam: null },
+  tillRptPeople: { name: "TILL RPT PEOPLE", fallbackId: "169", deletedParam: null },
+  /**
    * Expense Voucher (menu 277, Qt NexERP d97cdd4): the Reason and Expense
    * ledger cells' popups. Both bind QUOTED `'icompany_id'` — always sent.
    */

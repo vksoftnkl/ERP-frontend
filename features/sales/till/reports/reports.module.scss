@@ -1,0 +1,239 @@
+/**
+ * What Till Reports (menu 288) adds over the shared till sheet
+ * (`../shared/till.module.scss`): the filter bar, Qt's tab layouts — the main
+ * table over its detail at 3 : 2, the Safe book's day lines beside the
+ * remittances at 3 : 2 — the by-hour heat strip, the not-decided band, and
+ * the tables' totals row and pill cells.
+ *
+ * The screen sizes itself to `.erp-app-content` (`height: 100%` on the shared
+ * `.page`, never a viewport unit); the tables scroll inside their panes under
+ * a sticky head. Breakpoints are CONTAINER queries on the page — a media
+ * query sees the raw device width, not the app's zoomed one.
+ */
+
+.page {
+  container-type: inline-size;
+  container-name: till-reports;
+}
+
+.notice {
+  margin: 0;
+  font-size: 0.86rem;
+  color: #92400e;
+}
+
+/* ── The filter bar (Qt hboxFilter) ────────────────────────────────────── */
+
+.filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+}
+
+.cap {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.branchPick {
+  width: 230px;
+  min-width: 0;
+}
+
+.dateInput {
+  width: 138px;
+}
+
+.counterSelect {
+  min-width: 110px;
+}
+
+.personSelect {
+  min-width: 140px;
+  max-width: 220px;
+}
+
+.search {
+  flex: 1 1 150px;
+  min-width: 130px;
+  max-width: 320px;
+}
+
+/* ── A tab: main over detail ───────────────────────────────────────────── */
+
+.tabBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mainPane {
+  flex: 3 1 0;
+  min-height: 120px;
+  overflow: auto;
+}
+
+.detailPane {
+  flex: 2 1 0;
+  min-height: 100px;
+  overflow: auto;
+}
+
+.topRow {
+  display: flex;
+  align-items: center;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+}
+
+.head {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+/* Approver activity: the requests nobody decided — amber while any wait. */
+.undecided {
+  margin: 0;
+  padding: 5px 9px;
+  border-radius: var(--erp-radius);
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.undecidedAmber {
+  border: 1px solid #f0d9a0;
+  border-left: 4px solid #d97706;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.undecidedGreen {
+  border: 1px solid hsl(142deg 35% 85%);
+  border-left: 4px solid hsl(142deg 63% 35%);
+  background: hsl(142deg 35% 96%);
+  color: hsl(142deg 63% 26%);
+}
+
+/* Safe book: the day's lines (3) beside the remittance register (2). */
+.safeLower {
+  flex: 2 1 0;
+  min-height: 140px;
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 12px;
+}
+
+.safeSide {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.safeSidePane {
+  flex: 1 1 auto;
+  min-height: 80px;
+  overflow: auto;
+}
+
+/* ── The by-hour heat strip (Qt fillHours) ─────────────────────────────── */
+
+.hours {
+  display: flex;
+  gap: 4px;
+  min-height: 44px;
+}
+
+/* The shade is the hour's data (inline); the frame and the pick are the theme's. */
+.hour {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 44px;
+  padding: 2px 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-main);
+  font-size: 0.74rem;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  white-space: pre-line;
+
+  &[aria-pressed="true"] {
+    border: 2px solid var(--primary);
+  }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--primary) 45%, transparent);
+    outline-offset: 1px;
+  }
+}
+
+.hourDark {
+  color: #fff;
+}
+
+/* ── Tables ────────────────────────────────────────────────────────────── */
+
+.table {
+  td {
+    vertical-align: middle;
+  }
+}
+
+.totalRow td {
+  background: var(--header-bg, #f4f4f4);
+}
+
+.signed {
+  font-weight: 700;
+}
+
+.pills {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.pillsRight {
+  justify-content: flex-end;
+}
+
+/* ── The foot (Qt hboxFoot) ────────────────────────────────────────────── */
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.footNote {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+/* Narrow: the Safe book's two lower tables stack. */
+@container till-reports (max-width: 900px) {
+  .safeLower {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

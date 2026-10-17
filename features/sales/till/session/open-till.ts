@@ -18,6 +18,8 @@
  * reason picked — unless the company's approval gate refuses it (Qt 425fa80,
  * notes 124 §5): the open then answers 428 TILL_APPROVAL_REQUIRED, the screen
  * asks for that approval (`floatApprovalRequest`) and opens again with its id.
+ * Another cashier's session held here is Force close… (Qt 1d3e203): the
+ * cockpit's dialog, the server judging who may (FORCE_CLOSE rule, PIN).
  */
 import { countLines, countedPaise, type DenomCountValue, type Denomination } from "../shared/denom";
 import { clockOf, ddmmyyyy } from "../shared/format";
@@ -30,8 +32,10 @@ import type {
   TillOpenCheck,
   TillOpenCheckCounter,
   TillOpenCheckSession,
+  TillSessionKey,
   TillSessionPayload,
 } from "../shared/wire/types";
+import type { SessionFactsSource } from "../sessions/force-close";
 
 export type FloatChoice = "ISSUED" | "CARRIED";
 
@@ -141,6 +145,12 @@ export type LivePanel = {
   note: string;
   showResume: boolean;
   showForceClose: boolean;
+  /**
+   * Another cashier's session holds this counter: a supervisor force-closes
+   * it here (Qt 1d3e203). Their own session ends through End shift instead.
+   */
+  forceCloseEnabled: boolean;
+  forceCloseTip: string;
   showEndShift: boolean;
   endShiftEnabled: boolean;
   endShiftLabel: string;
@@ -220,6 +230,10 @@ export function livePanelOf(check: TillOpenCheck | null, me: string, liveDate = 
         : "",
     showResume: onThisDevice,
     showForceClose: onThisDevice,
+    forceCloseEnabled: onThisDevice && !ownSession,
+    forceCloseTip: ownSession
+      ? "Your own session: End shift counts and closes it"
+      : `A supervisor closes ${session.operatorName}'s session with their count and PIN (never the session's cashier)`,
     showEndShift: onThisDevice && ownSession,
     endShiftEnabled: resumable || counting,
     endShiftLabel: counting ? "Continue count" : "End shift",
@@ -510,7 +524,24 @@ export function withApproval(body: TillOpenBody, approvalId: string | undefined)
 
 export const MISMATCH_NOTE =
   "The session opens now; the difference posts at once as a FLOAT_MISMATCH variance (TVar, Cash Short & Excess) " +
-  "under the reason picked. Supervisor PIN at open comes with the approval gate (till build phase 3).";
+  "under the reason picked. When the company asks for an approval, an approver signs it here with their PIN (or " +
+  "from the inbox) before the session opens.";
 
-export const FORCE_CLOSE_TIP =
-  "Force close comes with the approval gate (till build phase 3) — not on the server yet";
+/**
+ * Force close of another cashier's session on this device (Qt 1d3e203, notes
+ * 117 §4): the cockpit's dialog, keyed by the open-check's session — whose
+ * fields it renames to the cockpit's keys, as Qt does. Null when this device
+ * holds no session.
+ */
+export function forceCloseRequestOf(
+  check: TillOpenCheck | null,
+  companyId: string,
+  branchId: string,
+): { key: TillSessionKey; session: SessionFactsSource } | null {
+  const s = check?.deviceSession;
+  if (!s) return null;
+  return {
+    key: { companyId, branchId, accYear: s.accYear, tssId: s.sessionId },
+    session: { tssSessionNo: s.sessionNo, operatorName: s.operatorName, counterCode: s.counterCode, tssStatus: s.status },
+  };
+}

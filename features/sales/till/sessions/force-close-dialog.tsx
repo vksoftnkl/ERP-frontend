@@ -4,7 +4,8 @@
  * Force close — Qt `TillForceCloseDialog` (c77f3f1, notes 117 §4): a
  * supervisor counts the drawer and closes a session whose cashier has gone
  * (OPEN, SUSPENDED or COUNTING), opened from the Session Cockpit's Force
- * close…. The count is End Shift's (`../session/denom-count.tsx`); what the
+ * close… and from Open Till's Supervisor: force close… on another cashier's
+ * session at this device (Qt 1d3e203). The count is End Shift's (`../session/denom-count.tsx`); what the
  * dialog decides is `force-close.ts`.
  *
  * Keys: Ctrl+Enter force-closes, Esc cancels.
@@ -33,14 +34,18 @@ import {
   notePlaceholder,
   sessionFacts,
   type ForceCloseForm,
+  type SessionFactsSource,
 } from "./force-close";
 import { dialogRefusal } from "./refusal";
 import local from "./sessions.module.scss";
 
 export type SessionDialogRequest = { key: TillSessionKey; session: TillSessionPayload };
 
+/** Force close reads only the facts card off the session, so Open Till's open-check session will do. */
+export type ForceCloseRequest = { key: TillSessionKey; session: SessionFactsSource };
+
 export type ForceCloseDialogProps = {
-  request: SessionDialogRequest | null;
+  request: ForceCloseRequest | null;
   /** Grid 134 rows, every category: the dialog keeps the live FORCE_CLOSE ones. */
   reasons: readonly TillReason[];
   onClose: () => void;
@@ -53,7 +58,7 @@ export function ForceCloseDialog({ request, reasons, onClose, onForceClosed }: F
   return request ? <ForceCloseBody request={request} reasons={reasons} onClose={onClose} onForceClosed={onForceClosed} /> : null;
 }
 
-function ForceCloseBody({ request, reasons, onClose, onForceClosed }: ForceCloseDialogProps & { request: SessionDialogRequest }) {
+function ForceCloseBody({ request, reasons, onClose, onForceClosed }: ForceCloseDialogProps & { request: ForceCloseRequest }) {
   const client = useTillSessionClient();
   const [facts] = useState(() => sessionFacts(request.session));
   const [denominations, setDenominations] = useState<Denomination[]>([]);
