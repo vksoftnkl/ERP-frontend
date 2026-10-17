@@ -11,11 +11,12 @@
  * Role · Leg narration.
  *
  * Keys, as in Qt: a typed character, Enter or F2 on the Ledger cell opens the
- * picker; Insert (or + on a non-text cell) adds a line below; Ctrl+Delete (or
- * − on a non-text cell) removes this one. The blank line at the bottom is
- * where the next line is typed, and is never removed. Enter on an amount
- * opens a party line's bill-wise popup (else moves to the next line); Enter
- * or Ctrl+Q on the Instrument cell opens its dialog.
+ * picker — on a Contra, the tender list (notes 126 §6), and the cell reads
+ * "Tender · Ledger"; Insert (or + on a non-text cell) adds a line below;
+ * Ctrl+Delete (or − on a non-text cell) removes this one. The blank line at
+ * the bottom is where the next line is typed, and is never removed. Enter on
+ * an amount opens a party line's bill-wise popup (else moves to the next
+ * line); Enter or Ctrl+Q on the Instrument cell opens its dialog.
  *
  * Under the typed lines, the legs the SERVER adds (an instrument's money leg,
  * a payment's TDS): locked, grey — amber when they post later, on a
@@ -40,6 +41,7 @@ import type { UiTableColumnRow } from "@/features/sales/quotation/quotation.type
 import { scaledWidth, totalColumnWidth } from "@/features/sales/quotation/quotation.utils";
 import styles from "@/features/accounts/receipt/page.module.scss";
 import own from "../vouchers.module.scss";
+import { ledgerCellText } from "../domain/contra";
 import { generatedInstrumentText, type GeneratedRow } from "../domain/generated";
 import { instrumentChip, instrumentSummary } from "../domain/instruments";
 import { formatPaise, sideLocked, typeAmount, type VoucherLine } from "../domain/lines";
@@ -136,6 +138,8 @@ export type LegsGridProps = {
   /** RECEIPT / PAYMENT lock a line's side once its ledger is picked. */
   nature: string | null;
   tenders: readonly InstrumentTenderRow[];
+  /** A Contra: the Ledger cell picks a tender (`onPickLedger` opens the tender list). */
+  tenderPicker?: boolean;
   /** A GST-band type: the rates, and the side a rate may go on (opposite the party). */
   taxRates: readonly TaxRateRow[];
   gstSide: DrCr | null;
@@ -183,6 +187,7 @@ export function LegsGrid(props: LegsGridProps) {
     generatedStale,
     nature,
     tenders,
+    tenderPicker = false,
     taxRates,
     gstSide,
     readOnly,
@@ -270,7 +275,9 @@ export function LegsGrid(props: LegsGridProps) {
                 ? "This voucher is read-only."
                 : note?.chip
                   ? `${note.chip} — Enter on the amount to change it`
-                  : "Enter, F2 or a typed letter opens the ledger picker"
+                  : tenderPicker
+                    ? "Enter, F2 or a typed letter opens the tender list — Cash, or a bank's tender"
+                    : "Enter, F2 or a typed letter opens the ledger picker"
             }
             onFocus={() => onCurrent(line.key)}
             onClick={() => onPickLedger(line.key, "")}
@@ -291,7 +298,7 @@ export function LegsGrid(props: LegsGridProps) {
               rowKeys(event, line);
             }}
           >
-            {line.ledgerName || (line.ledgerId ? "…" : "")}
+            {ledgerCellText(line, tenders)}
           </button>
         );
       case "group":

@@ -26,12 +26,10 @@ import { useGetBranchesByCompanyQuery } from "@/store/api/businessContextApi";
 import type { EntryMode } from "../domain/entryModel";
 import {
   IDENTITY_LIMITS,
-  USER_TYPE_OPTIONS,
   type IdentityErrors,
   type IdentityForm,
   type UserFacts,
 } from "../domain/identity";
-import { isUserType } from "../domain/identity";
 import styles from "../user-administration.module.scss";
 
 /** Dropdown 38's token for "no branch": its SQL casts the value to uuid. */
@@ -41,6 +39,8 @@ export type IdentityTabProps = {
   identity: IdentityForm;
   errors: IdentityErrors;
   facts: UserFacts | null;
+  /** The User Role list for this session (`userRoleOptions`). */
+  roleOptions: readonly { value: string; label: string }[];
   mode: EntryMode;
   disabled: boolean;
   onChange: (patch: Partial<IdentityForm>) => void;
@@ -105,7 +105,15 @@ function when(iso: string | null): string {
   return Number.isNaN(date.getTime()) ? iso : `${date.toLocaleDateString()}, ${formatClock12(date)}`;
 }
 
-export function IdentityTab({ identity, errors, facts, mode, disabled, onChange }: IdentityTabProps) {
+export function IdentityTab({
+  identity,
+  errors,
+  facts,
+  roleOptions,
+  mode,
+  disabled,
+  onChange,
+}: IdentityTabProps) {
   const ids = useId();
   const [reveal, setReveal] = useState(false);
   const companyDropdownId = useDropdownId("company");
@@ -238,12 +246,10 @@ export function IdentityTab({ identity, errors, facts, mode, disabled, onChange 
               className={cx(controlClass(Boolean(errors.userType)), styles.select)}
               value={identity.userType}
               disabled={disabled}
-              onChange={(event) =>
-                onChange({ userType: isUserType(event.target.value) ? event.target.value : "" })
-              }
+              onChange={(event) => onChange({ userType: event.target.value })}
             >
               <option value="">Select user role</option>
-              {USER_TYPE_OPTIONS.map((option) => (
+              {roleOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>

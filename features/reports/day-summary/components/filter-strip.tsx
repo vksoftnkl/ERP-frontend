@@ -12,6 +12,10 @@
  *
  * The date edits are clamped to the session's fiscal year; the server still
  * refuses (`RANGE_OUTSIDE_YEAR`).
+ *
+ * The By tender and No tender tabs take the dates and the branch only: there
+ * the Type combo and the four boxes are disabled (they keep their values for
+ * the other tabs).
  */
 import { useMemo, type MutableRefObject } from "react";
 import { cx } from "@/components/design-system/cx";
@@ -51,9 +55,12 @@ type Props = {
   flagged: ErrorField;
   onShow: () => void;
   dateRef: MutableRefObject<HTMLInputElement | null>;
+  /** A tender tab is on screen: only the dates and the branch apply. */
+  tenderView: boolean;
 };
 
 const ALL = "all";
+const TENDER_ONLY_TIP = "By tender and No tender take the dates and the branch only";
 
 export function FilterStrip({
   draft,
@@ -71,6 +78,7 @@ export function FilterStrip({
   flagged,
   onShow,
   dateRef,
+  tenderView,
 }: Props) {
   const typeOptions = useMemo(
     () => [
@@ -176,13 +184,17 @@ export function FilterStrip({
           </select>
         </label>
 
-        <div className={cx(styles.field, flagged === "type" && styles.fieldFlagged)}>
+        <div
+          className={cx(styles.field, flagged === "type" && styles.fieldFlagged)}
+          title={tenderView ? TENDER_ONLY_TIP : undefined}
+        >
           <span className={styles.fieldLabel}>Type</span>
           <div className={styles.combo}>
             <SearchableSelect
               value={draft.voucherTypeId === null ? "" : String(draft.voucherTypeId)}
               options={typeChoices}
               onChange={(value) => onDraft({ voucherTypeId: parseTypeId(value) })}
+              disabled={tenderView}
               searchPlaceholder="Find a voucher type"
             />
           </div>
@@ -199,7 +211,12 @@ export function FilterStrip({
           className={styles.check}
           title="Display only: shows the Draft column, the draft counts and the drafts check. The server always counts drafts; it never sums them."
         >
-          <input type="checkbox" checked={draft.countDrafts} onChange={(e) => onDraft({ countDrafts: e.target.checked })} />
+          <input
+            type="checkbox"
+            checked={draft.countDrafts}
+            disabled={tenderView}
+            onChange={(e) => onDraft({ countDrafts: e.target.checked })}
+          />
           Count drafts
         </label>
         <label
@@ -209,6 +226,7 @@ export function FilterStrip({
           <input
             type="checkbox"
             checked={draft.includeCancelledPairs}
+            disabled={tenderView}
             onChange={(e) => onDraft({ includeCancelledPairs: e.target.checked })}
           />
           Include cancelled pairs
@@ -217,16 +235,26 @@ export function FilterStrip({
           <input
             type="checkbox"
             checked={draft.clearingAsBank}
+            disabled={tenderView}
             onChange={(e) => onDraft({ clearingAsBank: e.target.checked })}
           />
           Clearing ledgers as bank
         </label>
         <label className={styles.check} title="Also list voucher types, money ledgers and days with nothing in range.">
-          <input type="checkbox" checked={draft.zeroRows} onChange={(e) => onDraft({ zeroRows: e.target.checked })} />
+          <input
+            type="checkbox"
+            checked={draft.zeroRows}
+            disabled={tenderView}
+            onChange={(e) => onDraft({ zeroRows: e.target.checked })}
+          />
           Zero rows
         </label>
         <div className={styles.stripSpacer} />
-        <span className={styles.stripHint}>Alt+←/→  previous / next day   ·   To &gt; Date  =  a range, summed</span>
+        <span className={styles.stripHint}>
+          {tenderView
+            ? `${TENDER_ONLY_TIP}   ·   Alt+←/→  previous / next day`
+            : "Alt+←/→  previous / next day   ·   To > Date  =  a range, summed"}
+        </span>
       </div>
     </div>
   );

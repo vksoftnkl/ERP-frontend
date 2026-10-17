@@ -75,7 +75,10 @@ export type SaveUserMenuDto = Record<GrantFlagKey, boolean> & {
 export const USER_TYPE_VALUES = [
   "SUPER ADMIN",
   "ADMIN",
-  "MANAGER",
+  "HO FINANCE",
+  "AREA MANAGER",
+  "STORE MANAGER",
+  "CASH OFFICE",
   "SUPERVISOR",
   "USER",
   "CASHIER",
@@ -88,7 +91,10 @@ export const USER_TYPE_VALUES = [
  * person is. What they may open is the Permissions tab; what they may approve
  * at a till is Till Approval Setup. The port plan (§10) recorded the DTO as
  * having no enum; the DTO checks this one with `@IsEnum`, so any other value is
- * a 400. SUPERVISOR joined it 2026-10-08.
+ * a 400. SUPERVISOR joined it 2026-10-08; notes 125 (2026-10-16) gave it the
+ * till approval levels' names and renamed MANAGER to STORE MANAGER — the
+ * server migrated the stored rows, and answers `null` for a stored value
+ * outside the enum.
  */
 export type UserType = (typeof USER_TYPE_VALUES)[number];
 
@@ -159,7 +165,8 @@ export type SaveUserAdministrationDto = {
   /** Absent keeps the stored till PIN, `""` clears it, 4–6 digits replace it. */
   usrPin?: string;
   usrMustChangePassword?: boolean;
-  usrType?: UserType | null;
+  /** A stored role the combo no longer offers (VIEWER, …) goes back as it came. */
+  usrType?: UserType | string | null;
   usrEditDate?: boolean;
   usrEditEntry?: boolean;
   usrEditRate?: boolean;

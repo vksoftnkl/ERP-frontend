@@ -287,8 +287,8 @@ describe("parseTenders", () => {
   });
 
   it("takes the server's surcharge, and what went to the bills is the gross less it", () => {
-    const [row] = parseTenders([tenderWire({ tdAmount: 202.02, tdSurchargeAmt: 2.02 })]);
-    expect(row).toMatchObject({ amount: 202.02, surchargeAmt: 2.02, forBills: 200 });
+    const [row] = parseTenders([tenderWire({ tdAmount: 202, tdSurchargeAmt: 2 })]);
+    expect(row).toMatchObject({ amount: 202, surchargeAmt: 2, forBills: 200 });
     // Sent back as it came: on an editable master, leaving it out would let
     // the server fall back to the master's flat amount.
     expect(row.sendSurcharge).toBe(true);

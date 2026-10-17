@@ -221,6 +221,11 @@ export type TillSessionPayload = {
   receivedBy?: string | null;
   receivedByName?: string | null;
   receivedOn?: string | null;
+  /**
+   * Notes 129 §1: the latest receipt was the session's own cashier, under its
+   * Approval Rule's "Allow self". Absent from a server before notes 129.
+   */
+  receivedBySelf?: boolean;
 };
 
 export type TillCashReceiptState = "NONE" | "AWAITING" | "APPROVED" | "DIFFERENCE";
@@ -612,3 +617,91 @@ export type TillRemitConfirmResult = {
 
 /** POST /till/movements/change — a PICKUP on the giving session and a TOP_UP on the taking one. */
 export type TillChangeResult = { from: TillMovementFull; to: TillMovementFull };
+
+// ─── Approval gate (notes 124 §5) ───────────────────────────────────────────
+
+export type TillApprovalStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED" | "EXPIRED";
+
+/** `/till/approvals/request` · `decide` · `cancel` · `get` (server `TillApprovalPayload`). */
+export type TillApprovalPayload = {
+  tapId: string;
+  tapAccYear: string;
+  companyId: string;
+  branchId: string;
+  event: string;
+  status: TillApprovalStatus;
+  amount: number;
+  requiredRole: string;
+  /** The rule's channel while PENDING (COUNTER · REMOTE · EITHER); the one used once decided. */
+  channel: string;
+  twoPerson: boolean;
+  selfAllowed: boolean;
+  sessionId: string | null;
+  sessionNo: string | null;
+  counterId: string | null;
+  counterName: string | null;
+  srcDocType: string | null;
+  srcDocId: string | null;
+  srcRefno: string | null;
+  reasonId: string | null;
+  reasonName: string | null;
+  requestedBy: string;
+  requestedByName: string | null;
+  requestedOn: string;
+  requestNote: string | null;
+  decidedBy: string | null;
+  decidedByName: string | null;
+  decidedOn: string | null;
+  decisionNote: string | null;
+  secondBy: string | null;
+  secondByName: string | null;
+  secondOn: string | null;
+  expiresOn: string | null;
+  /** An approved request a document has already taken (it approves nothing more). */
+  usedOn: string | null;
+};
+
+/** What waits for an approver, and the route that decides it. */
+export type TillApprovalInboxKind = "REQUEST" | "SESSION_VARIANCE" | "RECEIVE_VARIANCE" | "SAFE_VARIANCE";
+
+/** One row of `/till/approvals/pending` (server `TillApprovalInboxItem`). */
+export type TillApprovalInboxItem = {
+  kind: TillApprovalInboxKind;
+  /** approvals/decide · sessions/decide-variance · safes/decide-variance. */
+  action: string;
+  event: string;
+  accYear: string;
+  tapId: string | null;
+  tssId: string | null;
+  tcmId: string | null;
+  tvrId: string | null;
+  safeId: string | null;
+  sessionNo: string | null;
+  counterName: string | null;
+  safeName: string | null;
+  /** Null without Till Sessions (273) OVERRIDE: a blind count's gap is not shown. */
+  amount: number | null;
+  requiredRole: string;
+  channel: string;
+  twoPerson: boolean;
+  requestedBy: string | null;
+  requestedByName: string | null;
+  requestedOn: string | null;
+  expiresOn: string | null;
+  srcDocType: string | null;
+  srcDocId: string | null;
+  srcRefno: string | null;
+  note: string | null;
+  /** A session closed with this gap undecided (decided on sessions/decide-variance after close). */
+  afterClose: boolean;
+  /** The caller's own authority could decide it (self, level, ceiling); a PIN may still be asked. */
+  canDecide: boolean;
+  /** Why not: TILL_APPROVER_SELF · TILL_APPROVER_NO_GRANT · TILL_APPROVER_LIMIT … */
+  cannotBecause: string | null;
+};
+
+export type TillApprovalInboxPayload = {
+  items: TillApprovalInboxItem[];
+  /** Requests swept to EXPIRED by this read. */
+  expired: number;
+};

@@ -288,9 +288,16 @@ export function withAppliedSettlement(
  * reopened draft's `avhVoucherId`, so that draft is the one posted) with the
  * settlement APPLIED: the same allocations, held debits spent, pins and
  * on-account figure `/payments/post` takes.
+ *
+ * The one exception is 428 TILL_APPROVAL_REQUIRED (notes 131): the draft is
+ * kept, its id adopted into the header, and the call goes again with the
+ * approved request's `approvalId` (`domain/approval.ts`).
  */
-export function buildPaymentSaveAndPostPayload(input: PaymentDraftInput): SaveAndPostPaymentBody {
-  return withAppliedSettlement(buildPaymentDraftPayload(input), buildPaymentPostPayload(input));
+export function buildPaymentSaveAndPostPayload(
+  input: PaymentDraftInput & { approvalId?: string | null },
+): SaveAndPostPaymentBody {
+  const body = withAppliedSettlement(buildPaymentDraftPayload(input), buildPaymentPostPayload(input));
+  return input.approvalId ? { ...body, approvalId: input.approvalId } : body;
 }
 
 export type PaymentAmendInput = PaymentDraftInput & {

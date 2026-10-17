@@ -11,7 +11,10 @@
  *                             that takes the balance until its amount is typed
  *   saveDraft     F5          POST create (a DRAFT; with voucherId an edit of it)
  *   post          Ctrl+Enter  POST create, then POST post by the key — the number
- *                             is issued at post; a failed post leaves the draft saved
+ *                             is issued at post; a failed post leaves the draft saved.
+ *                             A 428 TILL_APPROVAL_REQUIRED asks for the approval
+ *                             (`approvalRequest`) and posts the same key again with
+ *                             it (Qt `postSaved(approvalId)`, 425fa80)
  *   cancelVoucher      POST cancel with a reason (a POSTED voucher only)
  *   openVoucher   F8 pick     GET get by the four keys, into this screen (Qt
  *                             `loadVoucher`, 6f15977)
@@ -31,6 +34,7 @@ import {
 } from "@/lib/use-screen-memory";
 import { useGetTenderMastersQuery } from "@/store/api/saleOrderApi";
 import { useGetVoucherTaxRatesQuery } from "@/store/api/vouchersApi";
+import { approvalNeededOf, type ApprovalRequestState } from "@/features/sales/till/shared/approval-gate";
 import { expenseApi, useExpenseReasonRowsQuery, useExpenseStateRowsQuery } from "../api/expense-api";
 import { expenseError } from "../api-errors";
 import type {
@@ -42,6 +46,7 @@ import type {
   ExpenseTenderDraft,
   ExpenseTillSession,
 } from "../expense.types";
+import { expenseApprovalAsk, expensePostBody, refusalsThatShutPost } from "../domain/approval";
 import {
   cellAfterPick,
   expenseDraftReducer,
@@ -386,7 +391,8 @@ export function useExpenseVoucher({ scope, initialKeys, today, session, rights, 
   }, [answer, draft.header, stateNames, view.linesFresh]);
 
   const checked = answer?.kind === "validated" && view.fresh;
-  const refused = checked && (answer?.payload.refusals.length ?? 0) > 0;
+  // The approval need does not count: Post is where it is asked for.
+  const refused = checked && refusalsThatShutPost(answer?.payload.refusals ?? []).length > 0;
   const saved = draft.keys !== null;
   const canSave = editable && !problem && !busy && !loading && rights.maySaveDraft(saved);
   const canPost =
@@ -432,6 +438,29 @@ export function useExpenseVoucher({ scope, initialKeys, today, session, rights, 
     setOpenRequest({ keys, picked: true });
   }, []);
 
+  // ── the approval gate (notes 124 §5, Qt 425fa80) ────────────────────────
+  // A company on `till.approval_gate` REFUSE answers the post with 428
+  // TILL_APPROVAL_REQUIRED: the "Needs approval" dialog is opened on the saved
+  // draft, and the post waits for its answer — the id of an APPROVED request,
+  // or null when it was closed without one.
+  const [approvalRequest, setApprovalRequest] = useState<ApprovalRequestState | null>(null);
+  const approvalAnswer = useRef<((tapId: string | null) => void) | null>(null);
+  const askApproval = useCallback(
+    (request: ApprovalRequestState) =>
+      new Promise<string | null>((resolve) => {
+        approvalAnswer.current = resolve;
+        setApprovalRequest(request);
+      }),
+    [],
+  );
+  /** The dialog's answer: `onApproved(tapId)`, or `onClose` (null). */
+  const answerApproval = useCallback((tapId: string | null) => {
+    const resolve = approvalAnswer.current;
+    approvalAnswer.current = null;
+    setApprovalRequest(null);
+    resolve?.(tapId);
+  }, []);
+
   const startNew = useCallback(() => {
     dispatchDraft({ type: "RESET", draft: newDraft(today, cashTenderId) });
     autoGstinRef.current = "";
@@ -456,6 +485,9 @@ export function useExpenseVoucher({ scope, initialKeys, today, session, rights, 
       if (!beginBusy()) {
         return null;
       }
+      // What the tenders come to as typed: the saved message, and the
+      // approval's amount when the 428 names none (Qt `tendersTyped()`).
+      const paid = sumPaise(draft.tenders.map((row) => paiseOfText(row.amount)));
       try {
         let savedVoucher: ExpensePayload;
         try {
@@ -466,38 +498,52 @@ export function useExpenseVoucher({ scope, initialKeys, today, session, rights, 
         }
         if (!thenPost) {
           // Saved: the screen starts the next one; the draft reopens from the list.
-          const paid = sumPaise(draft.tenders.map((row) => paiseOfText(row.amount)));
           startNew();
           toast.success(`Draft saved — ${formatPaise(paid)}. Open it from F8 List to change or post it.`);
           return savedVoucher;
         }
-        try {
-          const posted = readVoucher(
-            await settle(dispatch(expenseApi.endpoints.expensePost.initiate(keysOf(savedVoucher)))),
-          );
-          // Posted: the screen is ready for the next one.
-          startNew();
-          const notes = posted.warnings.map((warning) => warning.message);
-          const message =
-            `Expense ${posted.voucherNo ?? ""} posted — ${formatPaise(paiseOfNumber(posted.amount))}.` +
-            (notes.length > 0 ? `\n\n${notes.join("\n")}` : "");
-          if (notes.length > 0) {
-            toast.info(message);
-          } else {
-            toast.success(message);
+        // Posted by the key of the draft just saved — after a 428, the same
+        // key again with the approval (Qt `postSaved(approvalId)`).
+        const postSaved = async (approvalId: string | null): Promise<ExpensePayload | null> => {
+          try {
+            const posted = readVoucher(
+              await settle(
+                dispatch(expenseApi.endpoints.expensePost.initiate(expensePostBody(keysOf(savedVoucher), approvalId))),
+              ),
+            );
+            // Posted: the screen is ready for the next one.
+            startNew();
+            const notes = posted.warnings.map((warning) => warning.message);
+            const message =
+              `Expense ${posted.voucherNo ?? ""} posted — ${formatPaise(paiseOfNumber(posted.amount))}.` +
+              (notes.length > 0 ? `\n\n${notes.join("\n")}` : "");
+            if (notes.length > 0) {
+              toast.info(message);
+            } else {
+              toast.success(message);
+            }
+            return posted;
+          } catch (error) {
+            // The draft stays saved: fix it and post again.
+            showVoucher(savedVoucher);
+            // Notes 124 §5: a company on approval_gate REFUSE wants an approved
+            // EXPENSE request for this voucher first — asked here, then posted.
+            const need = approvalNeededOf(error);
+            if (!need) {
+              toast.error(expenseError(error));
+              return null;
+            }
+            const tapId = await askApproval(expenseApprovalAsk(need, keysOf(savedVoucher), paid));
+            // Closed without one: no error — Post again once it is approved.
+            return tapId ? postSaved(tapId) : null;
           }
-          return posted;
-        } catch (error) {
-          // The draft stays saved: fix it and post again.
-          showVoucher(savedVoucher);
-          toast.error(expenseError(error));
-          return null;
-        }
+        };
+        return await postSaved(null);
       } finally {
         endBusy();
       }
     },
-    [beginBusy, body, dispatch, draft.tenders, endBusy, postProblem, problem, showVoucher, startNew],
+    [askApproval, beginBusy, body, dispatch, draft.tenders, endBusy, postProblem, problem, showVoucher, startNew],
   );
 
   const saveDraft = useCallback(() => save(false), [save]);
@@ -718,6 +764,8 @@ export function useExpenseVoucher({ scope, initialKeys, today, session, rights, 
     showCancel,
     canCancel,
     canCancelReenter,
+    approvalRequest,
+    answerApproval,
     tenderOptions,
     rates,
     ratesFailed,

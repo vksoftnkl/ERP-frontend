@@ -129,7 +129,7 @@ export function tenderRowFrom(master: TenderMasterRow): TenderRow {
  * refuse and which nobody typed.
  *
  * The figure for the BILLS moves with it and the gross is re-derived: 200 on
- * cash becomes 202.02 on a 1% UPI, and back to 200 on cash again.
+ * cash becomes 202.00 on a 1% UPI, and back to 200 on cash again.
  */
 export function retargetTender(row: TenderRow, master: TenderMasterRow): TenderRow {
   const typeId = Number.parseInt(master.tndTypeId, 10) || 0;

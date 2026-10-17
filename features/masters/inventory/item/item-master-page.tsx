@@ -67,7 +67,10 @@ import ItemLinkedRecordsEditor, {
   type LinkedRecordColumnLayoutEntry,
   type LinkedRecordRow,
 } from "./item-linked-records-editor";
-import type { LinkedRecordColumnOptionsResolverParams } from "./item-linked-records-editor.shared";
+import {
+  parseLinkedRecordRowsResult,
+  type LinkedRecordColumnOptionsResolverParams,
+} from "./item-linked-records-editor.shared";
 import { normalizeItemPriceRowsForRules } from "./item-price-row-rules";
 import {
   applyConfiguredLinkedTableColumnConfig,
@@ -2162,6 +2165,83 @@ function buildItemEanRowsValueChangeResult(
   return {
     values: changedValues,
   };
+}
+/**
+ * The values a popup opens on, with every EMPTY row grid already holding the
+ * first row its editor would add on mount (`autoCreateFirstRowOnMount`) and
+ * the result of that grid's value-change handler — the same rows, run through
+ * the same handlers, in the order the editors mount (Core tab: conversions,
+ * prices; EAN tab: barcodes, reorders).
+ *
+ * Done before the popup opens because the popup keeps a draft of whatever
+ * differs from its opening values (`modalDraftKey`): a row an editor added on
+ * mount was such a difference, so merely opening Add Item — or an item with no
+ * price list, barcodes or reorder rules — left an "unsaved entry" behind for
+ * the next open to restore. Seeded here, the editors find their rows and add
+ * nothing, and only what the operator types is kept.
+ */
+export function seedEmptyItemLinkedGrids(
+  values: Record<string, string>,
+  itemTaxRecordsById: ReadonlyMap<string, Record<string, unknown>>,
+): Record<string, string> {
+  let current = values;
+  const seedGrid = (
+    fieldName: string,
+    buildFirstRow: (currentValues: Record<string, string>) => LinkedRecordRow,
+    onValueChange: (
+      nextValues: Record<string, string>,
+      previousValues: Record<string, string>,
+      serializedRows: string,
+    ) => ERPDynamicFieldValueChangeResult | void,
+  ) => {
+    // The editor's own test: rows it cannot parse are left alone, too.
+    const { parseError, rows } = parseLinkedRecordRowsResult(current[fieldName] ?? "");
+    if (parseError || rows.length > 0) {
+      return;
+    }
+    const serializedRows = serializeLinkedRecordRows([buildFirstRow(current)]);
+    const nextValues = { ...current, [fieldName]: serializedRows };
+    const result = onValueChange(nextValues, current, serializedRows);
+    current = result?.values ? { ...nextValues, ...result.values } : nextValues;
+  };
+  seedGrid(
+    ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME,
+    (currentValues) =>
+      buildEmptyItemUnitConversionRow((currentValues.item_base_unit_id ?? "").trim(), 1),
+    (nextValues, previousValues, serializedRows) =>
+      buildItemUnitConversionRowsValueChangeResult(
+        nextValues,
+        previousValues,
+        serializedRows,
+        itemTaxRecordsById,
+      ),
+  );
+  seedGrid(
+    ITEM_PRICE_ROWS_FIELD_NAME,
+    (currentValues) => ({
+      ...buildEmptyItemPriceRow(""),
+      ipm_company_id: (currentValues.item_company_id ?? "").trim(),
+      ipm_branch_id: (currentValues.item_branch_id ?? "").trim(),
+    }),
+    (nextValues, previousValues, serializedRows) =>
+      buildItemPriceRowsValueChangeResult(
+        nextValues,
+        previousValues,
+        serializedRows,
+        itemTaxRecordsById,
+      ),
+  );
+  seedGrid(
+    ITEM_EAN_ROWS_FIELD_NAME,
+    () => buildEmptyItemEanRow("", ""),
+    buildItemEanRowsValueChangeResult,
+  );
+  seedGrid(
+    ITEM_REORDER_ROWS_FIELD_NAME,
+    () => buildEmptyItemReorderRow(),
+    buildItemReorderRowsValueChangeResult,
+  );
+  return current;
 }
 const ITEM_PRICE_TIER_LABELS = ["A", "B", "C", "D"] as const;
 function resolveValidatedItemPriceTierCount(priceLevelCount: number): number {

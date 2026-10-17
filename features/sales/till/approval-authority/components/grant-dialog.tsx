@@ -8,8 +8,9 @@
  * — create, or change by `taaId` presence.
  *
  * The approver is fixed once the grant exists: a grant for someone else is a
- * new grant. "Every company" (group finance) has no branch, so the branch is
- * cleared and held while it is chosen.
+ * new grant. On a new grant the level starts at the picked user's User Role
+ * (Qt 425fa80), still changeable. "Every company" (group finance) has no
+ * branch, so the branch is cleared and held while it is chosen.
  *
  * Keys, as the till master popups: Enter moves to the next field (a required
  * box left empty keeps the caret), Ctrl+Enter saves, Esc closes. Mounted fresh
@@ -41,6 +42,7 @@ import {
   grantRowId,
   sameGrantForm,
   withEveryCompany,
+  withPickedUser,
   type GrantField,
   type GrantForm,
 } from "../domain/approval-authority";
@@ -204,7 +206,7 @@ export function GrantDialog({ row, readOnlyReason, companyId, companyName, today
               params={userParams}
               clearOnParamsChange={false}
               value={form.userId ? { id: form.userId, text: form.userName } : null}
-              onChange={(picked) => update({ userId: picked?.id ?? "", userName: picked?.text ?? "" })}
+              onChange={(picked, pickedRow) => setForm((current) => withPickedUser(current, picked, pickedRow, isNew))}
               // A grant belongs to one approver; for someone else, add a new grant.
               disabled={off("userId")}
               autoFocus={isNew && !readOnly}

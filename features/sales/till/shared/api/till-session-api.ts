@@ -1,6 +1,7 @@
 /**
  * The till session's routes — `/till/sessions/*`, `/till/movements/*`,
- * `/till/denominations/list` — the safe's (`/till/safes/*`, remit, notes 118)
+ * `/till/denominations/list` — the safe's (`/till/safes/*`, remit, notes 118),
+ * the approval gate's (`/till/approvals/*`, notes 124 §5)
  * and the configured grids the till screens read (134, 144–148, 157, 158),
  * one typed function each.
  *
@@ -30,6 +31,8 @@ import type { AppDispatch } from "@/store/store";
 import { getGridId, type ConfiguredGridKey } from "@/lib/configured-grids";
 import type {
   GridRow,
+  TillApprovalInboxPayload,
+  TillApprovalPayload,
   TillCashApprovalResult,
   TillChangeResult,
   TillCountLine,
@@ -112,6 +115,10 @@ async function quietRead<T>(dispatch: AppDispatch, url: string, params: Params):
   );
 }
 
+function inboxOf(data: TillApprovalInboxPayload | null | undefined): TillApprovalInboxPayload {
+  return { items: Array.isArray(data?.items) ? data.items : [], expired: Number(data?.expired ?? 0) || 0 };
+}
+
 function keyParams(key: TillSessionKey): Params {
   return { companyId: key.companyId, branchId: key.branchId, accYear: key.accYear, tssId: key.tssId };
 }
@@ -126,6 +133,11 @@ export type TillOpenBody = {
   lines: TillCountLine[];
   reasonId?: string;
   notes?: string;
+  /**
+   * Notes 124 §5: an APPROVED FLOAT_MISMATCH request for this counter, after
+   * the open answered 428 TILL_APPROVAL_REQUIRED (till.approval_gate REFUSE).
+   */
+  approvalId?: string;
 };
 
 export type TillCountBody = TillSessionKey & { lines: TillCountLine[] };
@@ -309,6 +321,54 @@ export type TillRemitConfirmBody = {
   notes?: string | null;
 };
 
+/**
+ * `RequestTillApprovalDto` (notes 124 §5, 272 VIEW or 273 VIEW): what a 428
+ * TILL_APPROVAL_REQUIRED named, asked for. `approverId` + `approverPin` = the
+ * approver standing at the counter decides it in this call; left out it waits
+ * PENDING in the inbox (asking again for the same document returns it).
+ */
+export type TillApprovalRequestBody = {
+  companyId: string;
+  branchId: string;
+  event: string;
+  amount: number;
+  sessionId?: string | null;
+  accYear?: string | null;
+  srcDocType?: string | null;
+  srcDocId?: string | null;
+  srcRefno?: string | null;
+  reasonId?: string | null;
+  note?: string | null;
+  approverId?: string | null;
+  approverPin?: string | null;
+  secondId?: string | null;
+  secondPin?: string | null;
+};
+
+/** `DecideTillApprovalDto` (273 OVERRIDE): the caller is the approver. */
+export type TillApprovalDecideBody = {
+  companyId: string;
+  branchId: string;
+  accYear: string;
+  tapId: string;
+  decision: "APPROVE" | "REJECT";
+  /** Required (trimmed, ≤ 500). */
+  note: string;
+  approverPin?: string | null;
+  /** APPROVE under a two-person rule. */
+  secondId?: string | null;
+  secondPin?: string | null;
+};
+
+/** `CancelTillApprovalDto`: whoever asked (anyone else needs 273 OVERRIDE). */
+export type TillApprovalCancelBody = {
+  companyId: string;
+  branchId: string;
+  accYear: string;
+  tapId: string;
+  note?: string | null;
+};
+
 export type TillSessionClient = {
   openCheck: (scope: { companyId: string; branchId: string; counterId?: string }) => Promise<TillOpenCheck>;
   /** `openCheck` for a timer: a query, so it is not announced as a data change (see the header). */
@@ -350,6 +410,14 @@ export type TillSessionClient = {
   remit: (body: TillRemitBody) => Promise<TillRemitResult>;
   remitConfirm: (body: TillRemitConfirmBody) => Promise<TillRemitConfirmResult>;
   denominations: (companyId: string) => Promise<TillDenominationRow[]>;
+  /** Notes 124 §5 — ask for an approval (decided here with the approver's PIN, or left PENDING). */
+  approvalRequest: (body: TillApprovalRequestBody) => Promise<TillApprovalPayload>;
+  /** The approvers' inbox at a branch (273 VIEW). */
+  approvalPending: (scope: { companyId: string; branchId: string }) => Promise<TillApprovalInboxPayload>;
+  /** `approvalPending` for a caption count: a query, so it is not announced as a data change. */
+  approvalPendingQuiet: (scope: { companyId: string; branchId: string }) => Promise<TillApprovalInboxPayload>;
+  approvalDecide: (body: TillApprovalDecideBody) => Promise<TillApprovalPayload>;
+  approvalCancel: (body: TillApprovalCancelBody) => Promise<TillApprovalPayload>;
   /** Every row of a configured grid, every page of it. */
   gridRows: (grid: ConfiguredGridKey, params: Record<string, string>) => Promise<GridRow[]>;
 };
@@ -399,6 +467,13 @@ export function createTillSessionClient(dispatch: AppDispatch): TillSessionClien
       if (Array.isArray(data)) return data;
       return Array.isArray(data?.items) ? data.items : [];
     },
+    approvalRequest: (body) => write(dispatch, "/till/approvals/request", body),
+    approvalPending: async ({ companyId, branchId }) =>
+      inboxOf(await read<TillApprovalInboxPayload | null>(dispatch, "/till/approvals/pending", { companyId, branchId })),
+    approvalPendingQuiet: async ({ companyId, branchId }) =>
+      inboxOf(await quietRead<TillApprovalInboxPayload | null>(dispatch, "/till/approvals/pending", { companyId, branchId })),
+    approvalDecide: (body) => write(dispatch, "/till/approvals/decide", body),
+    approvalCancel: (body) => write(dispatch, "/till/approvals/cancel", body),
     gridRows: async (grid, params) => {
       const rows: GridRow[] = [];
       for (let page = 1; page <= GRID_MAX_PAGES; page += 1) {

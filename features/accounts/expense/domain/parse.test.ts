@@ -55,6 +55,12 @@ describe("reading answers defensively", () => {
     });
     expect(v.warnings[0]).toMatchObject({ code: "STATUTORY_40A3", level: "WARN" });
     expect(v.approval).toMatchObject({ event: "EXPENSE", threshold: 500, amount: 1300, minRole: "SUPERVISOR" });
+    expect(v.approval?.enforced).toBe(false);
+  });
+
+  it("reads whether the approval is enforced (till.approval_gate REFUSE)", () => {
+    const v = readValidate({ ok: false, derived: {}, approval: { event: "EXPENSE", amount: 1300, enforced: true } });
+    expect(v.approval?.enforced).toBe(true);
   });
 
   it("reads the till session and the money-from of each tender", () => {

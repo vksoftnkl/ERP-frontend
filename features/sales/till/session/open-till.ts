@@ -15,12 +15,15 @@
  * The float is ISSUED (out of the safe, a TFlt voucher) or CARRIED (what the
  * previous close on the counter left). The drawer is counted by denomination;
  * counted ≠ issued opens anyway and posts a FLOAT_MISMATCH variance under the
- * reason picked.
+ * reason picked — unless the company's approval gate refuses it (Qt 425fa80,
+ * notes 124 §5): the open then answers 428 TILL_APPROVAL_REQUIRED, the screen
+ * asks for that approval (`floatApprovalRequest`) and opens again with its id.
  */
 import { countLines, countedPaise, type DenomCountValue, type Denomination } from "../shared/denom";
 import { clockOf, ddmmyyyy } from "../shared/format";
 import { formatMoney, formatSignedMoney, paiseOf, paiseToNumber } from "../shared/money";
 import type { TillOpenBody } from "../shared/api/till-session-api";
+import type { ApprovalNeed, ApprovalRequestState } from "../shared/approval-gate";
 import type { TillReason } from "../shared/reasons";
 import type {
   TillCarriedFrom,
@@ -473,6 +476,36 @@ export function openBody(inputs: OpenTillInputs, scope: { companyId: string; bra
     body.notes = `FLOAT_MISMATCH ${formatSignedMoney(figures.diff)}: ${reason?.name ?? ""}`.trim();
   }
   return body;
+}
+
+/**
+ * What the "Needs approval" dialog asks for when the open answered 428
+ * TILL_APPROVAL_REQUIRED (Qt 425fa80 `openSession`): a FLOAT_MISMATCH for the
+ * counter being opened, of the gap's size — never its sign — at the 428's
+ * level. The 428's figure, else the screen's own difference.
+ */
+export function floatApprovalRequest(
+  need: ApprovalNeed,
+  inputs: OpenTillInputs,
+  scope: { companyId: string; branchId: string },
+): ApprovalRequestState {
+  const amount = need.amount ?? paiseToNumber(openFigures(inputs).diff);
+  return {
+    ask: {
+      companyId: scope.companyId,
+      branchId: scope.branchId,
+      event: "FLOAT_MISMATCH",
+      amount: Math.abs(amount),
+      srcDocType: "TILL_COUNTER",
+      srcDocId: chosenCounterId(inputs.check, inputs.form.pickedCounterId),
+    },
+    requiredRole: need.requiredRole,
+  };
+}
+
+/** The open sent again once approved: the same body, with the approval's id. */
+export function withApproval(body: TillOpenBody, approvalId: string | undefined): TillOpenBody {
+  return approvalId ? { ...body, approvalId } : body;
 }
 
 export const MISMATCH_NOTE =

@@ -11,11 +11,13 @@
  * Nothing about a save is silent: a save that revokes anything asks first
  * (§7.3), and the page's toast says when the rights take effect (§8).
  */
-import { type CSSProperties, useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import ModalPortal from "@/components/ui/modal-portal";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import { cx } from "@/components/design-system/cx";
 import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
+import { useAppSelector } from "@/store/hooks";
+import { selectUserInfo } from "@/store/slices/authSlice";
 import {
   readUserAdminError,
   useLoadUserAdminMutation,
@@ -40,7 +42,7 @@ import {
 } from "./domain/entryModel";
 import { describeRevocations, revokesAnything } from "./domain/grantDiff";
 import { copyGrantsFrom, countGrants, grantsFromPayload, withAncestorsTicked } from "./domain/grants";
-import { validateIdentity } from "./domain/identity";
+import { userRoleOptions, validateIdentity } from "./domain/identity";
 import { parseMenuTree } from "./domain/menuTree";
 import { NESTED_SURFACE_ATTR } from "./nested-surface";
 import { IdentityTab } from "./tabs/identity-tab";
@@ -69,7 +71,18 @@ export function UserEntryDialog(props: UserEntryDialogProps) {
 }
 
 function EntryDialogBody({ mode, usrId, readOnly = false, onClose, onSaved }: UserEntryDialogProps) {
-  const [state, dispatch] = useReducer(entryReducer, { mode, usrId, readOnly }, initialEntryState);
+  // Who is signed in decides whether SUPER ADMIN is offered, and whether a
+  // SUPER ADMIN user may be changed at all (notes 125).
+  const sessionUserType = useAppSelector(selectUserInfo)?.userType ?? null;
+  const [state, dispatch] = useReducer(
+    entryReducer,
+    { mode, usrId, readOnly, sessionUserType },
+    initialEntryState,
+  );
+  const roleOptions = useMemo(
+    () => userRoleOptions(state.sessionUserType, state.loadedIdentity.userType),
+    [state.loadedIdentity.userType, state.sessionUserType],
+  );
   const [loadUser] = useLoadUserAdminMutation();
   const [loadTree] = useLoadMenuTreeMutation();
   const [saveUser] = useSaveUserAdminMutation();
@@ -307,6 +320,7 @@ function EntryDialogBody({ mode, usrId, readOnly = false, onClose, onSaved }: Us
                 identity={state.identity}
                 errors={state.fieldErrors}
                 facts={state.facts}
+                roleOptions={roleOptions}
                 mode={state.mode}
                 disabled={identityDisabled}
                 onChange={(patch) => dispatch({ type: "identity/changed", patch })}

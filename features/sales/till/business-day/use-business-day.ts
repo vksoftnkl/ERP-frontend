@@ -7,6 +7,7 @@ import { confirm } from "@/lib/confirm";
 import { toast } from "@/lib/notify";
 import { useLiveCash } from "../shared/use-live-cash";
 import { useBusinessDayClient } from "./api/business-day-api";
+import { isTodaysDay, type CashBooks, type SafeBook } from "./domain/books";
 import { CLOSE_CONFIRM_NOTE, closeQuestion, closedText, isCloseBlocked } from "./domain/day-close";
 import type { RowsState } from "./domain/day-reading";
 import {
@@ -43,6 +44,13 @@ export type DayState =
  */
 export type CloseCheckState = { tbdId: string; check: TillCloseCheck | null; error: string };
 
+/**
+ * What the books say now (Qt 425fa80 `m_cashBooks` / `m_safeBooks`, notes
+ * 126): the branch's, not one day's — `null` = not read (yet, or the read
+ * failed and nothing was held).
+ */
+export type BooksState = { cash: CashBooks | null; safes: readonly SafeBook[] | null };
+
 type Options = {
   companyId: string;
   branchId: string;
@@ -60,6 +68,7 @@ type Load = { quiet?: boolean };
 const EMPTY_ROWS: readonly GridRow[] = [];
 const LOADING: RowsState = { status: "loading", rows: EMPTY_ROWS };
 const NO_CHECK: CloseCheckState = { tbdId: "", check: null, error: "" };
+const NO_BOOKS: BooksState = { cash: null, safes: null };
 
 /**
  * The state behind the Business Day screen — the Qt `fetchDay / showDay /
@@ -82,6 +91,12 @@ const NO_CHECK: CloseCheckState = { tbdId: "", check: null, error: "" };
  * back from a cockpit (the screen remounts) — and an answer for a day no
  * longer shown is dropped. A failure is not a popup: the screen falls back to
  * its own reading and says why on a grey row.
+ *
+ * The books (Qt 425fa80 `fetchBooks`, notes 126) are read with it, each time a
+ * day is shown: the safes' ledgers against their safe books, and — on today's
+ * day only — the CASH tender's ledger as on today. They are the branch's, so
+ * a figure held stays until a newer answer replaces it, and a failed read
+ * leaves the row out, as Qt does.
  */
 export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCreate, canEdit }: Options) {
   const client = useBusinessDayClient();
@@ -99,6 +114,7 @@ export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCr
   const [opening, setOpening] = useState(false);
   const [closeCheck, setCloseCheck] = useState<CloseCheckState>(NO_CHECK);
   const [closing, setClosing] = useState(false);
+  const [books, setBooks] = useState<BooksState>(NO_BOOKS);
 
   const scopeReady = Boolean(companyId && branchId);
   const latest = useRef({
@@ -132,7 +148,7 @@ export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCr
     };
   });
 
-  const gens = useRef({ day: 0, sessions: 0, safes: 0, days: 0, closeCheck: 0 });
+  const gens = useRef({ day: 0, sessions: 0, safes: 0, days: 0, closeCheck: 0, safeBooks: 0, cashBooks: 0 });
   /**
    * The day on screen, set the moment it is put there (`latest` only follows
    * a render later): what a close-check answer is matched against.
@@ -245,7 +261,42 @@ export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCr
     [client],
   );
 
-  /** Put a day on screen, read its sessions and its close-check. */
+  /**
+   * Books = drawers / safe (Qt `fetchBooks`): `/till/safes/balance`, and on
+   * today's day the CASH tender's ledger as on today, on the day's own year —
+   * the year today falls in (Qt takes the login's year, which may be another
+   * one being looked at). Errors are swallowed, as Qt swallows them.
+   */
+  const fetchBooks = useCallback(
+    async (day: TillDay) => {
+      const { companyId: company, branchId: branch } = latest.current;
+      const safesGen = ++gens.current.safeBooks;
+      const reads: Promise<void>[] = [
+        client
+          .safeBooks({ companyId: company, branchId: branch })
+          .then((safes) => {
+            if (safesGen === gens.current.safeBooks) setBooks((current) => ({ ...current, safes }));
+          })
+          .catch(() => undefined),
+      ];
+      const now = new Date();
+      if (isTodaysDay(day, now)) {
+        const cashGen = ++gens.current.cashBooks;
+        reads.push(
+          client
+            .cashBooks({ companyId: company, branchId: branch, accYear: day.tbdAccYear, asOn: isoDateOfLocal(now) })
+            .then((cash) => {
+              if (cashGen === gens.current.cashBooks) setBooks((current) => ({ ...current, cash }));
+            })
+            .catch(() => undefined),
+        );
+      }
+      await Promise.all(reads);
+    },
+    [client],
+  );
+
+  /** Put a day on screen, read its sessions, its close-check and the books. */
   const showDay = useCallback(
     (day: TillDay, picked: DayPick, load: Load = {}) => {
       shownTbdId.current = day.tbdId;
@@ -255,8 +306,9 @@ export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCr
       setCloseCheck((current) => (current.tbdId === day.tbdId ? current : { ...NO_CHECK, tbdId: day.tbdId }));
       void loadSessions(day.tbdBusinessDate, load);
       void fetchCloseCheck(day, load);
+      void fetchBooks(day);
     },
-    [fetchCloseCheck, loadSessions],
+    [fetchBooks, fetchCloseCheck, loadSessions],
   );
 
   /** No day on screen: no check either, and any answer still on the wire is disowned. */
@@ -441,6 +493,7 @@ export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCr
     setSafes(LOADING);
     setDays(LOADING);
     setCloseCheck(NO_CHECK);
+    setBooks(NO_BOOKS);
   }
   useLayoutEffect(() => {
     gens.current.day += 1;
@@ -448,6 +501,8 @@ export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCr
     gens.current.safes += 1;
     gens.current.days += 1;
     gens.current.closeCheck += 1;
+    gens.current.safeBooks += 1;
+    gens.current.cashBooks += 1;
     shownTbdId.current = "";
   }, [scopeKey]);
   useEffect(() => {
@@ -484,6 +539,7 @@ export function useBusinessDay({ companyId, branchId, cutoff, initialPick, canCr
     opening,
     closeCheck,
     closing,
+    books,
     scopeReady,
     loadToday,
     loadDay,

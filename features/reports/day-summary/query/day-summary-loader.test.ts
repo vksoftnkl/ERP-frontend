@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { BRANCH_MAIN, COMPANY_ID, FY } from "../testing/fixtures";
 import { fakeClient, flush } from "../testing/fake-client";
 import { rowAt } from "./pages";
-import { parseFilters, summaryKey, vouchersKey, type Filters, type Session } from "./params";
+import { noTenderKey, parseFilters, summaryKey, tenderKey, vouchersKey, type Filters, type Session } from "./params";
 import { DaySummaryLoader, type LoaderState } from "./day-summary-loader";
 
 const session: Session = {
@@ -116,5 +116,104 @@ describe("one generation at a time (race test)", () => {
     expect(calls).toHaveLength(2);
     expect(loader.getState().error).toBeNull();
     expect(loader.getState().summary?.data.typeTotals.amount).toBe("495270.00");
+  });
+});
+
+describe("By tender and No tender (notes 126 §4)", () => {
+  it("By tender asks both lists, as the Qt screen does; the No tender tab then asks nothing", async () => {
+    const { client, calls } = fakeClient();
+    const loader = new DaySummaryLoader(client, () => undefined);
+    const f = filters("tab=tender&type=3");
+    loader.load({ session, filters: f });
+    await flush();
+    expect(calls.map((c) => c.route).sort()).toEqual(["no-tender", "tender"]);
+    const tender = calls.find((c) => c.route === "tender")!;
+    expect(tender.query).toEqual({
+      companyId: COMPANY_ID,
+      accYear: FY.accYear,
+      branchId: BRANCH_MAIN,
+      fromDate: "2026-10-09",
+      toDate: "2026-10-09",
+      groupBy: "TENDER",
+      withRows: "false",
+      limit: "1",
+    });
+    expect(calls.find((c) => c.route === "no-tender")!.query).toMatchObject({ limit: "500" });
+    const state = loader.getState();
+    expect(state.tender?.key).toBe(tenderKey(session, f));
+    expect(state.tender?.data.groups).toHaveLength(7);
+    expect(state.noTender?.key).toBe(noTenderKey(session, f));
+    expect(state.noTender?.data.count).toBe(2);
+
+    loader.load({ session, filters: filters("tab=no-tender&type=3") });
+    await flush();
+    expect(calls).toHaveLength(2);
+    expect(loader.getState()).toMatchObject({ loading: false, error: null });
+  });
+
+  it("the group-by asks By tender again, never the No tender list", async () => {
+    const { client, calls } = fakeClient();
+    const loader = new DaySummaryLoader(client, () => undefined);
+    loader.load({ session, filters: filters("tab=tender") });
+    await flush();
+    loader.load({ session, filters: filters("tab=tender&by=TYPE") });
+    await flush();
+    expect(calls.map((c) => c.route).slice(2)).toEqual(["tender"]);
+    expect(calls[2].query.groupBy).toBe("TYPE");
+    expect(loader.getState().tender?.data.groupBy).toBe("TYPE");
+  });
+
+  it("a switch to No tender while both are asked keeps its request and waits for it", async () => {
+    const { client, calls } = fakeClient({ gate: true });
+    const loader = new DaySummaryLoader(client, () => undefined);
+    loader.load({ session, filters: filters("tab=tender") });
+    loader.load({ session, filters: filters("tab=no-tender") });
+    expect(calls.map((c) => [c.route, c.aborted])).toEqual([
+      ["no-tender", false],
+      ["tender", true],
+    ]);
+    expect(loader.getState().loading).toBe(true);
+    calls[0].release();
+    await flush();
+    expect(loader.getState()).toMatchObject({ loading: false, error: null });
+    expect(loader.getState().noTender?.data.count).toBe(2);
+  });
+
+  it("a failed No tender list only leaves the count off under By tender; on its own tab it fails, and Retry asks again", async () => {
+    let fail = true;
+    const { client, calls } = fakeClient({
+      fail: (route) => (fail && route === "no-tender" ? { status: 500, data: {} } : null),
+    });
+    const loader = new DaySummaryLoader(client, () => undefined);
+    loader.load({ session, filters: filters("tab=tender") });
+    await flush();
+    expect(loader.getState()).toMatchObject({ loading: false, error: null, noTender: null });
+    expect(loader.getState().tender).not.toBeNull();
+
+    const f = filters("tab=no-tender");
+    loader.load({ session, filters: f });
+    await flush();
+    expect(calls.map((c) => c.route)).toEqual(["no-tender", "tender", "no-tender"]);
+    expect(loader.getState().error).toMatchObject({ key: noTenderKey(session, f), route: "no-tender" });
+
+    fail = false;
+    loader.reload();
+    await flush();
+    expect(calls).toHaveLength(4);
+    expect(loader.getState()).toMatchObject({ loading: false, error: null });
+    expect(loader.getState().noTender?.data.amount).toBe("2500.00");
+  });
+
+  it("Show on the same URL (reload) asks both again; the other tabs never ask either", async () => {
+    const { client, calls } = fakeClient();
+    const loader = new DaySummaryLoader(client, () => undefined);
+    loader.load({ session, filters: filters("tab=summary") });
+    await flush();
+    expect(calls.map((c) => c.route)).toEqual(["summary"]);
+    loader.load({ session, filters: filters("tab=tender") });
+    await flush();
+    loader.reload();
+    await flush();
+    expect(calls.map((c) => c.route).slice(1).sort()).toEqual(["no-tender", "no-tender", "tender", "tender"]);
   });
 });

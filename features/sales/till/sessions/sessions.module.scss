@@ -2,8 +2,8 @@
  * What the Till Sessions screens add over the shared till sheet
  * (`../shared/till.module.scss`): the session pill's slate tone (the
  * `locked` bucket of `../shared/session-badges.ts` — SUSPENSE, a gap parked
- * for a journal), the Bills tab's current row, and a message that keeps its
- * paragraph breaks.
+ * for a journal), the Bills tab's current row, a message that keeps its
+ * paragraph breaks, and the approvers' inbox list.
  */
 
 /* Qt `TxnBadgePalette::Bucket::Locked` — cool and quiet, not a warning. */
@@ -69,4 +69,27 @@
   align-items: baseline;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+/* Waiting for approval: the list scrolls under its sticky head (Qt 1180 × 560). */
+.inboxScroll {
+  min-height: 220px;
+  max-height: calc(56vh / var(--erp-ui-scale, 1));
+  overflow: auto;
+}
+
+/* The long columns wrap so the list fits the panel without a sideways
+   scroll; What keeps the most room (Qt: the stretched column). */
+.inboxWrap {
+  white-space: normal !important;
+}
+
+.inboxWhat {
+  min-width: 180px;
+}
+
+/* The decide dialog's facts wrap, as Qt's form layout does (no ellipsis). */
+.factWrap {
+  white-space: normal !important;
+  overflow-wrap: anywhere;
 }

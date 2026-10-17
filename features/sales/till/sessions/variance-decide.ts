@@ -15,6 +15,11 @@
  * difference instead — any session status, APPROVE only (the receiver's
  * count stands, so no Recount), `tcmId` in the body; neither that receiver
  * nor the session's cashier decides it.
+ *
+ * Closed-gap mode (Qt 425fa80 `setClosedGap`, notes 124): the cash gap a
+ * CLOSED session left undecided — APPROVE only (the cash was already handed
+ * over, so no Recount), posted at once on the closed session; the body is
+ * today's decide-variance one.
  */
 import type { TillDecideVarianceBody } from "../shared/api/till-session-api";
 import { CASH_TENDER_TYPE_ID } from "../shared/denom";
@@ -27,7 +32,7 @@ import type {
   TillSessionPayload,
   TillVarianceDecision,
 } from "../shared/wire/types";
-import { bagDocNo, pendingReceive, pendingVariance } from "./cockpit";
+import { bagDocNo, closedCashGap, pendingReceive, pendingVariance } from "./cockpit";
 
 export type VarianceEvent = "CASH_VARIANCE" | "NONCASH_VARIANCE";
 
@@ -45,6 +50,8 @@ export type DecideRequest = {
   cashier: string;
   /** Set: a bag's receive difference — APPROVE only, `tcmId` in the body. */
   bag?: DecideBag | null;
+  /** Notes 124: a closed session's undecided cash gap — APPROVE only, booked at once. */
+  closedGap?: boolean;
 };
 
 /**
@@ -78,6 +85,26 @@ export function bagDecideRequestOf(s: TillSessionPayload, key: TillSessionKey): 
     cashier: s.operatorName ?? "",
     bag: { tcmId, docNo: bagDocNo(s, tcmId) },
   };
+}
+
+/**
+ * The cash gap a closed session left undecided (Qt `decideVariance` →
+ * `setClosedGap`): a cash gap of that row's variance.
+ */
+export function closedGapDecideRequestOf(s: TillSessionPayload, key: TillSessionKey): DecideRequest {
+  return {
+    key,
+    event: "CASH_VARIANCE",
+    variancePaise: paiseOf(closedCashGap(s)?.tvrVariance),
+    sessionNo: s.tssSessionNo ?? "",
+    cashier: s.operatorName ?? "",
+    closedGap: true,
+  };
+}
+
+/** A bag's difference or a closed session's gap: APPROVE only, no Recount on offer. */
+export function approveOnly(request: DecideRequest): boolean {
+  return Boolean(request.bag) || Boolean(request.closedGap);
 }
 
 /** The Event fact: the gap's event, or `RECEIVE_VARIANCE · <bag doc no>`. */
@@ -173,6 +200,16 @@ export const DECIDE_HINT =
 export const BAG_DECIDE_HINT =
   "The cash was approved for other than was handed over. Approve books the difference at once — the supervisor's " +
   "count stands, so there is no recount. Not that supervisor, not the cashier.";
+
+/** Closed-gap mode's hint (Qt `setClosedGap`). */
+export const CLOSED_GAP_DECIDE_HINT =
+  "This session closed with the difference undecided. Approve books it now — the cash was already handed over, so " +
+  "there is no recount. SUSPENSE if it needs looking into first.";
+
+/** The hint under the form, by what is decided. */
+export function decideHint(request: DecideRequest): string {
+  return request.bag ? BAG_DECIDE_HINT : request.closedGap ? CLOSED_GAP_DECIDE_HINT : DECIDE_HINT;
+}
 
 export type DecideRefusal = {
   /**

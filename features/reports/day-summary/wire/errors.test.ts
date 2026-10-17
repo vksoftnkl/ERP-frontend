@@ -32,6 +32,19 @@ describe("toDaySummaryError", () => {
     );
   });
 
+  it("reads the tender day book's refusals in their live shape (errors[] beside the message)", () => {
+    // As /reports/tender-day-book answered on 2026-10-17: not nested under `message`.
+    const live = (code: string) => ({
+      status: 400,
+      data: { success: false, message: "Invalid report request", errors: [{ field: "fromDate", message: "m", code }], statusCode: 400 },
+    });
+    expect(toDaySummaryError(live("RANGE_OUTSIDE_YEAR"), { accYear: "2026-2027" })).toMatchObject({
+      message: "The dates must be inside the year 2026-2027.",
+      field: "dates",
+    });
+    expect(toDaySummaryError(live("DATE_REQUIRED"))).toMatchObject({ code: "DATE_REQUIRED", message: "Enter the Date.", field: "dates" });
+  });
+
   it("reads a 403 or NO_MENU_RIGHT as no access", () => {
     expect(toDaySummaryError(refusal(403, "NO_MENU_RIGHT"))).toMatchObject({ kind: "forbidden", message: NO_ACCESS_MESSAGE });
     expect(toDaySummaryError({ status: 403, data: {} }).kind).toBe("forbidden");

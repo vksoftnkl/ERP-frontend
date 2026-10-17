@@ -28,6 +28,12 @@
  * Qt bec3f98 — a supervisor's Change between two live counters (`change.ts`)
  * and the Void of a hand-posted movement picked on the Money documents tab
  * (`../shared/movement-void.ts`).
+ *
+ * Qt 425fa80 (notes 124 / 129) — Approve also books the cash gap a CLOSED
+ * session left undecided (`closedCashGap`, the decide dialog APPROVE only);
+ * the "not the session's cashier" gate is gone (Approval Rules 276 "Allow
+ * self" — the server judges it); the old Witness fact says who took the cash
+ * into the safe ("Cash to safe"), amber when it was the session's own cashier.
  */
 import type { DocumentPrintTarget } from "@/features/printing/domain/documentPrint";
 import type { BillKey } from "@/features/sales/testbill/types";
@@ -72,10 +78,25 @@ export type CockpitFacts = {
   duration: string;
   float: string;
   count: string;
-  witness: string;
+  /** Who took the cash into the safe, and when (the old, never-filled Witness slot). */
+  cashToSafe: string;
+  /** Notes 129 §1: that was the session's own cashier, under "Allow self" — amber. */
+  cashToSafeSelf: boolean;
   z: string;
   reopened: string;
 };
+
+/**
+ * "Cash to safe" (Qt `showSession`, 425fa80): `ANU · 06:40 PM`, with
+ * " · own cashier" when the session's cashier received it themselves
+ * (Approval Rule "Allow self", notes 129 §1); "—" while nobody has.
+ */
+export function cashToSafeText(s: TillSessionPayload): string {
+  const name = (s.receivedByName ?? "").trim();
+  if (!name) return "—";
+  const text = [name, clockOf(s.receivedOn)].filter(Boolean).join(" · ");
+  return s.receivedBySelf ? `${text} · own cashier` : text;
+}
 
 export function cockpitFacts(s: TillSessionPayload, now: Date): CockpitFacts {
   const attempts = Number(s.tssCountAttempts ?? 0) || 0;
@@ -87,7 +108,8 @@ export function cockpitFacts(s: TillSessionPayload, now: Date): CockpitFacts {
     count: s.tssCountMode
       ? `${s.tssCountMode} · at ${s.tssCountPlace === "CASH_OFFICE" ? "cash office" : "counter"} · ${attempts} attempt${attempts === 1 ? "" : "s"}`
       : "—",
-    witness: "—",
+    cashToSafe: cashToSafeText(s),
+    cashToSafeSelf: Boolean((s.receivedByName ?? "").trim() && s.receivedBySelf),
     z: s.tssZNo === null || s.tssZNo === undefined || String(s.tssZNo) === "" ? "issued on close" : String(s.tssZNo),
     reopened: "—",
   };
@@ -208,6 +230,18 @@ export function pendingReceive(s: TillSessionPayload | null): TillVariance | nul
   return null;
 }
 
+/**
+ * Notes 124: the CASH gap a closed session left undecided (closed before notes
+ * 112) — the first PENDING cash row not of the RECEIVE stage, as Qt finds it.
+ * The server books it on the closed session, APPROVE only.
+ */
+export function closedCashGap(s: TillSessionPayload | null): TillVariance | null {
+  for (const v of s?.variances ?? []) {
+    if (v.tvrTreatment === "PENDING" && v.tvrStage !== "RECEIVE" && v.tvrTenderTypeId === CASH_TENDER_TYPE_ID) return v;
+  }
+  return null;
+}
+
 /** Notes 114: the session's hand-over / drops not yet approved into the safe. */
 export function cashAwaiting(s: TillSessionPayload | null): boolean {
   return s?.receiptState === "AWAITING";
@@ -229,7 +263,8 @@ export function bagDocNo(s: TillSessionPayload | null, tcmId: string): string {
  *      pending (CASH_TO_APPROVE, notes 114);
  *   3. else a drawer variance first; a slip gap (non-cash) is final with the
  *      count and waits for the slip check — reported, not enforced; a cash gap
- *      still PENDING on a closed session is an orphan nothing posts any more.
+ *      still PENDING on a closed session (closed before notes 112) is booked
+ *      by an approver on the closed session since notes 124, APPROVE only.
  *
  * One adaptation: Qt raises the band for cash awaiting receipt on a session
  * of ANY status, and on a live one (a drop waiting for the cash office) it
@@ -271,8 +306,8 @@ export function approvalBand(s: TillSessionPayload): ApprovalBand | null {
 
   const slips = pending !== null && pending.tvrTenderTypeId !== CASH_TENDER_TYPE_ID;
   const variance = pending ? paiseOf(pending.tvrVariance) : 0;
-  // A cash gap still PENDING on a closed session: it closed after a Recount
-  // with no new count, so nothing decides or posts it any more.
+  // A cash gap still PENDING on a closed session (closed before notes 112):
+  // since notes 124 an approver books it on the closed session, APPROVE only.
   const orphan = !slips && pending !== null && status === "CLOSED";
   return {
     code: pending?.tvrStage === "OPEN" ? "FLOAT_MISMATCH" : slips ? "NONCASH_VARIANCE" : "CASH_VARIANCE",
@@ -285,13 +320,13 @@ export function approvalBand(s: TillSessionPayload): ApprovalBand | null {
           ? `A slip total differs by ${formatSignedMoney(variance)} — check the slips (Slip check), re-tender what was keyed wrong; the rest waits for the approver.`
           : `${formatSignedMoney(variance)} against a tolerance of ${formatMoney(paiseOf(pending.tvrTolerance))} — waits for a supervisor.`,
     note: orphan
-      ? "A closed session cannot be approved (only one waiting for approval). Book the gap by a journal to Cash " +
-        "Short & Excess, or ask the server team to reopen the decision."
+      ? "Approve books it now: a treatment and a reason (SUSPENSE to look into it first). No recount — the cash " +
+        "was already handed over. Not the session's cashier unless its Approval Rule (276) allows self."
       : slips && status !== "PENDING_APPROVAL"
         ? "Reported, not enforced: the session closes and nothing posts for the gap. The card money's truth comes " +
           "with the statement — a row never paid shows in Settlement → Not received."
-        : "Approve decides it: a treatment and a reason, or send it back to recount. Not the session's cashier — a " +
-          "supervisor or above with an Approval Setup (276) grant, or a super admin.",
+        : "Approve decides it: a treatment and a reason, or send it back to recount. Not the session's cashier " +
+          "unless its Approval Rule (276) allows self — a supervisor or above with an approval grant, or a super admin.",
   };
 }
 
@@ -418,12 +453,14 @@ export function isMine(s: TillSessionPayload | null, me: string): boolean {
 }
 
 /**
- * What Approve opens (Qt `decideVariance`, c77f3f1): a CLOSED session's cash
- * awaiting receipt with no bag difference → Approve Cash; a bag difference on a
- * session not waiting for approval → the decide dialog on that bag (tcmId);
- * else the decide dialog on the session's pending gap.
+ * What Approve opens (Qt `decideVariance`, 425fa80), in Qt's order: a CLOSED
+ * session's undecided cash gap with no bag difference → the decide dialog in
+ * closed-gap mode (notes 124); a CLOSED session's cash awaiting receipt with no
+ * bag difference → Approve Cash; a bag difference on a session not waiting for
+ * approval → the decide dialog on that bag (tcmId); else the decide dialog on
+ * the session's pending gap.
  */
-export type ApproveAction = "approveCash" | "bag" | "decide";
+export type ApproveAction = "closedGap" | "approveCash" | "bag" | "decide";
 
 export type ApproveButton = {
   enabled: boolean;
@@ -433,10 +470,12 @@ export type ApproveButton = {
 };
 
 /**
- * Approve: a session waiting for approval, or a bag's difference — never by
- * its own cashier; a closed session's cash to approve — enabled for anyone,
- * the cashier included: the server refuses them unless the shop runs
- * single-operator (notes 114), so the owner of a one-person shop may press it.
+ * Approve (Qt `refreshButtons`, 425fa80): a session waiting for approval, a
+ * bag's difference, a closed session's cash to approve, or the cash gap a
+ * closed session left undecided (notes 124). The session's own cashier may
+ * press it too: whether they may decide is the rule's call (Approval Rules
+ * 276, "Allow self" — a supervisor who also bills; for the cash, a
+ * single-operator shop, notes 114), so the server judges and its refusal shows.
  */
 export function approveButton(s: TillSessionPayload | null, me: string): ApproveButton {
   const status = s?.tssStatus ?? "";
@@ -445,19 +484,29 @@ export function approveButton(s: TillSessionPayload | null, me: string): Approve
   const receive = pendingReceive(s);
   const bagWaiting = receive !== null;
   const cashToApprove = status === "CLOSED" && cashAwaiting(s);
+  const closedGap = status === "CLOSED" && closedCashGap(s) !== null;
   const pending = s ? pendingVariance(s) : null;
   return {
-    enabled: ((pendingApproval || bagWaiting) && !mine) || cashToApprove,
+    enabled: pendingApproval || bagWaiting || cashToApprove || closedGap,
     tip:
-      cashToApprove && !pendingApproval && !bagWaiting
-        ? "Approve the cash handed over into the safe"
-        : !pendingApproval && !bagWaiting
-          ? "Only a session waiting for approval, its cash to approve, or an approved cash difference"
-          : mine
-            ? "You are this session's cashier: another person approves it"
-            : "Approve with a treatment, or send it back to recount",
+      closedGap && !bagWaiting
+        ? "Book the cash difference this closed session left undecided"
+        : cashToApprove && !pendingApproval && !bagWaiting
+          ? "Approve the cash handed over into the safe"
+          : !pendingApproval && !bagWaiting
+            ? "Only a session waiting for approval, its cash to approve, or an approved cash difference"
+            : mine
+              ? 'Your own session: allowed only when its Approval Rule (276) has "Allow self" ticked'
+              : "Approve with a treatment, or send it back to recount",
     label: cashToApprove && !pending && !receive ? "Approve Cash" : "Approve",
-    action: status === "CLOSED" && !receive && cashAwaiting(s) ? "approveCash" : !pendingApproval && receive ? "bag" : "decide",
+    action:
+      status === "CLOSED" && !receive && closedGap
+        ? "closedGap"
+        : status === "CLOSED" && !receive && cashAwaiting(s)
+          ? "approveCash"
+          : !pendingApproval && receive
+            ? "bag"
+            : "decide",
   };
 }
 
@@ -634,6 +683,9 @@ export function xReadLabel(sessionNo: string): string {
 
 /** Qt's info after a bag's difference is approved (notes 113). */
 export const BAG_DECIDED_MESSAGE = "Approved: the bag's difference is booked.";
+
+/** Qt's info after a closed session's undecided gap is approved (notes 124). */
+export const CLOSED_GAP_DECIDED_MESSAGE = "Approved: the closed session's difference is booked.";
 
 export const REC_NOTE =
   "Card is one line per terminal (batch total at End Shift). A non-cash gap → re-tender first, then SUSPENSE — never " +

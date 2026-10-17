@@ -1,8 +1,12 @@
 "use client";
 
+import { useState } from "react";
+
 import { cx } from "@/components/design-system/cx";
 import {
   CHECK_TONE_NAMES,
+  foldGreenChecks,
+  greenFoldLabel,
   type Check,
   type CheckTone,
   type DayHead,
@@ -54,50 +58,84 @@ export function FactsStrip({ facts }: { facts: DayHead["facts"] }) {
   );
 }
 
-/**
- * The checklist rows: tone pill, title over detail, and the jump that fixes
- * it — a session's cockpit, or another screen (Till Sessions; the Cash Office
- * on its count or remit tab). A jump with nowhere to go (a session the day
- * cannot name) is off.
- */
-export function Checklist({
-  checks,
-  onOpenSession,
-  onOpenHref,
-}: {
-  checks: readonly Check[];
+type CheckJumps = {
   onOpenSession: (keys: SessionKeys) => void;
   onOpenHref: (href: string) => void;
-}) {
+};
+
+/**
+ * One checklist row: tone pill, title over detail, and the jump that fixes it
+ * — a session's cockpit, or another screen (Till Sessions; the Cash Office on
+ * its count or remit tab). A jump with nowhere to go (a session the day cannot
+ * name) is off.
+ */
+function CheckRow({ check, onOpenSession, onOpenHref }: CheckJumps & { check: Check }) {
+  const session = check.action?.session ?? null;
+  const href = check.action?.href ?? "";
+  const live = Boolean(session || href);
+  return (
+    <div className={cx(styles.checkRow, CHECK_TONE[check.tone])}>
+      <span className={cx(styles.pill, styles.checkPill)}>{CHECK_TONE_NAMES[check.tone]}</span>
+      <div className={styles.checkText}>
+        <span className={styles.checkTitle}>{check.title}</span>
+        <span className={styles.checkDetail}>{check.detail}</span>
+      </div>
+      {check.action ? (
+        <button
+          type="button"
+          className={styles.checkAction}
+          disabled={!live}
+          onClick={() => {
+            if (session) onOpenSession(session);
+            else if (href) onOpenHref(href);
+          }}
+        >
+          {check.action.label}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The checklist (Qt 425fa80): what needs a look first, in order, then every
+ * green row folded under one "N checks OK" row whose Show opens them. Open or
+ * shut stays as the operator left it while the screen is up — every rebuild
+ * (a refresh, the live read, another day) keeps it.
+ */
+export function Checklist({ checks, onOpenSession, onOpenHref }: CheckJumps & { checks: readonly Check[] }) {
+  const [greensOpen, setGreensOpen] = useState(false);
+  const { rows, fold } = foldGreenChecks(checks);
+  const jumps = { onOpenSession, onOpenHref };
   return (
     <div className={styles.checks}>
-      {checks.map((check, index) => {
-        const session = check.action?.session ?? null;
-        const href = check.action?.href ?? "";
-        const live = Boolean(session || href);
-        return (
-          <div key={`${index}-${check.title}`} className={cx(styles.checkRow, CHECK_TONE[check.tone])}>
-            <span className={cx(styles.pill, styles.checkPill)}>{CHECK_TONE_NAMES[check.tone]}</span>
+      {rows.map((check, index) => (
+        <CheckRow key={`${index}-${check.title}`} check={check} {...jumps} />
+      ))}
+      {fold ? (
+        <>
+          <div className={cx(styles.checkRow, CHECK_TONE.green)}>
+            <span className={cx(styles.pill, styles.checkPill)}>{CHECK_TONE_NAMES.green}</span>
             <div className={styles.checkText}>
-              <span className={styles.checkTitle}>{check.title}</span>
-              <span className={styles.checkDetail}>{check.detail}</span>
+              <span className={styles.checkTitle}>{fold.title}</span>
+              <span className={styles.checkDetail}>{fold.detail}</span>
             </div>
-            {check.action ? (
-              <button
-                type="button"
-                className={styles.checkAction}
-                disabled={!live}
-                onClick={() => {
-                  if (session) onOpenSession(session);
-                  else if (href) onOpenHref(href);
-                }}
-              >
-                {check.action.label}
-              </button>
-            ) : null}
+            <button
+              type="button"
+              className={styles.checkAction}
+              aria-expanded={greensOpen}
+              onClick={() => setGreensOpen((open) => !open)}
+            >
+              {greenFoldLabel(greensOpen)}
+            </button>
           </div>
-        );
-      })}
+          {greensOpen
+            ? fold.greens.map((check, index) => (
+                <CheckRow key={`green-${index}-${check.title}`} check={check} {...jumps} />
+              ))
+            : null}
+        </>
+      ) : null}
     </div>
   );
 }

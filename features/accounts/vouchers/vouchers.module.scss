@@ -580,3 +580,12 @@
   top: 0;
   z-index: 1;
 }
+/*
+ * A Contra's tender list has no search box: the list itself holds the focus
+ * and takes the keys, and the highlighted row is the cursor — no focus ring
+ * round the whole list.
+ */
+.tenderList {
+  max-height: u(22);
+  outline: none;
+}

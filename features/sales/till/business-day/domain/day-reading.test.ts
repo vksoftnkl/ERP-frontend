@@ -9,11 +9,14 @@ import {
   checkLines,
   daySafeSection,
   dayHead,
+  foldGreenChecks,
+  greenFoldLabel,
   noDayHead,
   noDayReading,
   plural,
   readDay,
   sessionKeysById,
+  type Check,
   type RowsState,
 } from "./day-reading";
 import type { CloseCheckItem, DaySafe, GridRow, TillCloseCheck, TillDay } from "./wire";
@@ -704,5 +707,74 @@ describe("plural", () => {
   it("reads Qt's %n session(s)", () => {
     expect(plural(1, "session")).toBe("1 session");
     expect(plural(3, "session")).toBe("3 sessions");
+  });
+});
+
+describe("the books (Qt 425fa80, notes 126)", () => {
+  const AMBER_BOOKS: Check = {
+    tone: "amber",
+    title: "Books = drawers",
+    detail: "CASH IN HAND says 12,950.00, the drawers should hold 12,450.00 — 500.00 posted outside the till",
+  };
+  const GREEN_SAFE: Check = { tone: "green", title: "Books = safe", detail: "Every safe's ledger = its safe book" };
+
+  it("come after the safe count, and an amber one counts in the verdict without blocking", () => {
+    const check = serverCheck(ALL_GREEN, { canClose: true });
+    const reading = readDay(ready([]), NO_SAFES, [], "2026-10-07", {
+      day: OPEN_DAY,
+      check,
+      books: [AMBER_BOOKS, GREEN_SAFE],
+    });
+    expect(reading.checks.slice(-3).map((row) => row.title)).toEqual(["Safe counted", "Books = drawers", "Books = safe"]);
+    expect(reading.verdict.pill).toBe("1 AMBER");
+    expect(reading.verdict.tone).toBe("warning");
+  });
+
+  it("are left out while the sessions are still being read", () => {
+    const reading = readDay({ status: "loading", rows: [] }, NO_SAFES, null, "2026-10-07", {
+      day: OPEN_DAY,
+      books: [AMBER_BOOKS],
+    });
+    expect(reading.checks.map((row) => row.title)).toEqual(["Sessions closed"]);
+  });
+});
+
+describe("the green fold (Qt 425fa80)", () => {
+  const red: Check = { tone: "red", title: "Sessions closed", detail: "1 session still billing" };
+  const amber: Check = { tone: "amber", title: "Slip gaps", detail: "1 slip gap open" };
+  const grey: Check = { tone: "grey", title: "Books = drawers", detail: "Checked on today's day only" };
+  const green = (title: string): Check => ({ tone: "green", title, detail: `${title}: fine` });
+
+  it("puts every green row under one row, the others above it in order", () => {
+    const checks = [green("Approvals pending"), red, green("Everything posted"), amber, grey, green("Books = safe")];
+    const { rows, fold } = foldGreenChecks(checks);
+    expect(rows).toEqual([red, amber, grey]);
+    expect(fold).toEqual({
+      title: "3 checks OK",
+      detail: "Approvals pending · Everything posted · Books = safe",
+      greens: [green("Approvals pending"), green("Everything posted"), green("Books = safe")],
+    });
+  });
+
+  it("says one check in the singular, and has no fold without a green row", () => {
+    expect(foldGreenChecks([green("Safe counted")]).fold?.title).toBe("1 check OK");
+    expect(foldGreenChecks([red, amber])).toEqual({ rows: [red, amber], fold: null });
+    expect(foldGreenChecks([])).toEqual({ rows: [], fold: null });
+  });
+
+  it("folds the drawing only: the verdict still counts what it folds", () => {
+    const reading = readDay(ready([]), NO_SAFES, [], "2026-10-07", {
+      day: OPEN_DAY,
+      check: serverCheck(ALL_GREEN, { canClose: true }),
+    });
+    const { rows, fold } = foldGreenChecks(reading.checks);
+    expect(rows).toEqual([]);
+    expect(fold?.greens).toHaveLength(reading.checks.length);
+    expect(reading.verdict.pill).toBe("READY");
+  });
+
+  it("labels its button as Qt does", () => {
+    expect(greenFoldLabel(false)).toBe("Show  ▾");
+    expect(greenFoldLabel(true)).toBe("Hide  ▴");
   });
 });

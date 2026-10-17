@@ -247,6 +247,11 @@ export type ERPDynamicModalFormProps = {
   hideSectionHeader?: boolean;
   submitError?: string | null;
   panelStyle?: CSSProperties;
+  /**
+   * Merged into the overlay's style — e.g. `ENTRY_MODAL_OVERLAY_STYLE`, which
+   * puts the popup under the app header so the menu stays reachable.
+   */
+  overlayStyle?: CSSProperties;
   /** Extra class on the modal panel, so a host page can re-skin its own modal
    *  (the panel sits outside the page's DOM subtree, out of reach otherwise). */
   panelClassName?: string;

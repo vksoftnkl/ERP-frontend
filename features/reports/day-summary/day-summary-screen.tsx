@@ -9,10 +9,18 @@
  * nothing. Not a port: 3.0's `daybook.*` lends only the gestures (◀ ▶ one day,
  * the type filter, Enter opens the voucher).
  *
+ * Two more tabs port the Qt screen of menu 284 (NexERP 425fa80, server notes
+ * 126 §4), the Day Book BY TENDER, there to find a missing transaction: every
+ * leg on a cash / bank ledger carries a tender. By tender = per ledger ×
+ * tender master (or type); No tender = every line that has none, which should
+ * be none. They share the dates and the branch, and ignore the rest.
+ *
  * THE CLIENT ASKS, FORMATS AND NAVIGATES. It does no money arithmetic at all:
  * totals, tiles, opening and closing, the Day-wise closings and the Dr = Cr
- * verdict are the server's. The Summary tab is ONE `/summary` call, so its
- * panels are one snapshot and tie to each other.
+ * verdict are the server's. (One exception, because the route sends no
+ * totals: the By tender footer's Σ debit / credit, summed exactly on the
+ * digits in `view/tender.ts`, as the Qt footer does.) The Summary tab is ONE
+ * `/summary` call, so its panels are one snapshot and tie to each other.
  *
  * The URL is the report's state (`query/params.ts`): Show (F5) writes it,
  * ◀ ▶ write it at once, the URL change fetches. Company and year come from
@@ -40,6 +48,8 @@ import { GroupGrid } from "./components/group-grid";
 import { GroupLedgersDialog } from "./components/group-ledgers-dialog";
 import { KpiTiles } from "./components/kpi-tiles";
 import { MoneyLedgerGrid } from "./components/money-ledger-grid";
+import { NoTenderTable } from "./components/no-tender-table";
+import { TenderGroupsTable } from "./components/tender-groups-table";
 import { VoucherList } from "./components/voucher-list";
 import { VoucherTypeGrid } from "./components/voucher-type-grid";
 import { toXlsx } from "./export/to-xlsx";
@@ -52,6 +62,8 @@ import {
   defaultDate,
   exportQuery,
   isRange,
+  isTenderTab,
+  noTenderKey,
   parseFilters,
   stepDay,
   tileDrill,
@@ -65,9 +77,21 @@ import {
 import { useDaySummary } from "./query/use-day-summary";
 import { useVoucherTypes } from "./query/use-voucher-types";
 import { voucherFootText } from "./view/cells";
+import { GROUP_BY_LABEL, noTenderHead, noTenderTabLabel, TENDER_HINT, tenderFootText } from "./view/tender";
 import { buildTiles, natureLabel } from "./view/tiles";
 import { NO_ACCESS_MESSAGE, toDaySummaryError, type ErrorField } from "./wire/errors";
-import { GROUP_LEVELS, type Check, type GroupLevel, type GroupRow, type MoneyKind, type VoucherRow } from "./wire/types";
+import {
+  GROUP_LEVELS,
+  TENDER_GROUP_BYS,
+  type Check,
+  type GroupLevel,
+  type GroupRow,
+  type MoneyKind,
+  type TenderGroup,
+  type TenderGroupBy,
+  type TenderLine,
+  type VoucherRow,
+} from "./wire/types";
 
 export const DAY_SUMMARY_HREF = "/reports/day-summary";
 const RETURN_STORAGE_PREFIX = "erp.daySummary.return:";
@@ -77,6 +101,8 @@ const TABS: Array<{ id: Tab; label: string; key: string }> = [
   { id: "summary", label: "Summary", key: "1" },
   { id: "vouchers", label: "Vouchers", key: "2" },
   { id: "daily", label: "Day-wise", key: "3" },
+  { id: "tender", label: "By tender", key: "4" },
+  { id: "no-tender", label: "No tender", key: "5" },
 ];
 
 const GROUP_LEVEL_LABEL: Record<GroupLevel, string> = {
@@ -201,8 +227,18 @@ export default function DaySummaryScreen() {
   const summaryPart = state.summary;
   const vouchersPart = state.vouchers;
   const dailyPart = state.daily;
-  const heldKey =
-    filters.tab === "summary" ? summaryPart?.key : filters.tab === "vouchers" ? vouchersPart?.key : dailyPart?.key;
+  const tenderPart = state.tender;
+  const noTenderPart = state.noTender;
+  const heldKey = {
+    summary: summaryPart?.key,
+    vouchers: vouchersPart?.key,
+    daily: dailyPart?.key,
+    tender: tenderPart?.key,
+    "no-tender": noTenderPart?.key,
+  }[filters.tab];
+  // The No tender tab's count, once its list for THESE dates and branch is in.
+  const noTenderCount =
+    sessionReady && noTenderPart?.key === noTenderKey(session, filters) ? noTenderPart.data.count : null;
   const dimmed = state.loading || (want !== null && heldKey !== undefined && heldKey !== want.key);
 
   /* ---- the draft the strip edits; re-seeded whenever the URL moves */
@@ -305,6 +341,10 @@ export default function DaySummaryScreen() {
     (groupLevel: GroupLevel) => writeUrl({ ...filters, groupLevel }, "replace"),
     [filters, writeUrl],
   );
+  const onTenderGroupBy = useCallback(
+    (tenderGroupBy: TenderGroupBy) => writeUrl({ ...filters, tenderGroupBy }, "replace"),
+    [filters, writeUrl],
+  );
 
   /** A ledger → its statement, on the range and branch the SHOWN summary was asked for. */
   const openLedger = useCallback(
@@ -313,6 +353,31 @@ export default function DaySummaryScreen() {
       leaveTo(ledgerStatementHref({ ledgerId, fromDate: asked.fromDate, toDate: asked.toDate, branchId: asked.branchId }));
     },
     [filters, leaveTo, summaryPart?.filters],
+  );
+
+  /** A tender group → its ledger's statement, on the range and branch the SHOWN groups were asked for. */
+  const onTenderGroup = useCallback(
+    (row: TenderGroup) => {
+      const asked = tenderPart?.filters ?? filters;
+      leaveTo(
+        ledgerStatementHref({ ledgerId: row.ledgerId, fromDate: asked.fromDate, toDate: asked.toDate, branchId: asked.branchId }),
+      );
+    },
+    [filters, leaveTo, tenderPart?.filters],
+  );
+
+  /**
+   * A line with no tender → its ledger's statement on that day and in its
+   * branch, where the voucher sits among its neighbours. (No keyed voucher
+   * screen: the line carries no `src`, and a receipt's screen opens by the
+   * document's id, not the voucher's.)
+   */
+  const onNoTenderLine = useCallback(
+    (row: TenderLine) => {
+      const branchId = row.branchId ?? noTenderPart?.filters.branchId ?? null;
+      leaveTo(ledgerStatementHref({ ledgerId: row.ledgerId, fromDate: row.voucherDate, toDate: row.voucherDate, branchId }));
+    },
+    [leaveTo, noTenderPart?.filters.branchId],
   );
 
   const onVoucher = useCallback(
@@ -418,7 +483,7 @@ export default function DaySummaryScreen() {
       } else if (alt && event.key === "F1") {
         event.preventDefault();
         if (k.tab === "vouchers") k.toggleAllLegs();
-      } else if (ctrl && (event.key === "1" || event.key === "2" || event.key === "3")) {
+      } else if (ctrl && TABS.some((t) => t.key === event.key)) {
         event.preventDefault();
         const tab = TABS.find((t) => t.key === event.key)!.id;
         if (tab !== "daily" || k.range) k.onTab(tab);
@@ -643,6 +708,74 @@ export default function DaySummaryScreen() {
     );
   };
 
+  const tenderBody = () => (
+    <div className={styles.tenderTab}>
+      <div className={styles.listBar}>
+        <span className={styles.barHint}>{TENDER_HINT}</span>
+        <label className={styles.field}>
+          <span className={styles.fieldLabel}>Group by</span>
+          <select
+            className={styles.levelSelect}
+            value={filters.tenderGroupBy}
+            onChange={(event) => onTenderGroupBy(event.target.value as TenderGroupBy)}
+          >
+            {TENDER_GROUP_BYS.map((by) => (
+              <option key={by} value={by}>
+                {GROUP_BY_LABEL[by]}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {errorBody ??
+        (tenderPart ? (
+          <>
+            <div className={cx(styles.scroll, dimmed && styles.stale)}>
+              <TenderGroupsTable groups={tenderPart.data.groups} groupBy={tenderPart.data.groupBy} onLedger={onTenderGroup} />
+            </div>
+            <div className={styles.gridFoot}>
+              <span>{tenderFootText(tenderPart.data.groups)}</span>
+            </div>
+          </>
+        ) : (
+          <div className={styles.emptyState}>{state.loading ? "Loading…" : ""}</div>
+        ))}
+    </div>
+  );
+
+  const noTenderBody = () => {
+    if (errorBody) return errorBody;
+    if (!noTenderPart) return <div className={styles.emptyState}>{state.loading ? "Loading…" : ""}</div>;
+    const head = noTenderHead(noTenderPart.data);
+    return (
+      <div className={cx(styles.tenderTab, dimmed && styles.stale)}>
+        <div className={cx(styles.tieNote, styles[`tie-${head.tone}`])} role="status">
+          <span className={styles.tieHeading}>{head.text}</span>
+        </div>
+        {noTenderPart.data.rows.length > 0 ? (
+          <div className={styles.scroll}>
+            <NoTenderTable rows={noTenderPart.data.rows} onLine={onNoTenderLine} />
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
+  const tabBody = () => {
+    switch (filters.tab) {
+      case "summary":
+        return summaryBody();
+      case "vouchers":
+        return vouchersBody();
+      case "daily":
+        return dailyBody();
+      case "tender":
+        return tenderBody();
+      case "no-tender":
+        return noTenderBody();
+    }
+  };
+
   return (
     <div className={styles.page}>
       <header className={styles.titleBar}>
@@ -669,7 +802,7 @@ export default function DaySummaryScreen() {
               tab.id === "daily" && !isRange(filters) ? "Pick a To date after the Date to see a range" : `Ctrl+${tab.key}`
             }
           >
-            {tab.label}
+            {tab.id === "no-tender" ? noTenderTabLabel(noTenderCount) : tab.label}
           </button>
         ))}
       </nav>
@@ -690,6 +823,7 @@ export default function DaySummaryScreen() {
         flagged={flagged}
         onShow={onShow}
         dateRef={dateRef}
+        tenderView={isTenderTab(filters.tab)}
       />
 
       {checkError ? (
@@ -713,13 +847,13 @@ export default function DaySummaryScreen() {
       ) : (
         <div className={styles.body} aria-busy={state.loading}>
           {state.loading ? <div className={styles.progress} aria-hidden="true" /> : null}
-          {filters.tab === "summary" ? summaryBody() : filters.tab === "vouchers" ? vouchersBody() : dailyBody()}
+          {tabBody()}
         </div>
       )}
 
       <footer className={styles.footer}>
         <div className={styles.footerHints}>
-          <kbd>F5</kbd> Show · <kbd>Alt+←/→</kbd> Day · <kbd>Enter</kbd> Drill down · <kbd>Ctrl+1/2/3</kbd> Tabs ·{" "}
+          <kbd>F5</kbd> Show · <kbd>Alt+←/→</kbd> Day · <kbd>Enter</kbd> Drill down · <kbd>Ctrl+1…5</kbd> Tabs ·{" "}
           {filters.tab === "vouchers" ? (
             <>
               <kbd>Space</kbd> Legs · <kbd>Alt+F1</kbd> All legs ·{" "}

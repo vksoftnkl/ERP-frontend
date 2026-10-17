@@ -1,5 +1,6 @@
 /**
- * Account Day Summary — the wire shapes (plan §4.3, backend plan §5).
+ * Account Day Summary — the wire shapes (plan §4.3, backend plan §5), and
+ * at the end the Day Book by tender's (server notes 126 §4).
  *
  * Mirrors the SERVER's types file (`ERP server/src/modules/reports/
  * day-summary/types/day-summary.types.ts`, read 2026-10-12 while a peer
@@ -302,4 +303,107 @@ export type ExportPayload = {
   /** The server's `/export` sends `totalRows`, not an amount total; the sheet then has no Total row. */
   totals: { amount: string } | null;
   totalRows: number | null;
+};
+
+/* ------------------------------------------- /reports/tender-day-book (§4) */
+
+/*
+ * The Day Book by tender (server notes 126 §4), its own module on the server
+ * (`ERP server/src/modules/reports/tender-day-book/tender-day-book.types.ts`,
+ * read 2026-10-17, and one live response of each route). Every leg on a CASH
+ * or BANK ledger, labelled with the tender it moved by; a leg no tender row
+ * labels is a "money line with no tender", a transaction to look into.
+ *
+ * Unlike `/reports/day-summary/*`, these routes send opening and closing as
+ * SIGNED strings (Dr +, Cr −). The parser turns them into a `Bal` on the
+ * string's sign, so the screen prints them the way every other balance here is
+ * printed.
+ */
+
+/** `groupBy`: each tender master on its own ("CARD – HDFC machine 1"), or all of a tender type together. */
+export const TENDER_GROUP_BYS = ["TENDER", "TYPE"] as const;
+export type TenderGroupBy = (typeof TENDER_GROUP_BYS)[number];
+
+/** One tender (or tender type) on one cash / bank ledger. tenderId and tenderTypeId both null = NO tender. */
+export type TenderGroup = {
+  key: string;
+  /** Always null under groupBy TYPE. */
+  tenderId: string | null;
+  tenderName: string | null;
+  tenderTypeId: number | null;
+  tenderTypeName: string | null;
+  ledgerId: string;
+  ledgerName: string;
+  /** `CASH` or `BANK` (the ledger's `led_ledger_type`); shown, never branched on. */
+  ledgerType: string;
+  /** The year's labelled lines before fromDate. The opening SET has no tender, so it is in no group. */
+  opening: Bal;
+  debit: string;
+  credit: string;
+  closing: Bal;
+};
+
+/** Per cash / bank ledger: Σ its groups + `openingSet` = the ledger's books. */
+export type TenderLedger = {
+  ledgerId: string;
+  ledgerName: string;
+  ledgerType: string;
+  /** The year's opening set (acc_opening_balance): not a transaction, so in no tender group. */
+  openingSet: Bal;
+  opening: Bal;
+  debit: string;
+  credit: string;
+  closing: Bal;
+  /** Σ of this ledger's no-tender lines in the range. */
+  noTender: string;
+};
+
+/**
+ * GET /reports/tender-day-book. Asked `withRows=false`, so its `rows` are not
+ * read (the server sends them anyway today: see `tenderDayBookQuery`).
+ */
+export type TenderDayBookPayload = {
+  branchId: string | null;
+  fromDate: string;
+  toDate: string;
+  groupBy: TenderGroupBy;
+  groups: TenderGroup[];
+  ledgers: TenderLedger[];
+};
+
+/**
+ * One money line of the range (the server's `TenderBookRow`). Only what the
+ * No tender list shows or drills on is read: its rows all have no tender, and
+ * a field nobody looks at must not be able to fail the list that finds them.
+ */
+export type TenderLine = {
+  voucherDate: string;
+  voucherId: string;
+  accYear: string | null;
+  voucherNo: string | null;
+  voucherTypeId: number | null;
+  voucherTypeCode: string | null;
+  branchId: string | null;
+  partyName: string | null;
+  ledgerId: string;
+  ledgerName: string;
+  /** A reversal mirror (a cancel's Rev): labelled by the voucher it undoes. */
+  isMirror: boolean;
+  /** One of the two is "0.00": a line is one side of one leg. */
+  debit: string;
+  credit: string;
+};
+
+/** GET /reports/tender-day-book/no-tender. `count` should be 0: each line is a transaction to look into. */
+export type NoTenderPayload = {
+  branchId: string | null;
+  fromDate: string;
+  toDate: string;
+  /** Every such line in the range, not just the rows sent. */
+  count: number;
+  amount: string;
+  byVoucherType: Array<{ voucherTypeCode: string | null; count: number; amount: string }>;
+  /** The first `limit` of them. */
+  rows: TenderLine[];
+  rowsTruncated: boolean;
 };

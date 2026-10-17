@@ -5,11 +5,13 @@ import {
   blankLine,
   buildHeader,
   buildLines,
+  finishLedgerPick,
   formatPaise,
   isSendable,
   linesFromDraft,
   linesFromLegs,
   linesTotals,
+  newLineSide,
   paiseText,
   typeAmount,
   withTrailingLine,
@@ -59,6 +61,21 @@ describe("lines", () => {
     expect(typeAmount(line, "CR", "250")).toMatchObject({ drCr: "CR", amount: "250" });
     expect(typeAmount(line, "CR", "")).toBe(line);
     expect(typeAmount(line, "DR", "")).toMatchObject({ drCr: "DR", amount: "" });
+  });
+
+  it("after a pick, opens a party-first voucher's balancing line with the difference, and a blank follows", () => {
+    const receipt = { partyMode: "MANY" as const, partySide: "CR" as const };
+    const customer = aLine({ drCr: "CR", ledgerId: "led-cust", amount: "1500" });
+    const money = aLine({ drCr: "DR", amount: "" });
+    const lines = finishLedgerPick([customer, money], money.key, receipt, (current) => newLineSide(current, receipt));
+    // Balanced again: the blank line opens on the party's side, for the next customer.
+    expect(lines.map((line) => [line.drCr, line.amount])).toEqual([
+      ["CR", "1500"],
+      ["DR", "1500.00"],
+      ["CR", ""],
+    ]);
+    // Anywhere else the line keeps its (blank) amount.
+    expect(finishLedgerPick([customer, money], money.key, null)[1].amount).toBe("");
   });
 
   it("totals the sendable lines in paise", () => {

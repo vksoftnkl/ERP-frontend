@@ -6,6 +6,7 @@
  *   Σ type amount = Σ group Dr = Σ group Cr = 4,95,270.00
  *   type grid cash in / out = the cash ledger's in / out (1,10,300.00 / 88,700.00)
  *   type grid bank in / out = bank + clearing in / out (2,30,020.00 / 1,58,400.00)
+ *   the tender day book's groups (`TENDER_SPECS`) = each money ledger's in / out
  *
  * This module plays the SERVER, so it may add money up (in integer paise).
  * The client may not; that is the point of the tests that use it.
@@ -490,4 +491,155 @@ export function exportFixture(q: FixtureQuery = {}) {
   const summary = summaryFixture(q).data;
   const rows = filteredRows({ ...q, withLegs: "true" });
   return envelope({ summary, vouchers: rows, totalRows: rows.length });
+}
+
+/* ----------------------------------------- tender day book (notes 126 §4) */
+
+export const TENDER_CASH = "a7a7a7a7-7777-4777-8777-777777777771";
+export const TENDER_HDFC_CARD = "a7a7a7a7-7777-4777-8777-777777777772";
+export const TENDER_ICICI_CARD = "a7a7a7a7-7777-4777-8777-777777777773";
+export const TENDER_UPI = "a7a7a7a7-7777-4777-8777-777777777774";
+export const TENDER_NEFT = "a7a7a7a7-7777-4777-8777-777777777775";
+
+type TenderSpec = {
+  ledgerId: string;
+  ledgerName: string;
+  ledgerType: "CASH" | "BANK";
+  tenderId: string | null;
+  tenderName: string | null;
+  typeId: number | null;
+  typeName: string | null;
+  /** Paise. Opening is signed (Dr +). */
+  opening: number;
+  debit: number;
+  credit: number;
+};
+
+/**
+ * The day's cash and bank ledgers of `MONEY`, split by tender: each ledger's
+ * debit / credit add up to its in / out, and its group openings (plus the
+ * opening set, Cash in Hand's 30,000.00) to its opening. Two lines on Cash in
+ * Hand have no tender (2,500.00 Cr, the red row); HDFC's no-tender group is
+ * history only (an opening, nothing in the range). The two card machines
+ * carry paise, so a footer sum through a float would show.
+ */
+export const TENDER_SPECS: TenderSpec[] = [
+  { ledgerId: LEDGER_CASH, ledgerName: "Cash in Hand", ledgerType: "CASH", tenderId: TENDER_CASH, tenderName: "CASH", typeId: 1, typeName: "CASH", opening: 1825000, debit: 11030000, credit: 8620000 },
+  { ledgerId: LEDGER_CASH, ledgerName: "Cash in Hand", ledgerType: "CASH", tenderId: null, tenderName: null, typeId: null, typeName: null, opening: 0, debit: 0, credit: 250000 },
+  { ledgerId: LEDGER_HDFC, ledgerName: "HDFC Bank CA", ledgerType: "BANK", tenderId: TENDER_NEFT, tenderName: "BANK TRANSFER", typeId: 4, typeName: "BANK", opening: 31360000, debit: 15840000, credit: 12000000 },
+  { ledgerId: LEDGER_HDFC, ledgerName: "HDFC Bank CA", ledgerType: "BANK", tenderId: null, tenderName: null, typeId: null, typeName: null, opening: -120000, debit: 0, credit: 0 },
+  { ledgerId: LEDGER_CARD, ledgerName: "Card clearing", ledgerType: "BANK", tenderId: TENDER_HDFC_CARD, tenderName: "CARD – HDFC machine 1", typeId: 2, typeName: "CARD", opening: 2640050, debit: 2640050, credit: 2640050 },
+  { ledgerId: LEDGER_CARD, ledgerName: "Card clearing", ledgerType: "BANK", tenderId: TENDER_ICICI_CARD, tenderName: "CARD – ICICI machine 2", typeId: 2, typeName: "CARD", opening: 1199950, debit: 1199950, credit: 1199950 },
+  { ledgerId: LEDGER_UPI, ledgerName: "UPI clearing", ledgerType: "BANK", tenderId: TENDER_UPI, tenderName: "UPI – PhonePe QR", typeId: 3, typeName: "UPI", opening: 0, debit: 3322000, credit: 0 },
+];
+
+const OPENING_SETS: Record<string, number> = { [LEDGER_CASH]: 3000000 };
+
+/** Signed paise → "-1200.00" (the tender routes' opening / closing). */
+export function signedRupees(paise: number): string {
+  return `${paise < 0 ? "-" : ""}${rupees(paise)}`;
+}
+
+/** The lines no tender row labels, all on the Date: the red group's 2,500.00 Cr. */
+const NO_TENDER_LINES: WireRow[] = [
+  { voucherDate: DAY, voucherId: uuid(7001), accYear: FY.accYear, voucherNo: "tdr00007", voucherTypeId: 35, voucherTypeCode: "TDrp", branchId: BRANCH_MAIN, sessionId: uuid(7101), partyId: null, partyName: null, ledgerId: LEDGER_CASH, ledgerName: "Cash in Hand", ledgerType: "CASH", tenderId: null, tenderName: null, tenderTypeId: null, tenderTypeName: null, isMirror: false, debit: "0.00", credit: r(1500) },
+  { voucherDate: DAY, voucherId: uuid(7002), accYear: FY.accYear, voucherNo: "rev00012", voucherTypeId: 23, voucherTypeCode: "Rev", branchId: BRANCH_MAIN, sessionId: null, partyId: uuid(7201), partyName: "Cash Sales", ledgerId: LEDGER_CASH, ledgerName: "Cash in Hand", ledgerType: "CASH", tenderId: null, tenderName: null, tenderTypeId: null, tenderTypeName: null, isMirror: true, debit: "0.00", credit: r(1000) },
+];
+
+/** GET /reports/tender-day-book, in the server's order: ledger name, tender type (nulls last), tender. */
+export function tenderDayBookFixture(q: FixtureQuery = {}) {
+  const byType = q.groupBy === "TYPE";
+  const merged = new Map<string, TenderSpec>();
+  for (const spec of TENDER_SPECS) {
+    const key = `${spec.ledgerId}|${byType ? (spec.typeId ?? "NONE") : (spec.tenderId ?? "NONE")}`;
+    const held = merged.get(key);
+    merged.set(
+      key,
+      held
+        ? { ...held, opening: held.opening + spec.opening, debit: held.debit + spec.debit, credit: held.credit + spec.credit }
+        : { ...spec, tenderId: byType ? null : spec.tenderId, tenderName: byType ? null : spec.tenderName },
+    );
+  }
+  const ordered = [...merged.entries()].sort(
+    ([, a], [, b]) =>
+      a.ledgerName.localeCompare(b.ledgerName) ||
+      (a.typeId ?? Number.MAX_SAFE_INTEGER) - (b.typeId ?? Number.MAX_SAFE_INTEGER) ||
+      (a.tenderId ?? "").localeCompare(b.tenderId ?? ""),
+  );
+  const groups = ordered.map(([key, g]) => ({
+    key,
+    tenderId: g.tenderId,
+    tenderName: g.tenderName,
+    tenderTypeId: g.typeId,
+    tenderTypeName: g.typeName,
+    ledgerId: g.ledgerId,
+    ledgerName: g.ledgerName,
+    ledgerType: g.ledgerType,
+    opening: signedRupees(g.opening),
+    debit: rupees(g.debit),
+    credit: rupees(g.credit),
+    closing: signedRupees(g.opening + g.debit - g.credit),
+  }));
+  const ledgers = [...new Set(ordered.map(([, g]) => g.ledgerId))].map((ledgerId) => {
+    const own = TENDER_SPECS.filter((s) => s.ledgerId === ledgerId);
+    const set = OPENING_SETS[ledgerId] ?? 0;
+    const opening = set + own.reduce((a, s) => a + s.opening, 0);
+    const debit = own.reduce((a, s) => a + s.debit, 0);
+    const credit = own.reduce((a, s) => a + s.credit, 0);
+    const noTender = own.filter((s) => s.typeId === null).reduce((a, s) => a + s.debit + s.credit, 0);
+    return {
+      ledgerId,
+      ledgerName: own[0].ledgerName,
+      ledgerType: own[0].ledgerType,
+      openingSet: signedRupees(set),
+      opening: signedRupees(opening),
+      debit: rupees(debit),
+      credit: rupees(credit),
+      closing: signedRupees(opening + debit - credit),
+      noTender: rupees(noTender),
+    };
+  });
+  // The live server sends rows despite `withRows=false` (its DTO reads the coerced flag); `limit` caps them.
+  const cap = Number(q.limit ?? "5000");
+  return envelope({
+    companyId: q.companyId ?? COMPANY_ID,
+    accYear: q.accYear ?? FY.accYear,
+    branchId: q.branchId ?? null,
+    fromDate: q.fromDate ?? DAY,
+    toDate: q.toDate ?? q.fromDate ?? DAY,
+    groupBy: byType ? "TYPE" : "TENDER",
+    groups,
+    ledgers,
+    rows: NO_TENDER_LINES.slice(0, cap),
+    rowsTruncated: NO_TENDER_LINES.length > cap,
+  });
+}
+
+/** GET /reports/tender-day-book/no-tender: the lines in the range, `limit` of them; count and amount are all of them. */
+export function noTenderFixture(q: FixtureQuery = {}) {
+  const from = q.fromDate ?? FY.begin;
+  const to = q.toDate ?? DAY;
+  const lines = NO_TENDER_LINES.filter((l) => String(l.voucherDate) >= from && String(l.voucherDate) <= to);
+  const paise = (l: WireRow) => Math.round(Number(l.credit) * 100) + Math.round(Number(l.debit) * 100);
+  const byCode = new Map<string, { count: number; paise: number }>();
+  for (const l of lines) {
+    const code = String(l.voucherTypeCode);
+    const held = byCode.get(code) ?? { count: 0, paise: 0 };
+    byCode.set(code, { count: held.count + 1, paise: held.paise + paise(l) });
+  }
+  const cap = Number(q.limit ?? "5000");
+  return envelope({
+    companyId: q.companyId ?? COMPANY_ID,
+    accYear: q.accYear ?? FY.accYear,
+    branchId: q.branchId ?? null,
+    fromDate: from,
+    toDate: to,
+    count: lines.length,
+    amount: rupees(lines.reduce((a, l) => a + paise(l), 0)),
+    byVoucherType: [...byCode.entries()]
+      .sort(([a, x], [b, y]) => y.count - x.count || a.localeCompare(b))
+      .map(([voucherTypeCode, t]) => ({ voucherTypeCode, count: t.count, amount: rupees(t.paise) })),
+    rows: lines.slice(0, cap),
+    rowsTruncated: lines.length > cap,
+  });
 }

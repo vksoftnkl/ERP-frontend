@@ -57,6 +57,12 @@ export type VoucherLine = {
   tdsBase: boolean | null;
   /** A receipt / payment party line's instrument. */
   instrument: LineInstrument | null;
+  /**
+   * A Contra line's tender (notes 126 §6): Cash, or the bank's BANK tender —
+   * the ledger comes from it. "" on any other type.
+   */
+  tenderId: string;
+  tenderName: string;
   /** The operator set Dr/Cr by hand: never re-sided. */
   sideChosen: boolean;
   /** A GST-band type: the line's rate ("" = untaxed), HSN/SAC and ITC class. */
@@ -80,6 +86,8 @@ export function blankLine(drCr: DrCr = "DR"): VoucherLine {
     flags: null,
     tdsBase: null,
     instrument: null,
+    tenderId: "",
+    tenderName: "",
     sideChosen: false,
     taxId: "",
     hsn: "",
@@ -221,6 +229,22 @@ export function balancingAmount(
 }
 
 /**
+ * What follows a pick on the Ledger cell — a ledger from the picker, or a
+ * Contra's tender (Qt `finishLedgerPick`). `lines` already carry the pick on
+ * `key`: the line opens with the difference where that balances the voucher
+ * (`balancingAmount`), and a blank line follows.
+ */
+export function finishLedgerPick(
+  lines: readonly VoucherLine[],
+  key: string,
+  rules: Pick<VoucherTypeRules, "partyMode" | "partySide"> | null,
+  sideOf?: (lines: readonly VoucherLine[]) => DrCr,
+): VoucherLine[] {
+  const amount = balancingAmount(lines, key, rules);
+  return withTrailingLine(amount ? lines.map((row) => (row.key === key ? { ...row, amount } : row)) : lines, sideOf);
+}
+
+/**
  * A figure typed in the Debit or Credit column. A figure above zero moves the
  * line to that column's side; clearing the line's own column clears the
  * amount; clearing the OTHER column changes nothing. A LOCKED line never
@@ -300,6 +324,7 @@ export function buildLines(lines: readonly VoucherLine[], shape: LinesShape = {}
       ...(line.remarks.trim() ? { remarks: line.remarks.trim() } : {}),
       ...(line.tdsBase !== null ? { tdsBase: line.tdsBase } : {}),
       ...(line.instrument?.tenderId ? { instrument: instrumentBody(line.instrument) } : {}),
+      ...(line.tenderId ? { tenderId: line.tenderId } : {}),
       ...(shape.gstSide && line.drCr === shape.gstSide && line.taxId
         ? {
             gst: {
@@ -404,6 +429,8 @@ export function linesFromDraft(draft: StoredDraft | null): VoucherLine[] {
         remarks: line.remarks ?? "",
         tdsBase: typeof line.tdsBase === "boolean" ? line.tdsBase : null,
         instrument: line.instrument?.tenderId ? instrumentFromDraft(line.instrument) : null,
+        // The name comes from the loaded tenders (`ledgerCellText`).
+        tenderId: line.tenderId ?? "",
         // Read back as saved: the side is what was keyed.
         sideChosen: true,
         taxId: line.gst?.taxId ?? "",

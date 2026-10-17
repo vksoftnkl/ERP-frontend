@@ -31,7 +31,9 @@
  * or cancelled and re-entered — its copy opens as a new voucher to correct and
  * post. A POSTED voucher can be cancelled (a mirror in the Rev
  * series) while its till session still takes money. The approval the EXPENSE
- * rule asks for is reported only — the gate is till phase 3.
+ * rule asks for is shown in its band; a company on `till.approval_gate`
+ * REFUSE answers Post with 428, and the "Needs approval" dialog asks for it
+ * on the saved draft, which posts once APPROVED (Qt 425fa80).
  *
  * Layout and wiring only: the lifecycle is `state/use-expense-voucher.ts`,
  * every figure `domain/view.ts`, every body `domain/payload.ts`.
@@ -52,6 +54,7 @@ import { todayIso } from "@/features/sales/quotation/quotation.utils";
 import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
 import { PURPOSE_CODE } from "@/features/printing/domain/documentPrint";
 import { GridPickerModal, type PickerFallbackColumn } from "@/features/stocks/opening-stock/components/grid-picker-modal";
+import { ApprovalRequestDialog } from "@/features/sales/till/shared/approval-request-dialog";
 /*
  * The right-click menu ("save column width", "Admin settings"): the same
  * dialog every configured grid carries, on the same `fixed.ui_table_columns`
@@ -461,6 +464,7 @@ export default function ExpenseScreen({ initialKeys, onBackToList, memory }: Exp
       cancelOpen ||
       picker !== null ||
       registerOpen ||
+      api.approvalRequest !== null ||
       lineSettings.active ||
       tenderSettings.active,
   };
@@ -1039,6 +1043,12 @@ export default function ExpenseScreen({ initialKeys, onBackToList, memory }: Exp
       {tenderSettings.overlays}
 
       <ConfirmDialog request={confirmRequest} onClose={() => setConfirmRequest(null)} />
+      {/* Post's 428 TILL_APPROVAL_REQUIRED: the saved draft waits on it. */}
+      <ApprovalRequestDialog
+        request={api.approvalRequest}
+        onApproved={(tapId) => api.answerApproval(tapId)}
+        onClose={() => api.answerApproval(null)}
+      />
       {cancelMode ? (
         <CancelReasonDialog
           voucherNo={draft.voucherNo}

@@ -18,6 +18,7 @@ import { DayExceptionDialog } from "./components/day-exception-dialog";
 import { DayGrid } from "./components/day-grid";
 import { Checklist, DayNumbers, FactsStrip, VerdictBand, pillToneClass } from "./components/day-panels";
 import { DayReopenDialog } from "./components/day-reopen-dialog";
+import { booksChecks } from "./domain/books";
 import { DAY_COLUMNS_FALLBACK, SESSION_COLUMNS_FALLBACK } from "./domain/columns";
 import {
   dayButtons,
@@ -90,6 +91,9 @@ function pickFromUrl(): DayPick {
   return tbdId && accYear ? { tbdId, accYear } : null;
 }
 
+/** The sessions grid never gets fewer rows than this, however long the checklist (Qt 425fa80). */
+const SESSIONS_MIN_ROWS = 6;
+
 /** Before a day is read the sessions grid waits; after a failed read it is empty. */
 const SESSIONS_WAITING: RowsState = { status: "loading", rows: [] };
 const SESSIONS_NOTHING: RowsState = { status: "ready", rows: [] };
@@ -118,6 +122,11 @@ function dayRowKey(row: GridRow, index: number): string {
  * the TILL_DAY_Z print of the day. The safe's count and remittance are the
  * Cash Office's (menu 287): its rows jump there on the right tab.
  *
+ * Qt 425fa80 (notes 126): the books against the till — the CASH tender's
+ * ledger against the live drawers (today's day only), each safe's ledger
+ * against its safe book — as two rows that never block; the green rows fold
+ * under one "N checks OK" row, and the sessions grid keeps six rows.
+ *
  * Keys (Qt): F5 Refresh checks (always today) · F8 Day ⇄ List · F10 Close day
  * · Enter on a session opens its cockpit, on a day opens that day · Esc closes.
  */
@@ -139,8 +148,20 @@ export default function BusinessDayScreen() {
     canCreate: permissions.canCreate,
     canEdit: permissions.canEdit,
   });
-  const { dayState, pick, sessions, liveSessions, safes, days, dayBusy, opening, closing, closeCheck, scopeReady } =
-    model;
+  const {
+    dayState,
+    pick,
+    sessions,
+    liveSessions,
+    safes,
+    days,
+    dayBusy,
+    opening,
+    closing,
+    closeCheck,
+    books,
+    scopeReady,
+  } = model;
 
   const [tab, setTab] = useState<Tab>("day");
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -161,16 +182,18 @@ export default function BusinessDayScreen() {
   const reading = useMemo<DayReading | null>(() => {
     // The live read answering rebuilds the checklist (Qt `updated` → `rebuild`).
     if (dayState.kind === "day") {
+      const now = new Date();
       return readDay(sessions, safes, liveSessions, dayState.day.tbdBusinessDate, {
         day: dayState.day,
         check,
         checkError,
-        now: new Date(),
+        now,
+        books: booksChecks({ day: dayState.day, now, cash: books.cash, live: liveSessions, safes: books.safes }),
       });
     }
     if (dayState.kind === "none") return noDayReading();
     return null;
-  }, [dayState, sessions, safes, liveSessions, check, checkError]);
+  }, [dayState, sessions, safes, liveSessions, check, checkError, books]);
   const buttons = dayButtons(shownDay, check, permissions.canEdit);
   const canCloseDay = buttons.closeDay.enabled && !closing;
 
@@ -391,6 +414,7 @@ export default function BusinessDayScreen() {
               label="Sessions of the day"
               emptyText={sessionsEmpty}
               gridRef={sessionsGridRef}
+              minRows={SESSIONS_MIN_ROWS}
               autoFocus
             />
           </div>

@@ -5,7 +5,7 @@
  *
  * Built for the tender surcharge (Qt 6f15977): on a UPI or card master the
  * figure TYPED is what goes to the bills, and the row then carries the GROSS
- * the customer pays — 200 typed on a 1% UPI rests as 202.02. Fed straight
+ * the customer pays — 200 typed on a 1% UPI rests as 202.00. Fed straight
  * back into the box on every keystroke, that gross would be typed over:
  * "2" becomes 2.02, the next "0" makes it 2.020. So while the box has focus it
  * holds the operator's own text, starting from `editValue` (what goes to the

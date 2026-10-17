@@ -256,7 +256,7 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
   /**
    * The operator typed `amount` into an instrument — the figure for the BILLS.
    * A UPI or card master with a surcharge makes the gross of it (200 at 1% →
-   * 202.02), so every amount reaches the row through here and never through
+   * 202.00), so every amount reaches the row through here and never through
    * a plain `SET_TENDER` (Qt `onTenderCellEdited`, 6f15977).
    */
   const setTenderAmount = useCallback(

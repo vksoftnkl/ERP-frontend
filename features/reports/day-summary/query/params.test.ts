@@ -5,11 +5,17 @@ import {
   checkFilters,
   dayDrill,
   defaultDate,
+  isTenderTab,
+  NO_TENDER_LIMIT,
+  noTenderKey,
+  noTenderQuery,
   parseFilters,
   queryKey,
   stepDay,
   summaryKey,
   summaryQuery,
+  tenderDayBookQuery,
+  tenderKey,
   tileDrill,
   typeDrill,
   vouchersKey,
@@ -35,7 +41,7 @@ describe("URL ⇄ filters", () => {
   it("round-trips every key", () => {
     const qs =
       `date=2026-10-07&to=2026-10-09&branch=${BRANCH_MAIN}&type=3&tab=vouchers&drafts=0&pairs=0&clr=0&zero=1` +
-      "&group=PRIMARY&nature=SALES&list=drafts&legs=1";
+      "&group=PRIMARY&nature=SALES&list=drafts&legs=1&by=TYPE";
     const filters = parse(qs);
     expect(filters).toEqual({
       fromDate: "2026-10-07",
@@ -52,6 +58,7 @@ describe("URL ⇄ filters", () => {
       moneyKind: null,
       draftsOnly: true,
       withLegs: true,
+      tenderGroupBy: "TYPE",
     });
     expect(parse(buildSearch(filters).toString())).toEqual(filters);
   });
@@ -72,6 +79,7 @@ describe("URL ⇄ filters", () => {
       moneyKind: null,
       draftsOnly: false,
       withLegs: false,
+      tenderGroupBy: "TENDER",
     });
   });
 
@@ -100,6 +108,16 @@ describe("URL ⇄ filters", () => {
   it("an absent To means one day", () => {
     const f = parse("date=2026-09-01");
     expect(f.toDate).toBe("2026-09-01");
+  });
+
+  it("opens the two tender tabs, and writes `by` only for Tender type", () => {
+    expect(parse("tab=tender").tab).toBe("tender");
+    expect(parse("tab=no-tender").tab).toBe("no-tender");
+    expect(isTenderTab("tender") && isTenderTab("no-tender")).toBe(true);
+    expect(isTenderTab("vouchers")).toBe(false);
+    expect(parse("by=BOGUS").tenderGroupBy).toBe("TENDER");
+    expect(buildSearch(parse("tab=tender")).has("by")).toBe(false);
+    expect(buildSearch(parse("tab=tender&by=TYPE")).get("by")).toBe("TYPE");
   });
 });
 
@@ -181,6 +199,40 @@ describe("request queries and part keys", () => {
     // Include cancelled pairs is a /vouchers parameter only (D2).
     expect(summaryKey(session, { ...base, includeCancelledPairs: false })).toBe(summaryKey(session, base));
     expect(queryKey("x", { b: 1, a: undefined, c: "z" })).toBe("x?b=1&c=z");
+  });
+});
+
+describe("the tender day book's queries (notes 126 §4)", () => {
+  it("asks the scope only: no voucher type (the DTO's whitelist would refuse it), no branch for every branch", () => {
+    const f = parse("type=3&branch=all&tab=tender&date=2026-10-07&to=2026-10-09");
+    expect(noTenderQuery(session, f)).toEqual({
+      companyId: COMPANY_ID,
+      accYear: FY.accYear,
+      fromDate: "2026-10-07",
+      toDate: "2026-10-09",
+      limit: NO_TENDER_LIMIT,
+    });
+    expect(tenderDayBookQuery(session, { ...f, branchId: BRANCH_MAIN })).toEqual({
+      companyId: COMPANY_ID,
+      accYear: FY.accYear,
+      branchId: BRANCH_MAIN,
+      fromDate: "2026-10-07",
+      toDate: "2026-10-09",
+      groupBy: "TENDER",
+      // The groups only; limit=1 holds the rows the server sends despite withRows=false.
+      withRows: false,
+      limit: 1,
+    });
+    expect(NO_TENDER_LIMIT).toBe(500);
+  });
+
+  it("keys the two lists apart: the group-by moves By tender only, the voucher-type filters neither", () => {
+    const base = parse("tab=tender");
+    const byType = { ...base, tenderGroupBy: "TYPE" as const };
+    expect(tenderKey(session, byType)).not.toBe(tenderKey(session, base));
+    expect(noTenderKey(session, byType)).toBe(noTenderKey(session, base));
+    expect(tenderKey(session, { ...base, voucherTypeId: 3, clearingAsBank: false })).toBe(tenderKey(session, base));
+    expect(noTenderKey(session, { ...base, toDate: "2026-10-10" })).not.toBe(noTenderKey(session, base));
   });
 });
 

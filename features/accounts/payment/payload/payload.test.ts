@@ -284,6 +284,13 @@ describe("post is ONE call — /create with post: true", () => {
     expect(buildPaymentSaveAndPostPayload(input("v1")).avhVoucherId).toBe("v1");
   });
 
+  it("carries the approval only once there is one (notes 131), with the kept draft's id", () => {
+    expect(buildPaymentSaveAndPostPayload(input("v1"))).not.toHaveProperty("approvalId");
+    expect(buildPaymentSaveAndPostPayload({ ...input("v1"), approvalId: null })).not.toHaveProperty("approvalId");
+    const body = buildPaymentSaveAndPostPayload({ ...input("v1"), approvalId: "tap-1" });
+    expect(body).toMatchObject({ avhVoucherId: "v1", approvalId: "tap-1", post: true });
+  });
+
   it("removes a settlement key the post shape lacks — the draft's memo never leaks", () => {
     const draft = buildPaymentDraftPayload({
       ...input(null),

@@ -128,7 +128,7 @@ import {
   getFirstLedgerFocusableFieldTarget,
   focusLedgerFieldControl,
 } from "./form-navigation";
-import { Z_MODAL_NESTED } from "@/lib/z-index";
+import { ENTRY_MODAL_OVERLAY_STYLE, Z_MODAL_NESTED } from "@/lib/z-index";
 import { layoutPointer, layoutViewportSize } from "@/lib/ui-scale";
 import { useDataRefresh } from "@/lib/data-freshness";
 import { buildGridDeletedParam, gridRunEndpoint, useGridId } from "@/lib/configured-grids";
@@ -2467,6 +2467,9 @@ export default function AccountLedgerMasterPage() {
     "--erp-modal-accent-soft-ring": "#2563eb33",
     "--erp-modal-border": "#cfdae6",
     "--erp-modal-surface": "#ffffff",
+    // Under the app header, so the menu stays reachable with the popup open:
+    // the ledger is remembered and the popup is back on return.
+    ...ENTRY_MODAL_OVERLAY_STYLE,
   } as CSSProperties;
   const modalPanelStyle = {
     width: "min(calc(62vw/var(--erp-ui-scale)),62rem)",

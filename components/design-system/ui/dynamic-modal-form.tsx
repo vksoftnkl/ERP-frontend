@@ -181,6 +181,7 @@ export function ERPDynamicModalForm({
   hideSectionHeader = false,
   submitError,
   panelStyle,
+  overlayStyle,
   panelClassName,
   formGridColumns,
   denseGrid = true,
@@ -1696,6 +1697,7 @@ export function ERPDynamicModalForm({
     "--erp-modal-accent-soft-ring": `${activePalette.accent}33`,
     "--erp-modal-border": "#cfdae6",
     "--erp-modal-surface": "#ffffff",
+    ...overlayStyle,
   } as CSSProperties;
   const formId = activeVariant
     ? `erp-modal-form-${activeVariant.key}`

@@ -9,18 +9,21 @@
  *
  * Unknown tile codes, check codes and natures pass through untouched. The
  * enumerations the screen BRANCHES on (row kind, money kind, check level,
- * business-day status) are checked, and an unknown value is a parse failure.
+ * business-day status, tender groupBy) are checked, and an unknown value is
+ * a parse failure.
  *
  * Written against the server's types file (2026-10-12; no live response read
  * yet). The bare-list shapes of the backend plan still parse, so either
- * answer works. When the routes are up, read one response per route.
+ * answer works. When the routes are up, read one response per route. The
+ * two tender-day-book routes were read live (2026-10-17).
  */
-import { isAmountString } from "@/features/reports/shared/wire/money";
+import { isAmountString, isZeroAmount } from "@/features/reports/shared/wire/money";
 import {
   BUSINESS_DAY_STATUSES,
   CHECK_LEVELS,
   MONEY_KINDS,
   ROW_KINDS,
+  TENDER_GROUP_BYS,
   type Bal,
   type BusinessDay,
   type Check,
@@ -36,11 +39,16 @@ import {
   type MoneyKind,
   type MoneyRow,
   type MoneyTotal,
+  type NoTenderPayload,
   type PageInfo,
   type Scope,
   type Side,
   type Src,
   type SummaryPayload,
+  type TenderDayBookPayload,
+  type TenderGroup,
+  type TenderLedger,
+  type TenderLine,
   type Tile,
   type TypeRow,
   type TypeTotals,
@@ -543,6 +551,101 @@ export function parseCheckDetail(raw: unknown, code: string): CheckDetailPayload
     rows: list.list(key, (row) => row.raw()),
     totalRows: list.optInt("totalRows"),
     truncated: list.flag("truncated"),
+  };
+}
+
+/* ------------------------------------------- /reports/tender-day-book (§4) */
+
+/**
+ * A SIGNED amount (Dr +, Cr −: `"-2000.00"` is 2,000.00 Cr) → a balance,
+ * read off the sign. No arithmetic: the digits are the server's.
+ */
+export function signedBal(amount: string): Bal {
+  const unsigned = amount.replace(/^-/, "");
+  if (isZeroAmount(amount)) return { amount: unsigned, side: null };
+  return { amount: unsigned, side: amount.startsWith("-") ? "CR" : "DR" };
+}
+
+function signed(r: Reader, key: string): Bal {
+  return signedBal(r.amount(key));
+}
+
+function tenderGroup(r: Reader): TenderGroup {
+  return {
+    key: r.str("key"),
+    tenderId: r.optStr("tenderId"),
+    tenderName: r.optStr("tenderName"),
+    tenderTypeId: r.optInt("tenderTypeId"),
+    tenderTypeName: r.optStr("tenderTypeName"),
+    ledgerId: r.str("ledgerId"),
+    ledgerName: r.str("ledgerName"),
+    ledgerType: r.optStr("ledgerType") ?? "",
+    opening: signed(r, "opening"),
+    debit: r.amount("debit"),
+    credit: r.amount("credit"),
+    closing: signed(r, "closing"),
+  };
+}
+
+function tenderLedger(r: Reader): TenderLedger {
+  return {
+    ledgerId: r.str("ledgerId"),
+    ledgerName: r.str("ledgerName"),
+    ledgerType: r.optStr("ledgerType") ?? "",
+    openingSet: signed(r, "openingSet"),
+    opening: signed(r, "opening"),
+    debit: r.amount("debit"),
+    credit: r.amount("credit"),
+    closing: signed(r, "closing"),
+    noTender: r.amount("noTender"),
+  };
+}
+
+export function parseTenderDayBook(raw: unknown): TenderDayBookPayload {
+  const r = root("tender-day-book", raw);
+  return {
+    branchId: r.optStr("branchId"),
+    fromDate: r.str("fromDate"),
+    toDate: r.str("toDate"),
+    groupBy: r.oneOf("groupBy", TENDER_GROUP_BYS),
+    groups: r.list("groups", tenderGroup),
+    ledgers: r.list("ledgers", tenderLedger),
+  };
+}
+
+function tenderLine(r: Reader): TenderLine {
+  return {
+    voucherDate: r.str("voucherDate"),
+    voucherId: r.str("voucherId"),
+    accYear: r.optStr("accYear"),
+    voucherNo: r.optStr("voucherNo"),
+    voucherTypeId: r.optInt("voucherTypeId"),
+    voucherTypeCode: r.optStr("voucherTypeCode"),
+    branchId: r.optStr("branchId"),
+    partyName: r.optStr("partyName"),
+    ledgerId: r.str("ledgerId"),
+    ledgerName: r.str("ledgerName"),
+    isMirror: r.flag("isMirror"),
+    debit: r.amount("debit"),
+    credit: r.amount("credit"),
+  };
+}
+
+export function parseNoTender(raw: unknown): NoTenderPayload {
+  const r = root("tender-day-book/no-tender", raw);
+  return {
+    branchId: r.optStr("branchId"),
+    fromDate: r.str("fromDate"),
+    toDate: r.str("toDate"),
+    count: r.int("count"),
+    amount: r.amount("amount"),
+    byVoucherType: r.list("byVoucherType", (t) => ({
+      voucherTypeCode: t.optStr("voucherTypeCode"),
+      count: t.int("count"),
+      amount: t.amount("amount"),
+    })),
+    rows: r.list("rows", tenderLine),
+    rowsTruncated: r.flag("rowsTruncated"),
   };
 }
 

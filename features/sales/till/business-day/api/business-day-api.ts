@@ -13,6 +13,11 @@
  *                                     when no session is live (notes 118)
  *   GET  /configured-grid-sql/run     TILL DAY SESSIONS · MAIN LIST - TILL BUSINESS DAYS ·
  *                                     MAIN LIST - TILL SAFES · MAIN LIST - TILL REASONS
+ *   GET  /till/safes/balance          Books = safe: each safe's ledger against its safe
+ *                                     book (notes 126; Cash Office 287 or Till Sessions 273 VIEW)
+ *   GET  /vouchers/instruments        Books = drawers: the CASH tender's ledger …
+ *   GET  /vouchers/ledger-balance     … and its balance as on today — the Voucher Register's
+ *                                     own query endpoints (`store/api/vouchersApi`), reused
  *
  * The GETs are QUERY endpoints dispatched as
  * `initiate(arg, { subscribe: false, forceRefetch: true })` — never a lazy
@@ -35,11 +40,13 @@
  */
 import { useMemo } from "react";
 import { baseApi } from "@/store/api/baseApi";
+import { vouchersApi } from "@/store/api/vouchersApi";
 import { buildDropdownRunQuery } from "@/components/design-system/dropdown/api";
 import { getDropdownId } from "@/lib/configured-dropdowns";
 import { getGridId, type ConfiguredGridKey } from "@/lib/configured-grids";
 import { useAppDispatch } from "@/store/hooks";
 import type { AppDispatch } from "@/store";
+import { cashBooksOf, cashTenderOf, safeBooksOf, type CashBooks, type SafeBook } from "../domain/books";
 import { approverDropdownParams, type CloseDayBody, type ReopenDayBody } from "../domain/day-close";
 import type { TillDenominationRow } from "../../shared/wire/types";
 import {
@@ -67,6 +74,7 @@ const SUPERVISORS_ENDPOINT = "/till/movements/supervisors";
 const DENOMINATIONS_ENDPOINT = "/till/denominations/list";
 const GRID_RUN_ENDPOINT = "/configured-grid-sql/run";
 const DROPDOWN_RUN_ENDPOINT = "/dropdown-details/run";
+const SAFE_BALANCE_ENDPOINT = "/till/safes/balance";
 /** The runner caps `limit` at 100. */
 const GRID_PAGE_LIMIT = 100;
 /** A guard, not a business limit: a branch does not run 1,000 sessions a day. */
@@ -115,6 +123,10 @@ export const businessDayApi = baseApi.injectEndpoints({
       }),
       keepUnusedDataFor: 0,
     }),
+    tillDaySafeBalance: builder.query<unknown, { companyId: string; branchId: string }>({
+      query: (params) => ({ url: SAFE_BALANCE_ENDPOINT, params }),
+      keepUnusedDataFor: 0,
+    }),
     tillDayGridRun: builder.query<unknown, GridRunArgs>({
       query: ({ gridId, page, params }) => ({
         url: GRID_RUN_ENDPOINT,
@@ -155,6 +167,13 @@ export type BusinessDayClient = {
   denominations: (companyId: string) => Promise<TillDenominationRow[]>;
   /** Every page of one configured grid. */
   gridRows: (grid: ConfiguredGridKey, gridId: string | null, params: Record<string, string>) => Promise<GridRow[]>;
+  /** The branch's safes, each ledger against its safe book (Books = safe). */
+  safeBooks: (scope: { companyId: string; branchId: string }) => Promise<SafeBook[]>;
+  /**
+   * The CASH tender's ledger as on `asOn` (Books = drawers): the tender master
+   * names it, the ledger balance reads it. Null when no cash tender names a ledger.
+   */
+  cashBooks: (key: { companyId: string; branchId: string; accYear: string; asOn: string }) => Promise<CashBooks | null>;
 };
 
 /** A body that is not a TillDayPayload is a server change, said plainly. */
@@ -232,6 +251,26 @@ export function createBusinessDayClient(dispatch: AppDispatch): BusinessDayClien
         if (items.length < GRID_PAGE_LIMIT || (total !== null && rows.length >= total)) break;
       }
       return rows;
+    },
+    safeBooks: async ({ companyId, branchId }) =>
+      safeBooksOf(
+        await dispatch(businessDayApi.endpoints.tillDaySafeBalance.initiate({ companyId, branchId }, READ)).unwrap(),
+      ),
+    cashBooks: async ({ companyId, branchId, accYear, asOn }) => {
+      // Every tender of the branch: no voucher type narrows it ("" is none to the server).
+      const tender = cashTenderOf(
+        await dispatch(
+          vouchersApi.endpoints.getVoucherInstruments.initiate({ companyId, branchId, typeCode: "" }, READ),
+        ).unwrap(),
+      );
+      if (!tender) return null;
+      const balance = await dispatch(
+        vouchersApi.endpoints.getVoucherLedgerBalance.initiate(
+          { companyId, branchId, accYear, ledgerId: tender.ledgerId, asOn },
+          READ,
+        ),
+      ).unwrap();
+      return cashBooksOf(tender.ledgerName, balance);
     },
   };
 }

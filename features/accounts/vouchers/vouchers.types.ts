@@ -164,6 +164,12 @@ export type VoucherLineBody = {
   /** A payment's TDS base, said by hand; absent = the ledger's own flag. */
   tdsBase?: boolean;
   instrument?: InstrumentBody;
+  /**
+   * Notes 126 §6 — a CONTRA line's tender (a CASH tender, or the bank's BANK
+   * tender); `ledgerId` is that tender's ledger. Required on a Contra
+   * (VCH_MONEY_LINE_NO_TENDER), refused on any other type.
+   */
+  tenderId?: string;
   /** On a GST-band type, on the lines opposite the party only. */
   gst?: VoucherLineGstBody;
 };
@@ -582,9 +588,10 @@ export type VoucherLocks = {
 export type StoredDraft = {
   header?: Partial<Omit<VoucherHeaderBody, "posStcd">> & { posStcd?: string | null };
   lines?: Array<
-    Omit<Partial<VoucherLineBody>, "amount" | "tdsBase" | "instrument" | "gst"> & {
+    Omit<Partial<VoucherLineBody>, "amount" | "tdsBase" | "instrument" | "tenderId" | "gst"> & {
       amount?: string | number;
       tdsBase?: boolean | null;
+      tenderId?: string | null;
       instrument?: (Partial<InstrumentBody> & { cheque?: InstrumentChequeBody | null }) | null;
       gst?: { taxId?: string; hsn?: string | null; itcEligibility?: string | null } | null;
     }

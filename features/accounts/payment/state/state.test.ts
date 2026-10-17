@@ -15,6 +15,7 @@ import { documentRights } from "@/lib/permissions/document-rights";
 import { NO_MENU_PERMISSIONS } from "@/lib/permissions/menu-permissions";
 import {
   initialPaymentDraft,
+  isPaymentEditable,
   mayPostPayment,
   paymentDraftReducer,
   saveDraftDenial,
@@ -186,6 +187,13 @@ describe("the payment reducer", () => {
     expect(paymentDraftReducer(state, { type: "AUTO_ALLOCATE" }).refusal?.message).toContain(
       "no open bill",
     );
+  });
+
+  it("adopts the draft a 428 kept — still a DRAFT the screen can post (notes 131)", () => {
+    const state = paymentDraftReducer(picked(), { type: "SAVED", voucherId: "kept-1", status: "DRAFT" }).draft;
+    expect(state.header).toMatchObject({ voucherId: "kept-1", status: "DRAFT" });
+    expect(isPaymentEditable(state)).toBe(true);
+    expect(state.dirty).toBe(false);
   });
 });
 

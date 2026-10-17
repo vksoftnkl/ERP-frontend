@@ -21,6 +21,11 @@
  * (`../../shared/live-cash.ts`): every session of the branch still holding a
  * drawer, ANY date — a day's own list shows only its date, and one opened
  * yesterday is still a drawer to collect.
+ *
+ * Since Qt 425fa80 (notes 126) the books are checked against the drawers and
+ * the safe book (`books.ts`, rows the screen passes in), and the checklist is
+ * DRAWN with its green rows folded under one "N checks OK" row
+ * (`foldGreenChecks`) — what needs a look stays in view above the sessions.
  */
 import { clock12FromHhmm, dayMonthTime12Of } from "@/lib/time-format";
 import { TILL_SESSIONS_HREF } from "../../shared/format";
@@ -321,6 +326,12 @@ export type CloseContext = {
   checkError: string;
   /** "Now", for the oldest waiting hand-over (today shows a clock, an earlier day a date). */
   now: Date;
+  /**
+   * Books = drawers / safe (Qt 425fa80, notes 126 — `books.ts`): after the
+   * safe count, before the numbers. They never block; an amber one counts in
+   * the verdict as Qt counts it.
+   */
+  books: readonly Check[];
 };
 
 /**
@@ -544,7 +555,8 @@ export function noDayReading(): DayReading {
  * `liveSessions` is every live session of the branch, any date (`null` until
  * read): the drawers still out from an earlier day, and "Live now" in the
  * numbers. `dayDate` is the business date shown (ISO), "" when unknown.
- * `close` is the day itself and its close-check (see `CloseContext`).
+ * `close` is the day itself, its close-check and the books' rows (see
+ * `CloseContext`).
  */
 export function readDay(
   sessions: RowsState,
@@ -558,6 +570,7 @@ export function readDay(
     check: close.check && close.day && close.check.tbdId !== close.day.tbdId ? null : (close.check ?? null),
     checkError: close.checkError ?? "",
     now: close.now ?? new Date(),
+    books: close.books ?? [],
   };
   const dayClosed = context.day?.tbdStatus === "CLOSED";
   if (sessions.status !== "ready" && !context.check) {
@@ -683,6 +696,7 @@ export function readDay(
   if (older) checks.push(older);
   const safeCounted = safeCountedCheck(context.day, context.check);
   if (safeCounted) checks.push(safeCounted);
+  checks.push(...context.books);
 
   if (!rowsRead) return { checks, numbers: [], verdict: verdictOf(checks, context) };
 
@@ -754,4 +768,37 @@ export function readDay(
 /** The checklist as Qt's test prints it: `TONE title — detail`. */
 export function checkLines(checks: readonly Check[]): string[] {
   return checks.map((check) => `${CHECK_TONE_NAMES[check.tone]} ${check.title} — ${check.detail}`);
+}
+
+// ── The checklist as drawn: green folded ──────────────────────────────────
+
+/** The "N checks OK" row: its title, its detail (the green titles), and the rows it holds. */
+export type GreenFold = { title: string; detail: string; greens: Check[] };
+
+export type FoldedChecks = { rows: Check[]; fold: GreenFold | null };
+
+/**
+ * The checklist as it is drawn (Qt 425fa80 `addCheck` / `foldGreen`): a
+ * green row needs no action, so every green row goes under ONE "N checks OK"
+ * row — its detail their titles joined " · " — that Show opens; every other
+ * row stays above it, in order, and the sessions grid keeps its height. No
+ * green row, no fold. Only the drawing folds: the verdict counts every row.
+ */
+export function foldGreenChecks(checks: readonly Check[]): FoldedChecks {
+  const rows = checks.filter((check) => check.tone !== "green");
+  const greens = checks.filter((check) => check.tone === "green");
+  if (greens.length === 0) return { rows, fold: null };
+  return {
+    rows,
+    fold: {
+      title: `${plural(greens.length, "check")} OK`,
+      detail: greens.map((check) => check.title).join(" · "),
+      greens,
+    },
+  };
+}
+
+/** The fold's button: two spaces before the arrow, as every check button. */
+export function greenFoldLabel(open: boolean): string {
+  return open ? "Hide  ▴" : "Show  ▾";
 }

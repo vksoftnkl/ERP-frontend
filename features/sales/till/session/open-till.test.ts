@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ApprovalNeed } from "../shared/approval-gate";
 import { EMPTY_COUNT, toDenominations, withQty } from "../shared/denom";
 import type { TillReason } from "../shared/reasons";
 import type { TillOpenCheck, TillOpenCheckSession } from "../shared/wire/types";
@@ -10,6 +11,7 @@ import {
   counterDisplay,
   dayEndedText,
   dayText,
+  floatApprovalRequest,
   gaugeText,
   isCarried,
   isDeviceRefusal,
@@ -20,6 +22,7 @@ import {
   openProblem,
   resumePlan,
   waitPollDue,
+  withApproval,
   type OpenTillInputs,
 } from "./open-till";
 
@@ -208,6 +211,57 @@ describe("the body Open (Ctrl+Enter) posts", () => {
     const body = openBody(inputs({ check: linked }, { issuedPaise: 0 }), { companyId: "co", branchId: "br" });
     expect(body.counterId).toBeUndefined();
     expect(body.floatIssued).toBe(0);
+  });
+});
+
+describe("the approval gate (Qt 425fa80, notes 124 §5)", () => {
+  const need = (over: Partial<ApprovalNeed> = {}): ApprovalNeed => ({
+    event: "FLOAT_MISMATCH",
+    amount: -500,
+    requiredRole: "SUPERVISOR",
+    channel: "COUNTER",
+    twoPerson: false,
+    srcDocType: "TILL_COUNTER",
+    srcDocId: "c1",
+    ...over,
+  });
+  // 2,000.00 issued, 1,500.00 counted: 500.00 short.
+  const short = inputs({}, { count: withQty(EMPTY_COUNT, "d500", 3), reasonId: "r-miscount" });
+
+  it("asks for a FLOAT_MISMATCH on the counter, of the gap's size, at the 428's level", () => {
+    const state = floatApprovalRequest(need({ requiredRole: "STORE_MANAGER" }), short, { companyId: "co", branchId: "br" });
+    expect(state).toEqual({
+      ask: {
+        companyId: "co",
+        branchId: "br",
+        event: "FLOAT_MISMATCH",
+        amount: 500,
+        srcDocType: "TILL_COUNTER",
+        srcDocId: "c1",
+      },
+      requiredRole: "STORE_MANAGER",
+    });
+  });
+
+  it("takes the screen's own difference when the 428 sends no amount", () => {
+    const state = floatApprovalRequest(need({ amount: null }), short, { companyId: "co", branchId: "br" });
+    expect(state.ask.amount).toBe(500);
+  });
+
+  it("names the linked counter on a linked device", () => {
+    const linked = check({
+      linkedCounter: { counterId: "L", code: "ZT1", name: "Zone", defaultFloat: 0, carriedFrom: null, liveSessionId: null, inactive: false },
+      freeCounters: [],
+    });
+    const state = floatApprovalRequest(need(), inputs({ check: linked }), { companyId: "co", branchId: "br" });
+    expect(state.ask.srcDocId).toBe("L");
+  });
+
+  it("opens again with the approval's id, the body otherwise the same", () => {
+    const body = openBody(short, { companyId: "co", branchId: "br" });
+    expect(withApproval(body, "tap-1")).toEqual({ ...body, approvalId: "tap-1" });
+    expect(withApproval(body, undefined)).toBe(body);
+    expect(withApproval(body, "")).toBe(body);
   });
 });
 

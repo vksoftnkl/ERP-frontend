@@ -9,7 +9,9 @@ import {
   parseDaily,
   parseExport,
   parseGroupLedgers,
+  parseNoTender,
   parseSummary,
+  parseTenderDayBook,
   parseVouchers,
   parseVoucherTypes,
 } from "../wire/parse";
@@ -18,7 +20,9 @@ import {
   dailyFixture,
   exportFixture,
   groupLedgersFixture,
+  noTenderFixture,
   summaryFixture,
+  tenderDayBookFixture,
   vouchersFixture,
   voucherTypesFixture,
   type FixtureQuery,
@@ -76,6 +80,8 @@ export function fakeClient(opts: { gate?: boolean; fail?: (route: string, query:
       }, s),
     getCheckDetail: (q, s) => respond("checks/detail", q, (f) => parseCheckDetail(checkDetailFixture(f), q.code), s),
     getExport: (q, s) => respond("export", q, (f) => parseExport(exportFixture(f)), s),
+    getTenderDayBook: (q, s) => respond("tender", q, (f) => parseTenderDayBook(tenderDayBookFixture(f)), s),
+    getNoTender: (q, s) => respond("no-tender", q, (f) => parseNoTender(noTenderFixture(f)), s),
   };
   return { client, calls };
 }

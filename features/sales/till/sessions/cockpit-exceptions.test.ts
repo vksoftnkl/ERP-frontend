@@ -1,7 +1,9 @@
 /**
  * Qt c77f3f1 on the Session Cockpit: the approval band's new cases, the
  * button rules, Approve Cash, Force close, Reopen, X read, the bag decide,
- * Print Z / X targets and the Bills tab's pick.
+ * Print Z / X targets and the Bills tab's pick. Qt 425fa80 (notes 124 / 129):
+ * a closed session's undecided cash gap, Approve without the cashier gate,
+ * and "Cash to safe".
  */
 import { describe, expect, it } from "vitest";
 import { toReasons } from "../shared/reasons";
@@ -28,9 +30,13 @@ import {
 } from "./approve-cash";
 import {
   BAG_DECIDED_MESSAGE,
+  CLOSED_GAP_DECIDED_MESSAGE,
   approvalBand,
   approveButton,
   bagDocNo,
+  cashToSafeText,
+  closedCashGap,
+  cockpitFacts,
   exceptionButtons,
   pendingReceive,
   pendingVariance,
@@ -55,7 +61,19 @@ import {
 } from "./force-close";
 import { dialogRefusal } from "./refusal";
 import { EMPTY_REOPEN, REOPEN_HINT, reopenBody, reopenMessage, reopenProblem } from "./reopen";
-import { BAG_DECIDE_HINT, bagDecideRequestOf, decideBody, decideEventText, initialDecideForm } from "./variance-decide";
+import {
+  BAG_DECIDE_HINT,
+  CLOSED_GAP_DECIDE_HINT,
+  DECIDE_HINT,
+  approveOnly,
+  bagDecideRequestOf,
+  closedGapDecideRequestOf,
+  decideBody,
+  decideEventText,
+  decideHint,
+  decideRequestOf,
+  initialDecideForm,
+} from "./variance-decide";
 import { X_NOTE, xReadView } from "./x-read";
 
 const KEY: TillSessionKey = { companyId: "co", branchId: "br", accYear: "2026-2027", tssId: "tss" };
@@ -149,11 +167,14 @@ describe("the approval band (c77f3f1)", () => {
     });
   });
 
-  it("calls a cash gap still pending on a closed session an orphan", () => {
+  it("calls a cash gap still pending on a closed session an orphan, booked by Approve (notes 124)", () => {
     const band = approvalBand(session({ variances: [variance({})] }));
     expect(band?.code).toBe("CASH_VARIANCE");
     expect(band?.text).toBe("−10.00 — the session closed without a decision, so it is NOT posted.");
-    expect(band?.note).toMatch(/^A closed session cannot be approved/);
+    expect(band?.note).toBe(
+      "Approve books it now: a treatment and a reason (SUSPENSE to look into it first). No recount — the cash was " +
+        "already handed over. Not the session's cashier unless its Approval Rule (276) allows self.",
+    );
     // A pending gap beats the cash to approve (Qt: CASH_TO_APPROVE only with nothing pending).
     expect(approvalBand(session({ variances: [variance({})], receiptState: "AWAITING", cashAwaiting: 50 }))?.code).toBe(
       "CASH_VARIANCE",
@@ -189,7 +210,7 @@ describe("the cockpit's buttons (Qt refreshButtons)", () => {
     expect(approveButton(awaiting, "019C-CASHIER").enabled).toBe(true);
   });
 
-  it("opens the bag decide on a received bag's difference, never for its cashier", () => {
+  it("opens the bag decide on a received bag's difference — its cashier may press it too (425fa80)", () => {
     const bag = session({ variances: [variance({ tvrStage: "RECEIVE", tvrMovementId: "m1" })], receiptState: "DIFFERENCE" });
     expect(approveButton(bag, "019c-supervisor")).toEqual({
       enabled: true,
@@ -197,15 +218,36 @@ describe("the cockpit's buttons (Qt refreshButtons)", () => {
       label: "Approve",
       action: "bag",
     });
+    // "Allow self" is the rule's (276): the server judges, its refusal shows.
     expect(approveButton(bag, "019c-cashier")).toMatchObject({
-      enabled: false,
-      tip: "You are this session's cashier: another person approves it",
+      enabled: true,
+      tip: 'Your own session: allowed only when its Approval Rule (276) has "Allow self" ticked',
     });
   });
 
-  it("routes an orphan gap with cash waiting to Approve Cash, under the plain label (as Qt)", () => {
+  it("books a closed session's undecided cash gap before its cash to approve (notes 124, Qt's order)", () => {
     const both = session({ variances: [variance({})], receiptState: "AWAITING", cashAwaiting: 50 });
-    expect(approveButton(both, "x")).toMatchObject({ enabled: true, label: "Approve", action: "approveCash" });
+    expect(approveButton(both, "x")).toEqual({
+      enabled: true,
+      tip: "Book the cash difference this closed session left undecided",
+      label: "Approve",
+      action: "closedGap",
+    });
+    expect(approveButton(session({ variances: [variance({})] }), "019c-cashier")).toMatchObject({
+      enabled: true,
+      action: "closedGap",
+    });
+    // A bag waiting goes first; the gap's own tip only without one.
+    const withBag = session({
+      variances: [variance({}), variance({ tvrId: "rcv", tvrStage: "RECEIVE", tvrMovementId: "m1" })],
+    });
+    expect(approveButton(withBag, "x")).toMatchObject({
+      enabled: true,
+      tip: "Approve with a treatment, or send it back to recount",
+      action: "bag",
+    });
+    // Not closed: no closed gap — a counting session's pending gap waits for its decision.
+    expect(approveButton(session({ tssStatus: "COUNTING", variances: [variance({})] }), "x").enabled).toBe(false);
   });
 
   it("force-closes a live session, never by its cashier", () => {
@@ -631,5 +673,75 @@ describe("a dialog's refusal", () => {
       pin: true,
     });
     expect(dialogRefusal({ status: "FETCH_ERROR", error: "Failed to fetch" }, "fallback").line).toBe("Failed to fetch");
+  });
+});
+
+// ─── a closed session's undecided cash gap (Qt 425fa80, notes 124) ───────────
+
+describe("the cash gap a closed session left undecided (setClosedGap)", () => {
+  it("is the first pending cash row outside the RECEIVE stage", () => {
+    const card = variance({ tvrId: "card", tvrTenderTypeId: 2, tvrTenderId: "hdfc" });
+    const receive = variance({ tvrId: "rcv", tvrStage: "RECEIVE" });
+    const decided = variance({ tvrId: "done", tvrTreatment: "EXPENSE" });
+    const cash = variance({ tvrId: "cash", tvrVariance: -42 });
+    expect(closedCashGap(session({ variances: [card, receive, decided, cash] }))?.tvrId).toBe("cash");
+    expect(closedCashGap(session({ variances: [card, receive, decided] }))).toBeNull();
+    expect(closedCashGap(null)).toBeNull();
+  });
+
+  it("opens the decide dialog APPROVE only, on that gap, with its own hint", () => {
+    const s = session({ variances: [variance({ tvrId: "card", tvrTenderTypeId: 2, tvrVariance: -5 }), variance({ tvrVariance: -42 })] });
+    const request = closedGapDecideRequestOf(s, KEY);
+    expect(request).toEqual({
+      key: KEY,
+      event: "CASH_VARIANCE",
+      variancePaise: -4200,
+      sessionNo: "C01-261009-01",
+      cashier: "RAVI K",
+      closedGap: true,
+    });
+    expect(approveOnly(request)).toBe(true);
+    expect(approveOnly(bagDecideRequestOf(s, KEY))).toBe(true);
+    expect(approveOnly(decideRequestOf(s, KEY))).toBe(false);
+    expect(decideHint(request)).toBe(CLOSED_GAP_DECIDE_HINT);
+    expect(decideHint(decideRequestOf(s, KEY))).toBe(DECIDE_HINT);
+    expect(CLOSED_GAP_DECIDE_HINT).toBe(
+      "This session closed with the difference undecided. Approve books it now — the cash was already handed over, " +
+        "so there is no recount. SUSPENSE if it needs looking into first.",
+    );
+    expect(CLOSED_GAP_DECIDED_MESSAGE).toBe("Approved: the closed session's difference is booked.");
+    // The body is today's decide-variance one: no tcmId.
+    const form = { ...initialDecideForm("CASH_VARIANCE"), treatment: "SUSPENSE" as const, reasonId: "v1", note: "old gap" };
+    expect(decideBody(request.key, form)).toEqual({
+      ...KEY,
+      decision: "APPROVE",
+      treatment: "SUSPENSE",
+      reasonId: "v1",
+      note: "old gap",
+    });
+  });
+});
+
+describe("Cash to safe (the old Witness slot, notes 129 §1)", () => {
+  const at = "2026-10-09T13:10:00.000Z";
+
+  it("names who took the cash into the safe and when", () => {
+    const facts = cockpitFacts(session({ receivedByName: "ANU", receivedOn: at }), new Date(at));
+    expect(facts.cashToSafe).toMatch(/^ANU · \d{2}:\d{2} (AM|PM)$/);
+    expect(facts.cashToSafeSelf).toBe(false);
+  });
+
+  it("flags the session's own cashier, amber", () => {
+    const facts = cockpitFacts(session({ receivedByName: "RAVI K", receivedOn: at, receivedBySelf: true }), new Date(at));
+    expect(facts.cashToSafe).toMatch(/^RAVI K · \d{2}:\d{2} (AM|PM) · own cashier$/);
+    expect(facts.cashToSafeSelf).toBe(true);
+  });
+
+  it("is a dash while nobody has", () => {
+    expect(cashToSafeText(session())).toBe("—");
+    // A stray flag with no receiver is not amber.
+    expect(cockpitFacts(session({ receivedBySelf: true }), new Date(at))).toMatchObject({ cashToSafe: "—", cashToSafeSelf: false });
+    // No time: the name alone.
+    expect(cashToSafeText(session({ receivedByName: "ANU", receivedOn: null }))).toBe("ANU");
   });
 });

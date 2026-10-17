@@ -28,6 +28,12 @@
  * of the branch still holding a drawer, any date, and the cash in them; and in
  * the list, a live row's "Cash exp." — blank in the grid until the count —
  * carries the server's live figure (`../shared/live-cash.ts`).
+ *
+ * Waiting for approval (Qt 425fa80, notes 124 §5): a toolbar button whose
+ * caption counts what waits for an approver at the branch (re-read with every
+ * page of the list, and when the inbox closes; primary while any wait). It
+ * opens the approvers' inbox (`approval-inbox-dialog.tsx`); its close reloads
+ * the list.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -38,6 +44,7 @@ import { useBusinessContext } from "@/components/layout/business-context";
 import { toast } from "@/lib/notify";
 import masterStyles from "@/app/master/state-master/page.module.scss";
 import receiptStyles from "@/features/accounts/receipt/page.module.scss";
+import { INBOX_BUTTON_TIP } from "../shared/approval-gate";
 import { addDaysIso, cockpitHref, textOf, todayIso } from "../shared/format";
 import { LiveCashLine } from "../shared/live-cash-line";
 import { formatFigure, formatMoney, formatSignedMoney, toPaise } from "../shared/money";
@@ -46,6 +53,8 @@ import type { TillSessionKey } from "../shared/wire/types";
 import tillStyles from "../shared/till.module.scss";
 import { useLiveCash } from "../shared/use-live-cash";
 import { EndShiftDialog } from "../session/end-shift-dialog";
+import { inboxButtonState } from "./approval-inbox";
+import { ApprovalInboxDialog } from "./approval-inbox-dialog";
 import { JournalDialog } from "./journal-dialog";
 import { SessionBadge } from "./session-badge";
 import {
@@ -59,6 +68,7 @@ import {
   varianceTone,
   type SessionRow,
 } from "./session-list";
+import { useApprovalCount } from "./use-approval-count";
 
 const API_ENDPOINTS = {
   // The shell's own form and delete never run here (no Add, no Edit, no
@@ -148,6 +158,7 @@ export default function TillSessionsScreen() {
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [countKey, setCountKey] = useState<TillSessionKey | null>(null);
   const [journalRow, setJournalRow] = useState<SessionRow | null>(null);
+  const [inboxOpen, setInboxOpen] = useState(false);
   /** The highlighted row, as the hint callback last saw it. */
   const selected = useRef<SessionRow | null>(null);
 
@@ -156,6 +167,12 @@ export default function TillSessionsScreen() {
     cashByTss: liveCash,
     refreshUnlessLoading: refreshLive,
   } = useLiveCash({ companyId, branchId });
+  const {
+    count: waitingCount,
+    refresh: refreshWaiting,
+    refreshUnlessLoading: refreshWaitingUnlessLoading,
+  } = useApprovalCount({ companyId, branchId });
+  const inboxButton = inboxButtonState(waitingCount);
   const columnRenderOverrides = useMemo(
     () => ({ ...COLUMN_RENDER_OVERRIDES, cash_expected: cashExpectedRenderer(liveCash) }),
     [liveCash],
@@ -193,6 +210,8 @@ export default function TillSessionsScreen() {
       // the wire. The shell has no "page loaded" callback; it builds this query
       // once per page request, which is the same moment.
       refreshLive();
+      // And the inbox button's count (Qt `refreshInboxCount` on `dataLoaded`).
+      refreshWaitingUnlessLoading();
       return {
         page: String(currentPage),
         limit: String(pageSize),
@@ -202,7 +221,7 @@ export default function TillSessionsScreen() {
         grid_param: JSON.stringify(sessionGridParams({ companyId, branchId, fromDate, toDate, status, variance })),
       };
     },
-    [branchId, companyId, fromDate, refreshLive, refreshNonce, status, toDate, variance],
+    [branchId, companyId, fromDate, refreshLive, refreshNonce, refreshWaitingUnlessLoading, status, toDate, variance],
   );
 
   const listStateResetKey = `${companyId}|${branchId}|${fromDate}|${toDate}|${status}|${variance}|${refreshNonce}`;
@@ -229,7 +248,7 @@ export default function TillSessionsScreen() {
     setCountKey(row.key);
   }, []);
 
-  const dialogOpen = countKey !== null || journalRow !== null;
+  const dialogOpen = countKey !== null || journalRow !== null || inboxOpen;
 
   // F6 count / close · Enter the cockpit — the Qt keys. Quiet while a dialog
   // is up, so its own keys are not also this screen's.
@@ -393,10 +412,23 @@ export default function TillSessionsScreen() {
             </span>
             <span>Count / close</span>
           </button>
+          <span className="erp-ms-tsep" aria-hidden="true" />
+          <button
+            type="button"
+            className={`${masterStyles.iconBtn} ${masterStyles.iconBtnHistory} erp-ms-tbtn${inboxButton.primary ? " erp-ms-tbtn--primary" : ""}`}
+            title={INBOX_BUTTON_TIP}
+            disabled={!companyId || !branchId}
+            onClick={() => setInboxOpen(true)}
+          >
+            <span className={`${masterStyles.iconBtnBox} erp-ms-tbtn-icon`}>
+              <ErpActionIcon name="history" />
+            </span>
+            <span>{inboxButton.text}</span>
+          </button>
         </>
       );
     },
-    [openCockpit, openCount],
+    [branchId, companyId, inboxButton.primary, inboxButton.text, openCockpit, openCount],
   );
 
   return (
@@ -443,6 +475,19 @@ export default function TillSessionsScreen() {
         }}
       />
       <JournalDialog session={journalRow} onClose={() => setJournalRow(null)} />
+      <ApprovalInboxDialog
+        open={inboxOpen}
+        scope={{ companyId, branchId }}
+        onClose={() => {
+          setInboxOpen(false);
+          refreshWaiting();
+          refresh();
+        }}
+        onOpenCockpit={(key) => {
+          setInboxOpen(false);
+          router.push(cockpitHref(key));
+        }}
+      />
     </>
   );
 }

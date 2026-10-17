@@ -308,23 +308,23 @@ describe("the tender surcharge (Qt 6f15977)", () => {
     );
   }
 
-  it("collects 202.02 on the UPI row for the 200 typed", () => {
+  it("collects 202.00 on the UPI row for the 200 typed", () => {
     const draft = theSplit();
-    expect(draft.tenders.map((tender) => tender.amount)).toEqual([100, 202.02, 700]);
-    expect(draft.tenders[1]).toMatchObject({ forBills: 200, surchargeAmt: 2.02 });
+    expect(draft.tenders.map((tender) => tender.amount)).toEqual([100, 202, 700]);
+    expect(draft.tenders[1]).toMatchObject({ forBills: 200, surchargeAmt: 2 });
   });
 
-  it("seeds SURCHARGE_RECOVERED — CR, settling nothing — for the 2.02", () => {
+  it("seeds SURCHARGE_RECOVERED — CR, settling nothing — for the 2.00", () => {
     const line = theSplit().otherLines.find((entry) => entry.role === "SURCHARGE_RECOVERED");
-    expect(line).toMatchObject({ amount: 2.02, drCr: "CR", settlesBill: false, seeded: true });
+    expect(line).toMatchObject({ amount: 2, drCr: "CR", settlesBill: false, seeded: true });
   });
 
-  it("balances: 1,002.02 received = 1,000 allocated + 2.02 surcharge", () => {
+  it("balances: 1,002.00 received = 1,000 allocated + 2.00 surcharge", () => {
     const identity = computeIdentity(theSplit());
     expect(identity).toMatchObject({
-      received: 1002.02,
+      received: 1002,
       allocated: 1000,
-      additions: 2.02,
+      additions: 2,
       onAccount: 0,
       balances: true,
     });
@@ -336,9 +336,9 @@ describe("the tender surcharge (Qt 6f15977)", () => {
     expect(body.post).toBe(true);
     expect(body.onAccount).toBe(0);
     expect(body.otherLines).toContainEqual(
-      expect.objectContaining({ role: "SURCHARGE_RECOVERED", drCr: "CR", amount: 2.02 }),
+      expect.objectContaining({ role: "SURCHARGE_RECOVERED", drCr: "CR", amount: 2 }),
     );
-    expect(body.tenders[1]).toMatchObject({ tdAmount: 202.02 });
+    expect(body.tenders[1]).toMatchObject({ tdAmount: 202 });
     // The master does not let it be edited, so the server computes it.
     expect(body.tenders[1]).not.toHaveProperty("tdSurchargeAmt");
   });
@@ -347,7 +347,7 @@ describe("the tender surcharge (Qt 6f15977)", () => {
     let draft = run(start(), { type: "ADD_TENDER", master: cash, amount: 200 });
     const rowKey = draft.tenders[0].key;
     draft = run(draft, { type: "RETARGET_TENDER", rowKey, master: upi });
-    expect(draft.tenders[0].amount).toBe(202.02);
+    expect(draft.tenders[0].amount).toBe(202);
     expect(draft.otherLines.map((line) => line.role)).toEqual(["SURCHARGE_RECOVERED"]);
     draft = run(draft, { type: "RETARGET_TENDER", rowKey, master: cash });
     expect(draft.tenders[0].amount).toBe(200);
@@ -356,8 +356,8 @@ describe("the tender surcharge (Qt 6f15977)", () => {
 
   it("grosses up an amount the Amount box adds with the row", () => {
     const { draft } = draftReducer(start(), { type: "ADD_TENDER", master: upi, amount: 200 });
-    expect(draft.tenders[0].amount).toBe(202.02);
-    expect(draft.otherLines[0]).toMatchObject({ role: "SURCHARGE_RECOVERED", amount: 2.02 });
+    expect(draft.tenders[0].amount).toBe(202);
+    expect(draft.otherLines[0]).toMatchObject({ role: "SURCHARGE_RECOVERED", amount: 2 });
   });
 
   it("marks the figure to travel when the master lets it be edited", () => {
@@ -379,7 +379,7 @@ describe("the tender surcharge (Qt 6f15977)", () => {
       bills: [aBill({ billId: "b1", pendingAmount: 5000 })],
     });
     draft = run(draft, { type: "ADD_TENDER", master: upi, amount: 1000 }, { type: "AUTO_ALLOCATE" });
-    expect(draft.tenders[0].amount).toBe(1010.1);
+    expect(draft.tenders[0].amount).toBe(1010);
     expect(draft.bills[0].receive).toBe(1000);
     expect(computeIdentity(draft).balances).toBe(true);
   });

@@ -31,7 +31,8 @@
 
 .overlay {
   position: fixed;
-  inset: 0;
+  // An entry popup (`ENTRY_MODAL_OVERLAY_STYLE`) starts below the app header.
+  inset: var(--erp-modal-overlay-top, 0px) 0 0 0;
   z-index: var(--erp-modal-overlay-z-index, var(--erp-z-modal));
   display: flex;
   align-items: center;

@@ -3,11 +3,13 @@
 /**
  * The Ledger cell's picker — the ledgers a line on THIS side may use.
  *
- * `/vouchers/ledger-pick` applies the type's side groups (for Contra: Cash-in-
- * Hand, Bank Accounts, Bank OD A/c and their sub-groups) and leaves out the
+ * `/vouchers/ledger-pick` applies the type's side groups and leaves out the
  * instrument-controlled ledgers (Cheques In Hand, a card or UPI clearing
- * ledger) — the same filter the Qt popup's grid 119 runs. The search is the
- * server's loose one, on name and alias.
+ * ledger) — the same filter the Qt popup's grid 119 runs. Since notes 130 it
+ * also leaves out every cash / bank ledger, on every type, and lists nothing
+ * on a Receipt's Dr / a Payment's Cr side: the money side is a tender (the
+ * line's instrument; on a Contra the tender list, which opens instead of this
+ * picker). The search is the server's loose one, on name and alias.
  *
  * Opened by a typed character (which seeds the search), Enter, F2 or a click
  * on the cell. ↑/↓ move, Enter picks, Esc closes.

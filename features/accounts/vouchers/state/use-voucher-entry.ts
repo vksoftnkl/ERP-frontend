@@ -23,6 +23,12 @@
  * instrument balances itself (its money leg is the server's), so it is out
  * of that difference. Once a ledger is picked the line's side follows it.
  *
+ * ── Contra: a tender on every line ───────────────────────────────────────
+ * Each Contra line moves money, so its Ledger cell picks a TENDER (Cash, or
+ * a bank's BANK tender) and the line posts to that tender's ledger with its
+ * `tenderId` (notes 126 §6, `domain/contra.ts`). After the pick it goes on
+ * as a ledger pick does (`finishPick`).
+ *
  * ── Bill-wise, on demand ─────────────────────────────────────────────────
  * Enter on a party line's amount opens the bill-wise popup on the server's
  * party leg (on a payment with TDS, the gross), with the party's open bills
@@ -82,17 +88,18 @@ import {
   type BillRow,
   type LineBills,
 } from "../domain/bills";
+import { applyContraTender, contraTenders, isContra } from "../domain/contra";
 import { generatedFromDerived, postDatedPaise, readPosted, type GeneratedRow, type PostDatedNote } from "../domain/generated";
 import type { LineInstrument } from "../domain/instruments";
 import { isVoucherWorthRemembering } from "../domain/memory";
 import {
   adoptNames,
   amountPaise,
-  balancingAmount,
   blankLine,
   buildHeader,
   buildLines,
   draftRowNos,
+  finishLedgerPick,
   formatPaise,
   isBlankLine,
   isSendable,
@@ -472,6 +479,8 @@ export function useVoucherEntry(options: UseVoucherEntryOptions) {
   /** A payment: the parties are debited, the money leaves (Qt `paying()`). */
   const paying = rules?.partySide === "DR";
   const instrumentsOn = Boolean(rules?.instruments);
+  /** A Contra: the Ledger cell picks a tender, never a ledger (notes 126 §6). */
+  const contra = isContra(rules);
   /** Many parties on the lines, settled in the bill-wise popup. */
   const billwiseOn = Boolean(rules && rules.partyMode === "MANY" && rules.billwiseMode !== "OFF");
   /** One party on the header (the accounting Sales / Purchase, the notes). */
@@ -490,13 +499,15 @@ export function useVoucherEntry(options: UseVoucherEntryOptions) {
   });
   const sideOf = useCallback((current: readonly VoucherLine[]) => newLineSide(current, rulesRef.current), []);
 
-  // ── Lookups for instruments ───────────────────────────────────────────────
+  // ── Lookups for instruments — and a Contra's tenders ──────────────────────
   const tendersQuery = useGetVoucherInstrumentsQuery(
-    instrumentsOn && scope.companyId
+    (instrumentsOn || contra) && scope.companyId
       ? { companyId: scope.companyId, branchId: scope.branchId, typeCode }
       : skipToken,
   );
   const tenders = useMemo(() => tendersQuery.data?.tenders ?? [], [tendersQuery.data]);
+  /** What a Contra line may be: the CASH tenders and each bank's BANK tender. */
+  const moneyTenders = useMemo(() => (contra ? contraTenders(tenders) : []), [contra, tenders]);
   const booksQuery = useGetVoucherChequeBooksQuery(
     instrumentsOn && paying && scope.companyId ? { companyId: scope.companyId, branchId: scope.branchId } : skipToken,
   );
@@ -852,9 +863,34 @@ export function useVoucherEntry(options: UseVoucherEntryOptions) {
   );
 
   /**
-   * A ledger picked on a line. Another party: the old one's bills go with it.
-   * On the side that balances a party-first voucher, it opens with the
-   * difference. Returns the line's side, where the cursor goes next.
+   * What follows a pick on the Ledger cell, from the picker or a Contra's
+   * tender list (Qt `finishLedgerPick`): the line takes the pick; on the side
+   * that balances a party-first voucher it opens with the difference, and a
+   * blank line follows. Returns the line's side, where the cursor goes next.
+   */
+  const finishPick = useCallback(
+    (key: string, pick: (line: VoucherLine) => VoucherLine): DrCr | null => {
+      const line = latest.current.lines.find((candidate) => candidate.key === key);
+      if (!line || readOnly) {
+        return null;
+      }
+      setLines((current) =>
+        finishLedgerPick(
+          current.map((row) => (row.key === key ? pick(row) : row)),
+          key,
+          rulesRef.current,
+          sideOf,
+        ),
+      );
+      touch();
+      return line.drCr;
+    },
+    [readOnly, sideOf, touch],
+  );
+
+  /**
+   * A ledger picked on a line — never a tender's, so a tender the line had
+   * goes. Another party: the old one's bills go with it.
    */
   const pickLedger = useCallback(
     (key: string, ledger: LedgerPickRow): DrCr | null => {
@@ -862,30 +898,6 @@ export function useVoucherEntry(options: UseVoucherEntryOptions) {
       if (!line || readOnly) {
         return null;
       }
-      setLines((current) => {
-        const next = current.map((row) =>
-          row.key === key
-            ? {
-                ...row,
-                ledgerId: ledger.ledId,
-                ledgerName: ledger.name,
-                groupName: ledger.groupName,
-                flags: {
-                  isParty: ledger.isParty,
-                  isBillByBill: ledger.isBillByBill,
-                  isTdsApplicable: ledger.isTdsApplicable,
-                },
-                // The ledger's own rate, only where the line has none of its own.
-                taxId: rulesRef.current?.gstRegister && !row.taxId ? (ledger.defaultTaxId ?? "") : row.taxId,
-              }
-            : row,
-        );
-        const amount = balancingAmount(next, key, rulesRef.current);
-        return withTrailingLine(
-          amount ? next.map((row) => (row.key === key ? { ...row, amount } : row)) : next,
-          sideOf,
-        );
-      });
       if (line.ledgerId !== ledger.ledId) {
         setBills((current) => {
           if (!current[key]) {
@@ -896,10 +908,38 @@ export function useVoucherEntry(options: UseVoucherEntryOptions) {
           return next;
         });
       }
-      touch();
-      return line.drCr;
+      return finishPick(key, (row) => ({
+        ...row,
+        ledgerId: ledger.ledId,
+        ledgerName: ledger.name,
+        groupName: ledger.groupName,
+        flags: {
+          isParty: ledger.isParty,
+          isBillByBill: ledger.isBillByBill,
+          isTdsApplicable: ledger.isTdsApplicable,
+        },
+        tenderId: "",
+        tenderName: "",
+        // The ledger's own rate, only where the line has none of its own.
+        taxId: rulesRef.current?.gstRegister && !row.taxId ? (ledger.defaultTaxId ?? "") : row.taxId,
+      }));
     },
-    [readOnly, sideOf, touch],
+    [finishPick, readOnly],
+  );
+
+  /**
+   * A Contra line's tender (Qt `applyContraTender`): the line posts to the
+   * tender's ledger and carries its id; then on as after a ledger pick.
+   */
+  const pickTender = useCallback(
+    (key: string, tenderId: string): DrCr | null => {
+      const tender = moneyTenders.find((candidate) => candidate.tenderId === tenderId);
+      if (!tender) {
+        return null;
+      }
+      return finishPick(key, (row) => applyContraTender(row, tender));
+    },
+    [finishPick, moneyTenders],
   );
 
   const setTdsBase = useCallback(
@@ -1607,6 +1647,7 @@ export function useVoucherEntry(options: UseVoucherEntryOptions) {
     rights,
     paying,
     instrumentsOn,
+    contra,
     billwiseOn,
     partyOne,
     cardOn,
@@ -1628,6 +1669,8 @@ export function useVoucherEntry(options: UseVoucherEntryOptions) {
     setCardFigure,
     setItcForRows,
     tenders,
+    moneyTenders,
+    tendersReading: tendersQuery.isFetching,
     tendersProblem: tendersQuery.error ? voucherError(tendersQuery.error) : null,
     books,
     booksLoading: booksQuery.isFetching,
@@ -1657,6 +1700,7 @@ export function useVoucherEntry(options: UseVoucherEntryOptions) {
     updateLine,
     setSide,
     pickLedger,
+    pickTender,
     setTdsBase,
     instrumentBlock,
     setInstrument,

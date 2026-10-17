@@ -39,22 +39,27 @@ describe("surchargeTermsOf", () => {
 });
 
 describe("surchargeOn — the server's own figure", () => {
-  it("charges the percentage on the WHOLE gross amount", () => {
-    // receipt-lines.ts: amount × perc / 100, the surcharge inside the amount.
-    expect(surchargeOn(UPI_1PC, 202.02)).toBe(2.02);
-    expect(surchargeOn({ perc: 2, flat: 0, editable: false }, 5100)).toBe(102);
+  it("takes the percentage INSIDE the gross amount (notes 127 §4)", () => {
+    // receipt-lines.ts: amount × perc / (100 + perc) — 202 at 1% is 2.00,
+    // not 202 × 1% = 2.02.
+    expect(surchargeOn(UPI_1PC, 202)).toBe(2);
+    expect(surchargeOn({ perc: 2, flat: 0, editable: false }, 5100)).toBe(100);
   });
 
   it("rounds half-up on the exact decimal, as Prisma's Decimal does", () => {
-    // 100.50 × 1% = 1.005 — a double makes it 1.00499…, which rounds to 1.00
-    // and is a paisa short of the line the server seeds.
-    expect(surchargeOn(UPI_1PC, 100.5)).toBe(1.01);
-    expect(surchargeOn({ perc: 1.25, flat: 0, editable: false }, 202)).toBe(2.53);
+    // The server's own spec: 1000 × 2 / 102 = 19.6078…, 101.50 × 1.5 / 101.5 = 1.50.
+    expect(surchargeOn({ perc: 2, flat: 0, editable: false }, 1000)).toBe(19.61);
+    expect(surchargeOn({ perc: 1.5, flat: 0, editable: false }, 101.5)).toBe(1.5);
+    // 91.91 at 4% — 91.91 × 4 / 104 = 3.535 exactly. A double makes it
+    // 3.53499…, which rounds to 3.53 and is a paisa short of the line the
+    // server seeds.
+    expect(surchargeOn({ perc: 4, flat: 0, editable: false }, 91.91)).toBe(3.54);
+    expect(surchargeOn({ perc: 1.25, flat: 0, editable: false }, 202.5)).toBe(2.5);
   });
 
   it("charges the flat figure only when there is no percentage", () => {
     expect(surchargeOn(FLAT_5, 10)).toBe(5);
-    expect(surchargeOn({ perc: 1, flat: 5, editable: false }, 1000)).toBe(10);
+    expect(surchargeOn({ perc: 1, flat: 5, editable: false }, 1010)).toBe(10);
   });
 
   it("charges nothing on nothing", () => {
@@ -65,14 +70,19 @@ describe("surchargeOn — the server's own figure", () => {
 });
 
 describe("grossFor — what to collect so the bills get what was typed", () => {
-  it("makes 200 at 1% into 202.02, surcharge 2.02 (the Qt case)", () => {
+  it("makes 200 at 1% into 202.00, surcharge 2.00 (the Qt case, as on the bill)", () => {
     const gross = grossFor(UPI_1PC, 200);
-    expect(gross).toBe(202.02);
-    expect(surchargeOn(UPI_1PC, gross)).toBe(2.02);
+    expect(gross).toBe(202);
+    expect(surchargeOn(UPI_1PC, gross)).toBe(2);
+  });
+
+  it("makes 1,000 at 1% into 1,010.00, surcharge 10.00", () => {
+    expect(grossFor(UPI_1PC, 1000)).toBe(1010);
+    expect(surchargeOn(UPI_1PC, 1010)).toBe(10);
   });
 
   it("leaves exactly the typed figure for the bills, paisa for paisa", () => {
-    for (const perc of [0.5, 1, 1.75, 2, 3.333, 18]) {
+    for (const perc of [0.5, 1, 1.75, 2, 3.333, 18, 100]) {
       const terms: SurchargeTerms = { perc, flat: 0, editable: false };
       for (let paise = 1; paise <= 500_000; paise += 1_237) {
         const forBills = paise / 100;
@@ -93,8 +103,9 @@ describe("grossFor — what to collect so the bills get what was typed", () => {
     expect(grossFor(null, 200)).toBe(200);
   });
 
-  it("does not divide by zero on a 100% master", () => {
-    expect(grossFor({ perc: 100, flat: 0, editable: false }, 200)).toBe(200);
+  it("doubles the figure on a 100% master (half the gross is surcharge)", () => {
+    // The old `forBills / (1 − p)` divided by zero here; on top, it is plain.
+    expect(grossFor({ perc: 100, flat: 0, editable: false }, 200)).toBe(400);
   });
 });
 
@@ -102,9 +113,9 @@ describe("applySurcharge — a row's four money fields", () => {
   it("takes the typed figure as what goes to the bills and grosses it up", () => {
     const row = applySurcharge(aTender(), UPI_1PC, 200);
     expect(row).toMatchObject({
-      amount: 202.02,
+      amount: 202,
       forBills: 200,
-      surchargeAmt: 2.02,
+      surchargeAmt: 2,
       sendSurcharge: false,
     });
   });
@@ -123,7 +134,7 @@ describe("applySurcharge — a row's four money fields", () => {
       surchargeAmt: 0,
       sendSurcharge: false,
     });
-    expect(applySurcharge(backOnCash, UPI_1PC).amount).toBe(202.02);
+    expect(applySurcharge(backOnCash, UPI_1PC).amount).toBe(202);
   });
 
   it("falls back on the amount when nothing was typed yet", () => {
@@ -142,8 +153,8 @@ describe("the totals", () => {
       applySurcharge(aTender(), UPI_1PC, 200),
       applySurcharge(aTender(), UPI_1PC, 100.5),
     ];
-    // 100.50 at 1% grosses to 101.52 (surcharge 1.02).
-    expect(surchargeTotal(tenders)).toBe(3.04);
+    // 100.50 at 1% grosses to 101.51 (surcharge 1.01).
+    expect(surchargeTotal(tenders)).toBe(3.01);
     expect(forBillsTotal(tenders)).toBe(400.5);
   });
 

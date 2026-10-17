@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { layoutRect } from "@/lib/ui-scale";
 import styles from "./erp-header.module.css";
 import { clearAuthSession } from "@/lib/auth/session";
 import { clearBusinessContextSession } from "@/components/layout/business-context";
@@ -699,8 +700,29 @@ export default function ErpHeader({
     if (!canUseClientSideRouting()) { window.location.replace("/login"); return; }
     router.replace("/login");
   }, [dispatch, onLogout, router]);
+  // The header's height, published as `--erp-app-header-height`: an entry
+  // popup (`Z_ENTRY_MODAL`) starts below it, so the menu stays reachable while
+  // the popup is open. Layout pixels — the root is zoomed (lib/ui-scale).
+  const shellRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const node = shellRef.current;
+    if (!node || typeof ResizeObserver === "undefined") {
+      return undefined;
+    }
+    const root = document.documentElement;
+    const publish = () => {
+      root.style.setProperty("--erp-app-header-height", `${Math.ceil(layoutRect(node).height)}px`);
+    };
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty("--erp-app-header-height");
+    };
+  }, []);
   return (
-    <div className={styles.headerShell}>
+    <div ref={shellRef} className={styles.headerShell}>
       <header className={styles.topHeader}>
         <nav
           ref={primaryMenuRef}

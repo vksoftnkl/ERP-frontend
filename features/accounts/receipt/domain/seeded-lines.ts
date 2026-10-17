@@ -100,8 +100,8 @@ export function rebuildSeededLines(input: SeedInput): OtherLineRow[] {
     ROUND_OFF: toRupees(sumOf(input.bills, (bill) => bill.roundOff)),
     BANK_CHARGES: toRupees(sumOf(input.tenders, (tender) => tender.mdrAmt)),
     // The UPI / card surcharge the customer paid ON TOP: income that settles
-    // nothing, so the identity counts it as an ADDITION — 1,002.02 received =
-    // 1,000 allocated + 2.02 surcharge. The server seeds the same line from
+    // nothing, so the identity counts it as an ADDITION — 1,010.00 received =
+    // 1,000 allocated + 10.00 surcharge. The server seeds the same line from
     // the tenders and refuses one that disagrees, which is why it is the
     // rows' own `surchargeAmt` (the server's figure) and not recomputed here.
     SURCHARGE_RECOVERED: surchargeTotal(input.tenders),

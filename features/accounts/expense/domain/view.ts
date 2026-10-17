@@ -31,6 +31,7 @@ import type {
   ExpenseTillSession,
   ExpenseValidatePayload,
 } from "../expense.types";
+import { refusalsThatShutPost } from "./approval";
 import { formatPaise, paiseOfNumber, paiseOfText, sumPaise } from "./money";
 import { isEmptyLine } from "./payload";
 
@@ -274,8 +275,11 @@ export function buildExpenseView(input: ExpenseViewInput): ExpenseView {
   }
 
   // ── refusals, warnings, approval ───────────────────────────────────────
+  // The approval need is the band's, not the red list's: Post asks for it.
   const payload = answer?.payload ?? null;
-  let refusals = payload ? payload.refusals.map((refusal) => `${refusal.code} — ${refusal.message}`) : [];
+  let refusals = payload
+    ? refusalsThatShutPost(payload.refusals).map((refusal) => `${refusal.code} — ${refusal.message}`)
+    : [];
   if (validateError) {
     refusals = [validateError];
   }
@@ -289,7 +293,8 @@ export function buildExpenseView(input: ExpenseViewInput): ExpenseView {
         text:
           `total ${formatPaise(paiseOfNumber(payload.approval.amount))} is over ` +
           `${formatPaise(paiseOfNumber(payload.approval.threshold))} — needs a ${payload.approval.minRole} ` +
-          `(${payload.approval.channel}). Reported only: the approval gate is till build phase 3, so the voucher posts.`,
+          `(${payload.approval.channel}). Posting asks for it: as shipped the voucher posts and the request ` +
+          "waits in the approvers' inbox; a company that refuses asks for the approver's PIN first.",
       }
     : null;
 

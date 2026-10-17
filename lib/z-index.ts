@@ -13,6 +13,21 @@
  * you ever need that, you want a new tier in the scale, not a computed value.
  */
 
+/**
+ * A master's Add/Edit popup that keeps its draft: under the header (and
+ * starting below it), so the menu stays reachable while it is open.
+ */
+export const Z_ENTRY_MODAL = "var(--erp-z-entry-modal)";
+
+/**
+ * The overlay style for an entry popup — the layer, and a top edge below the
+ * header (`--erp-app-header-height`, published by the header).
+ */
+export const ENTRY_MODAL_OVERLAY_STYLE = {
+  "--erp-modal-overlay-z-index": Z_ENTRY_MODAL,
+  "--erp-modal-overlay-top": "var(--erp-app-header-height, 0px)",
+} as const;
+
 /** Standard modal overlay. */
 export const Z_MODAL = "var(--erp-z-modal)";
 

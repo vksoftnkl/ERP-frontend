@@ -228,11 +228,11 @@ describe("the save-and-post body (notes 106)", () => {
     const body = buildSaveAndPostPayload({
       ...input,
       tenders: [
-        aTender({ amount: 202.02, surchargeAmt: 2.02, sendSurcharge: true }),
-        aTender({ amount: 101.01, surchargeAmt: 1.01, sendSurcharge: false }),
+        aTender({ amount: 202, surchargeAmt: 2, sendSurcharge: true }),
+        aTender({ amount: 101, surchargeAmt: 1, sendSurcharge: false }),
       ],
     });
-    expect(body.tenders[0].tdSurchargeAmt).toBe(2.02);
+    expect(body.tenders[0].tdSurchargeAmt).toBe(2);
     expect(body.tenders[1]).not.toHaveProperty("tdSurchargeAmt");
   });
 });

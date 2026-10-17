@@ -11,6 +11,10 @@
  * Bag mode (`request.bag`, notes 113): a received bag's difference — APPROVE
  * only (no Recount), the bag named in the Event fact, its `tcmId` sent.
  *
+ * Closed-gap mode (`request.closedGap`, Qt 425fa80 `setClosedGap`, notes
+ * 124): the cash gap a CLOSED session left undecided — APPROVE only, its own
+ * hint, booked at once.
+ *
  * Keys: Ctrl+Enter decides, Esc cancels.
  */
 import { useRef, useState } from "react";
@@ -24,12 +28,12 @@ import { TillDialog } from "../shared/till-dialog";
 import type { TillVarianceDecision } from "../shared/wire/types";
 import styles from "../shared/till.module.scss";
 import {
-  BAG_DECIDE_HINT,
-  DECIDE_HINT,
+  approveOnly,
   decideAmount,
   decideBody,
   decideButtonLabel,
   decideEventText,
+  decideHint,
   decideProblem,
   decideRefusal,
   initialDecideForm,
@@ -159,8 +163,9 @@ function DecideBody({ request, reasons, onClose, onDecided }: VarianceDecideDial
               ["RECOUNT", "Recount"],
             ] as const
           )
-            // A bag's difference: the receiver's count stands — no recount.
-            .filter(([value]) => !request.bag || value === "APPROVE")
+            // A bag's difference: the receiver's count stands; a closed
+            // session's gap: the cash was already handed over — no recount.
+            .filter(([value]) => !approveOnly(request) || value === "APPROVE")
             .map(([value, label]) => (
               <label key={value} className={styles.radio}>
                 <input
@@ -241,7 +246,7 @@ function DecideBody({ request, reasons, onClose, onDecided }: VarianceDecideDial
         />
       </div>
 
-      <p className={styles.muted}>{request.bag ? BAG_DECIDE_HINT : DECIDE_HINT}</p>
+      <p className={styles.muted}>{decideHint(request)}</p>
       {refusal ? (
         <p className={cx(styles.warn, styles.warnDanger)}>
           <RefusalText refusal={refusal} />

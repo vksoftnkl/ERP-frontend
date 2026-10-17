@@ -37,6 +37,7 @@ import { skipToken } from "@reduxjs/toolkit/query";
 import { useBusinessContext } from "@/components/layout/business-context";
 import { NexDropdownSingle } from "@/components/design-system/dropdown";
 import { useDropdownId } from "@/lib/configured-dropdowns";
+import { toast } from "@/lib/notify";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import { useUiTableId } from "@/lib/ui-tables";
 import type { ScreenMemoryOption } from "@/lib/use-screen-memory";
@@ -55,6 +56,7 @@ import { BillCard } from "./components/bill-card";
 import { ExceptionsDialog } from "./components/exceptions-dialog";
 import { GstBox } from "./components/gst-box";
 import { ReviewDialog } from "./components/review-dialog";
+import { TenderPicker } from "./components/tender-picker";
 import { VoucherExtras } from "./components/voucher-extras";
 import { amountPaise, formatPaise } from "./domain/lines";
 import own from "./vouchers.module.scss";
@@ -222,6 +224,8 @@ export default function VoucherScreen(props: VoucherScreenProps) {
   const [currentKey, setCurrentKey] = useState<string | null>(null);
   /** The ledger picker — on a line, or (`key` null) for the header party. */
   const [picker, setPicker] = useState<{ key: string | null; seed: string } | null>(null);
+  /** A Contra line's tender list, in the picker's place (notes 126 §6). */
+  const [tenderPick, setTenderPick] = useState<{ key: string; letter: string } | null>(null);
   const [exceptionsOpen, setExceptionsOpen] = useState(false);
   const [instrumentFor, setInstrumentFor] = useState<string | null>(null);
   const pageRef = useRef<HTMLDivElement | null>(null);
@@ -276,6 +280,38 @@ export default function VoucherScreen(props: VoucherScreenProps) {
     const side = api.pickLedger(key, ledger);
     // On to the amount on the line's own side.
     focusCell(key, side === "CR" ? "credit" : "debit");
+  };
+
+  /**
+   * The Ledger cell asks for a pick: on a Contra the tender list (Qt
+   * `openContraTenderMenu`), on any other type the ledger picker.
+   */
+  const openLedgerCell = (key: string, seed: string) => {
+    if (!api.contra) {
+      setPicker({ key, seed });
+      return;
+    }
+    if (readOnly) {
+      return;
+    }
+    if (api.moneyTenders.length === 0) {
+      if (api.tendersReading) {
+        say("The tender list is still being read.");
+      } else if (api.tendersProblem) {
+        say(`The tender list has not loaded — ${api.tendersProblem}`);
+      } else {
+        toast.warning("There is no Cash or Bank tender to pick. Create one in Tender Master.", { title: "No tender" });
+      }
+      return;
+    }
+    setTenderPick({ key, letter: seed });
+  };
+
+  const onTenderPicked = (key: string, tenderId: string) => {
+    setTenderPick(null);
+    const side = api.pickTender(key, tenderId);
+    // On to the amount on the line's own side, as after a ledger pick.
+    focusCell(key, side === null ? "ledger" : side === "CR" ? "credit" : "debit");
   };
 
   /** The next line's Ledger — where the next party, or the bank, goes. */
@@ -410,7 +446,13 @@ export default function VoucherScreen(props: VoucherScreenProps) {
     close,
     toList,
     focusParty,
-    modal: dialog !== null || picker !== null || instrumentFor !== null || exceptionsOpen || legSettings.active,
+    modal:
+      dialog !== null ||
+      picker !== null ||
+      tenderPick !== null ||
+      instrumentFor !== null ||
+      exceptionsOpen ||
+      legSettings.active,
     blocked,
   };
   const keyRef = useRef(keyState);
@@ -510,7 +552,7 @@ export default function VoucherScreen(props: VoucherScreenProps) {
   const legsHint = [
     "+ / Insert adds a line",
     "− / Ctrl+Delete removes it",
-    "Enter on Ledger opens the picker",
+    api.contra ? "Enter on Ledger opens the tender list" : "Enter on Ledger opens the picker",
     ...(api.instrumentsOn ? ["Ctrl+Q: the line's instrument", "Enter on an amount: its bills"] : []),
     "grey rows are worked out by the server",
   ].join(" · ");
@@ -764,6 +806,7 @@ export default function VoucherScreen(props: VoucherScreenProps) {
                 generatedStale={!readOnly && !api.fresh}
                 nature={rules?.nature ?? null}
                 tenders={api.tenders}
+                tenderPicker={api.contra}
                 taxRates={api.taxRates}
                 gstSide={api.gstSide}
                 readOnly={readOnly}
@@ -776,7 +819,7 @@ export default function VoucherScreen(props: VoucherScreenProps) {
                 onChange={api.updateLine}
                 onSide={api.setSide}
                 onTdsBase={api.setTdsBase}
-                onPickLedger={(key, seed) => setPicker({ key, seed })}
+                onPickLedger={openLedgerCell}
                 onOpenInstrument={openInstrument}
                 onAmountEnter={(key) => void onAmountEnter(key)}
                 onRefuse={say}
@@ -1064,6 +1107,23 @@ export default function VoucherScreen(props: VoucherScreenProps) {
             } else {
               focusCell(key, "ledger");
             }
+          }}
+        />
+      ) : null}
+
+      {tenderPick && api.contra ? (
+        <TenderPicker
+          title={`Tender — ${
+            (lines.find((line) => line.key === tenderPick.key)?.drCr ?? "DR") === "CR" ? "credit" : "debit"
+          } side of ${typeName}`}
+          tenders={api.moneyTenders}
+          currentTenderId={lines.find((line) => line.key === tenderPick.key)?.tenderId ?? ""}
+          initialLetter={tenderPick.letter}
+          onPick={(tenderId) => onTenderPicked(tenderPick.key, tenderId)}
+          onClose={() => {
+            const key = tenderPick.key;
+            setTenderPick(null);
+            focusCell(key, "ledger");
           }}
         />
       ) : null}

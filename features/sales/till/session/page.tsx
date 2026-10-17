@@ -28,6 +28,12 @@
  * and while the live panel greys the open form, its first live button holds
  * the cursor.
  *
+ * Qt 425fa80 (notes 124 §5): a company on `till.approval_gate` REFUSE answers
+ * an open whose count is not the float with 428 TILL_APPROVAL_REQUIRED. That is
+ * no error popup: the "Needs approval" dialog asks for a FLOAT_MISMATCH on the
+ * counter, and once approved the open goes again with `approvalId`. Closed
+ * without one, the screen is as it was.
+ *
  * Keys: Enter = next field · Ctrl+Enter = open (from any field; Qt
  * 2026-10-12, was F10) · F5 = reload · Esc = not now. Every figure box
  * selects its text on focus.
@@ -42,6 +48,8 @@ import type { ApiRefusal } from "@/lib/api/error-text";
 import { getAuthUserId, getUserInfo } from "@/lib/auth/session";
 import { toast } from "@/lib/notify";
 import { useTillSessionClient } from "../shared/api/till-session-api";
+import { approvalNeededOf, type ApprovalRequestState } from "../shared/approval-gate";
+import { ApprovalRequestDialog } from "../shared/approval-request-dialog";
 import { EMPTY_COUNT, toDenominations, type Denomination } from "../shared/denom";
 import { tillErrorOf } from "../shared/errors";
 import { OPEN_TILL_HREF } from "../shared/format";
@@ -71,6 +79,7 @@ import {
   chosenCounterId,
   counterDisplay,
   dayText,
+  floatApprovalRequest,
   floatWords,
   isCarried,
   isDeviceRefusal,
@@ -82,6 +91,7 @@ import {
   openProblem,
   resumePlan,
   waitPollDue,
+  withApproval,
   type OpenTillForm,
   type OpenTillInputs,
 } from "./open-till";
@@ -140,6 +150,8 @@ export default function OpenTillScreen() {
   const [busy, setBusy] = useState(false);
   const [endShiftKey, setEndShiftKey] = useState<TillSessionKey | null>(null);
   const [movementKey, setMovementKey] = useState<TillSessionKey | null>(null);
+  /** The 428's "Needs approval" dialog, while it is up. */
+  const [approval, setApproval] = useState<ApprovalRequestState | null>(null);
   /** Bumped on every open-check answer: arms the next wait re-check, and COUNTING focuses Continue count. */
   const [checkTick, setCheckTick] = useState(0);
   /** Bumped by a wait re-check that failed: it looks again, the screen as it was. */
@@ -345,7 +357,8 @@ export default function OpenTillScreen() {
   );
 
   // The verbs read this render's state; the key handler reaches them through a ref.
-  const openSession = async () => {
+  /** `approvalId` — the open again, once the gate's approval came through. */
+  const openSession = async (approvalId?: string) => {
     if (busy) return;
     if (problem) {
       toast.warn(problem);
@@ -353,8 +366,15 @@ export default function OpenTillScreen() {
     }
     setBusy(true);
     try {
-      adopt(await client.open(openBody(inputs, { companyId, branchId })));
+      adopt(await client.open(withApproval(openBody(inputs, { companyId, branchId }), approvalId)));
     } catch (error) {
+      // Counted ≠ issued, and the company refuses without an approved
+      // FLOAT_MISMATCH for this counter: ask, then open again (Qt 425fa80).
+      const need = approvalNeededOf(error);
+      if (need) {
+        setApproval(floatApprovalRequest(need, inputs, { companyId, branchId }));
+        return;
+      }
       const refusal = tillErrorOf(error, "The session could not be opened.");
       toast.apiError(error, { fallback: "The session could not be opened." });
       // Someone took the counter (or the cashier opened elsewhere) meanwhile.
@@ -798,6 +818,15 @@ export default function OpenTillScreen() {
           setEndShiftKey(null);
           reload();
         }}
+      />
+      <ApprovalRequestDialog
+        request={approval}
+        onApproved={(tapId) => {
+          setApproval(null);
+          void openSession(tapId);
+        }}
+        // Sent to the inbox, or not asked at all: the count stays, Open waits for the next press.
+        onClose={() => setApproval(null)}
       />
     </div>
   );

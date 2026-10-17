@@ -25,6 +25,7 @@ import {
   toggleGrantWords,
   whoCheck,
   withEveryCompany,
+  withPickedUser,
 } from "./approval-authority";
 
 const CO = "co-1";
@@ -233,6 +234,33 @@ describe("the grant popup", () => {
     });
     expect(withEveryCompany(form, true)).toMatchObject({ everyCompany: true, branchId: "", branchName: "" });
     expect(withEveryCompany(form, false)).toMatchObject({ everyCompany: false, branchId: BR });
+  });
+
+  it("starts a new grant's level at the picked user's User Role (Qt 425fa80)", () => {
+    const fresh = grantFormOf(null, TODAY);
+    const meena = { id: "u2", text: "Meena" };
+    expect(withPickedUser(fresh, meena, { usr_id: "u2", usr_type: "STORE MANAGER" }, true)).toMatchObject({
+      userId: "u2",
+      userName: "Meena",
+      level: "STORE_MANAGER",
+    });
+    // MANAGER is the old name of STORE MANAGER.
+    expect(withPickedUser(fresh, meena, { usr_type: "manager" }, true).level).toBe("STORE_MANAGER");
+    expect(withPickedUser(fresh, meena, { usr_type: "AREA MANAGER" }, true).level).toBe("AREA_MANAGER");
+    // A role with no level keeps what the popup holds (changed by hand, or the default).
+    const changed = { ...fresh, level: "HO_FINANCE" };
+    expect(withPickedUser(changed, meena, { usr_type: "CASHIER" }, true).level).toBe("HO_FINANCE");
+    expect(withPickedUser(changed, meena, {}, true).level).toBe("HO_FINANCE");
+  });
+
+  it("leaves the level alone on a clear, a value set without a pick, or an existing grant", () => {
+    const fresh = { ...grantFormOf(null, TODAY), level: "CASH_OFFICE" };
+    expect(withPickedUser(fresh, null, undefined, true)).toMatchObject({ userId: "", userName: "", level: "CASH_OFFICE" });
+    expect(withPickedUser(fresh, { id: "u2", text: "Meena" }, undefined, true).level).toBe("CASH_OFFICE");
+    const saved = grantFormOf(grant({ taa_role: "SUPERVISOR" }), TODAY);
+    expect(withPickedUser(saved, { id: "u2", text: "Meena" }, { usr_type: "HO FINANCE" }, false).level).toBe(
+      "SUPERVISOR",
+    );
   });
 
   it("refuses in field order, Valid To before Valid From last", () => {

@@ -45,6 +45,8 @@ import { planDeductions } from "@/features/accounts/receipt/domain/deductions";
 import { IdentityStrip } from "@/features/accounts/receipt/components/identity-strip";
 import { PaidDetail, type PaidDetailTarget } from "@/features/accounts/receipt/components/paid-detail";
 import { PromptDialog } from "@/features/accounts/receipt/components/prompt-dialog";
+import type { ApprovalRequestState } from "@/features/sales/till/shared/approval-gate";
+import { ApprovalRequestDialog } from "@/features/sales/till/shared/approval-request-dialog";
 import {
   RECEIPT_FIELD_ATTR,
   advanceReceiptField,
@@ -113,7 +115,9 @@ const PAYMENT_FIELD_ORDER = [
 
 type DialogRequest =
   | { kind: "confirm"; request: ConfirmRequest; resolve: (ok: boolean) => void }
-  | { kind: "prompt"; request: PromptRequest; resolve: (value: string | null) => void };
+  | { kind: "prompt"; request: PromptRequest; resolve: (value: string | null) => void }
+  /** Post's 428 TILL_APPROVAL_REQUIRED (notes 131): the approved request's id, or null. */
+  | { kind: "approval"; request: ApprovalRequestState; resolve: (tapId: string | null) => void };
 
 export type PaymentScreenProps = {
   initialKeys?: PaymentKeys;
@@ -175,6 +179,11 @@ export default function PaymentScreen({
       new Promise<string | null>((resolve) => setDialog({ kind: "prompt", request, resolve })),
     [],
   );
+  const askApproval = useCallback(
+    (request: ApprovalRequestState) =>
+      new Promise<string | null>((resolve) => setDialog({ kind: "approval", request, resolve })),
+    [],
+  );
 
   const api = usePaymentDraft({
     scope,
@@ -184,6 +193,7 @@ export default function PaymentScreen({
     rights,
     confirm,
     prompt,
+    askApproval,
     memory,
   });
   const { draft, dispatch, identity, masters, busy, editable } = api;
@@ -1057,6 +1067,22 @@ export default function PaymentScreen({
           }}
         />
       ) : null}
+
+      <ApprovalRequestDialog
+        request={dialog?.kind === "approval" ? dialog.request : null}
+        onApproved={(tapId) => {
+          if (dialog?.kind === "approval") {
+            dialog.resolve(tapId);
+          }
+          setDialog(null);
+        }}
+        onClose={() => {
+          if (dialog?.kind === "approval") {
+            dialog.resolve(null);
+          }
+          setDialog(null);
+        }}
+      />
     </div>
   );
 }

@@ -999,6 +999,26 @@ $row-h: 26px;
   color: $ink;
 }
 
+/* ------------------------------------------- by tender / no tender tabs */
+.tenderTab {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.35);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.barHint {
+  flex: 1 1 u(24);
+  min-width: 0;
+  font-size: u(0.64);
+  color: $muted;
+}
+/** A "no tender" group that moved in the range: the Qt grid's danger tone. */
+.rowDanger td {
+  color: $red;
+  font-weight: 600;
+}
+
 /* ------------------------------------------------------------- dialogs */
 .overlay {
   position: fixed;

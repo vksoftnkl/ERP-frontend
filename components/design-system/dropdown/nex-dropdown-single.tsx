@@ -14,7 +14,7 @@ import { dropdownIdKey } from "./config";
 import { DropdownPopup } from "./dropdown-popup";
 import { toRawText } from "./format";
 import styles from "./nex-dropdown.module.scss";
-import type { DropdownParams, DropdownSelection } from "./types";
+import type { DropdownParams, DropdownRow, DropdownSelection } from "./types";
 import { useDropdownKeys } from "./use-dropdown-keys";
 import { useDropdownMaster } from "./use-dropdown-master";
 import { useDropdownSearch } from "./use-dropdown-search";
@@ -33,8 +33,12 @@ export type NexDropdownSingleProps = {
    * fires no callback at all, so there is nothing to block.
    */
   value: DropdownSelection | null;
-  /** Fired on a pick, and with `null` on a clear. Never for a value set by the caller. */
-  onChange: (selection: DropdownSelection | null) => void;
+  /**
+   * Fired on a pick, and with `null` on a clear. Never for a value set by the caller.
+   * `row` is every column of the row picked from the list (Qt `selectedRow()`);
+   * absent for a clear and for a record a master reported back.
+   */
+  onChange: (selection: DropdownSelection | null, row?: DropdownRow) => void;
   /**
    * Values for the dropdown's SQL placeholders. Required by the dropdowns that
    * declare one — 38 (EMPLOYEES) and 45 (SALES AGENTS) today — which fail to run
@@ -160,7 +164,7 @@ export function NexDropdownSingle({
       if (!id) {
         return;
       }
-      onChangeRef.current({ id, text: toRawText(row[config.completionKey]).trim() });
+      onChangeRef.current({ id, text: toRawText(row[config.completionKey]).trim() }, row);
       setQuery(null);
       setOpen(false);
       if (advanceFocusOnSelect && inputRef.current) {

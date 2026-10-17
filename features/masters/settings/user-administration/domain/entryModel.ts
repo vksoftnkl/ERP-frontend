@@ -11,6 +11,8 @@
  * - Once both halves are in, every ticked row ticks the groups above it — in
  *   the baseline too, so a form that only put a missing group back does not
  *   open dirty; the next save sends the group (Qt 6f15977).
+ * - A SUPER ADMIN user opened by anyone else locks read-only once it loads
+ *   (Qt 425fa80, notes 125).
  *
  * The React side (`user-entry-dialog.tsx`) only dispatches and renders.
  */
@@ -22,6 +24,7 @@ import {
   identityFromPayload,
   SERVER_FIELD_TO_FORM,
   sameIdentity,
+  superAdminLock,
   type IdentityErrors,
   type IdentityForm,
   type UserFacts,
@@ -38,6 +41,10 @@ export type EntryState = {
   usrId: string | null;
   /** Opened to look, not to change: no Save, every control inert. */
   readOnly: boolean;
+  /** The signed-in user's own type, which decides the SUPER ADMIN lock. */
+  sessionUserType: string | null;
+  /** Why the loaded user is read-only for this session, or null. */
+  lockNote: string | null;
   tab: EntryTab;
   identity: IdentityForm;
   /** The Identity tab as loaded — the dirty check's baseline. */
@@ -73,12 +80,15 @@ export function initialEntryState(args: {
   mode: EntryMode;
   usrId: string | null;
   readOnly?: boolean;
+  sessionUserType?: string | null;
 }): EntryState {
   const create = args.mode === "create";
   return {
     mode: args.mode,
     usrId: create ? null : args.usrId,
     readOnly: args.readOnly === true,
+    sessionUserType: args.sessionUserType ?? null,
+    lockNote: null,
     tab: "identity",
     identity: EMPTY_IDENTITY,
     loadedIdentity: EMPTY_IDENTITY,
@@ -128,8 +138,11 @@ function reduce(state: EntryState, action: EntryAction): EntryState {
     case "user/loaded": {
       const identity = identityFromPayload(action.payload);
       const grants = grantsFromPayload(action.payload.menus);
+      const lockNote = superAdminLock(action.payload.usrType, state.sessionUserType);
       return {
         ...state,
+        readOnly: state.readOnly || lockNote !== null,
+        lockNote,
         usrId: action.payload.usrId,
         identity,
         loadedIdentity: identity,
@@ -235,7 +248,7 @@ export function canSave(state: EntryState): boolean {
 
 /** Why Save is inactive, for the footer's hint. */
 export function saveHold(state: EntryState): string | null {
-  if (state.readOnly) return "Read-only.";
+  if (state.readOnly) return state.lockNote ?? "Read-only.";
   if (state.saving) return "Saving…";
   if (state.user.status === "loading" || state.user.status === "idle") return "Loading the user…";
   if (state.user.status === "failed") return state.user.error ?? "The user could not be loaded.";

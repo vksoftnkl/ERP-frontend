@@ -6,7 +6,12 @@ import {
   GROUP_DEBTORS,
   groupLedgersFixture,
   GROUPS,
+  LEDGER_CARD,
+  LEDGER_CASH,
+  noTenderFixture,
   summaryFixture,
+  TENDER_HDFC_CARD,
+  tenderDayBookFixture,
   vouchersFixture,
   voucherTypesFixture,
 } from "../testing/fixtures";
@@ -16,9 +21,12 @@ import {
   parseDaily,
   parseExport,
   parseGroupLedgers,
+  parseNoTender,
   parseSummary,
+  parseTenderDayBook,
   parseVouchers,
   parseVoucherTypes,
+  signedBal,
 } from "./parse";
 
 describe("parse", () => {
@@ -146,5 +154,102 @@ describe("parse", () => {
       category: "ACCOUNTING",
       sortOrder: 30,
     });
+  });
+});
+
+describe("parse — the tender day book (notes 126 §4)", () => {
+  it("turns a signed amount into a balance on its sign, without arithmetic", () => {
+    expect(signedBal("2000.00")).toEqual({ amount: "2000.00", side: "DR" });
+    expect(signedBal("-2000.00")).toEqual({ amount: "2000.00", side: "CR" });
+    expect(signedBal("0.00")).toEqual({ amount: "0.00", side: null });
+    expect(signedBal("-0.00")).toEqual({ amount: "0.00", side: null });
+  });
+
+  it("reads the groups per ledger × tender master, opening / closing as balances", () => {
+    const d = parseTenderDayBook(tenderDayBookFixture({ fromDate: "2026-10-09", toDate: "2026-10-09" }));
+    expect(d.groupBy).toBe("TENDER");
+    expect(d.fromDate).toBe("2026-10-09");
+    expect(d.groups).toHaveLength(7);
+    // The server's order: ledger name, then tender type with "no tender" last.
+    expect(d.groups.map((g) => [g.ledgerName, g.tenderTypeName])).toEqual([
+      ["Card clearing", "CARD"],
+      ["Card clearing", "CARD"],
+      ["Cash in Hand", "CASH"],
+      ["Cash in Hand", null],
+      ["HDFC Bank CA", "BANK"],
+      ["HDFC Bank CA", null],
+      ["UPI clearing", "UPI"],
+    ]);
+    expect(d.groups[0]).toMatchObject({
+      tenderId: TENDER_HDFC_CARD,
+      tenderName: "CARD – HDFC machine 1",
+      tenderTypeId: 2,
+      ledgerId: LEDGER_CARD,
+      ledgerType: "BANK",
+      debit: "26400.50",
+    });
+    const noTender = d.groups[3];
+    expect(noTender).toMatchObject({ tenderId: null, tenderTypeId: null, ledgerId: LEDGER_CASH, credit: "2500.00" });
+    expect(noTender.closing).toEqual({ amount: "2500.00", side: "CR" });
+    expect(d.groups[5].opening).toEqual({ amount: "1200.00", side: "CR" });
+    expect(d.ledgers.find((l) => l.ledgerId === LEDGER_CASH)).toMatchObject({
+      openingSet: { amount: "30000.00", side: "DR" },
+      opening: { amount: "48250.00", side: "DR" },
+      noTender: "2500.00",
+    });
+  });
+
+  it("reads Tender type: no tender master on any row, the two machines as one CARD group", () => {
+    const d = parseTenderDayBook(tenderDayBookFixture({ groupBy: "TYPE" }));
+    expect(d.groupBy).toBe("TYPE");
+    expect(d.groups.every((g) => g.tenderId === null)).toBe(true);
+    expect(d.groups.filter((g) => g.ledgerId === LEDGER_CARD)).toEqual([
+      expect.objectContaining({ tenderTypeName: "CARD", debit: "38400.00", credit: "38400.00" }),
+    ]);
+  });
+
+  it("refuses a numeric amount and an unknown groupBy, as the other routes do", () => {
+    const raw = tenderDayBookFixture();
+    (raw.data.groups[0] as Record<string, unknown>).debit = 26400.5;
+    expect(() => parseTenderDayBook(raw)).toThrow("tender-day-book: $.groups[0].debit is not an amount string (got 26400.5)");
+    const other = tenderDayBookFixture();
+    (other.data as Record<string, unknown>).groupBy = "MACHINE";
+    expect(() => parseTenderDayBook(other)).toThrow(DaySummaryParseError);
+  });
+
+  it("reads the no-tender list: count, amount, the count per type, the lines", () => {
+    const d = parseNoTender(noTenderFixture({ fromDate: "2026-10-09", toDate: "2026-10-09", limit: "500" }));
+    expect(d.count).toBe(2);
+    expect(d.amount).toBe("2500.00");
+    expect(d.byVoucherType).toEqual([
+      { voucherTypeCode: "Rev", count: 1, amount: "1000.00" },
+      { voucherTypeCode: "TDrp", count: 1, amount: "1500.00" },
+    ]);
+    expect(d.rows.map((r) => [r.voucherNo, r.voucherTypeCode, r.isMirror, r.partyName, r.debit, r.credit])).toEqual([
+      ["tdr00007", "TDrp", false, null, "0.00", "1500.00"],
+      ["rev00012", "Rev", true, "Cash Sales", "0.00", "1000.00"],
+    ]);
+    expect(d.rowsTruncated).toBe(false);
+    // A short page still says how many there are.
+    const capped = parseNoTender(noTenderFixture({ fromDate: "2026-10-09", limit: "1" }));
+    expect([capped.count, capped.rows.length, capped.rowsTruncated]).toEqual([2, 1, true]);
+    // A clean range.
+    expect(parseNoTender(noTenderFixture({ fromDate: "2026-10-10", toDate: "2026-10-10" }))).toMatchObject({
+      count: 0,
+      amount: "0.00",
+      byVoucherType: [],
+      rows: [],
+    });
+  });
+
+  it("a line's unread fields cannot fail the list (only what is shown is required)", () => {
+    const raw = noTenderFixture({ fromDate: "2026-10-09" });
+    const row = raw.data.rows[0] as Record<string, unknown>;
+    row.branchId = null;
+    row.sessionId = 42;
+    delete row.ledgerType;
+    expect(parseNoTender(raw).rows[0].branchId).toBeNull();
+    delete row.ledgerName;
+    expect(() => parseNoTender(raw)).toThrow("tender-day-book/no-tender: $.rows[0].ledgerName is missing or not text");
   });
 });

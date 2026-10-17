@@ -92,6 +92,12 @@ export type SaveExpenseBody = {
   gstBill?: ExpenseGstBillBody;
 };
 
+/**
+ * `PostExpenseDto`: the key of a saved draft and, after a 428
+ * TILL_APPROVAL_REQUIRED, the APPROVED request that lets it go (notes 124 §5).
+ */
+export type PostExpenseBody = ExpenseKeys & { approvalId?: string };
+
 export type CancelExpenseBody = ExpenseKeys & { reason: string };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -123,7 +129,8 @@ export type ExpenseApproval = {
   channel: string;
   twoPerson: boolean;
   blocksTill: boolean;
-  enforced: false;
+  /** True under `till.approval_gate` REFUSE: Post is answered 428 until it is approved. */
+  enforced: boolean;
 };
 
 export type ExpenseLegPayload = {

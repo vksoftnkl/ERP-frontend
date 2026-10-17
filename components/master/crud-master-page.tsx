@@ -44,7 +44,7 @@ import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form
 import { MasterIcon } from "@/components/design-system/icons/master-icons";
 import { ErpActionIcon } from "@/components/design-system/icons/erp-action-icons";
 import { FiSearch } from "react-icons/fi";
-import { Z_MODAL_NESTED } from "@/lib/z-index";
+import { ENTRY_MODAL_OVERLAY_STYLE, Z_MODAL_NESTED } from "@/lib/z-index";
 export type {
   CrudMasterApiEndpoints,
   CrudMasterAuditHistoryConfig,
@@ -201,6 +201,7 @@ const PAGE_SIZE_KEYS = [
   "per_page",
 ] as const;
 type ContextMenuPosition = Pick<CSSProperties, "left" | "top">;
+const ENTRY_OVERLAY_STYLE = ENTRY_MODAL_OVERLAY_STYLE as CSSProperties;
 /** Which popup was open when the operator left the screen (screen memory). */
 type MasterModalMarker = { variant: "new" } | { variant: "edit"; id: string | number };
 function clampContextMenuPosition(value: number, min: number, max: number): number {
@@ -4997,6 +4998,9 @@ export default function CrudMasterPage({
         hideSectionHeader
         submitError={saveError}
         panelStyle={modalPanelStyle}
+        // A popup that keeps its draft sits under the header, so the operator
+        // can go to another screen with it open and find it again on return.
+        overlayStyle={reopenMemoryKey ? ENTRY_OVERLAY_STYLE : undefined}
         panelClassName={modalPanelClassName}
         formGridColumns={modalFormGridColumns}
         denseGrid={modalFormDenseGrid}

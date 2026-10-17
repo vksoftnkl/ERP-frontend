@@ -7,7 +7,10 @@
  *
  *     /reports/day-summary?date=2026-10-09&to=2026-10-09&branch=<uuid>&type=3
  *        &tab=summary&drafts=1&pairs=1&clr=1&zero=0&group=REPORT
- *        [&nature=SALES | &money=CASH] [&list=drafts] [&legs=1]
+ *        [&nature=SALES | &money=CASH] [&list=drafts] [&legs=1] [&by=TYPE]
+ *
+ * `tab` is summary · vouchers · daily · tender (By tender) · no-tender. The
+ * two tender tabs share the dates and the branch, and ignore the rest.
  *
  * `companyId` and `accYear` are never in the URL: they come from the session,
  * so a link opened under another company re-scopes instead of leaking.
@@ -17,11 +20,23 @@
  * link for the combined view must not open on one branch.
  */
 import { addDays, displayDate, isIsoDate } from "@/features/reports/shared/wire/dates";
-import { GROUP_LEVELS, MONEY_KINDS, VOUCHER_NATURES, type GroupLevel, type MoneyKind } from "../wire/types";
+import {
+  GROUP_LEVELS,
+  MONEY_KINDS,
+  VOUCHER_NATURES,
+  type GroupLevel,
+  type MoneyKind,
+  type TenderGroupBy,
+} from "../wire/types";
 
-export type Tab = "summary" | "vouchers" | "daily";
+export type Tab = "summary" | "vouchers" | "daily" | "tender" | "no-tender";
 
-export const TABS: readonly Tab[] = ["summary", "vouchers", "daily"];
+export const TABS: readonly Tab[] = ["summary", "vouchers", "daily", "tender", "no-tender"];
+
+/** The Day Book by tender's two tabs (server notes 126 §4): dates and branch only. */
+export function isTenderTab(tab: Tab): boolean {
+  return tab === "tender" || tab === "no-tender";
+}
 
 export type Filters = {
   fromDate: string;
@@ -45,6 +60,8 @@ export type Filters = {
   draftsOnly: boolean;
   /** The Vouchers tab's pages carry legs. */
   withLegs: boolean;
+  /** By tender: each tender master on its own, or all of a tender type together. */
+  tenderGroupBy: TenderGroupBy;
 };
 
 /** Where the report is scoped, from the session. Never from the URL. */
@@ -98,6 +115,7 @@ export function parseFilters(search: URLSearchParams, defaults: FilterDefaults):
     moneyKind: (MONEY_KINDS as readonly string[]).includes(money ?? "") ? (money as MoneyKind) : null,
     draftsOnly: search.get("list") === "drafts",
     withLegs: flag(search.get("legs"), false),
+    tenderGroupBy: search.get("by") === "TYPE" ? "TYPE" : "TENDER",
   };
 }
 
@@ -117,6 +135,7 @@ export function buildSearch(filters: Filters): URLSearchParams {
   if (filters.moneyKind) search.set("money", filters.moneyKind);
   if (filters.draftsOnly) search.set("list", "drafts");
   if (filters.withLegs) search.set("legs", "1");
+  if (filters.tenderGroupBy === "TYPE") search.set("by", "TYPE");
   return search;
 }
 
@@ -255,6 +274,44 @@ export function exportQuery(session: Session, filters: Filters): ExportQuery {
   return { ...summaryQuery(session, filters), includeCancelledPairs: filters.includeCancelledPairs, withLegs: true };
 }
 
+/** The No tender list's row cap (the Qt screen's `kNoTenderLimit`); `count` is always the whole range's. */
+export const NO_TENDER_LIMIT = 500;
+
+/**
+ * `TenderBooksScopeDto`: company, year, dates, branch. No voucher type: the
+ * DTO has none, and the server's whitelist refuses a key it does not declare.
+ */
+export type TenderScopeQuery = { companyId: string; accYear: string; branchId?: string; fromDate: string; toDate: string };
+export type TenderDayBookQuery = TenderScopeQuery & { groupBy: TenderGroupBy; withRows: false; limit: number };
+export type NoTenderQuery = TenderScopeQuery & { limit: number };
+
+function tenderScopeQuery(session: Session, filters: Filters): TenderScopeQuery {
+  const query: TenderScopeQuery = {
+    companyId: session.companyId,
+    accYear: session.accYear,
+    fromDate: filters.fromDate,
+    toDate: filters.toDate,
+  };
+  // Absent = every branch.
+  if (filters.branchId) query.branchId = filters.branchId;
+  return query;
+}
+
+/**
+ * The groups only. `withRows=false` should leave the lines out, but the
+ * server reads that flag after the global pipe has turned "false" into `true`
+ * (its DTO takes `value`, not the raw `obj[key]` that `OptionalQueryBoolean`
+ * reads), so the lines come anyway; `limit=1` keeps them to one until the
+ * flag is fixed. Rows are a separate query and do not touch the groups.
+ */
+export function tenderDayBookQuery(session: Session, filters: Filters): TenderDayBookQuery {
+  return { ...tenderScopeQuery(session, filters), groupBy: filters.tenderGroupBy, withRows: false, limit: 1 };
+}
+
+export function noTenderQuery(session: Session, filters: Filters): NoTenderQuery {
+  return { ...tenderScopeQuery(session, filters), limit: NO_TENDER_LIMIT };
+}
+
 /**
  * A part's identity = exactly what its route is asked. So a filter a route
  * does not take (the group level, for `/vouchers`) never refetches it, and a
@@ -279,6 +336,15 @@ export function summaryKey(session: Session, filters: Filters): string {
 
 export function dailyKey(session: Session, filters: Filters): string {
   return queryKey("daily", dailyQuery(session, filters));
+}
+
+export function tenderKey(session: Session, filters: Filters): string {
+  return queryKey("tender", tenderDayBookQuery(session, filters));
+}
+
+/** The group-by is not in it: switching it never asks the No tender list again. */
+export function noTenderKey(session: Session, filters: Filters): string {
+  return queryKey("no-tender", noTenderQuery(session, filters));
 }
 
 /* --------------------------------------------------------------- drill-downs */

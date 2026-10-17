@@ -22,6 +22,8 @@ export const DAY_SUMMARY_ERROR_CODES = [
   "CHECK_UNKNOWN",
   "RANGE_TOO_LARGE",
   "NO_MENU_RIGHT",
+  // The tender day book's (`TENDER_BOOKS_ERROR`): the rest of its codes are the ones above.
+  "DATE_REQUIRED",
 ] as const;
 
 export type DaySummaryErrorCode = (typeof DAY_SUMMARY_ERROR_CODES)[number];
@@ -144,6 +146,8 @@ function sentenceFor(found: Detail, ctx: ErrorContext): { message: string; field
     }
     case "NO_MENU_RIGHT":
       return { message: NO_ACCESS_MESSAGE, field: null };
+    case "DATE_REQUIRED":
+      return { message: "Enter the Date.", field: "dates" };
   }
 }
 

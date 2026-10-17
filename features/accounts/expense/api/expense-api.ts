@@ -5,6 +5,7 @@
  *   POST create         a DRAFT; `voucherId` = edit that draft      CREATE / EDIT
  *   POST validate       always 200: derived · refusals · warnings · approval   VIEW
  *   POST post           the key of a saved draft: numbered, legs written       POST
+ *                       (+ `approvalId` after a 428 TILL_APPROVAL_REQUIRED)
  *   GET  get            ?companyId&branchId&accYear&voucherId                  VIEW
  *   POST cancel         key + reason: a mirror in the Rev series               CANCEL
  *
@@ -36,7 +37,7 @@
 import { baseApi } from "@/store/api/baseApi";
 import { getGridId } from "@/lib/configured-grids";
 import { getDropdownId } from "@/lib/configured-dropdowns";
-import type { CancelExpenseBody, ExpenseKeys, SaveExpenseBody } from "../expense.types";
+import type { CancelExpenseBody, ExpenseKeys, PostExpenseBody, SaveExpenseBody } from "../expense.types";
 
 const BASE = "/expenses";
 const GRID_RUN_ENDPOINT = "/configured-grid-sql/run";
@@ -111,7 +112,7 @@ export const expenseApi = baseApi.injectEndpoints({
       query: (body) => ({ url: `${BASE}/validate`, method: "POST", body }),
       transformResponse: dataOf,
     }),
-    expensePost: builder.mutation<unknown, ExpenseKeys>({
+    expensePost: builder.mutation<unknown, PostExpenseBody>({
       query: (body) => ({ url: `${BASE}/post`, method: "POST", body }),
       transformResponse: dataOf,
     }),

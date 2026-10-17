@@ -89,6 +89,58 @@ describe("the load gate (§7.2)", () => {
   });
 });
 
+describe("the SUPER ADMIN lock (notes 125)", () => {
+  const superAdmin = { ...liveUserPayload(), usrType: "SUPER ADMIN" };
+
+  it("opens a SUPER ADMIN user read-only for anyone else, and says why", () => {
+    const state = run(
+      initialEntryState({ mode: "edit", usrId: "u1", sessionUserType: "ADMIN" }),
+      { type: "tree/loaded", tree },
+      { type: "user/loaded", payload: superAdmin },
+    );
+    expect(state.readOnly).toBe(true);
+    expect(canSave(state)).toBe(false);
+    expect(saveHold(state)).toBe("A SUPER ADMIN user is changed only by a SUPER ADMIN.");
+    // Shown as stored, not blanked: the combo appends the role it was loaded with.
+    expect(state.identity.userType).toBe("SUPER ADMIN");
+  });
+
+  it("leaves a SUPER ADMIN user editable for a SUPER ADMIN, and anyone else's user alone", () => {
+    const bySuperAdmin = run(
+      initialEntryState({ mode: "edit", usrId: "u1", sessionUserType: "SUPER ADMIN" }),
+      { type: "tree/loaded", tree },
+      { type: "user/loaded", payload: superAdmin },
+    );
+    expect(bySuperAdmin.readOnly).toBe(false);
+    expect(bySuperAdmin.lockNote).toBeNull();
+    expect(canSave(bySuperAdmin)).toBe(true);
+
+    const plainUser = run(
+      initialEntryState({ mode: "edit", usrId: "u1", sessionUserType: "ADMIN" }),
+      { type: "tree/loaded", tree },
+      { type: "user/loaded", payload: liveUserPayload() },
+    );
+    expect(plainUser.readOnly).toBe(false);
+    expect(canSave(plainUser)).toBe(true);
+  });
+
+  it("an unknown session type is not a SUPER ADMIN", () => {
+    const state = run(
+      initialEntryState({ mode: "edit", usrId: "u1" }),
+      { type: "user/loaded", payload: superAdmin },
+    );
+    expect(state.lockNote).toBe("A SUPER ADMIN user is changed only by a SUPER ADMIN.");
+  });
+
+  it("a view without the edit right keeps its own hold", () => {
+    const state = run(
+      initialEntryState({ mode: "edit", usrId: "u1", readOnly: true, sessionUserType: "ADMIN" }),
+      { type: "user/loaded", payload: liveUserPayload() },
+    );
+    expect(saveHold(state)).toBe("Read-only.");
+  });
+});
+
 describe("the form", () => {
   const ready = run(
     initialEntryState({ mode: "edit", usrId: "u1" }),

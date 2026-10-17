@@ -23,6 +23,7 @@ import {
   type ScreenMemoryOption,
 } from "@/lib/use-screen-memory";
 import { useGetTenderMastersQuery } from "@/store/api/saleOrderApi";
+import { approvalNeededOf, type ApprovalRequestState } from "@/features/sales/till/shared/approval-gate";
 import {
   paymentApi,
   useAmendPaymentMutation,
@@ -42,6 +43,12 @@ import {
   parseDraftMemo,
   parseHeader,
 } from "@/features/accounts/receipt/payload/parse";
+import {
+  KEPT_AS_DRAFT_TEXT,
+  KEPT_AS_DRAFT_TITLE,
+  keptDraftHeader,
+  paymentApprovalAsk,
+} from "../domain/approval";
 import { PAYMENT_SETTLEMENT } from "../domain/roles";
 import { defaultPaymentTender, payableTenders, paymentTenderRowFrom } from "../domain/tenders";
 import {
@@ -57,7 +64,13 @@ import {
   parsePaymentTenders,
   postedPaymentNotes,
 } from "../payload/parse";
-import type { PaymentKeys, PaymentPayload, PaymentScope, PaymentSettings } from "../payment.types";
+import type {
+  PaymentHeaderDraft,
+  PaymentKeys,
+  PaymentPayload,
+  PaymentScope,
+  PaymentSettings,
+} from "../payment.types";
 import {
   paymentIdentityHint,
   validatePaymentBeforePost,
@@ -109,6 +122,11 @@ export type UsePaymentDraftOptions = {
   rights: DocumentRights;
   confirm: (request: ConfirmRequest) => Promise<boolean>;
   prompt: (request: PromptRequest) => Promise<string | null>;
+  /**
+   * The "Needs approval" dialog (notes 131): the id of an APPROVED request,
+   * or null when it was closed without one.
+   */
+  askApproval: (request: ApprovalRequestState) => Promise<string | null>;
   /** Screen memory (lib/screen-memory) — passed by the menu route only, never a deep link. */
   memory?: ScreenMemoryOption;
 };
@@ -116,7 +134,7 @@ export type UsePaymentDraftOptions = {
 export type UsePaymentDraft = ReturnType<typeof usePaymentDraft>;
 
 export function usePaymentDraft(options: UsePaymentDraftOptions) {
-  const { scope, appDate, settings, canWrite, rights, confirm, prompt, memory } = options;
+  const { scope, appDate, settings, canWrite, rights, confirm, prompt, askApproval, memory } = options;
   // The payment the operator left on this screen, when the page is reopening
   // on it. Read once; null for every fresh open.
   const recalled = useRecalledOnce<PaymentSnapshot>(memory, scope);
@@ -582,6 +600,12 @@ export function usePaymentDraft(options: UsePaymentDraftOptions) {
    * thing back and leaves NOTHING on the server (no draft to delete again, no
    * id to forget), so the screen keeps every line as keyed for the operator
    * to correct.
+   *
+   * The one refusal that DOES leave a draft is 428 TILL_APPROVAL_REQUIRED
+   * (cash out of a till drawer above the CASH_PAYMENT rule, under
+   * till.approval_gate REFUSE — notes 131): its id is adopted at once, so any
+   * retry posts THAT draft, and the approval is asked for (Qt `askApproval`,
+   * 425fa80). APPROVED → the same call again with `approvalId`.
    */
   const post = useCallback(async (): Promise<boolean> => {
     if (writing.current) {
@@ -630,49 +654,73 @@ export function usePaymentDraft(options: UsePaymentDraftOptions) {
       return false;
     }
 
+    // What was validated and confirmed is what is sent — under the kept
+    // draft's id once a 428 named one (Qt `sendSaveAndPost(approvalId)`).
+    const sendSaveAndPost = async (header: PaymentHeaderDraft, approvalId: string | null): Promise<boolean> => {
+      try {
+        const payload = await saveAndPostMutation(
+          buildPaymentSaveAndPostPayload({
+            header,
+            tenders: current.tenders,
+            lines: current.lines,
+            bills: current.bills,
+            credits: current.credits,
+            userId: getAuthUserId() ?? "",
+            approvalId,
+          }),
+        ).unwrap();
+
+        // The id is adopted (a NEW payment got one only now), though the screen
+        // is cleared straight after: the message below has already named it.
+        const voucherId = payload.header?.avhVoucherId;
+        if (voucherId) {
+          dispatch({ type: "SAVED", voucherId, status: "POSTED" });
+        }
+        toast.success(postedPaymentNotes(payload).join(" "));
+        resetToNew();
+        return true;
+      } catch (error) {
+        const need = approvalNeededOf(error);
+        if (need) {
+          // The server KEPT the payment as a draft and names it: taken first,
+          // so whatever happens next posts THAT draft, never a second copy.
+          const kept = keptDraftHeader(header, need);
+          if (kept.voucherId) {
+            dispatch({ type: "SAVED", voucherId: kept.voucherId, status: "DRAFT" });
+          }
+          const tapId = await askApproval(paymentApprovalAsk(need, kept, figures.received));
+          if (tapId) {
+            return sendSaveAndPost(kept, tapId);
+          }
+          toast.info(KEPT_AS_DRAFT_TEXT, { title: KEPT_AS_DRAFT_TITLE });
+          return false;
+        }
+        if (statusOf(error) === 409) {
+          // The server worked something out differently — a bill moved, the
+          // TDS rate or the year's base changed, a book ran out. Show both.
+          toast.apiError(error, {
+            kept:
+              `This screen made it ${formatTotal(figures.allocated)} allocated and ` +
+              `${formatTotal(figures.onAccount)} on account. Press F6 to re-read the bills and try again.\n` +
+              "Payment not lost.",
+          });
+        } else {
+          toast.apiError(error, { kept: "Payment not lost." });
+        }
+        return false;
+      }
+    };
+
     writing.current = true;
     setBusy("posting");
     try {
-      // What was validated and confirmed is what is sent.
-      const payload = await saveAndPostMutation(
-        buildPaymentSaveAndPostPayload({
-          header: current.header,
-          tenders: current.tenders,
-          lines: current.lines,
-          bills: current.bills,
-          credits: current.credits,
-          userId: getAuthUserId() ?? "",
-        }),
-      ).unwrap();
-
-      // The id is adopted (a NEW payment got one only now), though the screen
-      // is cleared straight after: the message below has already named it.
-      const voucherId = payload.header?.avhVoucherId;
-      if (voucherId) {
-        dispatch({ type: "SAVED", voucherId, status: "POSTED" });
-      }
-      toast.success(postedPaymentNotes(payload).join(" "));
-      resetToNew();
-      return true;
-    } catch (error) {
-      if (statusOf(error) === 409) {
-        // The server worked something out differently — a bill moved, the
-        // TDS rate or the year's base changed, a book ran out. Show both.
-        toast.apiError(error, {
-          kept:
-            `This screen made it ${formatTotal(figures.allocated)} allocated and ` +
-            `${formatTotal(figures.onAccount)} on account. Press F6 to re-read the bills and try again.\n` +
-            "Payment not lost.",
-        });
-      } else {
-        toast.apiError(error, { kept: "Payment not lost." });
-      }
-      return false;
+      return await sendSaveAndPost(current.header, null);
     } finally {
       writing.current = false;
       setBusy("idle");
     }
   }, [
+    askApproval,
     canWrite,
     confirm,
     reportProblems,

@@ -45,6 +45,7 @@ import {
   type WhoArgs,
   type WhoLine,
 } from "@/features/sales/till/approval-setup/domain/approval-setup";
+import { levelForUserRole } from "@/features/sales/till/shared/approval-gate";
 
 // ── The screen ──────────────────────────────────────────────────────────────
 
@@ -288,6 +289,25 @@ export function grantFormOf(row: GridRow | null, today: string): GrantForm {
     active: flag(row, "taa_is_active"),
     remarks: text(row, "taa_remarks"),
   };
+}
+
+/**
+ * A user picked in the User field (dropdown 68, whose row carries `usr_type`).
+ * On a NEW grant the level starts at the picked user's User Role when the two
+ * share a name (Qt 425fa80 `levelForUserRole`) — it can still be changed; a
+ * role with no level (CASHIER, USER, ADMIN), a clear, or an existing grant
+ * leave it as it is.
+ */
+export function withPickedUser(
+  form: GrantForm,
+  picked: { id: string; text: string } | null,
+  pickedRow: Record<string, unknown> | undefined,
+  isNew: boolean,
+): GrantForm {
+  const next = { ...form, userId: picked?.id ?? "", userName: picked?.text ?? "" };
+  if (!isNew || !picked || !pickedRow) return next;
+  const level = levelForUserRole(typeof pickedRow.usr_type === "string" ? pickedRow.usr_type : "");
+  return level ? { ...next, level } : next;
 }
 
 /** A branch narrows a company: "every company" (group finance) has none (Qt `refreshScope`). */

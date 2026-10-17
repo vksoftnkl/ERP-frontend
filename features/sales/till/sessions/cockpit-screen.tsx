@@ -26,6 +26,12 @@
  * `../shared/movement-void-dialog.tsx`). A failed read is said in plain words
  * (`toast.apiError`, Qt ec9d92d).
  *
+ * Qt 425fa80 (notes 124 / 129): Approve also books the cash gap a closed
+ * session left undecided (the decide dialog in closed-gap mode) and is no
+ * longer greyed for the session's own cashier (the rule's "Allow self" is the
+ * server's call); the Witness fact became "Cash to safe". The approvers'
+ * inbox (Till Sessions → Waiting for approval) lands here for a cash gap.
+ *
  * Keys: F5 refresh, Esc close; on the Bills / Money documents tab ↑ / ↓ pick
  * the row Re-tender / Void movement acts on.
  */
@@ -51,6 +57,7 @@ import { ApproveCashDialog, type ApproveCashRequest } from "./approve-cash-dialo
 import {
   BAG_DECIDED_MESSAGE,
   CHANGE_DONE_TITLE,
+  CLOSED_GAP_DECIDED_MESSAGE,
   REC_HINT,
   REC_NOTE,
   TENDER_FIGURES,
@@ -92,7 +99,13 @@ import { ReopenDialog } from "./reopen-dialog";
 import local from "./sessions.module.scss";
 import { SlipCheckDialog } from "./slip-check-dialog";
 import { VarianceDecideDialog } from "./variance-decide-dialog";
-import { bagDecideRequestOf, decideRequestOf, decidedMessage, type DecideRequest } from "./variance-decide";
+import {
+  bagDecideRequestOf,
+  closedGapDecideRequestOf,
+  decideRequestOf,
+  decidedMessage,
+  type DecideRequest,
+} from "./variance-decide";
 import { XReadDialog, type XReadRequest } from "./x-read-dialog";
 
 type DocTab = "bills" | "money" | "counts";
@@ -268,20 +281,23 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
   const voidState = voidMovementButton(session, pickedMove);
   const sessionNo = session?.tssSessionNo ?? "";
 
-  // Approve (Qt `decideVariance`, c77f3f1): the closed session's cash, a
-  // received bag's difference, or the session's pending gap.
+  // Approve (Qt `decideVariance`, 425fa80): a closed session's undecided cash
+  // gap, the closed session's cash, a received bag's difference, or the
+  // session's pending gap.
   const onApprove = () => {
     if (!session) return;
-    if (approve.action === "approveCash") setApproveCash({ key, session });
+    if (approve.action === "closedGap") setDecide(closedGapDecideRequestOf(session, key));
+    else if (approve.action === "approveCash") setApproveCash({ key, session });
     else if (approve.action === "bag") setDecide(bagDecideRequestOf(session, key));
     else setDecide(decideRequestOf(session, key));
   };
 
   const decided = (decision: TillVarianceDecision) => {
     const bag = Boolean(decide?.bag);
+    const closedGap = Boolean(decide?.closedGap);
     setDecide(null);
     load();
-    toast.info(bag ? BAG_DECIDED_MESSAGE : decidedMessage(decision));
+    toast.info(closedGap ? CLOSED_GAP_DECIDED_MESSAGE : bag ? BAG_DECIDED_MESSAGE : decidedMessage(decision));
   };
 
   // X read (notes 117 §6): the server journals it and answers the figures.
@@ -330,19 +346,20 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
           <div className={styles.facts}>
             {(
               [
-                ["Opened", facts.opened],
-                ["Billing ended", facts.ended],
-                ["Duration", facts.duration],
-                ["Float", facts.float],
-                ["Count", facts.count],
-                ["Witness", facts.witness],
-                ["Z no", facts.z],
-                ["Reopened", facts.reopened],
+                ["Opened", facts.opened, false],
+                ["Billing ended", facts.ended, false],
+                ["Duration", facts.duration, false],
+                ["Float", facts.float, false],
+                ["Count", facts.count, false],
+                // Who took the cash into the safe — amber when it was the session's own cashier (notes 129 §1).
+                ["Cash to safe", facts.cashToSafe, facts.cashToSafeSelf],
+                ["Z no", facts.z, false],
+                ["Reopened", facts.reopened, false],
               ] as const
-            ).map(([caption, value]) => (
+            ).map(([caption, value, amber]) => (
               <div key={caption} className={styles.fact}>
                 <span className={styles.cap}>{caption}</span>
-                <span className={styles.val} title={value}>
+                <span className={cx(styles.val, amber && styles.toneAmber)} title={value}>
                   {value}
                 </span>
               </div>

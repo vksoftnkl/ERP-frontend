@@ -181,6 +181,7 @@ describe("the cockpit", () => {
     expect(facts.float).toBe("ISSUED 2,000.00 · counted 2,000.00");
     expect(facts.count).toBe("BLIND · at counter · 2 attempts");
     expect(facts.z).toBe("issued on close");
+    expect(facts.cashToSafe).toBe("—");
   });
 
   it("reconciles the tenders the way Qt draws them", () => {
@@ -222,8 +223,8 @@ describe("the cockpit", () => {
       "The count is out of tolerance after the last recount.",
     );
     expect(approvalBand(session({ tssStatus: "PENDING_APPROVAL" }))?.note).toBe(
-      "Approve decides it: a treatment and a reason, or send it back to recount. Not the session's cashier — a " +
-        "supervisor or above with an Approval Setup (276) grant, or a super admin.",
+      "Approve decides it: a treatment and a reason, or send it back to recount. Not the session's cashier unless " +
+        "its Approval Rule (276) allows self — a supervisor or above with an approval grant, or a super admin.",
     );
   });
 
@@ -236,7 +237,7 @@ describe("the cockpit", () => {
     expect(pendingVariance(session({ variances: [variance({ tvrTreatment: "EXPENSE" })] }))).toBeNull();
   });
 
-  it("lets anyone but the session's cashier approve a session waiting for it", () => {
+  it("lets anyone press Approve on a session waiting for it — the cashier under \"Allow self\" (425fa80)", () => {
     const waiting = session({ tssStatus: "PENDING_APPROVAL", tssOperatorId: "019C-CASHIER" });
     expect(approveButton(waiting, "019c-supervisor")).toEqual({
       enabled: true,
@@ -245,8 +246,8 @@ describe("the cockpit", () => {
       action: "decide",
     });
     expect(approveButton(waiting, "019c-cashier")).toMatchObject({
-      enabled: false,
-      tip: "You are this session's cashier: another person approves it",
+      enabled: true,
+      tip: 'Your own session: allowed only when its Approval Rule (276) has "Allow self" ticked',
     });
     expect(approveButton(session({ tssOperatorId: "019c-cashier" }), "019c-supervisor")).toMatchObject({
       enabled: false,

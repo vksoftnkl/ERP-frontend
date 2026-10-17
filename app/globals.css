@@ -75,7 +75,7 @@
        - An overlay layer MUST take its z-index from a token below. Never
          write a literal, and never "just add a zero" to win a fight.
        - Order is derived from what has to sit above what:
-           header  <  modal  <  nested modal  <  popup  <  confirm
+           entry modal  <  header  <  modal  <  nested modal  <  popup  <  confirm
                    <  input assist  <  message  <  global loader
          A portaled dropdown must clear the modal that contains it, so
          popups outrank every modal. A confirm dialog interrupts whatever
@@ -84,10 +84,16 @@
          dialog you are standing in, say) must be readable over all of it.
        - Values are spaced by 1000 so a layer can be slotted between two
          tiers later without renumbering the app.
+       - The entry modal is a master's Add/Edit popup that keeps its draft
+         (screen memory). It sits UNDER the header and starts below it
+         (`--erp-app-header-height`), so the menu stays reachable: going to
+         another screen leaves the popup open, the way a Qt MDI window
+         stayed open, and it is back on return.
      In-page z-indexes (sticky table headers, cell overlaps, tabs) are NOT
      part of this scale — they live inside their own stacking context and
      stay small and local. From TS/TSX, import the mirrors in lib/z-index.ts
      rather than re-typing these names. */
+  --erp-z-entry-modal: 120;
   --erp-z-app-header: 150;
   --erp-z-modal: 2000;
   --erp-z-modal-nested: 2100;

@@ -7,7 +7,7 @@
  * server writes only the keys it receives, and the table defaults `UTC` / `en`
  * on create. `usrEmployeeId` and the till PIN joined the form 2026-10-08 (Qt).
  */
-import { USER_TYPE_VALUES, type UserAdminPayload, type UserType } from "./wire";
+import type { UserAdminPayload, UserType } from "./wire";
 
 export type IdentityForm = {
   loginName: string;
@@ -16,7 +16,13 @@ export type IdentityForm = {
   fullName: string;
   mobileNo: string;
   email: string;
-  userType: UserType | "";
+  /**
+   * A `UserType`, or "" before one is chosen. Typed wider on purpose: a role
+   * stored before the list changed (VIEWER, SYSTEM, or MANAGER from a server not
+   * yet migrated) is kept as it came, so the form shows it and a save that never
+   * touched it sends it back rather than blanking it.
+   */
+  userType: UserType | string;
   companyId: string;
   /** The label beside the id, for a picker that shows the saved name before it loads. */
   companyName: string;
@@ -75,7 +81,10 @@ export const EMPTY_IDENTITY: IdentityForm = {
 const USER_TYPE_LABELS: Record<UserType, string> = {
   "SUPER ADMIN": "Super Admin",
   ADMIN: "Admin",
-  MANAGER: "Manager",
+  "HO FINANCE": "HO Finance",
+  "AREA MANAGER": "Area Manager",
+  "STORE MANAGER": "Store Manager",
+  "CASH OFFICE": "Cash Office",
   SUPERVISOR: "Supervisor",
   USER: "User",
   CASHIER: "Cashier",
@@ -83,28 +92,65 @@ const USER_TYPE_LABELS: Record<UserType, string> = {
   SYSTEM: "System",
 };
 
+export const SUPER_ADMIN: UserType = "SUPER ADMIN";
+
 /**
- * The Qt combo's order (cashier first, the till's people together), then the
- * two roles Qt no longer offers — kept so a user saved with one still shows it.
+ * The roles the combo offers (Qt 425fa80, notes 125): the till approval
+ * levels' names, lowest first, then ADMIN. VIEWER and SYSTEM are still in the
+ * enum but no longer offered.
  */
-const USER_TYPE_ORDER: readonly UserType[] = [
+const OFFERED_USER_TYPES: readonly UserType[] = [
   "CASHIER",
   "USER",
-  "ADMIN",
   "SUPERVISOR",
-  "MANAGER",
-  "SUPER ADMIN",
-  "VIEWER",
-  "SYSTEM",
+  "STORE MANAGER",
+  "CASH OFFICE",
+  "AREA MANAGER",
+  "HO FINANCE",
+  "ADMIN",
 ];
 
-export const USER_TYPE_OPTIONS: readonly { value: UserType; label: string }[] = [
-  ...USER_TYPE_ORDER,
-  ...USER_TYPE_VALUES.filter((value) => !USER_TYPE_ORDER.includes(value)),
-].map((value) => ({ value, label: USER_TYPE_LABELS[value] }));
+/** Case and stray spaces forgiven, as `canEditTemplates` reads the session's type. */
+export function isSuperAdminType(type: string | null | undefined): boolean {
+  return (type ?? "").trim().toUpperCase() === SUPER_ADMIN;
+}
 
-export function isUserType(value: unknown): value is UserType {
-  return typeof value === "string" && (USER_TYPE_VALUES as readonly string[]).includes(value);
+export function userTypeLabel(value: string): string {
+  return USER_TYPE_LABELS[value as UserType] ?? value;
+}
+
+/**
+ * The User Role combo. SUPER ADMIN is VK Softwares' own account, never a
+ * client's role: it is offered only when the signed-in user is one. The role
+ * the user was loaded with is appended when the list no longer carries it, so
+ * an old role shows as itself instead of a blank combo.
+ */
+export function userRoleOptions(
+  sessionUserType: string | null | undefined,
+  storedUserType: string,
+): { value: string; label: string }[] {
+  const values: string[] = [...OFFERED_USER_TYPES];
+  if (isSuperAdminType(sessionUserType)) values.push(SUPER_ADMIN);
+  const stored = storedUserType.trim();
+  if (stored && !values.includes(stored)) values.push(stored);
+  return values.map((value) => ({ value, label: userTypeLabel(value) }));
+}
+
+export const SUPER_ADMIN_LOCK_NOTE = "A SUPER ADMIN user is changed only by a SUPER ADMIN.";
+
+/**
+ * Why this user opens read-only, or null. A client's admin may look at a SUPER
+ * ADMIN user but never change it: its role is not in their list, so a save
+ * would rewrite it — and the server refuses the save anyway (403
+ * USER_ROLE_RESERVED).
+ */
+export function superAdminLock(
+  storedUserType: string | null | undefined,
+  sessionUserType: string | null | undefined,
+): string | null {
+  return isSuperAdminType(storedUserType) && !isSuperAdminType(sessionUserType)
+    ? SUPER_ADMIN_LOCK_NOTE
+    : null;
 }
 
 /** The DTO's own lengths. */
@@ -130,7 +176,7 @@ export function identityFromPayload(payload: UserAdminPayload): IdentityForm {
     fullName: text(payload.usrFullName),
     mobileNo: text(payload.usrMobileNo),
     email: text(payload.usrEmail),
-    userType: isUserType(payload.usrType) ? payload.usrType : "",
+    userType: text(payload.usrType).trim(),
     companyId: text(payload.usrCompanyId),
     companyName: text(payload.usrCompanyName),
     branchId: text(payload.usrBranchId),

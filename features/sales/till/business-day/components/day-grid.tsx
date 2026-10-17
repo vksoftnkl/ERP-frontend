@@ -1,10 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+  type Ref,
+} from "react";
 
 import { cx } from "@/components/design-system/cx";
 import { useConfiguredGridSettings } from "@/components/master/use-configured-grid-settings";
 import { useGridId, type ConfiguredGridKey } from "@/lib/configured-grids";
+import { toLayoutPx } from "@/lib/ui-scale";
 import { useGetGridColumnsQuery } from "@/store/api/metadataApi";
 import { cellOf, resolveColumns, type CellTone, type GridColumn } from "../domain/columns";
 import type { RowsState } from "../domain/day-reading";
@@ -26,6 +36,8 @@ type Props = {
   /** The focusable grid itself — the screen moves the keyboard here on a tab change. */
   gridRef?: Ref<HTMLDivElement>;
   autoFocus?: boolean;
+  /** Never fewer rows tall than this, however much sits above it (Qt 425fa80 `keepSixRows`). */
+  minRows?: number;
 };
 
 const TONE_CLASS: Record<Exclude<CellTone, "">, string> = {
@@ -65,6 +77,7 @@ export function DayGrid({
   emptyText,
   gridRef,
   autoFocus,
+  minRows,
 }: Props) {
   const gridId = useGridId(grid);
   const { data: config, refetch } = useGetGridColumnsQuery({ gridId: Number(gridId) }, { skip: !gridId });
@@ -78,11 +91,34 @@ export function DayGrid({
   const setCurrent = (index: number) => setCursor({ rows, index });
   const at = rows.length === 0 ? -1 : Math.min(current, rows.length - 1);
   const bodyRef = useRef<HTMLTableSectionElement | null>(null);
+  /** The last row height measured: an empty list has no row to measure. */
+  const rowHeight = useRef(0);
+  const [minHeight, setMinHeight] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     if (at < 0 || !bodyRef.current) return;
     bodyRef.current.querySelector<HTMLElement>(`[data-row-index="${at}"]`)?.scrollIntoView({ block: "nearest" });
   }, [at]);
+
+  // `minRows` (Qt `keepSixRows`): the header, that many rows and the frame,
+  // measured — the row height is the theme's — each time the list or its
+  // columns change, before the browser paints.
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    const table = body?.parentElement;
+    const wrap = table?.parentElement;
+    if (!minRows || !body || !(table instanceof HTMLTableElement) || !wrap) return;
+    const head = toLayoutPx(table.tHead?.getBoundingClientRect().height ?? 0);
+    // Not laid out (the List tab is up): the last measurement stands.
+    if (head <= 0) return;
+    const first = body.rows[0];
+    if (first) rowHeight.current = toLayoutPx(first.getBoundingClientRect().height);
+    const row = rowHeight.current || head;
+    const border = getComputedStyle(wrap);
+    const frame =
+      (Number.parseFloat(border.borderTopWidth) || 0) + (Number.parseFloat(border.borderBottomWidth) || 0);
+    setMinHeight(Math.ceil(head + minRows * row + frame));
+  }, [minRows, rows, columns]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.ctrlKey || event.altKey || event.metaKey) return;
@@ -143,6 +179,7 @@ export function DayGrid({
       <div
         ref={gridRef}
         className={styles.tableWrap}
+        style={minRows && minHeight ? { minHeight } : undefined}
         tabIndex={0}
         role="grid"
         aria-label={label}

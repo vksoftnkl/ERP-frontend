@@ -421,10 +421,12 @@ export type PaymentSettlementKey = "allocations" | "creditsApplied" | "otherLine
 /**
  * `POST /payments/create` with `post: true` (notes 106): saves AND posts in
  * one transaction. The draft's body with its remembered settlement replaced by
- * the applied one; `onAccount` is the server's 400 without it.
+ * the applied one; `onAccount` is the server's 400 without it. `approvalId`
+ * (notes 131): the APPROVED CASH_PAYMENT request a 428 asked for, sent with
+ * the kept draft's `avhVoucherId`.
  */
 export type SaveAndPostPaymentBody = Omit<SaveDraftPaymentBody, PaymentSettlementKey> &
-  Partial<Pick<PostPaymentBody, PaymentSettlementKey>> & { post: true };
+  Partial<Pick<PostPaymentBody, PaymentSettlementKey>> & { post: true; approvalId?: string };
 
 export type AmendPaymentBody = SaveDraftPaymentBody &
   Omit<PostPaymentBody, "avhVoucherId"> & {

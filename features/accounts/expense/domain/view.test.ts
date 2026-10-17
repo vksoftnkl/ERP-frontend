@@ -189,8 +189,22 @@ describe("refusals, warnings and the approval band", () => {
     expect(v.approval).toEqual({
       code: "EXPENSE",
       amount: "1,120.00",
-      text: "total 1,120.00 is over 500.00 — needs a SUPERVISOR (EITHER). Reported only: the approval gate is till build phase 3, so the voucher posts.",
+      text: "total 1,120.00 is over 500.00 — needs a SUPERVISOR (EITHER). Posting asks for it: as shipped the voucher posts and the request waits in the approvers' inbox; a company that refuses asks for the approver's PIN first.",
     });
+  });
+
+  it("leaves the approval need out of the red list under REFUSE: Post asks for it", () => {
+    const refusing = validateAnswer({
+      ok: false,
+      refusals: [
+        { code: "TILL_APPROVAL_REQUIRED", field: "approvalId", message: "An expense of 1120.00 at a till needs an approval" },
+        { code: "EXPENSE_TOTAL_MISMATCH", message: "they must be equal" },
+      ],
+      approval: { ...payload.approval!, enforced: true },
+    });
+    const shown = view(draft, answered(draft, refusing));
+    expect(shown.refusals).toEqual(["EXPENSE_TOTAL_MISMATCH — they must be equal"]);
+    expect(shown.approval?.code).toBe("EXPENSE");
   });
 
   it("a failed check shows the server's error instead", () => {

@@ -90,7 +90,7 @@ function readApproval(raw: unknown): ExpenseApproval | null {
     channel: text(raw.channel),
     twoPerson: raw.twoPerson === true,
     blocksTill: raw.blocksTill === true,
-    enforced: false,
+    enforced: raw.enforced === true,
   };
 }
 
