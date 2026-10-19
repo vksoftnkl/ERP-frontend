@@ -166,6 +166,15 @@ describe("the head", () => {
   it("keeps the placeholders before anything is read", () => {
     expect(blankHead(CONTEXT).title).toBe("Business Day");
     expect(blankHead(CONTEXT).facts.status).toBe("—");
+    expect(blankHead(CONTEXT).sub).toBe("Acme Foods Pvt Ltd");
+  });
+
+  it("names another store than the header's after the company (Cash Position's drill, Qt 3b5069d)", () => {
+    const scoped = { ...CONTEXT, branchName: "Zone store" };
+    expect(dayHead({ ...DAY, tbdStatus: "OPEN" }, scoped).sub).toBe("Acme Foods Pvt Ltd · Zone store · opened 08:58 AM");
+    expect(noDayHead("2026-10-10", scoped).sub).toMatch(/^Acme Foods Pvt Ltd · Zone store · not opened yet/);
+    expect(blankHead(scoped).sub).toBe("Acme Foods Pvt Ltd · Zone store");
+    expect(blankHead({ ...CONTEXT, branchName: "" }).sub).toBe("Acme Foods Pvt Ltd");
   });
 });
 

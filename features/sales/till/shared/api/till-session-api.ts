@@ -45,6 +45,9 @@ import type {
   TillRemitConfirmResult,
   TillRemitMode,
   TillRemitResult,
+  TillReviewCreateResult,
+  TillReviewListPayload,
+  TillReviewOutcome,
   TillSafeBalance,
   TillSafeCountResult,
   TillSafeDecisionResult,
@@ -369,6 +372,25 @@ export type TillApprovalCancelBody = {
   note?: string | null;
 };
 
+/**
+ * `CreateTillReviewDto` (notes 134 §2.1, Cash Position 289 CREATE): head
+ * office's verdict on a business day or a till session of the branch. Exactly
+ * one of `dayId` / `sessionId`; `note` unless OK; the journal only on
+ * WRITTEN_OFF / SUSPENSE_CLEARED. Never edited: a later one supersedes it.
+ */
+export type TillReviewCreateBody = {
+  companyId: string;
+  branchId: string;
+  /** The year of the day / session reviewed. */
+  accYear: string;
+  dayId?: string | null;
+  sessionId?: string | null;
+  outcome: TillReviewOutcome;
+  note?: string | null;
+  refVoucherId?: string | null;
+  refVoucherAccYear?: string | null;
+};
+
 export type TillSessionClient = {
   openCheck: (scope: { companyId: string; branchId: string; counterId?: string }) => Promise<TillOpenCheck>;
   /** `openCheck` for a timer: a query, so it is not announced as a data change (see the header). */
@@ -418,6 +440,10 @@ export type TillSessionClient = {
   approvalPendingQuiet: (scope: { companyId: string; branchId: string }) => Promise<TillApprovalInboxPayload>;
   approvalDecide: (body: TillApprovalDecideBody) => Promise<TillApprovalPayload>;
   approvalCancel: (body: TillApprovalCancelBody) => Promise<TillApprovalPayload>;
+  /** Notes 134 — head office's review of a day or a session (289 CREATE). */
+  reviewCreate: (body: TillReviewCreateBody) => Promise<TillReviewCreateResult>;
+  /** A branch's reviews, newest first — every one, or one day's / one session's (289 VIEW). */
+  reviewList: (scope: { companyId: string; branchId: string; dayId?: string; sessionId?: string }) => Promise<TillReviewListPayload>;
   /** Every row of a configured grid, every page of it. */
   gridRows: (grid: ConfiguredGridKey, params: Record<string, string>) => Promise<GridRow[]>;
 };
@@ -474,6 +500,16 @@ export function createTillSessionClient(dispatch: AppDispatch): TillSessionClien
       inboxOf(await quietRead<TillApprovalInboxPayload | null>(dispatch, "/till/approvals/pending", { companyId, branchId })),
     approvalDecide: (body) => write(dispatch, "/till/approvals/decide", body),
     approvalCancel: (body) => write(dispatch, "/till/approvals/cancel", body),
+    reviewCreate: (body) => write(dispatch, "/till/reviews/create", body),
+    reviewList: async ({ companyId, branchId, dayId, sessionId }) => {
+      const data = await read<TillReviewListPayload | null>(dispatch, "/till/reviews/list", {
+        companyId,
+        branchId,
+        ...(dayId ? { dayId } : {}),
+        ...(sessionId ? { sessionId } : {}),
+      });
+      return { reviews: Array.isArray(data?.reviews) ? data.reviews : [] };
+    },
     gridRows: async (grid, params) => {
       const rows: GridRow[] = [];
       for (let page = 1; page <= GRID_MAX_PAGES; page += 1) {

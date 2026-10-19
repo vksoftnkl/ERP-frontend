@@ -34,9 +34,13 @@
  * page of the list, and when the inbox closes; primary while any wait). It
  * opens the approvers' inbox (`approval-inbox-dialog.tsx`); its close reloads
  * the list.
+ *
+ * Qt 3b5069d (`setBranch` — Cash Position's drill into a store): `?branch=<id>`
+ * on the URL lists that branch instead of the header's, read once on mount;
+ * the live line and the approval count follow it, and the title names it.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import type { MasterTableRow } from "@/components/master/crud-master-page.types";
 import { ErpActionIcon } from "@/components/design-system/icons/erp-action-icons";
@@ -62,9 +66,12 @@ import {
   STATUS_OPTIONS,
   VARIANCE_OPTIONS,
   awaitsCount,
+  branchLabelOf,
   rowHint,
+  scopeBranchOf,
   sessionGridParams,
   sessionRowOf,
+  sessionsTitle,
   varianceTone,
   type SessionRow,
 } from "./session-list";
@@ -146,9 +153,17 @@ function cashExpectedRenderer(liveCash: ReadonlyMap<string, number>) {
 
 export default function TillSessionsScreen() {
   const router = useRouter();
-  const { activeCompany, activeBranch } = useBusinessContext();
+  const { activeCompany, activeBranch, branchOptions } = useBusinessContext();
   const companyId = activeCompany?.id ?? "";
-  const branchId = activeBranch?.id ?? "";
+  /**
+   * Another store than the header's (Qt 3b5069d `setBranch`): the URL's
+   * `?branch=`, read once on mount — through `useSearchParams`, since on a
+   * forward client navigation `window.location` is still the page being left.
+   */
+  const searchParams = useSearchParams();
+  const [scopeBranchId] = useState(() => scopeBranchOf(searchParams?.toString() ?? ""));
+  const branchId = scopeBranchId || activeBranch?.id || "";
+  const title = sessionsTitle(scopeBranchId ? branchLabelOf(branchOptions, scopeBranchId) : "");
 
   const [status, setStatus] = useState("");
   const [variance, setVariance] = useState("");
@@ -434,8 +449,8 @@ export default function TillSessionsScreen() {
   return (
     <>
       <CrudMasterPage
-        title="Till Sessions"
-        listTitleOverride="Till Sessions"
+        title={title}
+        listTitleOverride={title}
         listSubtitleOverride="Every session of the branch, findable by its oddities — expected, counted and the variance are a supervisor's view, never the cashier's."
         entityLabel="till session"
         entityLabelPlural="till sessions"

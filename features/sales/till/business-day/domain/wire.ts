@@ -377,6 +377,19 @@ export function cockpitHref(keys: SessionKeys): string {
   return `/sales/till/sessions/${part(keys.companyId)}/${part(keys.branchId)}/${part(keys.accYear)}/${part(keys.tssId)}`;
 }
 
+/**
+ * The screen's open args from its URL (Qt `openOn` / `loadDay`): `tbdId` +
+ * `accYear` name a past day (where a cockpit's Back returns to), and
+ * `branch` another store than the header's — Cash Position's drill (Qt
+ * 3b5069d): its day, its safes, its day list and its live line.
+ */
+export function openArgsOf(search: string): { pick: { tbdId: string; accYear: string } | null; branchId: string } {
+  const params = new URLSearchParams(search);
+  const tbdId = (params.get("tbdId") ?? "").trim();
+  const accYear = (params.get("accYear") ?? "").trim();
+  return { pick: tbdId && accYear ? { tbdId, accYear } : null, branchId: (params.get("branch") ?? "").trim() };
+}
+
 /** A MAIN LIST - TILL BUSINESS DAYS row → the day it opens. */
 export function dayPickOf(row: GridRow | null | undefined): { tbdId: string; accYear: string } | null {
   if (!row) return null;

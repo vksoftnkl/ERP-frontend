@@ -4,7 +4,8 @@
  * Till Reports (menu 288, Sales › Till, till notes 133) — Qt `TillReportsEntry`
  * (NexERP 1d3e203, TILL_DESIGN.md §10; mockups share/till/till_report_
  * {variance,exceptions,approvals,safe_book}_ui_mockup.png, approved
- * 2026-10-17). One read-only screen, four tabs:
+ * 2026-10-17; the last three tabs Qt 3b5069d, no mockup). One read-only
+ * screen, seven tabs:
  *
  *   Cashier variance   per cashier (grid 159; Cash only / Cash + non-cash),
  *                      the picked cashier's sessions (160)
@@ -14,6 +15,11 @@
  *                      decisions (165)
  *   Safe book          per day (167), the picked day's lines (168), the
  *                      branch's remittances (157)
+ *   Cashier performance per cashier (175), the picked cashier's sessions (176)
+ *   Ledger check       per session (177; Every session / Only differences),
+ *                      the picked session's till cash legs (178)
+ *   Tender recon.      per session × non-cash tender (179; Every session /
+ *                      Only not settled), the picked tender's rows (180)
  *
  * Filters (Qt hboxFilter): Branch (dropdown 61 — the header's branch until
  * changed; empty = every branch), From / To (a week to today), Counter (133),
@@ -23,18 +29,25 @@
  * written, totalled and pilled is `till-reports.ts`; the reads are
  * `use-till-reports.ts`.
  *
- * Enter / double-click on a detail row that names a session opens its
- * Session Cockpit — a route here (Qt: a dialog over the report), so the
- * report keeps its tab, filters and picks for the way back. Ctrl+H is the
- * session's journal (grid 145, as Till Sessions' Ctrl+H). Print is the tab's
- * tables on a landscape page through the browser's print dialog; Export a
- * CSV of the same — each behind menu 288's PRINT / EXPORT right.
+ * Enter / double-click on a row that names a session opens its Session
+ * Cockpit — a detail row on most tabs, the MAIN row on Ledger check and
+ * Tender reconciliation (one row per session there; Qt `currentSessionRow`
+ * falls back to the main grid's). The Cockpit is a route here (Qt: a dialog
+ * over the report), so the report keeps its tab, filters and picks for the
+ * way back. Ctrl+H is the session's journal (grid 145, as Till Sessions'
+ * Ctrl+H). Print is the tab's tables on a landscape page through the
+ * browser's print dialog; Export a CSV of the same — each behind menu 288's
+ * PRINT / EXPORT right.
  *
- * Keys (Qt): F5 Refresh · Enter Open cockpit (on a detail table) · Ctrl+H
- * History · Enter walks the filter bar · Esc closes.
+ * Opened with `?branch=…&branchName=…&from=…&to=…` (Cash Position's drill,
+ * Qt `setScope`) the screen starts on that branch and period — over a
+ * remembered Back view — and strips the four from the address.
+ *
+ * Keys (Qt): F5 Refresh · Enter Open cockpit (on a table naming a session) ·
+ * Ctrl+H History · Enter walks the filter bar · Esc closes.
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { cx } from "@/components/design-system/cx";
 import { NexDropdownSingle, type DropdownSelection } from "@/components/design-system/dropdown";
@@ -49,18 +62,22 @@ import { overlayOpen } from "../shared/till-dialog";
 import styles from "../shared/till.module.scss";
 import { JournalDialog } from "../sessions/journal-dialog";
 import type { SessionRow } from "../sessions/session-list";
+import type { GridRow } from "../shared/wire/types";
 import { ReportTable } from "./report-table";
 import {
   EXCEPTION_CODES,
   HEAT_WHITE_TEXT,
   HOURS_HINT,
+  LEDGER_HINT,
   NO_PICKS,
   OPEN_TIP_OFF,
   OPEN_TIP_ON,
+  PERF_HINT,
   REMIT_HEAD,
   REPORT_TABS,
   SEARCH_PLACEHOLDER,
   SUBTITLE,
+  TENDER_HINT,
   TILL_REPORTS_HREF,
   VARIANCE_HINT,
   approversTable,
@@ -76,9 +93,15 @@ import {
   exceptionsTable,
   exportFileName,
   hourStrip,
+  ledgerTable,
+  legsHead,
+  legsTable,
   listedValue,
   parseReportView,
   peopleOptions,
+  perfSessionsHead,
+  perfSessionsTable,
+  performanceTable,
   pickedSafeId,
   printDocument,
   printTitle,
@@ -89,15 +112,22 @@ import {
   safeDaysTable,
   safeHint,
   safeOptions,
+  scopeFromSearch,
   searchTable,
   sessionTarget,
   sessionsHead,
   sessionsTable,
   tabLabel,
+  tenderRowKey,
+  tenderRowsHead,
+  tenderRowsTable,
+  tenderTable,
   undecidedLine,
   varianceTable,
+  withoutScopeParams,
   type ReportFilters,
   type ReportPicks,
+  type ReportScope,
   type ReportSection,
   type ReportTab,
   type ReportView,
@@ -134,6 +164,22 @@ function dropReturn(companyId: string) {
     window.sessionStorage.removeItem(RETURN_PREFIX + companyId);
   } catch {
     // Nothing kept, nothing to drop.
+  }
+}
+
+/**
+ * The scope's four, off the address once applied (Qt's `setScope` is a call,
+ * not a URL): a reload or a Back then lands on the screen as it stands. A
+ * null state is what keeps Next's router in step with the address.
+ */
+function stripScopeFromAddress() {
+  try {
+    const url = new URL(window.location.href);
+    const search = withoutScopeParams(url.search);
+    if (search === url.search) return;
+    window.history.replaceState(null, "", `${url.pathname}${search}${url.hash}`);
+  } catch {
+    // Without a history the address keeps the scope; the screen is not the worse.
   }
 }
 
@@ -198,22 +244,55 @@ function TillReportsScreen({ companyId, headerBranch }: ScreenProps) {
     dropReturn(companyId);
   }, [companyId]);
 
+  // ── Opened on a scope (Cash Position's drill, Qt `setScope`) ───────────
+  // The router's own reading of the address — not `window.location`, which
+  // on a client-side navigation still shows the page left until the commit.
+  const searchParams = useSearchParams();
+  const addressQuery = searchParams?.toString() ?? "";
+  /** The scope the screen opened on: its branch and period over a remembered Back view. */
+  const [scope] = useState<ReportScope | null>(() => scopeFromSearch(addressQuery));
+
   // ── The filter bar ─────────────────────────────────────────────────────
   const [tab, setTab] = useState<ReportTab>(restored?.tab ?? "variance");
   /** The header's branch until the operator picks one (Qt: the login branch). */
   const [branchPicked, setBranchPicked] = useState<{ value: DropdownSelection | null } | null>(
-    restored ? { value: restored.branch } : null,
+    scope ? { value: scope.branch } : restored ? { value: restored.branch } : null,
   );
   const branch = branchPicked ? branchPicked.value : headerBranch;
   const branchId = branch?.id ?? "";
-  const [fromDate, setFromDate] = useState(() => restored?.fromDate || defaultRange(today).fromDate);
-  const [toDate, setToDate] = useState(() => restored?.toDate || defaultRange(today).toDate);
-  const [counterId, setCounterId] = useState(restored?.counterId ?? "");
+  const [fromDate, setFromDate] = useState(
+    () => (scope ? scope.fromDate : restored?.fromDate) || defaultRange(today).fromDate,
+  );
+  const [toDate, setToDate] = useState(() => (scope ? scope.toDate : restored?.toDate) || defaultRange(today).toDate);
+  // A scope is a branch pick: the Counter back to All, the Safe to the branch's default.
+  const [counterId, setCounterId] = useState(scope ? "" : (restored?.counterId ?? ""));
   const [cashierId, setCashierId] = useState(restored?.cashierId ?? "");
   const [approverId, setApproverId] = useState(restored?.approverId ?? "");
   const [event, setEvent] = useState(restored?.event ?? "");
-  const [safeId, setSafeId] = useState(restored?.safeId ?? "");
+  const [safeId, setSafeId] = useState(scope ? "" : (restored?.safeId ?? ""));
+
+  // A later link to a scoped address while the screen is up (the same route:
+  // no remount) applies it the same way; the four then leave the address, so
+  // a reload or a Back lands on the screen as it stands.
+  const [seenQuery, setSeenQuery] = useState(addressQuery);
+  if (seenQuery !== addressQuery) {
+    setSeenQuery(addressQuery);
+    const next = scopeFromSearch(addressQuery);
+    if (next) {
+      setBranchPicked({ value: next.branch });
+      if (next.fromDate) setFromDate(next.fromDate);
+      if (next.toDate) setToDate(next.toDate);
+      setCounterId("");
+      setSafeId("");
+    }
+  }
+  useEffect(() => {
+    if (scopeFromSearch(addressQuery)) stripScopeFromAddress();
+  }, [addressQuery]);
+
   const [withNonCash, setWithNonCash] = useState(restored?.withNonCash ?? false);
+  const [ledgerDiffOnly, setLedgerDiffOnly] = useState(restored?.ledgerDiffOnly ?? false);
+  const [tenderPendingOnly, setTenderPendingOnly] = useState(restored?.tenderPendingOnly ?? false);
   const [search, setSearch] = useState(restored?.search ?? "");
   const [picks, setPicks] = useState<ReportPicks>(restored?.picks ?? NO_PICKS);
   const [detailPick, setDetailPick] = useState<DetailPick | null>(null);
@@ -239,11 +318,13 @@ function TillReportsScreen({ companyId, headerBranch }: ScreenProps) {
     event,
     safeId: branchId ? pickedSafeId(safes, safeId, settled(pickers.safes)) : "",
     withNonCash,
+    ledgerDiffOnly,
+    tenderPendingOnly,
   };
   const safeProblem = tab === "safe" ? safeBookProblem(filters, today, !settled(pickers.safes)) : "";
 
   const model = useTillReports({ tab, filters, today, tick, picks, safeProblem });
-  const { cashierRow, personRow, approverRow, dayRow } = model;
+  const { cashierRow, personRow, approverRow, dayRow, performerRow, ledgerRow, tenderRow } = model;
 
   // ── The tables, then what the search leaves of them ────────────────────
   const views = useMemo(
@@ -257,6 +338,12 @@ function TillReportsScreen({ companyId, headerBranch }: ScreenProps) {
       safeDays: safeDaysTable(model.safeDays.rows),
       dayLines: dayLinesTable(model.dayLines.rows),
       remits: remitsTable(model.remits.rows),
+      performance: performanceTable(model.performance.rows),
+      perfSessions: perfSessionsTable(model.perfSessions.rows),
+      ledger: ledgerTable(model.ledger.rows),
+      legs: legsTable(model.legs.rows),
+      tender: tenderTable(model.tender.rows),
+      tenderRows: tenderRowsTable(model.tenderRows.rows),
     }),
     [
       model.variance.rows,
@@ -268,6 +355,12 @@ function TillReportsScreen({ companyId, headerBranch }: ScreenProps) {
       model.safeDays.rows,
       model.dayLines.rows,
       model.remits.rows,
+      model.performance.rows,
+      model.perfSessions.rows,
+      model.ledger.rows,
+      model.legs.rows,
+      model.tender.rows,
+      model.tenderRows.rows,
     ],
   );
 
@@ -276,17 +369,27 @@ function TillReportsScreen({ companyId, headerBranch }: ScreenProps) {
     exceptions: { main: views.exceptions, detail: views.events, detailRead: model.events },
     approvers: { main: views.approvers, detail: views.decisions, detailRead: model.decisions },
     safe: { main: views.safeDays, detail: views.dayLines, detailRead: model.dayLines },
+    performance: { main: views.performance, detail: views.perfSessions, detailRead: model.perfSessions },
+    ledger: { main: views.ledger, detail: views.legs, detailRead: model.legs },
+    tender: { main: views.tender, detail: views.tenderRows, detailRead: model.tenderRows },
   };
   const current = tabTables[tab];
   const mainShown = useMemo(() => searchTable(current.main, search), [current.main, search]);
   const detailShown = useMemo(() => searchTable(current.detail, search), [current.detail, search]);
 
   // ── Heads and hints ────────────────────────────────────────────────────
-  const varianceEmpty = model.variance.settled && !model.variance.loading && model.variance.rows.length === 0;
+  const emptyAnswer = (read: GridRead) => read.settled && !read.loading && read.rows.length === 0;
+  const varianceEmpty = emptyAnswer(model.variance);
   const sessionsHeadText = sessionsHead(cashierRow ? textOf(cashierRow, "cashier") : null, varianceEmpty);
   const eventsHeadText = eventsHead(personRow ? textOf(personRow, "person") : null, event, picks.hour, model.events.rows.length);
   const decisionsHeadText = decisionsHead(approverRow ? textOf(approverRow, "approver") : null, model.decisions.rows.length);
   const dayHeadText = dayHead(dayRow);
+  const perfSessionsHeadText = perfSessionsHead(
+    performerRow ? textOf(performerRow, "cashier") : null,
+    emptyAnswer(model.performance),
+  );
+  const legsHeadText = legsHead(ledgerRow ? textOf(ledgerRow, "tss_session_no") : null, emptyAnswer(model.ledger), ledgerDiffOnly);
+  const tenderRowsHeadText = tenderRowsHead(tenderRow, emptyAnswer(model.tender), tenderPendingOnly);
   const undecided = model.undecided.settled ? undecidedLine(model.undecided.rows) : null;
   const safeHintText = safeProblem || (model.safeDays.settled ? safeHint(model.safeDays.rows) : "");
   const strip = useMemo(() => hourStrip(model.hours.rows), [model.hours.rows]);
@@ -295,13 +398,27 @@ function TillReportsScreen({ companyId, headerBranch }: ScreenProps) {
     exceptions: eventsHeadText,
     approvers: decisionsHeadText,
     safe: dayHeadText,
+    performance: perfSessionsHeadText,
+    ledger: legsHeadText,
+    tender: tenderRowsHeadText,
   };
 
-  // ── The picked detail row, and the session it names ────────────────────
+  // ── The picked rows, and the session one of them names ─────────────────
   const detailKey =
     detailPick && detailPick.tab === tab && detailPick.answerKey === current.detailRead.answerKey ? detailPick.rowKey : null;
   const detailRow = detailKey === null ? null : (current.detail.rows.find((row) => row.key === detailKey)?.row ?? null);
-  const target = sessionTarget(detailRow);
+  /** The main grid's picked row, per tab — the Ledger check's and Tender reconciliation's name a session. */
+  const mainRow: Record<ReportTab, GridRow | null> = {
+    variance: cashierRow,
+    exceptions: personRow,
+    approvers: approverRow,
+    safe: dayRow,
+    performance: performerRow,
+    ledger: ledgerRow,
+    tender: tenderRow,
+  };
+  // Qt `currentSessionRow`: the detail row when it names a session, else the main row when it does.
+  const target = sessionTarget(detailRow) ?? sessionTarget(mainRow[tab]);
 
   const pickDetail = (row: RowView) => {
     if (row.total) return;
@@ -321,6 +438,12 @@ function TillReportsScreen({ companyId, headerBranch }: ScreenProps) {
       model.safeDays,
       model.dayLines,
       model.remits,
+      model.performance,
+      model.perfSessions,
+      model.ledger,
+      model.legs,
+      model.tender,
+      model.tenderRows,
     ].some((read) => read.loading) || Object.values(pickers).some((read) => read.loading);
 
   // ── Verbs ──────────────────────────────────────────────────────────────
@@ -357,6 +480,8 @@ function TillReportsScreen({ companyId, headerBranch }: ScreenProps) {
     event,
     safeId,
     withNonCash,
+    ledgerDiffOnly,
+    tenderPendingOnly,
     search,
     picks: {
       cashier: cashierRow ? textOf(cashierRow, "cashier_id") : picks.cashier,
@@ -364,6 +489,9 @@ function TillReportsScreen({ companyId, headerBranch }: ScreenProps) {
       approver: approverRow ? textOf(approverRow, "approver_id") : "",
       day: dayRow ? textOf(dayRow, "day") : picks.day,
       hour: picks.hour,
+      performer: performerRow ? textOf(performerRow, "cashier_id") : picks.performer,
+      ledgerSession: ledgerRow ? textOf(ledgerRow, "tss_id") : picks.ledgerSession,
+      tenderKey: tenderRow ? tenderRowKey(tenderRow) : picks.tenderKey,
     },
   });
 
@@ -619,11 +747,124 @@ function TillReportsScreen({ companyId, headerBranch }: ScreenProps) {
     </>
   );
 
+  const performanceTab = (
+    <>
+      <p className={local.hint}>{PERF_HINT}</p>
+      <div className={local.mainPane}>
+        <ReportTable
+          table={mainShown}
+          pickedKey={performerRow ? textOf(performerRow, "cashier_id") : null}
+          onPick={(row) => {
+            // The totals row picks nobody: the sessions keep the last cashier (Qt).
+            if (row.total) return;
+            setPicks((now) => ({ ...now, performer: row.key }));
+            setDetailPick(null);
+          }}
+          loading={model.performance.loading}
+          error={model.performance.error}
+          emptyText={emptyAfterSearch(current.main, "No till session in this range.")}
+          label="Cashier performance"
+        />
+      </div>
+      <p className={local.head}>{perfSessionsHeadText}</p>
+      <div className={local.detailPane}>{detailTable("No session.", "The cashier's sessions by performance")}</div>
+    </>
+  );
+
+  /** A radio pair over the main table (Qt hboxLedgerTop / hboxTenderTop), the hint beside it. */
+  const radioPair = (
+    name: string,
+    label: string,
+    only: string,
+    value: boolean,
+    set: (value: boolean) => void,
+    hint: string,
+  ) => (
+    <div className={local.topRow}>
+      <span className={styles.radioRow} role="radiogroup" aria-label={label}>
+        <label className={styles.radio}>
+          <input type="radio" name={name} checked={!value} onChange={() => set(false)} />
+          Every session
+        </label>
+        <label className={styles.radio}>
+          <input type="radio" name={name} checked={value} onChange={() => set(true)} />
+          {only}
+        </label>
+      </span>
+      <span className={styles.spacer} />
+      <span className={local.hint}>{hint}</span>
+    </div>
+  );
+
+  /** Ledger check / Tender reconciliation: the main row names a session — Enter opens it. */
+  const sessionMainTable = (
+    read: GridRead,
+    pickedKey: string | null,
+    pick: "ledgerSession" | "tenderKey",
+    emptyText: string,
+    label: string,
+  ) => (
+    <ReportTable
+      table={mainShown}
+      pickedKey={pickedKey}
+      onPick={(row) => {
+        // The totals row is no session: the detail keeps the last one (Qt).
+        if (row.total) return;
+        setPicks((now) => ({ ...now, [pick]: row.key }));
+        setDetailPick(null);
+      }}
+      onOpen={(row) => openCockpit(row)}
+      loading={read.loading}
+      error={read.error}
+      emptyText={emptyAfterSearch(current.main, emptyText)}
+      label={label}
+    />
+  );
+
+  const ledgerTab = (
+    <>
+      {radioPair("till-rpt-ledger", "Ledger check", "Only differences", ledgerDiffOnly, setLedgerDiffOnly, LEDGER_HINT)}
+      <div className={local.mainPane}>
+        {sessionMainTable(
+          model.ledger,
+          ledgerRow ? textOf(ledgerRow, "tss_id") : null,
+          "ledgerSession",
+          ledgerDiffOnly ? "No session is OFF in this range." : "No till session in this range.",
+          "Ledger check per session",
+        )}
+      </div>
+      <p className={local.head}>{legsHeadText}</p>
+      <div className={local.detailPane}>{detailTable("No leg on the till cash ledger.", "The session's ledger legs")}</div>
+    </>
+  );
+
+  const tenderTab = (
+    <>
+      {radioPair("till-rpt-tender", "Tender reconciliation", "Only not settled", tenderPendingOnly, setTenderPendingOnly, TENDER_HINT)}
+      <div className={local.mainPane}>
+        {sessionMainTable(
+          model.tender,
+          tenderRow ? tenderRowKey(tenderRow) : null,
+          "tenderKey",
+          tenderPendingOnly
+            ? "Everything in this range is settled."
+            : "No card, UPI, wallet, cheque or bank tender in a till session in this range.",
+          "Tender reconciliation per session and tender",
+        )}
+      </div>
+      <p className={local.head}>{tenderRowsHeadText}</p>
+      <div className={local.detailPane}>{detailTable("No tender row.", "The tender rows")}</div>
+    </>
+  );
+
   const tabBody: Record<ReportTab, ReactNode> = {
     variance: varianceTab,
     exceptions: exceptionsTab,
     approvers: approversTab,
     safe: safeTab,
+    performance: performanceTab,
+    ledger: ledgerTab,
+    tender: tenderTab,
   };
 
   const personSelect = (

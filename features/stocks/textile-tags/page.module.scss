@@ -1,0 +1,368 @@
+/**
+ * Textile Tags — what this screen adds to the voucher skin it wears.
+ *
+ * The page, the grid, the buttons and the dialogs are the quotation's skin
+ * (`features/sales/quotation/page.module.scss`), the same one Opening Stock
+ * wears; this file holds only what the tag screen has and it does not: the
+ * tab strip, the header row, the size grid, the lines/preview split, the
+ * delegate's paint rules (chip, reserved grey, barcode blue, problem tint)
+ * and the label preview card.
+ *
+ * Lengths are in the voucher skin's fluid unit, `--erp-q-u`.
+ */
+@function u($n) {
+  @return calc(#{$n} * var(--erp-q-u));
+}
+
+/* ---------------------------------------------------------------- shell */
+.page {
+  gap: u(0.4);
+}
+
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.1);
+  min-width: 0;
+}
+
+.tabHint {
+  color: var(--text-muted, #666666);
+  font-size: u(0.7);
+}
+
+.tabs {
+  display: flex;
+  gap: u(0.2);
+  border-bottom: 1px solid var(--border, #c9c9c9);
+}
+
+.tab {
+  padding: u(0.3) u(0.9);
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: var(--erp-radius, 4px) var(--erp-radius, 4px) 0 0;
+  background: transparent;
+  color: var(--text-muted, #666666);
+  font: inherit;
+  font-size: u(0.74);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--primary, #7b1515);
+}
+
+.tabActive {
+  border-color: var(--border, #c9c9c9);
+  background: var(--card-bg, #ffffff);
+  color: var(--primary, #7b1515);
+  margin-bottom: -1px;
+}
+
+.tabPanel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: u(0.45);
+  min-height: 0;
+}
+
+.tabPanel[hidden] {
+  display: none;
+}
+
+.waitingTab {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  padding: u(2);
+}
+
+.waitingText {
+  max-width: u(42);
+  margin: 0;
+  color: var(--text-muted, #555555);
+  font-size: u(0.8);
+  line-height: 1.6;
+  text-align: center;
+}
+
+.waitingText code {
+  padding: 0 u(0.2);
+  background: #f2f2f2;
+  font-size: u(0.74);
+}
+
+/* --------------------------------------------------------------- header */
+.headerRow {
+  display: grid;
+  grid-template-columns:
+    auto minmax(u(7), 2fr)
+    auto minmax(u(9), 3fr)
+    auto minmax(u(6), 1fr)
+    auto minmax(u(7), 2fr)
+    auto minmax(u(4), 1fr);
+  gap: u(0.4) u(0.5);
+  align-items: center;
+  padding: u(0.5) u(0.8);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: var(--card-bg, #ffffff);
+}
+
+@container erp-txn-page (max-width: 1100px) {
+  .headerRow {
+    grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr);
+  }
+}
+
+.seriesInput {
+  color: var(--text-muted, #555555);
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
+/* ----------------------------------------------------------------- cards */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.35);
+  padding: u(0.45) u(0.7) u(0.55);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: var(--card-bg, #ffffff);
+}
+
+.cardTitle {
+  margin: 0;
+  color: var(--primary, #7b1515);
+  font-size: u(0.7);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+/* ------------------------------------------------------------- size grid */
+.sizeGridFields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.3) u(0.4);
+  align-items: center;
+}
+
+.sizeGridItem {
+  flex: 1 1 u(11);
+  min-width: u(11);
+}
+
+.sizeGridBrand {
+  flex: 1 1 u(9);
+  min-width: u(9);
+}
+
+.sizeGridShort {
+  max-width: u(8.5);
+}
+
+.sizeGridSet {
+  width: auto;
+}
+
+.sizeGridCost {
+  max-width: u(6);
+}
+
+.sizeGridFields > input {
+  flex: 1 1 u(6);
+}
+
+.sizeGridBoxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.3);
+  align-items: center;
+}
+
+.sizeBox {
+  display: inline-flex;
+  gap: u(0.2);
+  align-items: center;
+}
+
+.sizeBoxLabel {
+  font-size: u(0.7);
+  font-weight: 600;
+}
+
+.sizeBoxInput {
+  width: u(2.6);
+  text-align: center;
+}
+
+.sizeGridSummary {
+  margin-left: u(0.4);
+  color: var(--text-muted, #666666);
+  font-size: u(0.7);
+}
+
+/* ------------------------------------------------------- lines + preview */
+.linesRow {
+  display: flex;
+  flex: 1 1 auto;
+  gap: u(0.5);
+  min-height: 0;
+}
+
+.linesShell {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.previewPanel {
+  display: flex;
+  flex: 0 0 u(20.5);
+  flex-direction: column;
+  gap: u(0.35);
+  padding: u(0.45) u(0.6) u(0.55);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: var(--card-bg, #ffffff);
+}
+
+@container erp-txn-page (max-width: 1000px) {
+  .linesRow {
+    flex-direction: column;
+  }
+
+  .previewPanel {
+    flex: 0 0 auto;
+  }
+}
+
+.previewCard {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 300 / 190;
+}
+
+.previewCopies {
+  margin: 0;
+  font-size: u(0.72);
+  font-weight: 600;
+}
+
+.previewNote,
+.noTaxNote {
+  margin: 0;
+  color: var(--text-muted, #666666);
+  font-size: u(0.66);
+  line-height: 1.45;
+}
+
+.noTaxNote {
+  padding: u(0.2) u(0.5);
+}
+
+/* ------------------------------------------------------------ validation */
+.validation {
+  margin: 0;
+  padding: u(0.3) u(0.5);
+  border-top: 1px solid var(--border-light, #eeeeee);
+  font-size: u(0.72);
+  font-weight: 600;
+  white-space: pre-line;
+}
+
+.validationOk {
+  color: #15803d;
+}
+
+.validationError {
+  color: #b42318;
+}
+
+.hint {
+  margin: 0;
+  min-height: u(1);
+  padding: 0 u(0.5) u(0.2);
+  color: #a15c00;
+  font-size: u(0.68);
+}
+
+/* ------------------------------------------------------------------ grid */
+/* A line the server (or the screen, ahead of it) refuses: tinted. */
+.problemRow > td {
+  background: #fdf3d8;
+}
+
+.problemRow > td:first-child {
+  box-shadow: inset 3px 0 0 var(--danger, #b3261e);
+}
+
+/* A reserved line is read-only and grey, except its barcode. */
+.reservedRow > td {
+  color: #475569;
+}
+
+.reservedRow .cellDisabled {
+  color: #475569;
+}
+
+/* A disabled input swallows the click in Chromium; letting it through to the
+   cell is what lets the grid say WHY the cell is shut ("Pick the item first."). */
+.tagGrid .cellDisabled {
+  pointer-events: none;
+}
+
+.cellBold {
+  font-weight: 700;
+}
+
+.cellMuted,
+.cellMuted::placeholder {
+  color: #9ca3af;
+}
+
+.barcodeReserved {
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.chip {
+  display: inline-block;
+  padding: 0 u(0.35);
+  border-radius: 3px;
+  font-size: 0.85em;
+  line-height: 1.5;
+}
+
+.chipAuto {
+  background: #e6f6f4;
+  color: #0f766e;
+}
+
+.chipTyped {
+  background: #fef3e2;
+  color: #b45309;
+}
+
+/* ---------------------------------------------------------------- footer */
+.footerRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.35);
+  align-items: center;
+  padding-top: u(0.1);
+}
+
+.footNote {
+  flex: 1 1 auto;
+  margin: 0;
+  color: var(--text-main, #222222);
+  font-size: u(0.72);
+  font-weight: 600;
+}

@@ -50,11 +50,24 @@ export type RemittancesPanelProps = {
   onStatus: (status: string) => void;
   pickedId: string | null;
   onPick: (row: GridRow) => void;
+  /** Print memo (Qt 3b5069d): the picked remittance's memo, any state. */
+  printButton: ButtonState;
+  onPrint: () => void;
   voidButton: ButtonState;
   onVoid: () => void;
 };
 
-export function RemittancesPanel({ remits, status, onStatus, pickedId, onPick, voidButton, onVoid }: RemittancesPanelProps) {
+export function RemittancesPanel({
+  remits,
+  status,
+  onStatus,
+  pickedId,
+  onPick,
+  printButton,
+  onPrint,
+  voidButton,
+  onVoid,
+}: RemittancesPanelProps) {
   return (
     <div className={local.deskBody}>
       <div className={local.filterRow}>
@@ -74,6 +87,15 @@ export function RemittancesPanel({ remits, status, onStatus, pickedId, onPick, v
           ))}
         </select>
         <span className={styles.spacer} />
+        <button
+          type="button"
+          className={styles.secondaryButton}
+          disabled={!printButton.enabled}
+          title={printButton.title}
+          onClick={onPrint}
+        >
+          Print memo
+        </button>
         <button
           type="button"
           className={styles.dangerButton}

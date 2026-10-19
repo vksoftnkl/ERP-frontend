@@ -705,3 +705,47 @@ export type TillApprovalInboxPayload = {
   /** Requests swept to EXPIRED by this read. */
   expired: number;
 };
+
+// ─── head office reviews (notes 134, Cash Position 289) ──────────────────────
+
+/** ck_tsr_outcome — what head office made of a day or a session. */
+export type TillReviewOutcome =
+  | "OK"
+  | "QUERY"
+  | "ESCALATED"
+  | "RECOVERY_ORDERED"
+  | "WRITTEN_OFF"
+  | "SUSPENSE_CLEARED"
+  | "BANK_MATCHED";
+
+/** One accounts.till_session_review row (server `TillReviewPayload`). */
+export type TillReview = {
+  tsrId: string;
+  tsrAccYear: string;
+  /** The day reviewed — for a session review, null (the session names its day). */
+  dayId: string | null;
+  sessionId: string | null;
+  sessionNo: string | null;
+  /** The business date of the day, or of the session's day (yyyy-MM-dd). */
+  businessDate: string | null;
+  outcome: TillReviewOutcome;
+  note: string | null;
+  reviewedBy: string;
+  reviewedByName: string | null;
+  reviewedOn: string;
+  refVoucherId: string | null;
+  refVoucherAccYear: string | null;
+  refVoucherNo: string | null;
+  /** True on the newest review of its day / session: a later one supersedes it. */
+  current: boolean;
+};
+
+/** POST /till/reviews/create. */
+export type TillReviewCreateResult = {
+  review: TillReview;
+  /** The review of the same day / session this one supersedes, or null for the first. */
+  supersedes: string | null;
+};
+
+/** GET /till/reviews/list. */
+export type TillReviewListPayload = { reviews: TillReview[] };

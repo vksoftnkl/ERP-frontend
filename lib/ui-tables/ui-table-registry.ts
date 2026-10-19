@@ -93,6 +93,12 @@ export const UI_TABLES = {
    * one layout, one set of widths, whichever screen opens it.
    */
   charges: { name: "CHARGES", fallbackId: "21" },
+  /**
+   * Textile Tags, New tags tab (Qt NexERP 3b5069d, textile plan §4; ui_table
+   * registered 2026-10-17 on the dev DB): the line grid's titles, widths,
+   * order and Enter stops. The server's tag routes are not built yet (notes 136).
+   */
+  textileTagLines: { name: "TEXTILE TAGS - NEW TAG LINES", fallbackId: "53" },
 } as const;
 export type UiTableKey = keyof typeof UI_TABLES;
 const ID_KEYS = ["ui_tbl_id", "uiTblId", "uiTableId", "id"] as const;

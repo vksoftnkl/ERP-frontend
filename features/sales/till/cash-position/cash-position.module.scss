@@ -1,0 +1,308 @@
+/**
+ * What Cash Position (menu 289) adds over the shared till sheet
+ * (`../shared/till.module.scss`): the filter bar, the ten tiles, the stores
+ * table over its flags, the two lower tables at 3 : 2 (Qt hboxLower), the
+ * foot — and the cells Qt's delegate paints that the report table does not:
+ * the insured fill bar, amber text, a tooltip. The HO review popup's form
+ * (two columns of outcomes, the history pane) lives here too.
+ *
+ * The page sizes itself to `.erp-app-content` (`height: 100%` on the shared
+ * `.page`, never a viewport unit); the tables scroll inside their panes
+ * under a sticky head. Breakpoints are CONTAINER queries on the page.
+ */
+
+.page {
+  container-type: inline-size;
+  container-name: cash-position;
+}
+
+.notice {
+  margin: 0;
+  font-size: 0.86rem;
+  color: #92400e;
+}
+
+/* ── The filter bar (Qt hboxFilter) ────────────────────────────────────── */
+
+.filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+}
+
+.cap {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.dateInput {
+  width: 138px;
+}
+
+.branchPick {
+  width: 240px;
+  min-width: 0;
+}
+
+.showSelect {
+  min-width: 170px;
+}
+
+.search {
+  flex: 0 1 180px;
+  min-width: 120px;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-main);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* ── The tiles (Qt wTiles) ─────────────────────────────────────────────── */
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 10px;
+  background: var(--page-bg);
+  border: 1px solid var(--border-light, var(--border));
+  border-radius: var(--erp-radius);
+}
+
+.tileValue {
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Stores over the flags, the two lower tables ───────────────────────── */
+
+.storesPane {
+  flex: 3 1 0;
+  min-height: 140px;
+  overflow: auto;
+}
+
+.flags {
+  margin: 0;
+  padding: 5px 9px;
+  border: 1px solid #efb9b5;
+  border-left: 4px solid #b91c1c;
+  border-radius: var(--erp-radius);
+  background: #fdf2f1;
+  color: #b91c1c;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.lower {
+  flex: 2 1 0;
+  min-height: 120px;
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 12px;
+}
+
+.lowerSide {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lowerPane {
+  flex: 1 1 auto;
+  min-height: 80px;
+  overflow: auto;
+}
+
+.head {
+  margin: 0;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-main);
+}
+
+/* ── Tables ────────────────────────────────────────────────────────────── */
+
+.table {
+  td {
+    vertical-align: middle;
+  }
+}
+
+.totalRow td {
+  background: var(--header-bg, #f4f4f4);
+}
+
+.signed {
+  font-weight: 700;
+}
+
+.amber {
+  color: #b45309;
+}
+
+.pills {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.pillsRight {
+  justify-content: flex-end;
+}
+
+/* The insured fill bar before its percent (Qt `paintBar`). */
+.barCell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
+}
+
+.bar {
+  display: inline-block;
+  width: 70px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--border, #ddd);
+  overflow: hidden;
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+}
+
+.barGreen {
+  background: #15803d;
+}
+
+.barAmber {
+  background: #d97706;
+}
+
+.barRed {
+  background: #b91c1c;
+}
+
+/* ── The foot (Qt hboxFoot) ────────────────────────────────────────────── */
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.footNote {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+/* ── Add HO review ─────────────────────────────────────────────────────── */
+
+.form {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 8px 14px;
+  align-items: start;
+}
+
+.formCap {
+  padding-top: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.targetLine {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.targetSelect {
+  min-width: 320px;
+  max-width: 100%;
+}
+
+.outcomes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 24px;
+}
+
+.outcomeColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.outcome {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.outcomeHint {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.historyPane {
+  min-height: 140px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+/* Narrow: the lower tables stack, the tiles wrap, the outcomes one column. */
+@container cash-position (max-width: 1100px) {
+  .tiles {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@container cash-position (max-width: 900px) {
+  .lower {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .outcomes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

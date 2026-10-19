@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { cx } from "@/components/design-system/cx";
 import { useBusinessContext } from "@/components/layout/business-context";
@@ -14,6 +14,7 @@ import { PURPOSE_CODE } from "@/features/printing/domain/documentPrint";
 import { useAppSelector } from "@/store/hooks";
 import { selectAppSettingText } from "@/store/slices/appSettingsSlice";
 import { LiveCashLine } from "../shared/live-cash-line";
+import { branchLabelOf } from "../sessions/session-list";
 import { DayExceptionDialog } from "./components/day-exception-dialog";
 import { DayGrid } from "./components/day-grid";
 import { Checklist, DayNumbers, FactsStrip, VerdictBand, pillToneClass } from "./components/day-panels";
@@ -44,6 +45,7 @@ import {
   cockpitHref,
   dayKeyOf,
   dayPickOf,
+  openArgsOf,
   sessionKeysOf,
   text,
   type DayCloseResult,
@@ -82,15 +84,6 @@ function overlayOpen(): boolean {
   );
 }
 
-/** The day the URL names — where a cockpit's Back returns to. */
-function pickFromUrl(): DayPick {
-  if (typeof window === "undefined") return null;
-  const params = new URLSearchParams(window.location.search);
-  const tbdId = (params.get("tbdId") ?? "").trim();
-  const accYear = (params.get("accYear") ?? "").trim();
-  return tbdId && accYear ? { tbdId, accYear } : null;
-}
-
 /** The sessions grid never gets fewer rows than this, however long the checklist (Qt 425fa80). */
 const SESSIONS_MIN_ROWS = 6;
 
@@ -127,18 +120,37 @@ function dayRowKey(row: GridRow, index: number): string {
  * against its safe book — as two rows that never block; the green rows fold
  * under one "N checks OK" row, and the sessions grid keeps six rows.
  *
+ * Qt 3b5069d (`openOn` — Cash Position's drill into a store): `?branch=<id>`
+ * on the URL runs the whole screen on THAT branch instead of the header's —
+ * its day (the one `tbdId` + `accYear` name, or its today), its safes, its day
+ * list, its live line, its books, and Day Open / Close day post with it. Read
+ * once on mount; the subtitle names the store when it is not the header's
+ * (its name from the header's branch list, else the id — the day payload
+ * carries none). The Cash Office links on the checklist still open the
+ * header's branch: that screen has no branch arg (nor does Qt's).
+ *
  * Keys (Qt): F5 Refresh checks (always today) · F8 Day ⇄ List · F10 Close day
  * · Enter on a session opens its cockpit, on a day opens that day · Esc closes.
  */
 export default function BusinessDayScreen() {
   const router = useRouter();
   const { permissions } = usePagePermissions({ href: BUSINESS_DAY_HREF });
-  const { activeCompany, activeBranch } = useBusinessContext();
+  const { activeCompany, activeBranch, branchOptions } = useBusinessContext();
   const companyId = activeCompany?.id ?? "";
-  const branchId = activeBranch?.id ?? "";
+  const headerBranchId = activeBranch?.id ?? "";
   const companyName = activeCompany?.name ?? "";
   const cutoff = useAppSelector((state) => selectAppSettingText(state, "till.day_cutoff"));
-  const [initialPick] = useState(pickFromUrl);
+  // The URL's open args (Qt `openOn`): the day a cockpit's Back returns to, and
+  // the branch Cash Position drilled into ("" = the header's). Read through
+  // `useSearchParams`, never `window.location`: on a forward client navigation
+  // the address is pushed after the first render, so `window.location` would
+  // still be the page being left.
+  const searchParams = useSearchParams();
+  const [args] = useState((): { pick: DayPick; branchId: string } => openArgsOf(searchParams?.toString() ?? ""));
+  const initialPick = args.pick;
+  // Another store than the header's (Qt `openOn`): the whole screen simply runs on it.
+  const branchId = args.branchId || headerBranchId;
+  const scopedBranchName = args.branchId && args.branchId !== headerBranchId ? branchLabelOf(branchOptions, args.branchId) : "";
 
   const model = useBusinessDay({
     companyId,
@@ -169,7 +181,7 @@ export default function BusinessDayScreen() {
   const daysGridRef = useRef<HTMLDivElement | null>(null);
 
   // ── What the screen says ───────────────────────────────────────────────
-  const headContext = useMemo(() => ({ companyName, cutoff }), [companyName, cutoff]);
+  const headContext = useMemo(() => ({ companyName, cutoff, branchName: scopedBranchName }), [companyName, cutoff, scopedBranchName]);
   const head = useMemo(() => {
     if (dayState.kind === "day") return dayHead(dayState.day, headContext);
     if (dayState.kind === "none") return noDayHead(dayState.businessDate, headContext);

@@ -3,7 +3,9 @@
 /**
  * The reads behind Till Reports — the Qt `runGrid` calls of `loadVariance /
  * loadSessions / loadExceptions / loadEvents / loadApprovers / loadDecisions /
- * loadSafe / loadDayLines / loadPickers` — as one keyed read per grid.
+ * loadSafe / loadDayLines / loadPerformance / loadPerfSessions / loadLedger /
+ * loadLegs / loadTender / loadTenderRows / loadPickers` — as one keyed read
+ * per grid.
  *
  * Each grid is read when its key moves: what it reads (its tokens, every one
  * sent), the grid id the directory resolved, and a tick that F5 and a tab
@@ -33,13 +35,20 @@ import {
   exceptionEventsParams,
   exceptionHoursParams,
   exceptionsParams,
+  baseParams,
+  ledgerLegsParams,
+  ledgerParams,
   peopleParams,
   pickRowById,
+  pickRowOrFirst,
   pickSafeDay,
+  pickTenderRow,
   pickVarianceRow,
   remittanceParams,
   safeDayLinesParams,
   safeDaysParams,
+  tenderParams,
+  tenderRowsParams,
   varianceParams,
   type ReportFilters,
   type ReportPicks,
@@ -152,7 +161,7 @@ export type TillReportsInput = {
   safeProblem: string;
 };
 
-/** Every grid of the four tabs; only the showing tab's are read. */
+/** Every grid of the seven tabs; only the showing tab's are read. */
 export function useTillReports({ tab, filters, today, tick, picks, safeProblem }: TillReportsInput) {
   // ── 1 · Cashier variance ───────────────────────────────────────────────
   const variance = useGridRead(
@@ -248,6 +257,59 @@ export function useTillReports({ tab, filters, today, tick, picks, safeProblem }
     ROW_ORDER.remits,
   );
 
+  // ── 5 · Cashier performance ────────────────────────────────────────────
+  const onPerformance = tab === "performance";
+  const performance = useGridRead(
+    "tillRptCashierPerformance",
+    onPerformance ? baseParams(filters, today) : null,
+    tick,
+    "The cashier performance could not be read.",
+  );
+  const performerRow = onPerformance ? pickVarianceRow(performance.rows, picks.performer) : null;
+  const perfSessions = useGridRead(
+    "tillRptPerformanceSessions",
+    performerRow ? cashierSessionsParams(filters, today, textOf(performerRow, "cashier_id")) : null,
+    tick,
+    "The cashier's sessions could not be read.",
+    ROW_ORDER.sessions,
+  );
+
+  // ── 6 · Ledger check ───────────────────────────────────────────────────
+  const onLedger = tab === "ledger";
+  const ledger = useGridRead(
+    "tillRptLedgerCheck",
+    onLedger ? ledgerParams(filters, today) : null,
+    tick,
+    "The ledger check could not be read.",
+  );
+  const ledgerRow = onLedger ? pickRowOrFirst(ledger.rows, "tss_id", picks.ledgerSession) : null;
+  const legs = useGridRead(
+    "tillRptLedgerLegs",
+    ledgerRow ? ledgerLegsParams(filters.companyId, textOf(ledgerRow, "tss_id")) : null,
+    tick,
+    "The session's ledger legs could not be read.",
+    ROW_ORDER.legs,
+  );
+
+  // ── 7 · Tender reconciliation ──────────────────────────────────────────
+  const onTender = tab === "tender";
+  const tender = useGridRead(
+    "tillRptTenderRecon",
+    onTender ? tenderParams(filters, today) : null,
+    tick,
+    "The tender reconciliation could not be read.",
+  );
+  const tenderRow = onTender ? pickTenderRow(tender.rows, picks.tenderKey) : null;
+  const tenderRows = useGridRead(
+    "tillRptTenderRows",
+    tenderRow
+      ? tenderRowsParams(filters.companyId, textOf(tenderRow, "tss_id"), textOf(tenderRow, "tender_type_id"))
+      : null,
+    tick,
+    "The tender rows could not be read.",
+    ROW_ORDER.tenderRows,
+  );
+
   return {
     variance,
     cashierRow,
@@ -264,6 +326,15 @@ export function useTillReports({ tab, filters, today, tick, picks, safeProblem }
     dayRow,
     dayLines,
     remits,
+    performance,
+    performerRow,
+    perfSessions,
+    ledger,
+    ledgerRow,
+    legs,
+    tender,
+    tenderRow,
+    tenderRows,
   };
 }
 

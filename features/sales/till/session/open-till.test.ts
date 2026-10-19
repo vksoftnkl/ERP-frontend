@@ -14,6 +14,7 @@ import {
   floatApprovalRequest,
   forceCloseRequestOf,
   gaugeText,
+  heldSessionOf,
   isCarried,
   isDeviceRefusal,
   liveDateOf,
@@ -143,6 +144,49 @@ describe("the figures", () => {
     expect(openFigures(i).issued).toBe(150000);
     // Nothing to carry on C02: the choice falls back to issued.
     expect(isCarried(inputs({}, { floatChoice: "CARRIED", pickedCounterId: "c2" }))).toBe(false);
+  });
+
+  it("reads as money with a tone while nothing is held", () => {
+    const figures = openFigures(inputs({}, { count: withQty(EMPTY_COUNT, "d500", 3) }));
+    expect(figures).toMatchObject({ hidden: false, issuedText: "2,000.00", countedText: "1,500.00" });
+  });
+});
+
+// Qt tests/till/snap_open.cpp "other": another cashier's session held on this device.
+describe("a held session greys the form (Qt 3b5069d)", () => {
+  const other = check({ deviceSession: live({ operatorId: "u-other", counterCode: "ZT1", operatorName: "MEENA T" }) });
+  const elsewhere = check({ userSessionElsewhere: live({ deviceName: "VKPOS2" }) });
+
+  it("is this device's session, anyone's, else this user's elsewhere", () => {
+    expect(heldSessionOf(other)?.operatorName).toBe("MEENA T");
+    expect(heldSessionOf(elsewhere)?.deviceName).toBe("VKPOS2");
+    expect(heldSessionOf(check({ deviceSession: live(), userSessionElsewhere: live({ sessionId: "x" }) }))?.sessionId).toBe("tss-1");
+    expect(heldSessionOf(check())).toBeNull();
+    expect(heldSessionOf(null)).toBeNull();
+  });
+
+  it("names the held session's counter and operator — over the linked counter and the pick list", () => {
+    const text = counterDisplay(other);
+    expect(text.kind).toBe("text");
+    expect(text.kind === "text" ? text.text : "").toMatch(/^ZT1/);
+    expect(text).toEqual({ kind: "text", text: "ZT1  (in use by MEENA T)" });
+    const linked = check({
+      ...other,
+      linkedCounter: { counterId: "L", code: "C09", name: "Linked", defaultFloat: 0, carriedFrom: null, liveSessionId: "tss-1", inactive: false },
+    });
+    expect(counterDisplay(linked)).toEqual({ kind: "text", text: "ZT1  (in use by MEENA T)" });
+    // This user's session elsewhere does not hold THIS counter: the line stays the pick.
+    expect(counterDisplay(elsewhere).kind).toBe("pick");
+  });
+
+  it("reads every figure as — with no tone, and hides the mismatch band, even over a counted drawer", () => {
+    for (const held of [other, elsewhere]) {
+      const figures = openFigures(inputs({ check: held }, { count: withQty(EMPTY_COUNT, "d500", 3) }));
+      expect(figures).toMatchObject({ hidden: true, issuedText: "—", countedText: "—", diffText: "—", diffTone: "", mismatch: false });
+      // The paise stay what the form says (the approval request reads the diff).
+      expect(figures.diff).toBe(-50000);
+    }
+    expect(livePanelOf(other, "u-me")).toMatchObject({ showForceClose: true, forceCloseEnabled: true });
   });
 });
 

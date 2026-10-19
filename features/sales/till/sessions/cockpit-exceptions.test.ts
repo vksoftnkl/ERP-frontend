@@ -41,11 +41,15 @@ import {
   pendingReceive,
   pendingVariance,
   pickedIndexAfter,
+  printSlipButton,
   printZLabel,
+  printableSlip,
   retenderButton,
   retenderTargetOf,
   retenderableBill,
   sessionPrintTarget,
+  slipPrintLabel,
+  slipPrintTarget,
   xReadLabel,
 } from "./cockpit";
 import {
@@ -338,6 +342,47 @@ describe("the cockpit's buttons (Qt refreshButtons)", () => {
     expect(sessionPrintTarget(KEY, "C01-261009-01", "x").filename).toBe("x-C01-261009-01");
     expect(printZLabel("C01-261009-01")).toBe("Session Z C01-261009-01");
     expect(xReadLabel("C01-261009-01")).toBe("X read C01-261009-01");
+  });
+});
+
+// ─── Print slip (Qt 3b5069d, notes 135) ──────────────────────────────────────
+
+describe("Print slip on the Money documents tab", () => {
+  const money = (kind: string, over: Record<string, unknown> = {}) => ({
+    md_id: "tcm-1",
+    md_doc: "tpi/00031",
+    md_kind: kind,
+    md_amount: "150.00",
+    md_status: "POSTED",
+    ...over,
+  });
+
+  it("takes any till movement, any state — never a voucher", () => {
+    for (const kind of ["FLOAT_ISSUE", "TOP_UP", "PICKUP", "DROP", "CLOSE_HANDOVER", "PAID_IN", "EXCHANGE"]) {
+      expect(printableSlip(money(kind))).not.toBeNull();
+    }
+    expect(printableSlip(money("DROP", { md_status: "VOIDED" }))).not.toBeNull();
+    expect(printableSlip(money("RECEIPT"))).toBeNull();
+    expect(printableSlip(money("PAYMENT"))).toBeNull();
+    expect(printableSlip(money(""))).toBeNull();
+    expect(printableSlip(null)).toBeNull();
+  });
+
+  it("says why the button is off, and which slip it prints", () => {
+    expect(printSlipButton(null)).toEqual({ enabled: false, tip: "Pick a till movement on the Money documents tab (not a voucher)" });
+    expect(printSlipButton(money("RECEIPT")).enabled).toBe(false);
+    expect(printSlipButton(money("PICKUP"))).toEqual({ enabled: true, tip: "Print the slip of tpi/00031" });
+  });
+
+  it("names the slip as a print document on the cockpit's key, the '/' of the number as '-'", () => {
+    expect(slipPrintTarget(money("PICKUP"), KEY)).toEqual({
+      docId: "tcm-1",
+      companyId: "co",
+      accYear: "2026-2027",
+      branchId: "br",
+      filename: "slip-tpi-00031",
+    });
+    expect(slipPrintLabel(money("PICKUP"))).toBe("Slip tpi/00031");
   });
 });
 

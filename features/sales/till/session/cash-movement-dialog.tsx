@@ -19,6 +19,11 @@
  *
  * Keys: Ctrl+Enter (or F10) posts, Ctrl+1..4 pick the mode, Enter walks the
  * form into the count, then the supervisor and their PIN; Esc closes.
+ *
+ * Post & print (Qt 3b5069d, notes 135): once posted, the dialog asks to print
+ * the slip both people sign; yes puts the print dialog (purpose
+ * TILL_MOVEMENT) over the posted form, and the dialog closes when that one
+ * does — no otherwise, as before. `onPosted` fires before the question.
  */
 import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { NexDropdownSingle } from "@/components/design-system/dropdown";
@@ -26,13 +31,16 @@ import { cx } from "@/components/design-system/cx";
 import RefusalText from "@/components/feedback/refusal-text";
 import type { ApiRefusal } from "@/lib/api/error-text";
 import { getAuthUserId } from "@/lib/auth/session";
+import { confirm } from "@/lib/confirm";
 import { clock12Of } from "@/lib/time-format";
 import { useDropdownId } from "@/lib/configured-dropdowns";
 import { getMessages, subscribeToMessages, toast } from "@/lib/notify";
+import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
+import { PURPOSE_CODE, type DocumentPrintTarget } from "@/features/printing/domain/documentPrint";
 import { useTillSessionClient } from "../shared/api/till-session-api";
 import { EMPTY_COUNT, toDenominations, type Denomination } from "../shared/denom";
 import { tillErrorOf } from "../shared/errors";
-import { amountInputPaise, formatMoney, isAmountDraft, paiseOf } from "../shared/money";
+import { amountInputPaise, formatMoney, isAmountDraft } from "../shared/money";
 import { reasonGridParams, toReasons, type TillReason } from "../shared/reasons";
 import { selectOnFocus } from "../shared/select-on-focus";
 import { TillDialog, TonePill } from "../shared/till-dialog";
@@ -53,13 +61,16 @@ import {
   modeForKey,
   movementAmount,
   movementBody,
+  movementPrintQuestion,
   movementProblem,
+  movementSlipTarget,
   movementStars,
   movementWords,
   openingMode,
   pickedSupervisor,
   reasonOptions,
   refVisible,
+  slipLabel,
   summaryAccount,
   supervisorLabel,
   type MovementForm,
@@ -148,6 +159,12 @@ function CashMovementBody({
   const [denominations, setDenominations] = useState<Denomination[]>([]);
   const [denomsLoading, setDenomsLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  /**
+   * Posted, and the slip's print dialog is up (Qt 3b5069d): the form behind it
+   * is done — nothing posts again, and Escape is the print dialog's.
+   */
+  const [slip, setSlip] = useState<{ docNo: string; target: DocumentPrintTarget } | null>(null);
+  const locked = busy || slip !== null;
   /** The declared amount as typed (a drop): kept as text so "2000." survives a keystroke. */
   const [amountText, setAmountText] = useState("");
   /** The time the dialog opened, `hh:mm AM` (Qt c77f3f1 `hh:mm AP`). */
@@ -242,7 +259,7 @@ function CashMovementBody({
   };
 
   const post = async () => {
-    if (busy) return;
+    if (locked) return;
     const why = movementProblem(inputs);
     if (why) {
       toast.warn(why);
@@ -251,8 +268,14 @@ function CashMovementBody({
     setBusy(true);
     try {
       const result = await client.createMovement(movementBody(inputs, sessionKey));
-      toast.success(`${result.tcmKind} ${result.tcmDocNo} posted — ${formatMoney(paiseOf(result.tcmAmount))}.`);
       onPosted?.();
+      // Post & print (TILL_DESIGN S3): the slip both people sign (notes 135).
+      const print = await confirm({ title: "Cash Movement", message: movementPrintQuestion(result), confirmLabel: "Print slip" });
+      if (print) {
+        setSlip({ docNo: result.tcmDocNo, target: movementSlipTarget(result, sessionKey) });
+        setBusy(false);
+        return;
+      }
       onClose();
     } catch (error) {
       const refusal = tillErrorOf(error, "The movement could not be posted.");
@@ -300,10 +323,11 @@ function CashMovementBody({
   const star = (text: string, needed: boolean) => (needed ? `${text} *` : text);
 
   return (
+    <>
     <TillDialog
       open
       size="normal"
-      busy={busy}
+      busy={locked}
       title={words.title}
       subtitle={words.sub}
       headExtra={
@@ -319,12 +343,12 @@ function CashMovementBody({
           // Never the browser's own Ctrl+digit (a tab switch). Ctrl+1 is as
           // dead as the Drop tile when the counter has no drop safe.
           event.preventDefault();
-          if (!busy && (mode !== "DROP" || dropOk)) setMode(mode);
+          if (!locked && (mode !== "DROP" || dropOk)) setMode(mode);
           return;
         }
         if (isPostKey(event)) {
           event.preventDefault();
-          if (!problem && !busy) void post();
+          if (!problem && !locked) void post();
         }
       }}
       footer={
@@ -332,17 +356,17 @@ function CashMovementBody({
           <p className={cx(styles.warn, styles.spacer, signerRefusal && styles.warnDanger)}>
             {signerRefusal ? <RefusalText refusal={signerRefusal} /> : problem}
           </p>
-          <button type="button" className={cx(styles.secondaryButton, styles.verbButton)} disabled={busy} onClick={onClose}>
+          <button type="button" className={cx(styles.secondaryButton, styles.verbButton)} disabled={locked} onClick={onClose}>
             Close - Esc
           </button>
           <button
             id={POST_ID}
             type="button"
             className={cx(styles.primaryButton, styles.verbButton)}
-            disabled={busy || problem !== ""}
+            disabled={locked || problem !== ""}
             onClick={() => void post()}
           >
-            {busy ? "Posting…" : "Post - Ctrl+Enter"}
+            {busy ? "Posting…" : slip ? "Posted" : "Post - Ctrl+Enter"}
           </button>
         </>
       }
@@ -356,7 +380,7 @@ function CashMovementBody({
             aria-selected={form.mode === mode}
             title={mode === "DROP" ? dropTileTitle(session) : `Ctrl+${index + 1}`}
             className={cx(styles.secondaryButton, styles.modeTile, form.mode === mode && styles.modeButtonOn)}
-            disabled={busy || (mode === "DROP" && !dropOk)}
+            disabled={locked || (mode === "DROP" && !dropOk)}
             onClick={() => setMode(mode)}
           >
             <span>{MODE_TITLES[mode]}</span>
@@ -548,7 +572,7 @@ function CashMovementBody({
             loading={denomsLoading}
             value={form.count}
             onChange={(count) => update({ count })}
-            disabled={busy}
+            disabled={locked}
             onDone={() => document.getElementById(handOver ? SUPERVISOR_ID : POST_ID)?.focus()}
           />
         </>
@@ -595,5 +619,15 @@ function CashMovementBody({
         </div>
       ) : null}
     </TillDialog>
+    {slip ? (
+      <PrintOptionsDialog
+        open
+        onClose={onClose}
+        purposeCode={PURPOSE_CODE.TILL_MOVEMENT}
+        documentLabel={slipLabel(slip.docNo)}
+        targets={[slip.target]}
+      />
+    ) : null}
+    </>
   );
 }

@@ -37,6 +37,13 @@ import {
   safePill,
   transitRows,
   transitTabTitle,
+  postedRemitMemo,
+  printMemoButton,
+  remitMemoFilename,
+  remitMemoLabel,
+  remitMemoOf,
+  remitMemoTarget,
+  remitPrintQuestion,
   voidButton,
   voidableRemit,
   type RemitForm,
@@ -476,5 +483,58 @@ describe("cash office — void remittance", () => {
       kind: "REMIT",
       amount: 150000,
     });
+  });
+});
+
+describe("cash office — print memo (Qt 3b5069d, notes 135)", () => {
+  const row: GridRow = {
+    tcm_id: "m1",
+    tcm_acc_year: "2026-2027",
+    tcm_doc_no: "crm00012",
+    rm_amount: "150000.00",
+    tcm_status: "POSTED",
+    tcm_remit_status: "CONFIRMED",
+  };
+
+  it("takes the picked remittance in ANY state — a confirmed one prints with the bank's figures", () => {
+    expect(remitMemoOf(row)).toEqual({ tcmId: "m1", accYear: "2026-2027", docNo: "crm00012" });
+    expect(remitMemoOf({ ...row, tcm_status: "VOIDED" })).not.toBeNull();
+    expect(remitMemoOf({ ...row, tcm_remit_status: "IN_TRANSIT" })).not.toBeNull();
+    expect(remitMemoOf(null)).toBeNull();
+    expect(remitMemoOf({ tcm_doc_no: "x" })).toBeNull();
+  });
+
+  it("says why the button is off, and what it prints", () => {
+    expect(printMemoButton(null, true)).toEqual({ enabled: false, title: "Pick a remittance" });
+    expect(printMemoButton(remitMemoOf(row), false)).toEqual({ enabled: false, title: "No print right on Cash Office (menu 287)" });
+    expect(printMemoButton(remitMemoOf(row), true)).toEqual({ enabled: true, title: "Print the memo of crm00012" });
+  });
+
+  it("names the memo as a print document on the screen's company and branch", () => {
+    expect(remitMemoTarget({ tcmId: "m1", accYear: "2026-2027", docNo: "crm00012" }, scope)).toEqual({
+      docId: "m1",
+      companyId: scope.companyId,
+      accYear: "2026-2027",
+      branchId: scope.branchId,
+      filename: "remit-crm00012",
+    });
+    // No year on the row: left out, so the server binds the company's current one.
+    expect(remitMemoTarget({ tcmId: "m1", accYear: "", docNo: "crm00012" }, scope)).not.toHaveProperty("accYear");
+    expect(remitMemoFilename("crm00012")).toBe("remit-crm00012");
+    expect(remitMemoLabel("crm00012")).toBe("Remittance memo crm00012");
+  });
+
+  it("asks to print the memo once the remittance is posted, on the posted movement", () => {
+    const result = {
+      movement: { tcmId: "m9", tcmAccYear: "2026-2027", tcmKind: "REMIT", tcmDocNo: "crm00013", tcmAmount: 100, tcmStatus: "POSTED" },
+      tapId: null,
+      countId: null,
+      safe: safeState(),
+    };
+    expect(remitPrintQuestion(result)).toBe(
+      "Remittance crm00013 posted: 100.00.\n\nPrint the memo now (bank / agency copy and store copy)?",
+    );
+    expect(postedRemitMemo(result)).toEqual({ tcmId: "m9", accYear: "2026-2027", docNo: "crm00013" });
+    expect(postedRemitMemo({ ...result, movement: { ...result.movement, tcmId: "" } })).toBeNull();
   });
 });

@@ -15,6 +15,7 @@ import {
   errorStatus,
   firstErrorOf,
   listOf,
+  openArgsOf,
   parseCloseCheck,
   parseCloseResult,
   parseDay,
@@ -193,6 +194,13 @@ describe("rows", () => {
   it("opens a day from the List tab by id and year", () => {
     expect(dayPickOf({ tbd_id: "d1", tbd_acc_year: "2026-2027" })).toEqual({ tbdId: "d1", accYear: "2026-2027" });
     expect(dayPickOf({ tbd_id: "d1" })).toBeNull();
+  });
+
+  it("reads the URL's day and branch (Qt openOn — Cash Position's drill)", () => {
+    expect(openArgsOf("?tbdId=d1&accYear=2026-2027&branch=b2")).toEqual({ pick: { tbdId: "d1", accYear: "2026-2027" }, branchId: "b2" });
+    expect(openArgsOf("?branch=b2")).toEqual({ pick: null, branchId: "b2" });
+    expect(openArgsOf("?tbdId=d1")).toEqual({ pick: null, branchId: "" });
+    expect(openArgsOf("")).toEqual({ pick: null, branchId: "" });
   });
 });
 

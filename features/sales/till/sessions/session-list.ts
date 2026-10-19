@@ -15,6 +15,10 @@
  * awaiting Approve Cash; grid 144 tests it on its `cash_receipt` value), and
  * `cash_receipt` is the third pill column; the pill colours are the shared
  * session palette (`../shared/session-badges.ts`).
+ *
+ * Qt 3b5069d (`TillSessionsView::setBranch` — Cash Position's drill): the
+ * URL's `?branch=<id>` lists that store instead of the header's; the live
+ * line and the approval count follow, and the title names the store.
  */
 import { textOf } from "../shared/format";
 import { toPaise } from "../shared/money";
@@ -26,6 +30,24 @@ export const DEFAULT_DAYS_BACK = 7;
 
 /** A castable uuid, so a pre-context request comes back empty instead of 400. */
 export const NO_TENANT_ID = "00000000-0000-0000-0000-000000000000";
+
+// ─── another store than the header's (Qt 3b5069d) ────────────────────────────
+
+/** The URL's `?branch=<id>`, read once on mount; "" = the header's branch. */
+export function scopeBranchOf(search: string): string {
+  return (new URLSearchParams(search).get("branch") ?? "").trim();
+}
+
+/** A branch's name from the header's option list (value = id); the id itself when it is not there. */
+export function branchLabelOf(options: readonly { value: string; label: string }[], branchId: string): string {
+  if (!branchId) return "";
+  return options.find((option) => option.value === branchId)?.label || branchId;
+}
+
+/** `Till Sessions — Zone store` when the list is on another store than the header's. */
+export function sessionsTitle(scopedBranchName: string): string {
+  return scopedBranchName ? `Till Sessions — ${scopedBranchName}` : "Till Sessions";
+}
 
 export const STATUS_OPTIONS = [
   { value: "", label: "All" },

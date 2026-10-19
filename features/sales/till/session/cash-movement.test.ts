@@ -13,13 +13,18 @@ import {
   ledgerTip,
   modeForKey,
   movementBody,
+  movementPostedText,
+  movementPrintQuestion,
   movementProblem,
+  movementSlipTarget,
   movementStars,
   movementWords,
   openingMode,
   pickedSupervisor,
   reasonOptions,
   refVisible,
+  slipFilename,
+  slipLabel,
   summaryAccount,
   supervisorLabel,
   type MovementForm,
@@ -436,5 +441,28 @@ describe("the dialog's keys", () => {
     expect(modeForKey(key("5", { ctrlKey: true }))).toBeNull();
     expect(modeForKey(key("1"))).toBeNull();
     expect(modeForKey(key("1", { ctrlKey: true, altKey: true }))).toBeNull();
+  });
+});
+
+describe("the slip after the post (Qt 3b5069d, notes 135)", () => {
+  const posted = { tcmId: "m-1", tcmAccYear: "2026-2027", tcmKind: "PICKUP", tcmDocNo: "tpi/00031", tcmAmount: 150, tcmStatus: "POSTED" };
+  const key = { companyId: "co", branchId: "br", accYear: "2026-2027", tssId: "tss" };
+
+  it("asks to print the slip both people sign, after saying what posted", () => {
+    expect(movementPostedText(posted)).toBe("PICKUP tpi/00031 posted — 150.00.");
+    expect(movementPrintQuestion(posted)).toBe("PICKUP tpi/00031 posted — 150.00.\n\nPrint the slip now?");
+  });
+
+  it("names the slip as a print document on the session's company, year and branch", () => {
+    expect(movementSlipTarget(posted, key)).toEqual({
+      docId: "m-1",
+      companyId: "co",
+      accYear: "2026-2027",
+      branchId: "br",
+      filename: "slip-tpi-00031",
+    });
+    expect(slipFilename("tpi00031")).toBe("slip-tpi00031");
+    expect(slipFilename("TPI/26/0031")).toBe("slip-TPI-26-0031");
+    expect(slipLabel("tpi00031")).toBe("Slip tpi00031");
   });
 });

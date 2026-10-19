@@ -2,9 +2,16 @@ import { describe, expect, it } from "vitest";
 import type { GridRow } from "../shared/wire/types";
 import {
   EXCEPTION_COLUMNS,
+  LEDGER_COLUMNS,
+  LEG_COLUMNS,
   NO_PICKS,
+  PERF_SESSION_COLUMNS,
+  PERFORMANCE_COLUMNS,
+  REPORT_TABS,
   ROW_ORDER,
   SAFE_BOOK_MAX_DAYS,
+  TENDER_COLUMNS,
+  TENDER_ROW_COLUMNS,
   VARIANCE_COLUMNS,
   approverParams,
   baseParams,
@@ -30,13 +37,24 @@ import {
   exportFileName,
   hourLabel,
   hourStrip,
+  ledgerLegsParams,
+  ledgerParams,
+  ledgerTable,
+  legsHead,
+  legsTable,
   listedValue,
   moneyText,
+  offCount,
   paletteBucket,
   parseReportView,
   peopleParams,
+  perfSessionsHead,
+  perfSessionsTable,
+  performanceTable,
   pickRowById,
+  pickRowOrFirst,
   pickSafeDay,
+  pickTenderRow,
   pickVarianceRow,
   pickedSafeId,
   printDocument,
@@ -53,15 +71,27 @@ import {
   safeDaysTable,
   safeHint,
   safeOptions,
+  scopeFromSearch,
   searchTable,
   sessionTarget,
   sessionsHead,
   sessionsTable,
+  settleStatusTone,
   statusTone,
+  tenderParams,
+  tenderRowKey,
+  tenderRowsHead,
+  tenderRowsParams,
+  tenderRowsTable,
+  tenderStateTone,
+  tenderTable,
   treatmentTone,
   undecidedLine,
   varianceParams,
   varianceTable,
+  verdictTone,
+  withoutScopeParams,
+  type ReportColumn,
   type ReportFilters,
   type TableView,
 } from "./till-reports";
@@ -81,6 +111,8 @@ const filters = (patch: Partial<ReportFilters> = {}): ReportFilters => ({
   event: "",
   safeId: "",
   withNonCash: false,
+  ledgerDiffOnly: false,
+  tenderPendingOnly: false,
   ...patch,
 });
 
@@ -89,6 +121,10 @@ const BASE = ["icompany_id", "ibranch_id", "ifrom_date", "ito_date", "icounter_i
 
 /** The texts of a table, row by row — what the operator reads. */
 const texts = (table: TableView) => table.rows.map((row) => row.cells.map((cell) => cell.text));
+
+/** A table's cell on one row, by column key. */
+const cellAt = (table: TableView, columns: readonly ReportColumn[], row: number, key: string) =>
+  table.rows[row].cells[columns.findIndex((column) => column.key === key)];
 
 // Rows as the dev server answered them (2026-10-17).
 const VARIANCE_ROW: GridRow = {
@@ -181,6 +217,43 @@ describe("the grids' tokens — every one sent, '' = all", () => {
   it("decisions: the picked approver, else the Approver filter", () => {
     expect(decisionsParams(filters({ approverId: "f" }), TODAY, "a1").iapprover_id).toBe("a1");
     expect(decisionsParams(filters({ approverId: "f" }), TODAY, null).iapprover_id).toBe("f");
+  });
+
+  it("175–180: the base six and the radios; the detail grids only the company and the session", () => {
+    const f = filters();
+    // 175 reads the base six as they are; 176 the picked cashier (cashierSessionsParams, as 160).
+    expect(keys(ledgerParams(f, TODAY))).toEqual([...BASE, "idiff"].sort());
+    expect(ledgerParams(f, TODAY).idiff).toBe("");
+    expect(ledgerParams(filters({ ledgerDiffOnly: true }), TODAY).idiff).toBe("1");
+    expect(ledgerLegsParams(COMPANY, "t1")).toEqual({ icompany_id: COMPANY, itss_id: "t1" });
+    expect(keys(tenderParams(f, TODAY))).toEqual([...BASE, "ipending"].sort());
+    expect(tenderParams(f, TODAY).ipending).toBe("");
+    expect(tenderParams(filters({ tenderPendingOnly: true }), TODAY).ipending).toBe("1");
+    expect(tenderRowsParams(COMPANY, "t1", "3")).toEqual({ icompany_id: COMPANY, itss_id: "t1", itender_type_id: "3" });
+  });
+});
+
+describe("the tabs", () => {
+  it("the three of 3b5069d follow the Safe book, in Qt's order and words", () => {
+    expect(REPORT_TABS.map((entry) => entry.value)).toEqual([
+      "variance",
+      "exceptions",
+      "approvers",
+      "safe",
+      "performance",
+      "ledger",
+      "tender",
+    ]);
+    expect(REPORT_TABS.slice(4).map((entry) => entry.label)).toEqual([
+      "Cashier performance",
+      "Ledger check",
+      "Tender reconciliation",
+    ]);
+    expect(exportFileName("performance", TODAY)).toBe("till-cashier-performance-2026-10-17.csv");
+    expect(exportFileName("tender", TODAY)).toBe("till-tender-reconciliation-2026-10-17.csv");
+    expect(printTitle("ledger", "2026-10-11", TODAY, "Every branch")).toBe(
+      "Till Reports — Ledger check · 11-10-2026 to 17-10-2026 · Every branch",
+    );
   });
 });
 
@@ -439,6 +512,302 @@ describe("Safe book", () => {
   });
 });
 
+describe("Cashier performance", () => {
+  // Grid 175 as the dev DB answers it: counts as strings, rates to one place, money to two.
+  const ROWS: GridRow[] = [
+    {
+      cashier_id: "a",
+      cashier: "VKPOS",
+      sessions: "2",
+      hours: "1.50",
+      bills: "30",
+      lines: "90",
+      items_per_bill: "3.0",
+      bills_per_hour: "20.0",
+      sales: "60000.00",
+      avg_bill: "2000.00",
+      gap_minutes: "2.5",
+      cancelled: "1",
+      retenders: "0",
+    },
+    {
+      cashier_id: "b",
+      cashier: "zt-cashier",
+      sessions: "1",
+      hours: "0.50",
+      bills: "10",
+      lines: "10",
+      items_per_bill: "1.0",
+      bills_per_hour: "20.0",
+      sales: "10000.00",
+      avg_bill: "1000.00",
+      gap_minutes: null,
+      cancelled: "0",
+      retenders: "2",
+    },
+  ];
+
+  it("the columns, in Qt's order, with its titles", () => {
+    expect(PERFORMANCE_COLUMNS.map((column) => column.key)).toEqual([
+      "cashier", "sessions", "hours", "bills", "lines", "items_per_bill", "bills_per_hour", "sales", "avg_bill",
+      "gap_minutes", "cancelled", "retenders",
+    ]);
+    expect(PERFORMANCE_COLUMNS.find((column) => column.key === "gap_minutes")).toMatchObject({ title: "Min. between bills", kind: "hours" });
+    expect(PERFORMANCE_COLUMNS.find((column) => column.key === "retenders")).toMatchObject({ title: "Re-tenders", total: true });
+    expect(PERFORMANCE_COLUMNS.filter((column) => column.total).map((column) => column.key)).toEqual([
+      "sessions", "hours", "bills", "lines", "sales", "cancelled", "retenders",
+    ]);
+    expect(PERF_SESSION_COLUMNS.map((column) => column.key)).toEqual([
+      "tss_session_no", "business_date", "counter_code", "opened_at", "hours", "bills", "lines", "items_per_bill",
+      "bills_per_hour", "sales", "avg_bill", "gap_minutes", "cancelled", "retenders", "status_text",
+    ]);
+    expect(PERF_SESSION_COLUMNS.some((column) => column.total)).toBe(false);
+  });
+
+  it("the totals row's rates are the range's, not sums", () => {
+    const table = performanceTable(ROWS);
+    expect(table.rows).toHaveLength(3);
+    const total = 2;
+    expect(cellAt(table, PERFORMANCE_COLUMNS, total, "cashier").text).toBe("2 cashiers");
+    expect(cellAt(table, PERFORMANCE_COLUMNS, total, "sessions").text).toBe("3");
+    expect(cellAt(table, PERFORMANCE_COLUMNS, total, "hours").text).toBe("2.0");
+    expect(cellAt(table, PERFORMANCE_COLUMNS, total, "bills").text).toBe("40");
+    expect(cellAt(table, PERFORMANCE_COLUMNS, total, "lines").text).toBe("100");
+    expect(cellAt(table, PERFORMANCE_COLUMNS, total, "sales").text).toBe("70,000.00");
+    // 100 lines ÷ 40 bills; 40 bills ÷ 2.0 hours; 70,000 ÷ 40 — not 3.0 + 1.0, 20 + 20, 2,000 + 1,000.
+    expect(cellAt(table, PERFORMANCE_COLUMNS, total, "items_per_bill").text).toBe("2.5");
+    expect(cellAt(table, PERFORMANCE_COLUMNS, total, "bills_per_hour").text).toBe("20.0");
+    expect(cellAt(table, PERFORMANCE_COLUMNS, total, "avg_bill").text).toBe("1,750.00");
+    expect(cellAt(table, PERFORMANCE_COLUMNS, total, "gap_minutes").text).toBe("");
+  });
+
+  it("no bills, no rates; no hours, no bills per hour", () => {
+    const idle = performanceTable([{ ...ROWS[0], bills: "0", lines: "0", sales: "0.00", hours: "0.00" }]);
+    expect(cellAt(idle, PERFORMANCE_COLUMNS, 1, "items_per_bill").text).toBe("");
+    expect(cellAt(idle, PERFORMANCE_COLUMNS, 1, "bills_per_hour").text).toBe("");
+    expect(cellAt(idle, PERFORMANCE_COLUMNS, 1, "avg_bill").text).toBe("");
+    const noHours = performanceTable([{ ...ROWS[0], hours: "0.00" }]);
+    expect(cellAt(noHours, PERFORMANCE_COLUMNS, 1, "bills_per_hour").text).toBe("");
+    expect(cellAt(noHours, PERFORMANCE_COLUMNS, 1, "items_per_bill").text).toBe("3.0");
+    expect(performanceTable([]).rows).toHaveLength(0);
+  });
+
+  it("cancelled a red pill, re-tenders amber, nothing at 0", () => {
+    const table = performanceTable(ROWS);
+    expect(cellAt(table, PERFORMANCE_COLUMNS, 0, "cancelled").pills).toEqual([{ text: "1", tone: "red" }]);
+    expect(cellAt(table, PERFORMANCE_COLUMNS, 0, "retenders").pills).toEqual([]);
+    expect(cellAt(table, PERFORMANCE_COLUMNS, 1, "cancelled").pills).toEqual([]);
+    expect(cellAt(table, PERFORMANCE_COLUMNS, 1, "retenders").pills).toEqual([{ text: "2", tone: "amber" }]);
+    expect(table.rows.map((row) => row.key)).toEqual(["a", "b", "__total"]);
+  });
+
+  it("the picked cashier's sessions: a status pill, no totals, newest first", () => {
+    const sessions: GridRow[] = [
+      { tss_id: "s1", tss_session_no: "ZT1-261016-01", tss_opened_on: "2026-10-16T04:00:00Z", status_text: "CLOSED", bills: "0" },
+      { tss_id: "s2", tss_session_no: "ZT1-261017-01", tss_opened_on: "2026-10-17T04:00:00Z", status_text: "OPEN", bills: "3" },
+    ];
+    const table = perfSessionsTable(ROW_ORDER.sessions(sessions));
+    expect(table.rows.map((row) => row.key)).toEqual(["s2", "s1"]);
+    expect(cellAt(table, PERF_SESSION_COLUMNS, 0, "status_text").pills).toEqual([{ text: "OPEN", tone: "blue" }]);
+    expect(cellAt(table, PERF_SESSION_COLUMNS, 0, "bills").text).toBe("3");
+    expect(cellAt(table, PERF_SESSION_COLUMNS, 1, "bills").text).toBe("");
+  });
+
+  it("the head, and the empty state", () => {
+    expect(perfSessionsHead("VKPOS", false)).toBe("VKPOS — every session in the range · Enter opens the Session Cockpit");
+    expect(perfSessionsHead(null, false)).toBe("");
+    expect(perfSessionsHead(null, true)).toBe("No till session in this range.");
+  });
+});
+
+describe("Ledger check", () => {
+  // Grid 177 as the dev DB answers it, in ITS order: OFF first, then newest.
+  const ROWS: GridRow[] = [
+    {
+      tss_id: "off", tss_acc_year: "2026-2027", tss_company_id: COMPANY, tss_branch_id: BRANCH,
+      tss_session_no: "ZT1-261016-02", business_date: "16-10-2026", counter_code: "ZT1", cashier: "VKPOS",
+      status_text: "CLOSED", tss_float_mode: "CARRIED", tss_float_issued: "2000.00", tss_float_left: "2000.00",
+      books: "150.00", should: "0.00", diff: "150.00", legs: "4", verdict: "OFF",
+    },
+    {
+      tss_id: "live", tss_acc_year: "2026-2027", tss_company_id: COMPANY, tss_branch_id: BRANCH,
+      tss_session_no: "ZT2-261017-01", business_date: "17-10-2026", counter_code: "ZT2", cashier: "zt-cashier",
+      status_text: "OPEN", tss_float_mode: "ISSUED", tss_float_issued: "2000.00", tss_float_left: null,
+      books: "1500.00", should: null, diff: null, legs: "2", verdict: "LIVE",
+    },
+    {
+      tss_id: "ok", tss_acc_year: "2026-2027", tss_company_id: COMPANY, tss_branch_id: BRANCH,
+      tss_session_no: "ZT1-261017-01", business_date: "17-10-2026", counter_code: "ZT1", cashier: "VKPOS",
+      status_text: "CLOSED", tss_float_mode: "ISSUED", tss_float_issued: "2000.00", tss_float_left: "2000.00",
+      books: "2000.00", should: "2000.00", diff: "0.00", legs: "3", verdict: "OK",
+    },
+  ];
+
+  it("the columns: only the legs are summed", () => {
+    expect(LEDGER_COLUMNS.map((column) => column.key)).toEqual([
+      "tss_session_no", "business_date", "counter_code", "cashier", "status_text", "tss_float_mode", "tss_float_issued",
+      "tss_float_left", "books", "should", "diff", "legs", "verdict",
+    ]);
+    expect(LEDGER_COLUMNS.filter((column) => column.total).map((column) => column.key)).toEqual(["legs"]);
+    expect(LEDGER_COLUMNS.find((column) => column.key === "diff")).toMatchObject({ title: "Difference", kind: "signed" });
+    expect(LEDGER_COLUMNS.find((column) => column.key === "verdict")?.title).toBe("Check");
+  });
+
+  it("keeps the grid's order, pills the check and the status, counts the sessions OFF", () => {
+    const table = ledgerTable(ROWS);
+    expect(table.rows.map((row) => row.key)).toEqual(["off", "live", "ok", "__total"]);
+    expect(cellAt(table, LEDGER_COLUMNS, 0, "verdict").pills).toEqual([{ text: "OFF", tone: "red" }]);
+    expect(cellAt(table, LEDGER_COLUMNS, 1, "verdict").pills).toEqual([{ text: "LIVE", tone: "blue" }]);
+    expect(cellAt(table, LEDGER_COLUMNS, 2, "verdict").pills).toEqual([{ text: "OK", tone: "green" }]);
+    expect(cellAt(table, LEDGER_COLUMNS, 1, "status_text").pills).toEqual([{ text: "OPEN", tone: "blue" }]);
+    expect(cellAt(table, LEDGER_COLUMNS, 0, "diff")).toMatchObject({ text: "+150.00", tone: "green" });
+    expect(cellAt(table, LEDGER_COLUMNS, 1, "should").text).toBe("");
+    expect(cellAt(table, LEDGER_COLUMNS, 3, "tss_session_no").text).toBe("1 session OFF");
+    expect(cellAt(table, LEDGER_COLUMNS, 3, "legs").text).toBe("9");
+    expect(cellAt(table, LEDGER_COLUMNS, 3, "books").text).toBe("");
+    expect(offCount(ROWS)).toBe(1);
+    expect(cellAt(ledgerTable(ROWS.slice(1)), LEDGER_COLUMNS, 2, "tss_session_no").text).toBe("2 sessions, none OFF");
+    expect(cellAt(ledgerTable([ROWS[2]]), LEDGER_COLUMNS, 1, "tss_session_no").text).toBe("1 session, none OFF");
+    expect(verdictTone("OK")).toBe("green");
+    expect(verdictTone("OFF")).toBe("red");
+    expect(verdictTone("LIVE")).toBe("blue");
+  });
+
+  it("the picked session is kept by tss_id, else the first; a main row names its session", () => {
+    expect(pickRowOrFirst(ROWS, "tss_id", "ok")?.tss_id).toBe("ok");
+    expect(pickRowOrFirst(ROWS, "tss_id", "gone")?.tss_id).toBe("off");
+    expect(pickRowOrFirst(ROWS, "tss_id", "")?.tss_id).toBe("off");
+    expect(pickRowOrFirst([], "tss_id", "ok")).toBeNull();
+    const session = sessionTarget(ROWS[1]);
+    expect(session?.key).toEqual({ companyId: COMPANY, branchId: BRANCH, accYear: "2026-2027", tssId: "live" });
+    expect(session).toMatchObject({ sessionNo: "ZT2-261017-01", status: "OPEN", cashier: "zt-cashier", counterCode: "ZT2" });
+  });
+
+  it("the legs: oldest first, Dr / Cr summed, the totals row's Running is the last leg's", () => {
+    const legs: GridRow[] = [
+      { av_id: "2", av_created_on: "2026-10-17T05:00:00Z", at_text: "17-10 10:30 AM", refno: "TDrp/1", type_code: "TDrp", type_name: "Till drop", dr: null, cr: "500.00", running: "1500.00", remarks: "" },
+      { av_id: "1", av_created_on: "2026-10-17T04:00:00Z", at_text: "17-10 09:30 AM", refno: "TFlt/1", type_code: "TFlt", type_name: "Till float", dr: "2000.00", cr: null, running: "2000.00", remarks: "float" },
+    ];
+    const table = legsTable(ROW_ORDER.legs(legs));
+    expect(table.rows.map((row) => row.key)).toEqual(["1", "2", "__total"]);
+    expect(LEG_COLUMNS.map((column) => column.key)).toEqual(["at_text", "refno", "type_code", "type_name", "dr", "cr", "running", "remarks"]);
+    expect(texts(table)[2]).toEqual(["2 legs", "", "", "", "2,000.00", "500.00", "+1,500.00", ""]);
+    expect(cellAt(table, LEG_COLUMNS, 2, "running").tone).toBe("green");
+    expect(cellAt(table, LEG_COLUMNS, 0, "running")).toMatchObject({ text: "+2,000.00", tone: "green" });
+    expect(sessionTarget(legs[0])).toBeNull();
+    expect(legsTable([]).rows).toHaveLength(0);
+  });
+
+  it("the legs' head, and the empty state by the radio", () => {
+    expect(legsHead("ZT2-261017-01", false, false)).toBe(
+      "ZT2-261017-01 — its legs on the till cash ledger, in the order written · Enter opens the Cockpit",
+    );
+    expect(legsHead(null, false, true)).toBe("");
+    expect(legsHead(null, true, true)).toBe("No session is OFF in this range.");
+    expect(legsHead(null, true, false)).toBe("No till session in this range.");
+  });
+});
+
+describe("Tender reconciliation", () => {
+  // Grid 179 as the dev DB would answer it, in ITS order: FAILED first, then newest.
+  const ROWS: GridRow[] = [
+    {
+      tss_id: "s1", tss_acc_year: "2026-2027", tss_company_id: COMPANY, tss_branch_id: BRANCH,
+      tss_session_no: "ZT1-261017-01", business_date: "17-10-2026", counter_code: "ZT1", cashier: "VKPOS",
+      tender_type_id: 2, tender: "Card", txns: "3", expected: "3000.00", settled: "1000.00", mdr: "15.00",
+      gap: "2000.00", pending_n: "1", failed_n: "1", oldest_days: "4", state: "FAILED",
+    },
+    {
+      tss_id: "s1", tss_acc_year: "2026-2027", tss_company_id: COMPANY, tss_branch_id: BRANCH,
+      tss_session_no: "ZT1-261017-01", business_date: "17-10-2026", counter_code: "ZT1", cashier: "VKPOS",
+      tender_type_id: 3, tender: "UPI", txns: "2", expected: "500.00", settled: "500.00", mdr: "0.00",
+      gap: "0.00", pending_n: "0", failed_n: "0", oldest_days: null, state: "SETTLED",
+    },
+    {
+      tss_id: "s2", tss_acc_year: "2026-2027", tss_company_id: COMPANY, tss_branch_id: BRANCH,
+      tss_session_no: "ZT1-261016-01", business_date: "16-10-2026", counter_code: "ZT1", cashier: "VKPOS",
+      tender_type_id: 5, tender: "Cheque", txns: "1", expected: "-200.00", settled: "0.00", mdr: "0.00",
+      gap: "-200.00", pending_n: "0", failed_n: "0", oldest_days: null, state: "NOT TRACKED",
+    },
+  ];
+
+  it("the columns", () => {
+    expect(TENDER_COLUMNS.map((column) => column.key)).toEqual([
+      "tss_session_no", "business_date", "counter_code", "cashier", "tender", "txns", "expected", "settled", "mdr", "gap",
+      "pending_n", "failed_n", "oldest_days", "state",
+    ]);
+    expect(TENDER_COLUMNS.filter((column) => column.total).map((column) => column.key)).toEqual([
+      "txns", "expected", "settled", "mdr", "gap", "pending_n", "failed_n",
+    ]);
+    expect(TENDER_COLUMNS.find((column) => column.key === "oldest_days")).toMatchObject({ title: "Oldest (days)", kind: "count" });
+    expect(TENDER_ROW_COLUMNS.map((column) => column.key)).toEqual([
+      "at_text", "doc_type", "doc_refno", "tender_name", "amount", "reference", "settle_status", "settled_on", "settled",
+      "mdr", "settle_ref", "age_days",
+    ]);
+    expect(TENDER_ROW_COLUMNS.filter((column) => column.total).map((column) => column.key)).toEqual(["amount", "settled", "mdr"]);
+    expect(TENDER_ROW_COLUMNS.find((column) => column.key === "amount")?.kind).toBe("signed");
+  });
+
+  it("a row is the session and the tender type together; kept by that key, else the first", () => {
+    expect(tenderRowKey(ROWS[0])).toBe("s12");
+    expect(tenderRowKey(ROWS[1])).toBe("s13");
+    expect(tenderRowKey(null)).toBe("");
+    expect(pickTenderRow(ROWS, "s13")?.tender).toBe("UPI");
+    expect(pickTenderRow(ROWS, "s19")?.tender).toBe("Card");
+    expect(pickTenderRow(ROWS, "")?.tender).toBe("Card");
+    expect(pickTenderRow([], "s12")).toBeNull();
+    expect(tenderTable(ROWS).rows.map((row) => row.key)).toEqual(["s12", "s13", "s25", "__total"]);
+  });
+
+  it("keeps the grid's order, pills the state and the failures, totals the money", () => {
+    const table = tenderTable(ROWS);
+    expect(cellAt(table, TENDER_COLUMNS, 0, "state").pills).toEqual([{ text: "FAILED", tone: "red" }]);
+    expect(cellAt(table, TENDER_COLUMNS, 1, "state").pills).toEqual([{ text: "SETTLED", tone: "green" }]);
+    expect(cellAt(table, TENDER_COLUMNS, 2, "state").pills).toEqual([{ text: "NOT TRACKED", tone: "grey" }]);
+    expect(tenderStateTone("PENDING")).toBe("amber");
+    expect(tenderStateTone("PARTIAL")).toBe("amber");
+    expect(cellAt(table, TENDER_COLUMNS, 0, "failed_n").pills).toEqual([{ text: "1", tone: "red" }]);
+    expect(cellAt(table, TENDER_COLUMNS, 1, "failed_n").pills).toEqual([]);
+    expect(cellAt(table, TENDER_COLUMNS, 2, "gap")).toMatchObject({ text: "−200.00", tone: "red" });
+    const total = 3;
+    expect(cellAt(table, TENDER_COLUMNS, total, "tss_session_no").text).toBe("3 session-tenders");
+    expect(cellAt(table, TENDER_COLUMNS, total, "txns").text).toBe("6");
+    expect(cellAt(table, TENDER_COLUMNS, total, "expected").text).toBe("3,300.00");
+    expect(cellAt(table, TENDER_COLUMNS, total, "gap")).toMatchObject({ text: "+1,800.00", tone: "green" });
+    expect(cellAt(table, TENDER_COLUMNS, total, "oldest_days").text).toBe("");
+    expect(cellAt(tenderTable([ROWS[1]]), TENDER_COLUMNS, 1, "tss_session_no").text).toBe("1 session-tender");
+    expect(sessionTarget(ROWS[0])?.key.tssId).toBe("s1");
+  });
+
+  it("the tender rows: oldest first, the settlement pilled, the amount signed and summed", () => {
+    const rows: GridRow[] = [
+      { td_id: "b", td_created_on: "2026-10-17T06:00:00Z", at_text: "17-10 11:30 AM", doc_type: "SALE_RETURN", doc_refno: "SR/2", tender_name: "HDFC Card", amount: "-200.00", reference: "xx1234", settle_status: "NA", settled_on: "", settled: null, mdr: null, settle_ref: "", age_days: null },
+      { td_id: "a", td_created_on: "2026-10-17T05:00:00Z", at_text: "17-10 10:30 AM", doc_type: "SALE_BILL", doc_refno: "SB/1", tender_name: "HDFC Card", amount: "1000.00", reference: "AUTH1 · xx1234", settle_status: "SETTLED", settled_on: "18-10-2026", settled: "1000.00", mdr: "15.00", settle_ref: "BATCH9", age_days: null },
+      { td_id: "c", td_created_on: "2026-10-17T07:00:00Z", at_text: "17-10 12:30 PM", doc_type: "SALE_BILL", doc_refno: "SB/3", tender_name: "HDFC Card", amount: "2000.00", reference: "", settle_status: "FAILED", settled_on: "", settled: null, mdr: null, settle_ref: "", age_days: "4" },
+    ];
+    const table = tenderRowsTable(ROW_ORDER.tenderRows(rows));
+    expect(table.rows.map((row) => row.key)).toEqual(["a", "b", "c", "__total"]);
+    expect(cellAt(table, TENDER_ROW_COLUMNS, 0, "settle_status").pills).toEqual([{ text: "SETTLED", tone: "green" }]);
+    expect(cellAt(table, TENDER_ROW_COLUMNS, 1, "settle_status").pills).toEqual([{ text: "NA", tone: "grey" }]);
+    expect(cellAt(table, TENDER_ROW_COLUMNS, 2, "settle_status").pills).toEqual([{ text: "FAILED", tone: "red" }]);
+    expect(settleStatusTone("PENDING")).toBe("amber");
+    expect(settleStatusTone("PARTIAL")).toBe("amber");
+    expect(cellAt(table, TENDER_ROW_COLUMNS, 1, "amount")).toMatchObject({ text: "−200.00", tone: "red" });
+    expect(cellAt(table, TENDER_ROW_COLUMNS, 2, "age_days").text).toBe("4");
+    expect(texts(table)[3]).toEqual(["3 rows", "", "", "", "+2,800.00", "", "", "", "1,000.00", "15.00", "", ""]);
+    expect(sessionTarget(rows[0])).toBeNull();
+  });
+
+  it("the rows' head, and the empty state by the radio", () => {
+    expect(tenderRowsHead(ROWS[1], false, false)).toBe("ZT1-261017-01 · UPI — the rows and how each settled");
+    expect(tenderRowsHead(null, false, false)).toBe("");
+    expect(tenderRowsHead(null, true, true)).toBe("Everything in this range is settled.");
+    expect(tenderRowsHead(null, true, false)).toBe(
+      "No card, UPI, wallet, cheque or bank tender in a till session in this range.",
+    );
+  });
+});
+
 describe("pickers", () => {
   it("counters by code, safes code · name with the default", () => {
     expect(counterOptions([{ tcn_id: "c1", tcn_code: "ZT1" }])).toEqual([{ value: "c1", label: "ZT1" }]);
@@ -525,6 +894,25 @@ describe("back from the Cockpit", () => {
     });
     expect(view).toMatchObject({ tab: "exceptions", branch: { id: BRANCH, text: "Coimbatore" }, event: "PIN_FAIL", withNonCash: true });
     expect(view?.picks).toEqual({ ...NO_PICKS, person: "p1", hour: 10 });
+    // A view stored before the three new tabs: the radios off, the picks none.
+    expect(view).toMatchObject({ ledgerDiffOnly: false, tenderPendingOnly: false });
+  });
+
+  it("the new tabs' radios and picks", () => {
+    const view = parseReportView({
+      tab: "tender",
+      branch: null,
+      ledgerDiffOnly: true,
+      tenderPendingOnly: true,
+      picks: { performer: "c1", ledgerSession: "t1", tenderKey: "t12" },
+    });
+    expect(view).toMatchObject({ tab: "tender", ledgerDiffOnly: true, tenderPendingOnly: true });
+    expect(view?.picks).toEqual({ ...NO_PICKS, performer: "c1", ledgerSession: "t1", tenderKey: "t12" });
+    expect(parseReportView({ tab: "ledger", ledgerDiffOnly: "1", picks: { performer: 3 } })).toMatchObject({
+      ledgerDiffOnly: false,
+      picks: NO_PICKS,
+    });
+    expect(parseReportView({ tab: "performance" })?.tab).toBe("performance");
   });
 
   it("refuses what is not one", () => {
@@ -536,5 +924,26 @@ describe("back from the Cockpit", () => {
   it("plurals", () => {
     expect(countLabel(1, "day")).toBe("1 day");
     expect(countLabel(3, "person", "people")).toBe("3 people");
+  });
+});
+
+describe("opened on a scope (Cash Position's drill)", () => {
+  it("the branch and period off the address; a day that is not one leaves the default", () => {
+    const scope = scopeFromSearch(`?branch=${BRANCH}&branchName=Coimbatore+Main&from=2026-10-01&to=2026-10-17`);
+    expect(scope).toEqual({ branch: { id: BRANCH, text: "Coimbatore Main" }, fromDate: "2026-10-01", toDate: "2026-10-17" });
+    expect(scopeFromSearch(`branch=${BRANCH}`)).toEqual({ branch: { id: BRANCH, text: "" }, fromDate: "", toDate: "" });
+    expect(scopeFromSearch(`branch=${BRANCH}&from=2026-02-30&to=17-10-2026`)).toMatchObject({ fromDate: "", toDate: "" });
+  });
+
+  it("no branch, no scope", () => {
+    expect(scopeFromSearch("")).toBeNull();
+    expect(scopeFromSearch("?from=2026-10-01&to=2026-10-17")).toBeNull();
+    expect(scopeFromSearch("?branch=%20&branchName=X")).toBeNull();
+  });
+
+  it("the four leave the address; anything else stays", () => {
+    expect(withoutScopeParams(`?branch=${BRANCH}&branchName=Main&from=2026-10-01&to=2026-10-17`)).toBe("");
+    expect(withoutScopeParams(`?tab=safe&branch=${BRANCH}&x=1`)).toBe("?tab=safe&x=1");
+    expect(withoutScopeParams("")).toBe("");
   });
 });

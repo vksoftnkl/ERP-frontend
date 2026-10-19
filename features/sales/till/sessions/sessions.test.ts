@@ -17,10 +17,13 @@ import {
 import {
   VARIANCE_OPTIONS,
   badgeTone,
+  branchLabelOf,
   journalSummary,
   rowHint,
+  scopeBranchOf,
   sessionGridParams,
   sessionRowOf,
+  sessionsTitle,
   varianceTone,
 } from "./session-list";
 import { initialMarks, slipCheckBody, slipFacts, slipResult } from "./slip-check";
@@ -102,6 +105,21 @@ function session(over: Partial<TillSessionPayload> = {}): TillSessionPayload {
 }
 
 describe("the Sessions list", () => {
+  it("lists another store than the header's from the URL (Qt 3b5069d setBranch)", () => {
+    expect(scopeBranchOf("?branch=b2&x=1")).toBe("b2");
+    expect(scopeBranchOf("?branch=%20b2%20")).toBe("b2");
+    expect(scopeBranchOf("")).toBe("");
+    const options = [
+      { value: "", label: "All" },
+      { value: "b2", label: "Zone store" },
+    ];
+    expect(branchLabelOf(options, "b2")).toBe("Zone store");
+    expect(branchLabelOf(options, "b9")).toBe("b9");
+    expect(branchLabelOf(options, "")).toBe("");
+    expect(sessionsTitle("Zone store")).toBe("Till Sessions — Zone store");
+    expect(sessionsTitle("")).toBe("Till Sessions");
+  });
+
   it("sends all six quoted tokens", () => {
     expect(
       sessionGridParams({ companyId: "", branchId: "br", fromDate: "2026-10-02", toDate: "2026-10-09", status: "", variance: "SHORT" }),

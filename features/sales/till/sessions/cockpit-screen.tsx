@@ -32,8 +32,12 @@
  * server's call); the Witness fact became "Cash to safe". The approvers'
  * inbox (Till Sessions → Waiting for approval) lands here for a cash gap.
  *
+ * Qt 3b5069d (notes 135): Print slip prints the till movement picked on the
+ * Money documents tab — any kind, any state (a voided one with VOID across
+ * it), never a voucher — through the print dialog (purpose TILL_MOVEMENT).
+ *
  * Keys: F5 refresh, Esc close; on the Bills / Money documents tab ↑ / ↓ pick
- * the row Re-tender / Void movement acts on.
+ * the row Re-tender / Void movement / Print slip acts on.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -73,13 +77,17 @@ import {
   gridCellText,
   isMine,
   movementVoidRequestOf,
+  printSlipButton,
   printZLabel,
+  printableSlip,
   retenderButton,
   retenderTargetOf,
   retenderableBill,
   type RetenderTarget,
   sessionPrintTarget,
   shouldFallBackToBlind,
+  slipPrintLabel,
+  slipPrintTarget,
   slipTenders,
   tenderRows,
   VOID_DONE_TITLE,
@@ -152,6 +160,8 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
   const [pickedMoveId, setPickedMoveId] = useState<string | null>(null);
   const [change, setChange] = useState<SessionDialogRequest | null>(null);
   const [voidMove, setVoidMove] = useState<MovementVoidRequest | null>(null);
+  /** The till movement whose slip the print dialog is up for (Qt `printSlip`). */
+  const [slipRow, setSlipRow] = useState<GridRow | null>(null);
 
   /** Bumped by F5 / Refresh and after a dialog: the effect below re-reads everything. */
   const [tick, setTick] = useState(0);
@@ -276,9 +286,12 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
   const mine = isMine(session, me);
   const pickedBill = retenderableBill(pickedBillId ? grids.bills.find((row) => textOf(row, "tb_id") === pickedBillId) : null);
   const retenderState = retenderButton(pickedBill);
-  const pickedMove = voidableMovement(pickedMoveId ? grids.money.find((row) => textOf(row, "md_id") === pickedMoveId) : null);
+  const pickedMoneyRow = pickedMoveId ? (grids.money.find((row) => textOf(row, "md_id") === pickedMoveId) ?? null) : null;
+  const pickedMove = voidableMovement(pickedMoneyRow);
+  const pickedSlip = printableSlip(pickedMoneyRow);
   const changeState = changeButton(session);
   const voidState = voidMovementButton(session, pickedMove);
+  const slipState = printSlipButton(pickedSlip);
   const sessionNo = session?.tssSessionNo ?? "";
 
   // Approve (Qt `decideVariance`, 425fa80): a closed session's undecided cash
@@ -485,7 +498,7 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
                     ? {
                         selectedId: pickedMoveId,
                         onSelect: (row: GridRow) => setPickedMoveId(textOf(row, "md_id") || null),
-                        label: "Money documents — pick a drop, paid in, pickup or top-up to void it",
+                        label: "Money documents — pick a drop, paid in, pickup or top-up to void it, or any till movement to print its slip",
                       }
                     : {})}
               />
@@ -582,6 +595,17 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
           }}
         >
           Void movement…
+        </button>
+        <button
+          type="button"
+          className={styles.secondaryButton}
+          disabled={!slipState.enabled}
+          title={slipState.tip}
+          onClick={() => {
+            if (pickedSlip) setSlipRow(pickedSlip);
+          }}
+        >
+          Print slip
         </button>
         <button
           type="button"
@@ -706,6 +730,15 @@ export default function CockpitScreen({ initialKey }: CockpitScreenProps) {
           purposeCode={PURPOSE_CODE.TILL_SESSION_Z}
           documentLabel={printZLabel(sessionNo)}
           targets={[sessionPrintTarget(key, sessionNo, "z")]}
+        />
+      ) : null}
+      {slipRow ? (
+        <PrintOptionsDialog
+          open
+          onClose={() => setSlipRow(null)}
+          purposeCode={PURPOSE_CODE.TILL_MOVEMENT}
+          documentLabel={slipPrintLabel(slipRow)}
+          targets={[slipPrintTarget(slipRow, key)]}
         />
       ) : null}
       <CockpitRetender

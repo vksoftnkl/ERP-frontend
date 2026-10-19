@@ -243,6 +243,34 @@ export const CONFIGURED_GRIDS = {
   tillRptSafeDayLines: { name: "TILL RPT SAFE DAY LINES", fallbackId: "168", deletedParam: null },
   tillRptPeople: { name: "TILL RPT PEOPLE", fallbackId: "169", deletedParam: null },
   /**
+   * Cash Position (menu 289, Qt NexERP 3b5069d, till notes 134): head office's
+   * every-store page. 170 one row per branch as at the end of `'iday'` · 171
+   * the live sessions (today only) · 172 the day's exceptions · 173 cashiers'
+   * month-to-date shortage · 174 the HO reviews of one branch. Every token is
+   * QUOTED — always sent: `'icompany_id'` `'ibranch_id'` (`""` = every branch
+   * on 170–173; 174 needs one) `'iday'` (yyyy-MM-dd).
+   */
+  tillCashPosition: { name: "TILL CASH POSITION", fallbackId: "170", deletedParam: null },
+  tillCashPositionLive: { name: "TILL CASH POSITION LIVE", fallbackId: "171", deletedParam: null },
+  tillCashPositionEvents: { name: "TILL CASH POSITION EVENTS", fallbackId: "172", deletedParam: null },
+  tillCashPositionCashiers: { name: "TILL CASH POSITION CASHIERS", fallbackId: "173", deletedParam: null },
+  tillCashPositionReviews: { name: "TILL CASH POSITION REVIEWS", fallbackId: "174", deletedParam: null },
+  /**
+   * Till Reports' three later tabs (Qt NexERP 3b5069d): Cashier performance
+   * (175 per cashier · 176 the picked cashier's sessions), Ledger check (177
+   * per session, `'idiff'` "1" = only differences · 178 the session's till
+   * cash legs) and Tender reconciliation (179 per session × non-cash tender,
+   * `'ipending'` "1" = only not settled · 180 that tender's rows). 175–177 and
+   * 179 bind the shared report tokens; 178 binds `'icompany_id'` + `'itss_id'`,
+   * 180 those + `'itender_type_id'`.
+   */
+  tillRptCashierPerformance: { name: "TILL RPT CASHIER PERFORMANCE", fallbackId: "175", deletedParam: null },
+  tillRptPerformanceSessions: { name: "TILL RPT PERFORMANCE SESSIONS", fallbackId: "176", deletedParam: null },
+  tillRptLedgerCheck: { name: "TILL RPT LEDGER CHECK", fallbackId: "177", deletedParam: null },
+  tillRptLedgerLegs: { name: "TILL RPT LEDGER LEGS", fallbackId: "178", deletedParam: null },
+  tillRptTenderRecon: { name: "TILL RPT TENDER RECON", fallbackId: "179", deletedParam: null },
+  tillRptTenderRows: { name: "TILL RPT TENDER ROWS", fallbackId: "180", deletedParam: null },
+  /**
    * Expense Voucher (menu 277, Qt NexERP d97cdd4): the Reason and Expense
    * ledger cells' popups. Both bind QUOTED `'icompany_id'` — always sent.
    */

@@ -34,6 +34,11 @@
  * counter, and once approved the open goes again with `approvalId`. Closed
  * without one, the screen is as it was.
  *
+ * Qt 3b5069d: while a session is held (this device's, anyone's, or this
+ * user's elsewhere) the counter line names the held session's counter and
+ * operator, and ISSUED / COUNTED / DIFFERENCE read "—" with no mismatch band
+ * (`open-till.ts` `heldSessionOf`, `openFigures.hidden`).
+ *
  * Keys: Enter = next field · Ctrl+Enter = open (from any field; Qt
  * 2026-10-12, was F10) · F5 = reload · Esc = not now. Every figure box
  * selects its text on focus.
@@ -53,7 +58,7 @@ import { ApprovalRequestDialog } from "../shared/approval-request-dialog";
 import { EMPTY_COUNT, toDenominations, type Denomination } from "../shared/denom";
 import { tillErrorOf } from "../shared/errors";
 import { OPEN_TILL_HREF } from "../shared/format";
-import { amountInputPaise, formatMoney, isAmountDraft, paiseOf, paiseToInput } from "../shared/money";
+import { amountInputPaise, isAmountDraft, paiseOf, paiseToInput } from "../shared/money";
 import { reasonGridParams, reasonsOf, toReasons, type TillReason } from "../shared/reasons";
 import { selectOnFocus } from "../shared/select-on-focus";
 import { getTillSession, patchTillSessionStatus, setTillSession } from "../shared/session-store";
@@ -645,13 +650,14 @@ export default function OpenTillScreen() {
                 onDone={afterCount}
               />
               <div className={styles.summary} aria-disabled={live !== null}>
+                {/* Under a held session every cell reads "—" with no tone (Qt 3b5069d refreshFigures). */}
                 <div className={styles.fact}>
                   <span className={styles.cap}>ISSUED</span>
-                  <span className={styles.figure}>{formatMoney(figures.issued)}</span>
+                  <span className={styles.figure}>{figures.issuedText}</span>
                 </div>
                 <div className={styles.fact}>
                   <span className={styles.cap}>COUNTED</span>
-                  <span className={styles.figure}>{formatMoney(figures.counted)}</span>
+                  <span className={styles.figure}>{figures.countedText}</span>
                 </div>
                 <div className={styles.fact}>
                   <span className={styles.cap}>DIFFERENCE</span>

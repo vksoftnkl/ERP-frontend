@@ -20,6 +20,11 @@
  * asks for that approval (`floatApprovalRequest`) and opens again with its id.
  * Another cashier's session held here is Force close… (Qt 1d3e203): the
  * cockpit's dialog, the server judging who may (FORCE_CLOSE rule, PIN).
+ * While a session is held — this device's, anyone's, or this user's on
+ * another device (Qt 3b5069d `heldSession`) — the form is greyed: the
+ * counter line names the held session's counter and its operator, and the
+ * figures read "—" with no mismatch band, since there is no float or count
+ * to compare.
  */
 import { countLines, countedPaise, type DenomCountValue, type Denomination } from "../shared/denom";
 import { clockOf, ddmmyyyy } from "../shared/format";
@@ -94,11 +99,25 @@ export function carriedFromOf(check: TillOpenCheck | null, picked: string): Till
   return check.carriedFrom ?? chosenCounter(check, picked)?.carriedFrom ?? null;
 }
 
-/** The counter line in the facts: linked text, "none free", or a pick list. */
+/**
+ * The session that greys the form, if any (Qt `heldSession`): the one this
+ * device holds (any operator), else this user's on another device.
+ */
+export function heldSessionOf(check: TillOpenCheck | null): TillOpenCheckSession | null {
+  return check?.deviceSession ?? check?.userSessionElsewhere ?? null;
+}
+
+/**
+ * The counter line in the facts: the held session's counter and operator
+ * (Qt 3b5069d — the counter is that session's, not a free one to pick),
+ * else the linked text, "none free", or a pick list.
+ */
 export function counterDisplay(check: TillOpenCheck | null):
   | { kind: "text"; text: string }
   | { kind: "pick"; options: { value: string; label: string }[]; placeholder: string } {
   if (!check) return { kind: "text", text: "—" };
+  const mine = check.deviceSession;
+  if (mine) return { kind: "text", text: `${mine.counterCode}  (in use by ${mine.operatorName})` };
   const linked = check.linkedCounter;
   if (linked) return { kind: "text", text: `${linked.code} · ${linked.name}  (this device)` };
   const free = check.freeCounters ?? [];
@@ -381,8 +400,16 @@ export type OpenFigures = {
   over: boolean;
   /** Nothing counted yet is not a difference: the band waits for the count. */
   mismatch: boolean;
+  /**
+   * A session is held (Qt 3b5069d `refreshFigures`): there is no float or
+   * count to compare, so the three summary cells read "—" with no tone and
+   * the mismatch band stays hidden. The paise above stay what the form says.
+   */
+  hidden: boolean;
+  issuedText: string;
+  countedText: string;
   diffText: string;
-  diffTone: "danger" | "warning" | "success";
+  diffTone: "danger" | "warning" | "success" | "";
 };
 
 export function openFigures(inputs: OpenTillInputs): OpenFigures {
@@ -391,6 +418,9 @@ export function openFigures(inputs: OpenTillInputs): OpenFigures {
   const diff = counted - issued;
   const short = diff < 0;
   const over = diff > 0;
+  if (heldSessionOf(inputs.check)) {
+    return { issued, counted, diff, short, over, mismatch: false, hidden: true, issuedText: "—", countedText: "—", diffText: "—", diffTone: "" };
+  }
   return {
     issued,
     counted,
@@ -398,6 +428,9 @@ export function openFigures(inputs: OpenTillInputs): OpenFigures {
     short,
     over,
     mismatch: (short || over) && counted > 0,
+    hidden: false,
+    issuedText: formatMoney(issued),
+    countedText: formatMoney(counted),
     diffText: short ? `${formatSignedMoney(diff)}  short` : over ? `${formatSignedMoney(diff)}  over` : formatMoney(0),
     diffTone: short ? "danger" : over ? "warning" : "success",
   };

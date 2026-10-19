@@ -9,7 +9,9 @@
  * The branch's safe: what it should hold and how it got there (blind — every
  * figure a dash — under till.blind_close for a caller without 287 / 273
  * OVERRIDE), its book since the last count (grid 158), the branch's
- * remittances (grid 157) with Void remittance…, and the desk: Count safe
+ * remittances (grid 157) with Print memo (Qt 3b5069d, notes 135: the memo
+ * goes with the cash — bank / agency copy and store copy, purpose TILL_REMIT)
+ * and Void remittance…, and the desk: Count safe
  * (blind; the answer shows what it should have held), Remit to bank (bank
  * deposit by staff, or a CIT agency — then on the way until the bank confirms
  * it) and On the way, whose Confirm with bank… is `remit-confirm-dialog.tsx`.
@@ -39,6 +41,8 @@ import { getUserInfo } from "@/lib/auth/session";
 import { confirm } from "@/lib/confirm";
 import { useDataRefresh, type DataRefreshReason } from "@/lib/data-freshness";
 import { toast } from "@/lib/notify";
+import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
+import { PURPOSE_CODE } from "@/features/printing/domain/documentPrint";
 import { useTillSessionClient } from "../shared/api/till-session-api";
 import { EMPTY_COUNT, countLines, countedPaise, type DenomCountValue } from "../shared/denom";
 import { textOf, todayIso } from "../shared/format";
@@ -68,10 +72,15 @@ import {
   gapsLine,
   nextGap,
   pickTransitId,
+  postedRemitMemo,
+  printMemoButton,
   remitAmountPaise,
   remitBody,
   remitButtonTitle,
-  remitPostedText,
+  remitMemoLabel,
+  remitMemoOf,
+  remitMemoTarget,
+  remitPrintQuestion,
   remitProblem,
   remitQuestion,
   remitVoidRequest,
@@ -85,6 +94,7 @@ import {
   type CountForm,
   type DeskTab,
   type RemitForm,
+  type RemitMemo,
 } from "./cash-office";
 import { CountPanel, RemitPanel, TransitPanel } from "./desk-panels";
 import type { RemitConfirmRequest } from "./remit-confirm";
@@ -138,6 +148,7 @@ function CashOfficeScreen({ companyId, branchId, companyName }: CashOfficeScreen
   const canCreate = permissions.canCreate;
   // Absent reads as allowed (an ungoverned route grants everything): the server judges.
   const canOverride = permissions.canOverride !== false;
+  const canPrint = permissions.canPrint !== false;
   const [userName] = useState(() => getUserInfo()?.userName ?? "");
   const scope = useMemo(() => ({ companyId, branchId }), [companyId, branchId]);
 
@@ -166,6 +177,8 @@ function CashOfficeScreen({ companyId, branchId, companyName }: CashOfficeScreen
   const [pickedTransitId, setPickedTransitId] = useState("");
   const [pickedRemitId, setPickedRemitId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
+  /** The remittance whose memo the print dialog is up for (Qt `printMemo`). */
+  const [memo, setMemo] = useState<RemitMemo | null>(null);
   const [busy, setBusy] = useState(false);
   /** Two F10s inside one render must not post twice. */
   const inFlight = useRef(false);
@@ -200,6 +213,8 @@ function CashOfficeScreen({ companyId, branchId, companyName }: CashOfficeScreen
 
   const pickedRemitRow = pickedRemitId ? (remits.rows.find((row) => textOf(row, "tcm_id") === pickedRemitId) ?? null) : null;
   const voidState = voidButton(pickedRemitRow, { busy, canOverride });
+  const pickedMemo = remitMemoOf(pickedRemitRow);
+  const printState = printMemoButton(pickedMemo, canPrint);
 
   // ── Verbs ──────────────────────────────────────────────────────────────
   const close = useCallback(() => {
@@ -242,9 +257,12 @@ function CashOfficeScreen({ companyId, branchId, companyName }: CashOfficeScreen
       if (!yes) return;
       setBusy(true);
       const result = await client.remit(remitBody(scope, safe.safeId, remitForm, remitAmount));
-      toast.success(remitPostedText(result), { title: "Remit to bank", autoClose: false });
       setRemitForm(clearedRemitForm);
       reload();
+      // The memo goes with the cash (Qt 3b5069d, notes 135): two copies, bank / agency and store.
+      const posted = postedRemitMemo(result);
+      const print = await confirm({ title: "Remit to bank", message: remitPrintQuestion(result), confirmLabel: "Print memo" });
+      if (print && posted) setMemo(posted);
     } catch (error) {
       toast.apiError(error, { fallback: "The remittance could not be posted." });
     } finally {
@@ -289,6 +307,12 @@ function CashOfficeScreen({ companyId, branchId, companyName }: CashOfficeScreen
     setDialog(null);
     reload();
     toast.success(movementVoidMessage(result), { title: "Void remittance", autoClose: false });
+  };
+
+  /** Print memo (Qt `printMemo`): the picked remittance, any state. */
+  const openPrintMemo = () => {
+    if (!printState.enabled || !pickedMemo) return;
+    setMemo(pickedMemo);
   };
 
   const pickSafe = (id: string) => {
@@ -420,6 +444,8 @@ function CashOfficeScreen({ companyId, branchId, companyName }: CashOfficeScreen
                 onStatus={setRemitStatus}
                 pickedId={pickedRemitId}
                 onPick={(row: GridRow) => setPickedRemitId(textOf(row, "tcm_id") || null)}
+                printButton={printState}
+                onPrint={openPrintMemo}
                 voidButton={voidState}
                 onVoid={openVoid}
               />
@@ -518,6 +544,15 @@ function CashOfficeScreen({ companyId, branchId, companyName }: CashOfficeScreen
         onClose={() => setDialog(null)}
         onVoided={voided}
       />
+      {memo ? (
+        <PrintOptionsDialog
+          open
+          onClose={() => setMemo(null)}
+          purposeCode={PURPOSE_CODE.TILL_REMIT}
+          documentLabel={remitMemoLabel(memo.docNo)}
+          targets={[remitMemoTarget(memo, scope)]}
+        />
+      ) : null}
     </div>
   );
 }

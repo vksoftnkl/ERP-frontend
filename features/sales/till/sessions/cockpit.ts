@@ -41,6 +41,7 @@ import { clockOf, ddmmyyyy, durationText, textOf, type TillTone } from "../share
 import { formatFigure, formatMoney, formatSignedMoney, paiseOf, paiseToNumber, toPaise } from "../shared/money";
 import { CASH_TENDER_TYPE_ID } from "../shared/denom";
 import { VOIDABLE_SESSION_KINDS, type MovementVoidRequest } from "../shared/movement-void";
+import { movementSlipTarget, slipLabel } from "../session/cash-movement";
 import type {
   GridRow,
   TillSessionKey,
@@ -653,6 +654,37 @@ export function voidMovementButton(s: TillSessionPayload | null, move: GridRow |
 /** The info boxes' titles once a change or a void is done (Qt `AppMessage::showInfo`). */
 export const CHANGE_DONE_TITLE = "Change between counters";
 export const VOID_DONE_TITLE = "Void movement";
+
+// ─── Print slip (Qt 3b5069d, notes 135) ──────────────────────────────────────
+
+/** Every till movement kind grid 147 lists — a voucher (RECEIPT, PAYMENT …) prints from its own screen. */
+export const SLIP_KINDS: readonly string[] = ["FLOAT_ISSUE", "TOP_UP", "PICKUP", "DROP", "CLOSE_HANDOVER", "PAID_IN", "EXCHANGE"];
+
+/**
+ * The Money documents tab's row when it is a till movement of ANY kind or
+ * state (Qt `currentSlip`): a voided one prints with VOID across it.
+ */
+export function printableSlip(row: GridRow | null | undefined): GridRow | null {
+  if (!row) return null;
+  return SLIP_KINDS.includes(textOf(row, "md_kind").toUpperCase()) ? row : null;
+}
+
+/** Print slip: lit while the picked row is a till movement; the server judges the rest. */
+export function printSlipButton(row: GridRow | null | undefined): ButtonState {
+  const slip = printableSlip(row);
+  return slip
+    ? { enabled: true, tip: `Print the slip of ${textOf(slip, "md_doc")}` }
+    : { enabled: false, tip: "Pick a till movement on the Money documents tab (not a voucher)" };
+}
+
+/** The slip as a print document (purpose TILL_MOVEMENT): grid 147's `md_id` = tcm_id, the cockpit's company / year / branch. */
+export function slipPrintTarget(row: GridRow, key: TillSessionKey): DocumentPrintTarget {
+  return movementSlipTarget({ tcmId: textOf(row, "md_id"), tcmDocNo: textOf(row, "md_doc") }, key);
+}
+
+export function slipPrintLabel(row: GridRow): string {
+  return slipLabel(textOf(row, "md_doc"));
+}
 
 // ─── printing (notes 117 §7) ─────────────────────────────────────────────────
 

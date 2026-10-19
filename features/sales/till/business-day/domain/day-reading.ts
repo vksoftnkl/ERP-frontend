@@ -67,7 +67,14 @@ export type HeadContext = {
   companyName: string;
   /** The effective `till.day_cutoff` ("04:00"), or null while it is unread. */
   cutoff: string | null;
+  /** Another store than the header's (Cash Position's drill, Qt 3b5069d `openOn`): named after the company. */
+  branchName?: string;
 };
+
+/** `Acme · Zone store` — the branch only when the screen is on another store than the header's. */
+function whose(context: HeadContext): string {
+  return [context.companyName, context.branchName ?? ""].filter(Boolean).join(" · ");
+}
 
 /** What the Cut-off cell shows: the setting's value as a 12-hour clock, or its key as Qt does. */
 function cutoffText(cutoff: string | null): string {
@@ -78,7 +85,7 @@ function cutoffText(cutoff: string | null): string {
 export function blankHead(context: HeadContext): DayHead {
   return {
     title: "Business Day",
-    sub: context.companyName,
+    sub: whose(context),
     pill: "",
     pillTone: "",
     facts: { status: "—", opened: "—", sessions: "—", storeZ: "—", cutoff: cutoffText(context.cutoff), reopened: "—" },
@@ -90,7 +97,7 @@ export function noDayHead(businessDate: string, context: HeadContext): DayHead {
   return {
     title: `Business Day  ${displayDate(businessDate)}`,
     sub:
-      `${context.companyName} · not opened yet — the first till session opens it (till.day_auto_open), ` +
+      `${whose(context)} · not opened yet — the first till session opens it (till.day_auto_open), ` +
       "or a manager's Day Open",
     pill: "NOT OPEN",
     pillTone: "",
@@ -145,7 +152,7 @@ export function dayHead(day: TillDay, context: HeadContext): DayHead {
   const { total, closed } = sessionCounts(day);
   return {
     title: `Business Day  ${displayDate(day.tbdBusinessDate)}`,
-    sub: `${context.companyName} · opened ${opened}`,
+    sub: `${whose(context)} · opened ${opened}`,
     pill: day.tbdStatus,
     pillTone: dayStatusTone(day.tbdStatus),
     facts: {

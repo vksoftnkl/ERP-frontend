@@ -49,6 +49,13 @@ export const PURPOSE_CODE = {
   TILL_SESSION_X: "TILL_SESSION_X",
   /** Notes 117 §7 — docId = tbd_id: the day X while open, the store Z once closed. */
   TILL_DAY_Z: "TILL_DAY_Z",
+  /**
+   * Notes 135 — docId = tcm_id, accYear = tcm_acc_year: the slip of one cash
+   * movement (every kind but a REMIT), and the memo that goes with a
+   * remittance's cash (two copies: bank / agency, store).
+   */
+  TILL_MOVEMENT: "TILL_MOVEMENT",
+  TILL_REMIT: "TILL_REMIT",
 } as const;
 
 export type PurposeCode = (typeof PURPOSE_CODE)[keyof typeof PURPOSE_CODE];

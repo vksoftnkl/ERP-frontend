@@ -20,11 +20,12 @@
  * A drop goes only into the counter's own drop safe (the session's
  * `dropSafeName`); with none, the bag goes to a supervisor as a Pickup.
  */
+import type { DocumentPrintTarget } from "@/features/printing/domain/documentPrint";
 import { countLines, countedPaise, type DenomCountValue, type Denomination } from "../shared/denom";
-import { formatMoney, paiseToNumber } from "../shared/money";
+import { formatMoney, paiseOf, paiseToNumber } from "../shared/money";
 import { reasonById, reasonsOf, type TillReason } from "../shared/reasons";
 import type { TillMovementBody } from "../shared/api/till-session-api";
-import type { TillSessionKey, TillSessionPayload, TillSupervisor } from "../shared/wire/types";
+import type { TillMovementDetail, TillSessionKey, TillSessionPayload, TillSupervisor } from "../shared/wire/types";
 
 export type MovementMode = "DROP" | "PAID_IN" | "PICKUP" | "TOP_UP";
 
@@ -371,5 +372,44 @@ export function emptyMovementForm(mode: MovementMode, count: DenomCountValue): M
     supervisorId: "",
     supervisorPin: "",
     count,
+  };
+}
+
+// ─── the slip (Qt 3b5069d, notes 135 — post & print, TILL_DESIGN S3) ─────────
+
+/** What the server answered, as the dialog says it: `PICKUP tpi00031 posted — 150.00.` */
+export function movementPostedText(result: Pick<TillMovementDetail, "tcmKind" | "tcmDocNo" | "tcmAmount">): string {
+  return `${result.tcmKind} ${result.tcmDocNo} posted — ${formatMoney(paiseOf(result.tcmAmount))}.`;
+}
+
+/** The question after the post: the slip both people sign. */
+export function movementPrintQuestion(result: Pick<TillMovementDetail, "tcmKind" | "tcmDocNo" | "tcmAmount">): string {
+  return `${movementPostedText(result)}\n\nPrint the slip now?`;
+}
+
+/** The download's name: `slip-<doc no>`, a "/" in the number as "-". */
+export function slipFilename(docNo: string): string {
+  return `slip-${docNo}`.replace(/\//g, "-");
+}
+
+export function slipLabel(docNo: string): string {
+  return `Slip ${docNo}`;
+}
+
+/**
+ * The movement as a print document (purpose TILL_MOVEMENT): docId = tcm_id,
+ * with the session's company, year and branch (branch.profile prints the
+ * letterhead) — Qt `PrintingModule::printDocuments` after the post.
+ */
+export function movementSlipTarget(
+  movement: Pick<TillMovementDetail, "tcmId" | "tcmDocNo">,
+  key: Pick<TillSessionKey, "companyId" | "branchId" | "accYear">,
+): DocumentPrintTarget {
+  return {
+    docId: movement.tcmId,
+    companyId: key.companyId,
+    accYear: key.accYear,
+    branchId: key.branchId,
+    filename: slipFilename(movement.tcmDocNo),
   };
 }

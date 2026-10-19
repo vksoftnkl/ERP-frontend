@@ -18,6 +18,7 @@
  * remittance is `remit-confirm.ts`; voiding one is the shared void dialog.
  */
 import type { DropdownSelection } from "@/components/design-system/dropdown";
+import type { DocumentPrintTarget } from "@/features/printing/domain/documentPrint";
 import { dayMonthTime12Of } from "@/lib/time-format";
 import type { TillRemitBody, TillSafeCountBody } from "../shared/api/till-session-api";
 import { CASH_TENDER_TYPE_ID } from "../shared/denom";
@@ -525,6 +526,67 @@ export function remitVoidRequest(row: GridRow, scope: CashOfficeScope): Movement
     kind: "REMIT",
     amount: paiseToNumber(paiseOf(row.rm_amount)),
   };
+}
+
+// ─── Print memo (Qt 3b5069d, notes 135) ──────────────────────────────────────
+
+/** A remittance as a print document: the movement, its year and its number. */
+export type RemitMemo = { tcmId: string; accYear: string; docNo: string };
+
+export const NO_PRINT_TITLE = "No print right on Cash Office (menu 287)";
+
+/**
+ * The Remittances tab's picked row as a memo, ANY state (Qt `pickedRemit`): a
+ * confirmed one prints with the bank's figures, a voided one says so.
+ */
+export function remitMemoOf(row: GridRow | null | undefined): RemitMemo | null {
+  const tcmId = textOf(row, "tcm_id");
+  if (!row || !tcmId) return null;
+  return { tcmId, accYear: textOf(row, "tcm_acc_year"), docNo: textOf(row, "tcm_doc_no") };
+}
+
+/** The remittance just posted, as a memo (Qt `submitRemit` → `printMemo`). */
+export function postedRemitMemo(result: TillRemitResult): RemitMemo | null {
+  const m = result.movement;
+  if (!m?.tcmId) return null;
+  return { tcmId: m.tcmId, accYear: m.tcmAccYear ?? "", docNo: m.tcmDocNo ?? "" };
+}
+
+/** Print memo: lit while any remittance is picked; the print right is menu 287 PRINT. */
+export function printMemoButton(memo: RemitMemo | null, canPrint: boolean): ButtonState {
+  if (!memo) return { enabled: false, title: "Pick a remittance" };
+  if (!canPrint) return { enabled: false, title: NO_PRINT_TITLE };
+  return { enabled: true, title: `Print the memo of ${memo.docNo}` };
+}
+
+/** The download's name: `remit-<doc no>` (Qt keeps the number as it is). */
+export function remitMemoFilename(docNo: string): string {
+  return `remit-${docNo}`;
+}
+
+export function remitMemoLabel(docNo: string): string {
+  return `Remittance memo ${docNo}`;
+}
+
+/**
+ * The memo as a print document (purpose TILL_REMIT, two copies: bank / agency
+ * and store): docId = the movement, the screen's company and branch, the
+ * movement's own year. A row without one leaves the year out, and the server
+ * binds the company's current year — the session's (Qt `AppSession::accYear`).
+ */
+export function remitMemoTarget(memo: RemitMemo, scope: CashOfficeScope): DocumentPrintTarget {
+  return {
+    docId: memo.tcmId,
+    companyId: scope.companyId,
+    ...(memo.accYear ? { accYear: memo.accYear } : {}),
+    branchId: scope.branchId,
+    filename: remitMemoFilename(memo.docNo),
+  };
+}
+
+/** The question once a remittance is posted (Qt): the memo goes with the cash. */
+export function remitPrintQuestion(result: TillRemitResult): string {
+  return `${remitPostedText(result)}\n\nPrint the memo now (bank / agency copy and store copy)?`;
 }
 
 /** Grid 157's visible columns as configured on the dev box, until the grid's own are read. */

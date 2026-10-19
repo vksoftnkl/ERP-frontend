@@ -91,7 +91,7 @@ const EVENT_TEXT: Record<string, string> = {
   CASH_VARIANCE: "the close's cash gap beyond tolerance",
   NONCASH_VARIANCE: "a card / cheque / voucher gap at the close",
   EXPENSE: "an expense paid from the drawer (ExpV)",
-  CASH_PAYMENT: "a bill-wise payment in cash from the drawer",
+  CASH_PAYMENT: "a payment in cash from the drawer",
   PAID_IN: "cash income with no party",
   PICKUP: "a supervisor takes cash out of a drawer",
   TOP_UP: "change brought from the safe into a drawer",

@@ -2,18 +2,22 @@
  * Till Reports (menu 288, Sales › Till, till notes 133) — Qt `TillReportsEntry`
  * (NexERP 1d3e203, TILL_DESIGN.md §10; mockups share/till/till_report_
  * {variance,exceptions,approvals,safe_book}_ui_mockup.png, approved
- * 2026-10-17) without the widgets: one read-only screen, four tabs.
+ * 2026-10-17) without the widgets: one read-only screen, seven tabs (the last
+ * three Qt 3b5069d, 2026-10-17 — no mockup, the layout of the first four).
  *
  *   Cashier variance   grid 159 per cashier · 160 the picked cashier's sessions
  *   Exceptions         grid 161 per person · 162 by hour · 163 the events
  *   Approver activity  grid 164 per approver · 165 decisions · 166 not decided
  *   Safe book          grid 167 per day · 168 the picked day's lines · 157 remittances
+ *   Cashier performance grid 175 per cashier · 176 the picked cashier's sessions
+ *   Ledger check       grid 177 per session (TILL_DESIGN §5.7) · 178 its till cash legs
+ *   Tender recon.      grid 179 per session × non-cash tender · 180 that tender's rows
  *
  * Every figure is the registered grid's: the screen only formats, totals the
  * rows it was sent and paints pills. Pickers: dropdown 61 (branches), grids
  * 133 / 136 (counters / safes), 169 (people, by role).
  *
- * Every token of grids 159–169 is QUOTED in their SQL, and a quoted token that
+ * Every token of grids 159–180 is QUOTED in their SQL, and a quoted token that
  * is not sent stays a literal word — the grid then compares a date with the
  * text `ifrom_date` and answers nothing, silently. So every builder below
  * sends every token its grid binds, `""` meaning "all".
@@ -34,13 +38,16 @@ export const TILL_REPORTS_HREF = "/sales/till/reports";
 
 // ─── tabs ────────────────────────────────────────────────────────────────────
 
-export type ReportTab = "variance" | "exceptions" | "approvers" | "safe";
+export type ReportTab = "variance" | "exceptions" | "approvers" | "safe" | "performance" | "ledger" | "tender";
 
 export const REPORT_TABS: readonly { value: ReportTab; label: string }[] = [
   { value: "variance", label: "Cashier variance" },
   { value: "exceptions", label: "Exceptions" },
   { value: "approvers", label: "Approver activity" },
   { value: "safe", label: "Safe book" },
+  { value: "performance", label: "Cashier performance" },
+  { value: "ledger", label: "Ledger check" },
+  { value: "tender", label: "Tender reconciliation" },
 ];
 
 export function tabLabel(tab: ReportTab): string {
@@ -93,6 +100,10 @@ export type ReportFilters = {
   safeId: string;
   /** Cash + non-cash (grid 159 `inoncash` "1"); Cash only sends "". */
   withNonCash: boolean;
+  /** Ledger check: Only differences (grid 177 `idiff` "1"); Every session sends "". */
+  ledgerDiffOnly: boolean;
+  /** Tender reconciliation: Only not settled (grid 179 `ipending` "1"); Every session sends "". */
+  tenderPendingOnly: boolean;
 };
 
 const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -149,9 +160,29 @@ export function varianceParams(filters: ReportFilters, today: string): Params {
   return { ...baseParams(filters, today), inoncash: filters.withNonCash ? "1" : "" };
 }
 
-/** Grid 160: the picked cashier's sessions. */
+/** Grids 160 / 176: the picked cashier's sessions. */
 export function cashierSessionsParams(filters: ReportFilters, today: string, cashierId: string): Params {
   return { ...baseParams(filters, today), ioperator_id: cashierId };
+}
+
+/** Grid 177: + `idiff` ("1" = only the sessions whose books are OFF). */
+export function ledgerParams(filters: ReportFilters, today: string): Params {
+  return { ...baseParams(filters, today), idiff: filters.ledgerDiffOnly ? "1" : "" };
+}
+
+/** Grid 178 binds only the company and the session. */
+export function ledgerLegsParams(companyId: string, tssId: string): Params {
+  return { icompany_id: companyId, itss_id: tssId };
+}
+
+/** Grid 179: + `ipending` ("1" = only the session-tenders with something not settled). */
+export function tenderParams(filters: ReportFilters, today: string): Params {
+  return { ...baseParams(filters, today), ipending: filters.tenderPendingOnly ? "1" : "" };
+}
+
+/** Grid 180 binds the company, the session and the tender type. */
+export function tenderRowsParams(companyId: string, tssId: string, tenderTypeId: string): Params {
+  return { icompany_id: companyId, itss_id: tssId, itender_type_id: tenderTypeId };
 }
 
 /** Grid 161: it counts every code — the Event filter is the event list's, never the table's. */
@@ -270,9 +301,24 @@ export function pickedSafeId(options: readonly SafeOption[], value: string, sett
 
 // ─── the picked main row ─────────────────────────────────────────────────────
 
-/** Variance: the cashier kept across a reload, else the first (Qt `pick = 0`). */
+/** The row kept across a reload by one field, else the first (Qt `pick = 0`). */
+export function pickRowOrFirst(rows: readonly GridRow[], field: string, keepId: string): GridRow | null {
+  return rows.find((row) => keepId && textOf(row, field) === keepId) ?? rows[0] ?? null;
+}
+
+/** Variance / performance: the cashier kept, else the first. */
 export function pickVarianceRow(rows: readonly GridRow[], keepId: string): GridRow | null {
-  return rows.find((row) => keepId && textOf(row, "cashier_id") === keepId) ?? rows[0] ?? null;
+  return pickRowOrFirst(rows, "cashier_id", keepId);
+}
+
+/** A tender reconciliation row's key: the session and the tender type together (Qt `tss_id + tender_type_id`). */
+export function tenderRowKey(row: GridRow | null | undefined): string {
+  return textOf(row, "tss_id") + textOf(row, "tender_type_id");
+}
+
+/** Tender reconciliation: the session-tender kept, else the first. */
+export function pickTenderRow(rows: readonly GridRow[], keepKey: string): GridRow | null {
+  return rows.find((row) => keepKey && tenderRowKey(row) === keepKey) ?? rows[0] ?? null;
 }
 
 /** Exceptions / approvers: the one kept, else nobody — the detail then reads everyone. */
@@ -291,8 +337,10 @@ export function pickSafeDay(rows: readonly GridRow[], keepDay: string): GridRow 
 /**
  * The time-ordered grids, put back in their SQL's order: the runner wraps the
  * statement, and its ORDER BY is not something to rely on through the wrap
- * (Cash Office, Business Day). The per-person grids (159 / 161 / 164 / 169,
- * ORDER BY the name) keep the server's collation order.
+ * (Cash Office, Business Day). The per-person grids (159 / 161 / 164 / 169 /
+ * 175, ORDER BY the name) keep the server's collation order, and so do 177
+ * and 179, whose order is a verdict first (OFF / FAILED) and newest within —
+ * not a field to sort on.
  */
 export const ROW_ORDER = {
   sessions: (rows: readonly GridRow[]) => newestFirst(rows, "tss_opened_on"),
@@ -303,6 +351,10 @@ export const ROW_ORDER = {
   safeDays: (rows: readonly GridRow[]) => sortRowsBy(rows, "day"),
   dayLines: (rows: readonly GridRow[]) => sortRowsBy(rows, "sb_at"),
   remits: (rows: readonly GridRow[]) => newestFirst(rows, "tcm_created_on"),
+  /** 178: in the order written — the running figure is a window sum in that order. */
+  legs: (rows: readonly GridRow[]) => sortRowsBy(rows, "av_created_on"),
+  /** 180: the tender rows as keyed. */
+  tenderRows: (rows: readonly GridRow[]) => sortRowsBy(rows, "td_created_on"),
 } as const;
 
 // ─── numbers and money ───────────────────────────────────────────────────────
@@ -480,6 +532,104 @@ export const REMIT_COLUMNS: readonly ReportColumn[] = [
   col("rm_age", "Age"),
 ];
 
+/** Grid 175. The rates (`hours` kind: one decimal) are the grid's per cashier; the totals row's are the range's. */
+export const PERFORMANCE_COLUMNS: readonly ReportColumn[] = [
+  col("cashier", "Cashier"),
+  col("sessions", "Sessions", "count", true),
+  col("hours", "Hours", "hours", true),
+  col("bills", "Bills", "count", true),
+  col("lines", "Lines", "count", true),
+  col("items_per_bill", "Items / bill", "hours"),
+  col("bills_per_hour", "Bills / hour", "hours"),
+  col("sales", "Sales", "money", true),
+  col("avg_bill", "Average bill", "money"),
+  col("gap_minutes", "Min. between bills", "hours"),
+  col("cancelled", "Cancelled", "count", true),
+  col("retenders", "Re-tenders", "count", true),
+];
+
+/** Grid 176. */
+export const PERF_SESSION_COLUMNS: readonly ReportColumn[] = [
+  col("tss_session_no", "Session"),
+  col("business_date", "Date"),
+  col("counter_code", "Counter"),
+  col("opened_at", "Opened"),
+  col("hours", "Hours", "hours"),
+  col("bills", "Bills", "count"),
+  col("lines", "Lines", "count"),
+  col("items_per_bill", "Items / bill", "hours"),
+  col("bills_per_hour", "Bills / hour", "hours"),
+  col("sales", "Sales", "money"),
+  col("avg_bill", "Average bill", "money"),
+  col("gap_minutes", "Min. between bills", "hours"),
+  col("cancelled", "Cancelled", "count"),
+  col("retenders", "Re-tenders", "count"),
+  col("status_text", "Status"),
+];
+
+/** Grid 177. */
+export const LEDGER_COLUMNS: readonly ReportColumn[] = [
+  col("tss_session_no", "Session"),
+  col("business_date", "Date"),
+  col("counter_code", "Counter"),
+  col("cashier", "Cashier"),
+  col("status_text", "Status"),
+  col("tss_float_mode", "Float"),
+  col("tss_float_issued", "Issued", "money"),
+  col("tss_float_left", "Float left", "money"),
+  col("books", "Books", "money"),
+  col("should", "Should be", "money"),
+  col("diff", "Difference", "signed"),
+  col("legs", "Legs", "count", true),
+  col("verdict", "Check"),
+];
+
+/** Grid 178. */
+export const LEG_COLUMNS: readonly ReportColumn[] = [
+  col("at_text", "When"),
+  col("refno", "Voucher"),
+  col("type_code", "Type"),
+  col("type_name", "Type name"),
+  col("dr", "Dr (in)", "money", true),
+  col("cr", "Cr (out)", "money", true),
+  col("running", "Running", "signed"),
+  col("remarks", "Remarks"),
+];
+
+/** Grid 179. */
+export const TENDER_COLUMNS: readonly ReportColumn[] = [
+  col("tss_session_no", "Session"),
+  col("business_date", "Date"),
+  col("counter_code", "Counter"),
+  col("cashier", "Cashier"),
+  col("tender", "Tender"),
+  col("txns", "Txns", "count", true),
+  col("expected", "Expected", "money", true),
+  col("settled", "Settled", "money", true),
+  col("mdr", "MDR", "money", true),
+  col("gap", "Gap", "signed", true),
+  col("pending_n", "Pending", "count", true),
+  col("failed_n", "Failed", "count", true),
+  col("oldest_days", "Oldest (days)", "count"),
+  col("state", "State"),
+];
+
+/** Grid 180. */
+export const TENDER_ROW_COLUMNS: readonly ReportColumn[] = [
+  col("at_text", "When"),
+  col("doc_type", "Doc"),
+  col("doc_refno", "No."),
+  col("tender_name", "Tender"),
+  col("amount", "Amount", "signed", true),
+  col("reference", "Reference"),
+  col("settle_status", "Settlement"),
+  col("settled_on", "Settled on"),
+  col("settled", "Settled", "money", true),
+  col("mdr", "MDR", "money", true),
+  col("settle_ref", "Settle ref"),
+  col("age_days", "Age (days)", "count"),
+];
+
 /** A cell's text (Qt `cellText`): a count of 0 is blank, a missing figure is blank. */
 export function cellText(column: ReportColumn, row: GridRow): string {
   switch (column.kind) {
@@ -597,6 +747,21 @@ export function remitStatusTone(text: string): PillTone {
   }
 }
 
+/** Grid 177's check: OK green, OFF red (a posting bug), LIVE (anything else) blue — still being written. */
+export function verdictTone(text: string): PillTone {
+  return text === "OK" ? "green" : text === "OFF" ? "red" : "blue";
+}
+
+/** Grid 179's state: SETTLED green, FAILED red, NOT TRACKED grey, else (PENDING / PARTIAL) amber. */
+export function tenderStateTone(text: string): PillTone {
+  return text === "SETTLED" ? "green" : text === "FAILED" ? "red" : text === "NOT TRACKED" ? "grey" : "amber";
+}
+
+/** Grid 180's settlement: SETTLED green, FAILED red, NA grey (nothing to wait for), else amber. */
+export function settleStatusTone(text: string): PillTone {
+  return text === "SETTLED" ? "green" : text === "FAILED" ? "red" : text === "NA" ? "grey" : "amber";
+}
+
 type PillRule = (key: string, row: GridRow) => Pill[];
 
 const positive = (row: GridRow, key: string) => numberOf(row, key) > 0;
@@ -660,6 +825,29 @@ const dayLinePills: PillRule = (key, row) => {
 
 const remitPills: PillRule = (key, row) =>
   key === "rm_status" ? pill(textOf(row, key), remitStatusTone(textOf(row, key))) : [];
+
+const performancePills: PillRule = (key, row) => {
+  if (key === "cancelled" && positive(row, key)) return pill(textOf(row, key), "red");
+  if (key === "retenders" && positive(row, key)) return pill(textOf(row, key), "amber");
+  return [];
+};
+
+const statusPill: PillRule = (key, row) =>
+  key === "status_text" ? pill(textOf(row, key), statusTone(textOf(row, key))) : [];
+
+const ledgerPills: PillRule = (key, row) => {
+  if (key === "verdict") return pill(textOf(row, key), verdictTone(textOf(row, key)));
+  return statusPill(key, row);
+};
+
+const tenderPills: PillRule = (key, row) => {
+  if (key === "state") return pill(textOf(row, key), tenderStateTone(textOf(row, key)));
+  if (key === "failed_n" && positive(row, key)) return pill(textOf(row, key), "red");
+  return [];
+};
+
+const tenderRowPills: PillRule = (key, row) =>
+  key === "settle_status" ? pill(textOf(row, key), settleStatusTone(textOf(row, key))) : [];
 
 // ─── tables ──────────────────────────────────────────────────────────────────
 
@@ -849,6 +1037,84 @@ export function remitsTable(rows: readonly GridRow[]): TableView {
 }
 
 /**
+ * Cashier performance (grid 175). The totals row's rates are the RANGE's, not
+ * sums: items per bill = Σ lines ÷ Σ bills, bills per hour = Σ bills ÷ Σ hours,
+ * average bill = Σ sales ÷ Σ bills — each blank when its divisor is nothing.
+ */
+export function performanceTable(rows: readonly GridRow[]): TableView {
+  const table = buildTable(PERFORMANCE_COLUMNS, rows, {
+    rowKey: byField("cashier_id"),
+    pills: performancePills,
+    totalsCaption: (n) => countLabel(n, "cashier"),
+  });
+  if (rows.length === 0) return table;
+  const sum = (key: string) => rows.reduce((acc, row) => acc + numberOf(row, key), 0);
+  const bills = sum("bills");
+  const lines = sum("lines");
+  const hours = sum("hours");
+  const sales = rows.reduce((acc, row) => acc + (toPaise(row.sales) ?? 0), 0);
+  let totals = withTotalCell(table, "items_per_bill", bills > 0 ? (lines / bills).toFixed(1) : "");
+  totals = withTotalCell(totals, "bills_per_hour", hours > 0.004 ? (bills / hours).toFixed(1) : "");
+  return withTotalCell(totals, "avg_bill", bills > 0 ? moneyText(Math.round(sales / bills)) : "");
+}
+
+/** The picked cashier's sessions, by performance (grid 176). */
+export function perfSessionsTable(rows: readonly GridRow[]): TableView {
+  return buildTable(PERF_SESSION_COLUMNS, rows, { rowKey: byField("tss_id"), pills: statusPill });
+}
+
+/** How many of grid 177's sessions are OFF. */
+export function offCount(rows: readonly GridRow[]): number {
+  return rows.filter((row) => textOf(row, "verdict") === "OFF").length;
+}
+
+/**
+ * Ledger check (grid 177): one row per session, in the grid's order (OFF
+ * first, then newest). The totals caption counts the sessions OFF, or says
+ * none is.
+ */
+export function ledgerTable(rows: readonly GridRow[]): TableView {
+  const off = offCount(rows);
+  return buildTable(LEDGER_COLUMNS, rows, {
+    rowKey: byField("tss_id"),
+    pills: ledgerPills,
+    totalsCaption: (n) => (off > 0 ? `${countLabel(off, "session")} OFF` : `${countLabel(n, "session")}, none OFF`),
+  });
+}
+
+/**
+ * The picked session's legs on the till cash ledger (grid 178), oldest first.
+ * The totals row's Running is the LAST leg's running figure, not a sum.
+ */
+export function legsTable(rows: readonly GridRow[]): TableView {
+  const table = buildTable(LEG_COLUMNS, rows, {
+    rowKey: byField("av_id"),
+    totalsCaption: (n) => countLabel(n, "leg"),
+  });
+  if (rows.length === 0) return table;
+  const running = toPaise(rows[rows.length - 1].running) ?? 0;
+  return withTotalCell(table, "running", moneyText(running, true), signTone(running));
+}
+
+/** Tender reconciliation (grid 179): one row per session × non-cash tender, in the grid's order (FAILED first). */
+export function tenderTable(rows: readonly GridRow[]): TableView {
+  return buildTable(TENDER_COLUMNS, rows, {
+    rowKey: (row, index) => tenderRowKey(row) || `#${index}`,
+    pills: tenderPills,
+    totalsCaption: (n) => countLabel(n, "session-tender"),
+  });
+}
+
+/** The picked session-tender's rows and how each settled (grid 180). */
+export function tenderRowsTable(rows: readonly GridRow[]): TableView {
+  return buildTable(TENDER_ROW_COLUMNS, rows, {
+    rowKey: byField("td_id"),
+    pills: tenderRowPills,
+    totalsCaption: (n) => countLabel(n, "row"),
+  });
+}
+
+/**
  * Search narrows the rows already loaded (Qt `applySearch`): every typed word
  * has to be found in some cell's text (or pill) — the app's loose rule, so
  * `pin fail` finds PIN_FAIL. The totals row always stays.
@@ -879,12 +1145,48 @@ export const HOURS_HINT = "By hour — darker = more events in that hour · clic
 export const REMIT_HEAD = "Remittance register — raised vs bank-credited";
 export const SUBTITLE = "Read-only · supervisors and above — the figures are not blind.";
 export const SEARCH_PLACEHOLDER = "cashier / session / doc no";
+export const PERF_HINT =
+  "Bills keyed in each cashier's till sessions. Hours run from open to end of billing. " +
+  "Minutes between bills = first to last bill of a session over the bills between — " +
+  "scan-to-tender time is not recorded, so it is not shown.";
+export const LEDGER_HINT =
+  "Till cash = the branch's CASH tender ledger. A closed session's legs on it must come to the float it left " +
+  "in the drawer (less a float carried in). OFF is a posting bug to report, not missing cash. " +
+  "A live session shows what the books hold so far.";
+export const TENDER_HINT =
+  "Expected = the session's non-cash tender rows (refunds out). Settled = the gross the provider paid, " +
+  "matched on Tender Settlement (278); MDR apart. NOT TRACKED = rows with no settlement to wait for.";
 
 /** Above the picked cashier's sessions. */
 export function sessionsHead(cashier: string | null, varianceEmpty: boolean): string {
   if (varianceEmpty) return "No till session in this range.";
   if (cashier === null) return "";
   return `${cashier} — every session in the range · Enter opens the Session Cockpit · Ctrl+H its history`;
+}
+
+/** Above the picked cashier's sessions by performance (grid 176). */
+export function perfSessionsHead(cashier: string | null, performanceEmpty: boolean): string {
+  if (performanceEmpty) return "No till session in this range.";
+  if (cashier === null) return "";
+  return `${cashier} — every session in the range · Enter opens the Session Cockpit`;
+}
+
+/** Above the picked session's legs (grid 178); the empty state says what the radio asked for. */
+export function legsHead(sessionNo: string | null, ledgerEmpty: boolean, diffOnly: boolean): string {
+  if (ledgerEmpty) return diffOnly ? "No session is OFF in this range." : "No till session in this range.";
+  if (sessionNo === null) return "";
+  return `${sessionNo} — its legs on the till cash ledger, in the order written · Enter opens the Cockpit`;
+}
+
+/** Above the picked session-tender's rows (grid 180); the empty state says what the radio asked for. */
+export function tenderRowsHead(picked: GridRow | null, tenderEmpty: boolean, pendingOnly: boolean): string {
+  if (tenderEmpty) {
+    return pendingOnly
+      ? "Everything in this range is settled."
+      : "No card, UPI, wallet, cheque or bank tender in a till session in this range.";
+  }
+  if (!picked) return "";
+  return `${textOf(picked, "tss_session_no")} · ${textOf(picked, "tender")} — the rows and how each settled`;
 }
 
 /** `10 AM` — Qt `QTime(hr, 0).toString("h AP")`. */
@@ -1006,9 +1308,10 @@ export const HEAT_WHITE_TEXT = 0.55;
 // ─── the session a detail row names ──────────────────────────────────────────
 
 /**
- * The session a detail row names — 160's own, 163's, 165's — with its own
- * tenant key, for the Cockpit (Enter) and its journal (Ctrl+H). Null when the
- * row names none (168's lines never do).
+ * The session a row names — 160's own, 163's, 165's, 176's, and the MAIN rows
+ * of 177 / 179 — with its own tenant key, for the Cockpit (Enter) and its
+ * journal (Ctrl+H). Null when the row names none (168's lines, 178's legs and
+ * 180's tender rows never do).
  */
 export function sessionTarget(row: GridRow | null | undefined): SessionRow | null {
   const tssId = textOf(row, "tss_id");
@@ -1117,14 +1420,38 @@ export type ReportView = {
   event: string;
   safeId: string;
   withNonCash: boolean;
+  ledgerDiffOnly: boolean;
+  tenderPendingOnly: boolean;
   search: string;
   picks: ReportPicks;
 };
 
-/** The main rows picked, by id (`""` = none), and the hour picked on the strip. */
-export type ReportPicks = { cashier: string; person: string; approver: string; day: string; hour: number | null };
+/**
+ * The main rows picked, by id (`""` = none), and the hour picked on the strip.
+ * `performer` is grid 175's cashier, `ledgerSession` grid 177's session,
+ * `tenderKey` grid 179's session + tender type (`tenderRowKey`).
+ */
+export type ReportPicks = {
+  cashier: string;
+  person: string;
+  approver: string;
+  day: string;
+  hour: number | null;
+  performer: string;
+  ledgerSession: string;
+  tenderKey: string;
+};
 
-export const NO_PICKS: ReportPicks = { cashier: "", person: "", approver: "", day: "", hour: null };
+export const NO_PICKS: ReportPicks = {
+  cashier: "",
+  person: "",
+  approver: "",
+  day: "",
+  hour: null,
+  performer: "",
+  ledgerSession: "",
+  tenderKey: "",
+};
 
 const str = (value: unknown): string => (typeof value === "string" ? value : "");
 
@@ -1147,6 +1474,8 @@ export function parseReportView(raw: unknown): ReportView | null {
     event: EXCEPTION_CODES.some((entry) => entry.code === value.event) ? str(value.event) : "",
     safeId: str(value.safeId),
     withNonCash: value.withNonCash === true,
+    ledgerDiffOnly: value.ledgerDiffOnly === true,
+    tenderPendingOnly: value.tenderPendingOnly === true,
     search: str(value.search),
     picks: {
       cashier: str(picks.cashier),
@@ -1154,6 +1483,50 @@ export function parseReportView(raw: unknown): ReportView | null {
       approver: str(picks.approver),
       day: str(picks.day),
       hour,
+      performer: str(picks.performer),
+      ledgerSession: str(picks.ledgerSession),
+      tenderKey: str(picks.tenderKey),
     },
   };
+}
+
+// ─── opened on a scope (Cash Position's drill) ───────────────────────────────
+
+/**
+ * Qt `setScope(branchId, branchName, from, to)`: Cash Position opens the
+ * report on one store for the month to its as-on day. On the web it is the
+ * route with `?branch=<id>&branchName=<name>&from=<yyyy-MM-dd>&to=<yyyy-MM-dd>`;
+ * the screen starts on that branch and period (the Counter and Safe back to
+ * All, as a branch pick does) and then strips the four from the address, so a
+ * reload does not apply them again.
+ */
+export type ReportScope = {
+  branch: { id: string; text: string };
+  /** `""` when the address carried none, or not a day — the default then stands. */
+  fromDate: string;
+  toDate: string;
+};
+
+export const SCOPE_PARAMS = ["branch", "branchName", "from", "to"] as const;
+
+/** The scope the address carries, or null when it names no branch. */
+export function scopeFromSearch(search: string): ReportScope | null {
+  const params = new URLSearchParams(search);
+  const id = (params.get("branch") ?? "").trim();
+  if (!id) return null;
+  const from = params.get("from") ?? "";
+  const to = params.get("to") ?? "";
+  return {
+    branch: { id, text: (params.get("branchName") ?? "").trim() },
+    fromDate: isIsoDay(from) ? from : "",
+    toDate: isIsoDay(to) ? to : "",
+  };
+}
+
+/** The address's query without the scope's four, as `?a=b` or `""`. */
+export function withoutScopeParams(search: string): string {
+  const params = new URLSearchParams(search);
+  for (const name of SCOPE_PARAMS) params.delete(name);
+  const rest = params.toString();
+  return rest ? `?${rest}` : "";
 }
