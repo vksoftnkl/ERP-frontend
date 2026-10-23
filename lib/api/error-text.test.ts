@@ -105,6 +105,14 @@ describe("refusalMessage", () => {
     expect(message.detail).toBe("409 · SALES_ALREADY_POSTED · sbId");
   });
 
+  it("titles a refused delete as a delete, never as a save", () => {
+    const refusal = apiRefusalOf(rtk(409, tillBody({ code: "ITEM_BRAND_IN_USE" }, "Brand is in use")));
+    expect(refusalMessage(refusal, null, "Cannot delete").title).toBe("Cannot delete");
+    expect(refusalMessage(refusal, null, "  ").title).toBe("Cannot save");
+    // A 404 keeps its own title whatever the caller was doing.
+    expect(refusalMessage(apiRefusalOf(rtk(404, { message: "Gone" })), null, "Cannot delete").title).toBe("Not found");
+  });
+
   it("lists every error's own reason under an unworded headline, the headline once", () => {
     const message = refusalMessage(
       apiRefusalOf(

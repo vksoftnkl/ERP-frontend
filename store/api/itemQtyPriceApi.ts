@@ -40,6 +40,8 @@ export type SaveItemQtyPriceDto = {
   iqp_modified_by?: string | null;
 };
 
+// A saved slab as the GET answers it. The names come from the Prisma joins;
+// they are null when the list is served from an admin-configured grid.
 export type ItemQtyPricePayload = SaveItemQtyPriceDto & {
   iqp_id: string;
   iqp_from_qty: number;
@@ -120,6 +122,8 @@ export const itemQtyPriceApi = baseApi.injectEndpoints({
       invalidatesTags: ["ItemQtyPrice"],
     }),
 
+    // The slab grid's headings (the layout names Uom / From / To). Not tagged
+    // with the slabs: a slab save has nothing to do with the layout.
     getItemQtyPriceColumnConfig: builder.query<UiTableColumnConfigRow[], { uiTableId: string }>({
       query: (params) => ({ url: UI_TABLE_MASTERS_ENDPOINT, params }),
       transformResponse: (payload: UiTableConfigResponse, _meta, arg) => {
@@ -127,7 +131,6 @@ export const itemQtyPriceApi = baseApi.injectEndpoints({
           payload.data?.find((row) => row.uiTblId === arg.uiTableId) ?? payload.data?.[0];
         return table?.columns ?? [];
       },
-      providesTags: ["ItemQtyPrice"],
       keepUnusedDataFor: 300,
     }),
   }),

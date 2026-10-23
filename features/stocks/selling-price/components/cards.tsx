@@ -1,16 +1,16 @@
 "use client";
 
 /**
- * The three cards under the grid (the Qt `.ui`'s frameSrc / frameFour /
- * frameRow): the Src legend, the violet "each level is four numbers" card and
- * the card that says, in words, what Save will do to the current row.
+ * What sits under the grid: the profit line for the current row (Qt
+ * `lblProfitLine`, the item card's Pricing line), and the two cards (the Qt
+ * `.ui`'s frameSrc / frameRow) — the Src legend and the card that says, in
+ * words, what Save will do to the current row. The violet four-number card
+ * went in Qt 4ae6575; the profit line replaced it.
  */
-import { Fragment, useState } from "react";
+import { Fragment } from "react";
 import { cx } from "@/components/design-system/cx";
 import { chipColours } from "../selling-price.constants";
-import type { FourCard, RowCard } from "../selling-price.cards";
-import type { FourTarget } from "../use-selling-price-screen";
-import { acceptsTyping, type FourField, type NumericInputKind } from "../selling-price.state";
+import { profitLineText, type ProfitLine, type RowCard } from "../selling-price.cards";
 import styles from "../page.module.scss";
 
 const LEGEND: ReadonlyArray<{ chip: string; text: string }> = [
@@ -49,168 +49,48 @@ export function SrcLegendCard() {
 
 // ---------------------------------------------------------------------------
 
-type FourInputProps = {
-  id: string;
-  label: string;
-  value: string;
-  kind: NumericInputKind;
-  disabled: boolean;
-  /** The row and level the card shows right now. */
-  target: FourTarget;
-  onFinish: (text: string, target: FourTarget) => void;
-};
-
 /**
- * One of the four boxes. Only a TYPED change counts — leaving the box
- * untouched (the Qt editingFinished-on-focus-out) changes nothing.
+ * "Profit per PCS (no tax):  WS ₹10.00 (10.0%) ↑ · RET ₹12.00 (12.0%)" — each
+ * amount green (profit) or red (loss), the arrow green / red the way the
+ * profit moved since the row was loaded; the old figures are in the tooltip.
  */
-function FourInput({ id, label, value, kind, disabled, target, onFinish }: FourInputProps) {
-  const [text, setText] = useState(value);
-  const [dirty, setDirty] = useState(false);
-  /** Where the typing started — the edit lands there, wherever focus goes next. */
-  const [editTarget, setEditTarget] = useState<FourTarget | null>(null);
-  // The row's figure, followed while nobody is typing: the card re-reads the
-  // current row whenever it (or the level) changes.
-  const [seenValue, setSeenValue] = useState(value);
-  if (seenValue !== value) {
-    setSeenValue(value);
-    if (!dirty) {
-      setText(value);
-    }
-  }
-
-  const finish = () => {
-    if (!dirty) {
-      return;
-    }
-    setDirty(false);
-    onFinish(text, editTarget ?? target);
-    setEditTarget(null);
-    // The card re-reads the row; a refused edit falls back to the row's figure.
-    setText(value);
-  };
-
-  return (
-    <input
-      id={id}
-      aria-label={label}
-      className={styles.fourInput}
-      value={text}
-      disabled={disabled}
-      inputMode="decimal"
-      autoComplete="off"
-      onChange={(event) => {
-        if (acceptsTyping(kind, event.target.value)) {
-          if (!dirty) {
-            setEditTarget(target);
-          }
-          setDirty(true);
-          setText(event.target.value);
-        }
-      }}
-      onFocus={(event) => event.currentTarget.select()}
-      onBlur={finish}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" && !event.ctrlKey && !event.metaKey) {
-          event.preventDefault();
-          finish();
-        } else if (event.key === "Escape" && dirty) {
-          event.preventDefault();
-          setDirty(false);
-          setEditTarget(null);
-          setText(value);
-        }
-      }}
-    />
-  );
-}
-
-export function FourNumberCard({
-  four,
-  target,
-  onEdit,
-}: {
-  four: FourCard;
-  target: FourTarget;
-  onEdit: (field: FourField, text: string, target: FourTarget) => void;
-}) {
-  const disabled = !four.enabled;
-  return (
-    <section
-      className={cx(styles.card, styles.fourCard)}
-      aria-label="Each level is four numbers"
-      // F5 / Ctrl+Enter from a box here commits it before the save reads the rows.
-      data-selling-price-commit="true"
-    >
-      <div className={styles.cardTitle}>EACH LEVEL IS FOUR NUMBERS</div>
-      <div className={styles.fourWhich}>{four.which}</div>
-      <div className={styles.fourGrid}>
-        <label className={styles.fourCap} htmlFor="csp-four-markup">
-          markup %
-        </label>
-        <span />
-        <label className={styles.fourCap} htmlFor="csp-four-wot">
-          price wot
-        </label>
-        <span />
-        <label className={styles.fourCap} htmlFor="csp-four-price">
-          price
-        </label>
-        <span />
-        <label className={styles.fourCap} htmlFor="csp-four-margin">
-          margin %
-        </label>
-        <FourInput
-          id="csp-four-markup"
-          label="markup %"
-          value={four.markup}
-          kind="percent"
-          disabled={disabled}
-          target={target}
-          onFinish={(text, at) => onEdit("markup", text, at)}
-        />
-        <span className={styles.fourArrow}>⇄</span>
-        <FourInput
-          id="csp-four-wot"
-          label="price wot"
-          value={four.wot}
-          kind="amount"
-          disabled={disabled}
-          target={target}
-          onFinish={(text, at) => onEdit("wot", text, at)}
-        />
-        <span className={styles.fourArrow}>⇄</span>
-        <FourInput
-          id="csp-four-price"
-          label="price"
-          value={four.price}
-          kind="amount"
-          disabled={disabled}
-          target={target}
-          onFinish={(text, at) => onEdit("price", text, at)}
-        />
-        <span className={styles.fourArrow}>⇄</span>
-        <FourInput
-          id="csp-four-margin"
-          label="margin %"
-          value={four.margin}
-          kind="percent"
-          disabled={disabled}
-          target={target}
-          onFinish={(text, at) => onEdit("margin", text, at)}
-        />
+export function ProfitLineView({ line }: { line: ProfitLine }) {
+  if (line.kind === "note") {
+    return (
+      <div className={styles.profitLine} role="status" aria-live="polite">
+        {line.text}
       </div>
-      <p className={styles.fourNote}>
-        Type any one; the other three follow. The server keeps PRICE and recomputes wot + markup
-        from it. Delta chips against the loaded value are the preview.
-      </p>
-      {four.cess ? (
-        <p className={styles.cessNote}>
-          ⚠ This item carries a cess: the four numbers are approximate — a per-unit cess is not a
-          percentage of price.
-        </p>
+    );
+  }
+  return (
+    <div
+      className={styles.profitLine}
+      role="status"
+      aria-live="polite"
+      aria-label={profitLineText(line)}
+      title={line.tooltip}
+    >
+      <span className={styles.profitCaption}>Profit per {line.unit} (no tax):</span>
+      {line.parts.map((part, index) => (
+        <Fragment key={part.level + index}>
+          {index > 0 ? <span className={styles.profitDot}>·</span> : null}
+          <span>
+            {part.level}{" "}
+            <span className={part.loss ? styles.deltaDown : styles.deltaUp}>
+              {part.amount} ({part.pct}%)
+            </span>
+            {part.moved ? (
+              <span className={part.moved === "up" ? styles.deltaUp : styles.deltaDown}>
+                {part.moved === "up" ? " ↑" : " ↓"}
+              </span>
+            ) : null}
+          </span>
+        </Fragment>
+      ))}
+      {line.cess ? (
+        <span className={styles.profitCess}>(approximate — this item carries a cess)</span>
       ) : null}
-    </section>
+    </div>
   );
 }
 

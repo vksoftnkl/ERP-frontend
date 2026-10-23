@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CrudMasterPage, { type CrudMasterPageController } from "@/components/master/crud-master-page";
+import { useSoftDeleteActions } from "@/features/masters/shared/use-soft-delete-actions";
 import WidgetVisibilityTree, {
   type WidgetTreeSectionView,
 } from "@/features/masters/shared/widget-visibility-tree";
@@ -21,10 +22,15 @@ import {
   type ERPDynamicModalField,
   type ERPDynamicModalVariant,
   type ERPDynamicSelectOption,
+  type ERPDynamicFieldValueChangeHandler,
 } from "@/components/design-system/ui/dynamic-modal-form";
 import styles from "@/app/master/state-master/page.module.scss";
 import { extractRows } from "@/features/masters/shared/normalizers";
 import { getFirstDefinedValue, toDisplayValue } from "@/features/masters/shared/value-mappers";
+import {
+  useLazyConfiguredDropdown,
+  type LazyDropdownHandlers,
+} from "@/features/masters/shared/use-lazy-configured-dropdown";
 import { useDataRefresh } from "@/lib/data-freshness";
 import { buildGridDeletedParam, type ConfiguredGridKey } from "@/lib/configured-grids";
 
@@ -79,15 +85,19 @@ const WIDGET_VISIBILITY_ENDPOINT = "/widget-masters/visibility";
 const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(WIDGET_FIELD_NAME_BY_FORM_FIELD);
 
 const BRANCH_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
-const PARENT_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 
 const BRANCH_LOOKUP_QUERY = {
   module: "branches",
 } as const;
 
-const PARENT_LOOKUP_QUERY = {
-  module: "godownLocations",
-} as const;
+// Parent Location is the lazy configured dropdown "GODOWNS" (gdl_id, gdl_name …),
+// loaded on open and on debounced typing. Its SQL binds two guarded tokens, both
+// sent as `dropdown_param` (Qt 4ae6575): `ibranch_id` — a parent must be a
+// godown of the SAME branch, so the list follows the chosen branch — and, on an
+// edit, `iexclude_id` — never this godown or anything under it. The server
+// refuses either pick only after Save.
+const PARENT_DROPDOWN_ID_KEYS = ["gdl_id", "gdlId"] as const;
+const PARENT_DROPDOWN_LABEL_KEYS = ["gdl_name", "gdlName"] as const;
 
 const LOOKUP_KEYS = {
   id: [
@@ -215,6 +225,7 @@ const GODOWN_ID_FORM_KEYS = [
 
 const BRANCH_ID_FORM_KEYS = ["gdl_branch_id", "gdlBranchId", "branch_id", "branchId"] as const;
 const PARENT_ID_FORM_KEYS = ["gdl_parent_id", "gdlParentId", "parent_id", "parentId"] as const;
+const PARENT_NAME_FORM_KEYS = ["gdl_parent_name", "gdlParentName", "parent_name", "parentName"] as const;
 const TYPE_FORM_KEYS = ["gdl_type", "gdlType", "godown_type", "type"] as const;
 const LEVEL_FORM_KEYS = ["gdl_level", "gdlLevel", "level"] as const;
 const DEL_SHEET_FORM_KEYS = ["gdl_del_sheet", "gdlDelSheet", "del_sheet", "delSheet"] as const;
@@ -273,7 +284,9 @@ type GodownMasterPageContentProps = {
 
 function buildGodownFormFields(
   branchOptions: ERPDynamicSelectOption[],
+  onBranchChange: ERPDynamicFieldValueChangeHandler,
   parentOptions: ERPDynamicSelectOption[],
+  lazyParent: LazyDropdownHandlers,
 ): ERPDynamicModalField[] {
   return [
     {
@@ -310,14 +323,19 @@ function buildGodownFormFields(
       validation: {
         requiredMessage: "Branch Id is required.",
       },
+      onValueChange: onBranchChange,
     },
     {
       name: "parentLocationId",
       label: "Parent Location Id",
       type: "select",
       searchable: true,
+      serverSearch: true,
       options: parentOptions,
       placeholder: "Search parent location",
+      onSearchOpenChange: lazyParent.onSearchOpenChange,
+      onSearchQueryChange: lazyParent.onSearchQueryChange,
+      onValueChange: lazyParent.onValueChange,
     },
     {
       name: "__heading_attributes",
@@ -440,41 +458,6 @@ function buildBranchOptions(payload: unknown): ERPDynamicSelectOption[] {
   return [DEFAULT_BRANCH_OPTION, ...sortedOptions];
 }
 
-function buildParentOptions(payload: unknown): ERPDynamicSelectOption[] {
-  const optionMap = new Map<string, string>();
-  const rows = extractRows(payload, LOOKUP_KEYS.array);
-
-  for (const row of rows) {
-    if (!row || typeof row !== "object" || Array.isArray(row)) {
-      continue;
-    }
-
-    const source = row as Record<string, unknown>;
-    const parentId = toDisplayValue(getFirstDefinedValue(source, LOOKUP_KEYS.id));
-    if (!parentId) {
-      continue;
-    }
-
-    const parentName = toDisplayValue(getFirstDefinedValue(source, LOOKUP_KEYS.name));
-    if (!parentName) {
-      continue;
-    }
-
-    const parentCode = toDisplayValue(getFirstDefinedValue(source, LOOKUP_KEYS.code));
-    const label = parentCode ? `${parentName} (${parentCode})` : parentName;
-
-    if (!optionMap.has(parentId)) {
-      optionMap.set(parentId, label);
-    }
-  }
-
-  const sortedOptions = Array.from(optionMap.entries())
-    .map(([value, label]) => ({ value, label }))
-    .sort((left, right) => left.label.localeCompare(right.label));
-
-  return [DEFAULT_PARENT_OPTION, ...sortedOptions];
-}
-
 function toUpdateGodownId(editingItemId: string | number | null): string | number {
   if (typeof editingItemId === "number" && Number.isFinite(editingItemId)) {
     return editingItemId;
@@ -506,7 +489,6 @@ export default function GodownMasterPageContent({
   onGodownSaved,
 }: GodownMasterPageContentProps = {}) {
   const { getAll: getBranchLookup } = useApi<unknown>(BRANCH_LOOKUP_ENDPOINT);
-  const { getAll: getParentLookup } = useApi<unknown>(PARENT_LOOKUP_ENDPOINT);
   // Silent progressive enhancement: a failed config fetch leaves the form on its
   // hardcoded labels/order (empty map), so don't nag the user with an error toast.
   const { getAll: getWidgetConfig } = useApi<WidgetMastersResponse>(WIDGET_CONFIG_ENDPOINT, {
@@ -515,15 +497,50 @@ export default function GodownMasterPageContent({
   const [branchOptions, setBranchOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_BRANCH_OPTION,
   ]);
-  const [parentOptions, setParentOptions] = useState<ERPDynamicSelectOption[]>([
-    DEFAULT_PARENT_OPTION,
-  ]);
+  // What the parent list is scoped to: the branch the form holds, and the godown
+  // being edited ("" on a create).
+  const [parentScopeBranchId, setParentScopeBranchId] = useState("");
+  const [excludeParentId, setExcludeParentId] = useState("");
+  const parentLocation = useLazyConfiguredDropdown({
+    dropdownKey: "godown",
+    idKeys: PARENT_DROPDOWN_ID_KEYS,
+    labelKeys: PARENT_DROPDOWN_LABEL_KEYS,
+    defaultOption: DEFAULT_PARENT_OPTION,
+    params: { ibranch_id: parentScopeBranchId, iexclude_id: excludeParentId },
+  });
+  const seedParentLocation = parentLocation.seedSelected;
+  // Picking a branch re-scopes the parent list and drops a parent from the
+  // branch before (Qt GodownEntry: the branch's `selected` clears the parent).
+  const handleBranchChange = useCallback<ERPDynamicFieldValueChangeHandler>(
+    ({ value, previousValues }) => {
+      const branchId = value.trim();
+      setParentScopeBranchId(branchId);
+      if (branchId === (previousValues.branchReferenceId ?? "").trim()) {
+        return;
+      }
+      seedParentLocation("", "");
+      return { values: { parentLocationId: "" } };
+    },
+    [seedParentLocation],
+  );
   const [widgetFieldConfig, setWidgetFieldConfig] = useState<Map<string, ResolvedFieldConfig>>(
     () => new Map(),
   );
   // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
   // can see soft-deleted godown locations. Lives beside the list search input.
   const [wantDelete, setWantDelete] = useState(false);
+  // Live view: Delete. Deleted view: the same button is Restore (`POST
+  // /godowns/restore`), and Edit / View are refused. A refusal is titled for what
+  // was refused — "Cannot delete" / "Cannot restore", not "Cannot save".
+  const softDeleteProps = useSoftDeleteActions({
+    showingDeleted: wantDelete,
+    deleteEndpoint: API_ENDPOINTS.delete,
+    restoreEndpoint: "/godowns/restore",
+    idParam: "gdl_id",
+    idKeys: LOOKUP_KEYS.id,
+    entityTitle: "Godown location",
+    plainRefusals: true,
+  });
 
   // Lookup options come from master tables that other users and other screens
   // change, so they are re-read on every data-refresh signal, not just on mount.
@@ -532,21 +549,16 @@ export default function GodownMasterPageContent({
 
     void (async () => {
       try {
-        const [branchPayload, parentPayload] = await Promise.all([
-          getBranchLookup(BRANCH_LOOKUP_QUERY),
-          getParentLookup(PARENT_LOOKUP_QUERY),
-        ]);
+        const branchPayload = await getBranchLookup(BRANCH_LOOKUP_QUERY);
 
         if (!mounted) {
           return;
         }
 
         setBranchOptions(buildBranchOptions(branchPayload));
-        setParentOptions(buildParentOptions(parentPayload));
       } catch {
         if (mounted) {
           setBranchOptions([DEFAULT_BRANCH_OPTION]);
-          setParentOptions([DEFAULT_PARENT_OPTION]);
         }
       }
     })();
@@ -554,7 +566,7 @@ export default function GodownMasterPageContent({
     return () => {
       mounted = false;
     };
-  }, [getBranchLookup, getParentLookup]);
+  }, [getBranchLookup]);
   useEffect(() => loadLookupOptions(), [loadLookupOptions]);
   useDataRefresh(() => {
     loadLookupOptions();
@@ -594,11 +606,22 @@ export default function GodownMasterPageContent({
   const godownFormFields = useMemo(
     () =>
       applyWidgetFieldConfig(
-        buildGodownFormFields(branchOptions, parentOptions),
+        buildGodownFormFields(
+          branchOptions,
+          handleBranchChange,
+          parentLocation.options,
+          parentLocation.handlers,
+        ),
         widgetFieldConfig,
         WIDGET_FIELD_NAME_BY_FORM_FIELD,
       ),
-    [branchOptions, parentOptions, widgetFieldConfig],
+    [
+      branchOptions,
+      handleBranchChange,
+      parentLocation.options,
+      parentLocation.handlers,
+      widgetFieldConfig,
+    ],
   );
 
   // Adds the `grid_param` payload to the default page/limit/search list query.
@@ -821,6 +844,7 @@ export default function GodownMasterPageContent({
   return (
     <>
     <CrudMasterPage
+      {...softDeleteProps}
       title="Godown Location"
       iconName="godown_master_entry"
       auditHistory={{ screenName: "Godown Location Master" }}
@@ -862,7 +886,15 @@ export default function GodownMasterPageContent({
       editModalTitle="Edit Location Entry"
         modalPanelStyle={{ width: "min(40rem, calc(calc(100vw/var(--erp-ui-scale)) - 2.4rem))" }}
       onCrudControllerReady={onCrudControllerReady}
-      onModalOpenChange={onModalOpenChange}
+      onModalOpenChange={(open, variantKey) => {
+        // A create: no branch picked yet and no record to leave out.
+        if (open && variantKey === "master-create") {
+          setParentScopeBranchId("");
+          setExcludeParentId("");
+          seedParentLocation("", "");
+        }
+        onModalOpenChange?.(open, variantKey);
+      }}
       hideListPage={inlineModalOnly}
       buildGetByIdRequest={({ recordId }) => ({
         query: {
@@ -871,12 +903,22 @@ export default function GodownMasterPageContent({
       })}
       mapFormValues={({ source, defaults }) => {
         const rowSource = source ?? {};
+        const branchReferenceId = toDisplayValue(getFirstDefinedValue(rowSource, BRANCH_ID_FORM_KEYS));
+        const parentLocationId = toDisplayValue(getFirstDefinedValue(rowSource, PARENT_ID_FORM_KEYS));
+        // An edit: the branch arrives with the record, and the record itself (with
+        // its subtree) stays out of its parent list.
+        setParentScopeBranchId(branchReferenceId);
+        setExcludeParentId(toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.id)));
+        seedParentLocation(
+          parentLocationId,
+          toDisplayValue(getFirstDefinedValue(rowSource, PARENT_NAME_FORM_KEYS)),
+        );
 
         return {
           ...GODOWN_INITIAL_FORM_VALUES,
           godownReferenceId: toDisplayValue(getFirstDefinedValue(rowSource, GODOWN_ID_FORM_KEYS)),
-          branchReferenceId: toDisplayValue(getFirstDefinedValue(rowSource, BRANCH_ID_FORM_KEYS)),
-          parentLocationId: toDisplayValue(getFirstDefinedValue(rowSource, PARENT_ID_FORM_KEYS)),
+          branchReferenceId,
+          parentLocationId,
           masterName:
             toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.name)) ||
             defaults.masterName,

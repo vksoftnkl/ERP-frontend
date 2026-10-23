@@ -21,6 +21,8 @@ import {
   SELLING_PRICE_BUCKETS_ENDPOINT,
   SELLING_PRICE_GRID_ENDPOINT,
   SELLING_PRICE_SAVE_ENDPOINT,
+  SELLING_PRICE_SCHEDULE_CANCEL_ENDPOINT,
+  SELLING_PRICE_SCHEDULE_ENDPOINT,
 } from "./selling-price.constants";
 import type {
   BarcodeItem,
@@ -32,6 +34,9 @@ import type {
   SellingPricePage,
   SellingPriceRow,
   SellingPriceSaveResult,
+  SellingPriceSavedRow,
+  SellingPriceScheduleCancelResult,
+  SellingPriceScheduleRow,
 } from "./selling-price.types";
 
 const EMPTY_PAGE: SellingPricePage = { items: [], meta: { limit: 0, offset: 0, count: 0 } };
@@ -72,11 +77,54 @@ export const sellingPriceApi = baseApi.injectEndpoints({
       query: (body) => ({ url: SELLING_PRICE_SAVE_ENDPOINT, method: "POST", body }),
       transformResponse: (payload: ApiSuccessResponse<SellingPriceSaveResult>) => ({
         saved: Number(payload?.data?.saved) || 0,
+        effectiveFrom: text(payload?.data?.effectiveFrom).slice(0, 10),
+        rows: Array.isArray(payload?.data?.rows)
+          ? payload.data.rows.map(
+              (row): SellingPriceSavedRow => ({
+                lineNo: Number(row?.lineNo) || 0,
+                bucketId: text(row?.bucketId),
+                scheduled: row?.scheduled === true,
+                effectiveFrom: text(row?.effectiveFrom).slice(0, 10),
+                effectiveTo: text(row?.effectiveTo).slice(0, 10),
+              }),
+            )
+          : [],
         masterRowsSaved: Number(payload?.data?.masterRowsSaved) || 0,
         noStock: Array.isArray(payload?.data?.noStock) ? payload.data.noStock : [],
         needsConfirm: payload?.data?.needsConfirm === true,
         problems: Array.isArray(payload?.data?.problems) ? payload.data.problems : [],
         belowCostPolicy: text(payload?.data?.belowCostPolicy),
+      }),
+    }),
+    /**
+     * Notes 140 B — the prices saved to start after today that this branch can
+     * see (its own and the chain's). `itemId` narrows to one item. Never cached:
+     * a list opened after a save or a cancel must show it.
+     */
+    listPriceSchedule: builder.query<
+      SellingPriceScheduleRow[],
+      { companyId: string; branchId: string; itemId?: string }
+    >({
+      query: ({ companyId, branchId, itemId }) => ({
+        url: SELLING_PRICE_SCHEDULE_ENDPOINT,
+        params: { companyId, branchId, ...(itemId ? { itemId } : {}) },
+      }),
+      transformResponse: (payload: ApiSuccessResponse<SellingPriceScheduleRow[]>) =>
+        Array.isArray(payload?.data) ? payload.data : [],
+      keepUnusedDataFor: 0,
+    }),
+    /**
+     * Notes 140 B — take a scheduled price off before it starts; the row in
+     * force today runs on to the cancelled row's end. 409
+     * STOCK_PRICE_SCHEDULE_STARTED once it is in force, 403
+     * STOCK_PRICE_CHAIN_HQ_ONLY for a chain row from a non-HQ branch.
+     */
+    cancelPriceSchedule: builder.mutation<SellingPriceScheduleCancelResult, { ipmId: string }>({
+      query: (body) => ({ url: SELLING_PRICE_SCHEDULE_CANCEL_ENDPOINT, method: "POST", body }),
+      transformResponse: (payload: ApiSuccessResponse<SellingPriceScheduleCancelResult>) => ({
+        bucketId: text(payload?.data?.bucketId),
+        restoredId: payload?.data?.restoredId ? text(payload.data.restoredId) : null,
+        restoredTo: payload?.data?.restoredTo ? text(payload.data.restoredTo).slice(0, 10) : null,
       }),
     }),
     /** The price levels' names (1..4 are the four columns). */
@@ -88,6 +136,7 @@ export const sellingPriceApi = baseApi.injectEndpoints({
               priceLvlId: Number(row?.priceLvlId) || 0,
               priceLvlName: row?.priceLvlName ?? null,
               priceLvlShort: row?.priceLvlShort ?? null,
+              priceLvlIsActive: row?.priceLvlIsActive !== false,
             }))
           : [],
       keepUnusedDataFor: 300,
@@ -166,6 +215,9 @@ export const sellingPriceApi = baseApi.injectEndpoints({
 });
 
 export const {
+  useCancelPriceScheduleMutation,
+  useListPriceScheduleQuery,
+  useLazyListPriceScheduleQuery,
   useSaveSellingPriceRowsMutation,
   useGetSellingPriceLevelNamesQuery,
   useGetSellingPriceBranchNamesQuery,

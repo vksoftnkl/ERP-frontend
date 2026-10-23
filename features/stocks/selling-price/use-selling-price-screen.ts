@@ -3,8 +3,9 @@
 /**
  * Change Selling Price — the screen's state and every path the operator has
  * into it: F8's Apply & Load, the Item cell's picker, a barcode scanned on the
- * spare line, F12's bucket list, the grid's cell edits, the violet card, the
- * scope switch and the save with its below-cost round trip.
+ * spare line, F12's bucket list, F9's scheduled prices, the grid's cell edits,
+ * the scope switch, the Price from day and the save with its below-cost round
+ * trip.
  *
  * The rules themselves are the pure modules beside this file; this hook only
  * sequences them against the server. Rows are held in state AND a ref: the
@@ -15,8 +16,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useBusinessContext } from "@/components/layout/business-context";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
-import { confirm, getConfirmations } from "@/lib/confirm";
-import { getMessages, toast } from "@/lib/notify";
+import { confirm, getConfirmations, subscribeToConfirmations } from "@/lib/confirm";
+import { getMessages, subscribeToMessages, toast } from "@/lib/notify";
 import { RESTORED_MESSAGE_OPTIONS, screenMemory, type ScreenScope } from "@/lib/screen-memory";
 import {
   useForgetIfWritingOnUnmount,
@@ -34,13 +35,15 @@ import {
   useGetSellingPriceLevelNamesQuery,
   useSaveSellingPriceRowsMutation,
 } from "./selling-price.api";
-import { changedChipText, fourCard, rowCard, subtitleText } from "./selling-price.cards";
+import { changedChipText, profitLine, rowCard, subtitleText } from "./selling-price.cards";
 import {
+  ALL_LEVELS_ON,
   DEFAULT_LEVEL_NAMES,
   DEFAULT_LEVEL_SHORTS,
   GRID_PAGE_SIZE,
   GRID_ROW_CEILING,
   LEVEL_COUNT,
+  PRICE_FROM_INPUT_ID,
   PRICE_KEYS,
   SELLING_PRICE_GRID_NAME,
   isHqUserType,
@@ -61,36 +64,47 @@ import {
   filterNotAvailableMessage,
   refusedFilterKey,
   refusedLineNumbers,
+  refusesPriceFrom,
   savedMessage,
+  scheduledDayOf,
   type BelowCostLine,
 } from "./selling-price.payload";
 import {
   applyCellEdit,
-  applyFourEdit,
   branchCellText,
   cellNumber,
   changedCount,
   editorKindOf,
+  effectiveFromToSend,
   hereName,
   insertNewBucketRow,
   isChanged,
   isPriceWorkWorthRemembering,
   isSameFigure,
+  isSchedulingDay,
+  landingLevel,
   newBucketTemplateIndex,
   parseAcceptable,
+  priceFromNote,
+  priceFromRefusal,
   refreshItemRows,
+  restoredPriceFrom,
   rowFromServer,
   rowIndexOfItem,
   sameTenant,
   tracksOf,
-  type FourField,
   type PriceGridRow,
   type SellingPriceSnapshot,
 } from "./selling-price.state";
 import { SAVE_BLOCKED_TOOLTIP, SAVE_TOOLTIP, validateRows } from "./selling-price.validate";
 import { useSellingPriceSettings } from "./use-selling-price-settings";
 import { messageContent } from "./components/message-text";
-import type { ApiErrorLike, PriceScope, SellingPriceRow } from "./selling-price.types";
+import type {
+  ApiErrorLike,
+  PriceScope,
+  SellingPriceRow,
+  SellingPriceScheduleRow,
+} from "./selling-price.types";
 
 /** The spare line's React key — it is not a row of the state. */
 export const SPARE_ROW_KEY = "csp-spare";
@@ -109,9 +123,6 @@ export type BelowCostDialogState = {
 };
 
 export type PickerState = { initialQuery: string } | null;
-
-/** Which row and level a violet-card edit belongs to. */
-export type FourTarget = { rowKey: string | null; level: number };
 
 type CurrentCell = { rowKey: string | null; column: ColumnKey | null };
 
@@ -169,9 +180,13 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
   const [saveRows] = useSaveSellingPriceRowsMutation();
 
   // ------------------------------------------------------------- names
-  const { levelNames, levelShorts } = useMemo(() => {
+  // A level the company has not switched on is not shown anywhere on the
+  // screen — columns, bands, validation, the profit line (Qt `m_levelActive`).
+  // Its loaded prices still go back as they came, so a save never moves them.
+  const { levelNames, levelShorts, levelActive } = useMemo(() => {
     const names: string[] = [...DEFAULT_LEVEL_NAMES];
     const shorts: string[] = [...DEFAULT_LEVEL_SHORTS];
+    const active: boolean[] = [...ALL_LEVELS_ON];
     for (const level of levelQuery.data ?? []) {
       const id = level.priceLvlId;
       if (id < 1 || id > LEVEL_COUNT) {
@@ -179,9 +194,12 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
       }
       if (level.priceLvlName?.trim()) names[id - 1] = level.priceLvlName.trim();
       if (level.priceLvlShort?.trim()) shorts[id - 1] = level.priceLvlShort.trim();
+      active[id - 1] = level.priceLvlIsActive !== false;
     }
-    return { levelNames: names, levelShorts: shorts };
+    return { levelNames: names, levelShorts: shorts, levelActive: active };
   }, [levelQuery.data]);
+  const levelActiveRef = useRef(levelActive);
+  levelActiveRef.current = levelActive;
 
   const branchName = branchQuery.data?.brName || business.activeBranch?.name || "";
   const branchShort = branchQuery.data?.brShort || "";
@@ -213,6 +231,16 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
   const [lastLevel, setLastLevel] = useState(recalled?.lastLevel ?? 0);
   const lastLevelRef = useRef(0);
   lastLevelRef.current = lastLevel;
+
+  // Notes 140 A — the day the prices start; blank = today, a later day
+  // schedules. Held in a ref too: Save reads it the moment it runs.
+  const today = todayIso();
+  const [priceFrom, setPriceFromState] = useState(() => restoredPriceFrom(recalled?.priceFrom, todayIso()));
+  const priceFromRef = useRef(priceFrom);
+  const setPriceFrom = useCallback((value: string) => {
+    priceFromRef.current = value;
+    setPriceFromState(value);
+  }, []);
   const [serverProblemKeys, setServerProblemKeys] = useState<ReadonlySet<string>>(() => new Set());
 
   const serverProblemKeysRef = useRef(serverProblemKeys);
@@ -255,8 +283,9 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
       filter,
       scopeChoice,
       lastLevel,
+      priceFrom,
     }),
-    [filter, lastLevel, rows, scopeChoice, tenant],
+    [filter, lastLevel, priceFrom, rows, scopeChoice, tenant],
   );
   useRememberWrite(memory, snapshot, {
     scopeOf: (value) => value.tenant,
@@ -284,6 +313,8 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
   const [bucketDialog, setBucketDialog] = useState<BucketDialogState | null>(null);
   const [belowCost, setBelowCost] = useState<BelowCostDialogState | null>(null);
   const [picker, setPicker] = useState<PickerState>(null);
+  /** F9 — the schedule as read for this branch, while its list is open. */
+  const [scheduled, setScheduled] = useState<SellingPriceScheduleRow[] | null>(null);
   /** The spare line's scan field. */
   const [spareBarcode, setSpareBarcode] = useState("");
 
@@ -318,6 +349,18 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
     attempt(2);
   }, []);
 
+  /** Where the cursor goes once a message is read: "priceFrom" after a refusal of the day. */
+  const pendingFocusRef = useRef<"priceFrom" | null>(null);
+
+  /** Tab from the grid: the Price from field. */
+  const focusPriceFrom = useCallback(() => {
+    const input = document.getElementById(PRICE_FROM_INPUT_ID);
+    if (input instanceof HTMLInputElement && !input.disabled) {
+      input.focus();
+      input.select();
+    }
+  }, []);
+
   // ------------------------------------------------------------- derived
   const changed = changedCount(rows);
   const problemIndices = useMemo(() => {
@@ -328,26 +371,26 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
     return set;
   }, [rows, serverProblemKeys]);
   const validation = useMemo(
-    () => validateRows(rows, levelNames, belowCostPolicy, problemIndices),
-    [belowCostPolicy, levelNames, problemIndices, rows],
+    () => validateRows(rows, levelNames, belowCostPolicy, problemIndices, levelActive),
+    [belowCostPolicy, levelActive, levelNames, problemIndices, rows],
   );
   const saveEnabled = !validation.blocked && !saving && changed > 0 && canSaveRight;
   const saveTooltip = validation.blocked ? SAVE_BLOCKED_TOOLTIP : SAVE_TOOLTIP;
 
   // What the save path reads at the moment it runs, not at the last render.
-  const liveRef = useRef({ levelNames, belowCostPolicy, canSaveRight, companyId, branchId });
-  liveRef.current = { levelNames, belowCostPolicy, canSaveRight, companyId, branchId };
+  const liveRef = useRef({ levelNames, levelActive, belowCostPolicy, canSaveRight, companyId, branchId });
+  liveRef.current = { levelNames, levelActive, belowCostPolicy, canSaveRight, companyId, branchId };
 
   const currentIndex = current.rowKey ? rows.findIndex((row) => row.key === current.rowKey) : -1;
   const currentRow = currentIndex >= 0 ? rows[currentIndex] : null;
-  const currentLevel =
-    current.column && levelOfColumn(current.column) >= 0 ? levelOfColumn(current.column) : lastLevel;
 
   const subtitle = subtitleText(companyName, branchName, rows);
   const changedChip = changed > 0 ? changedChipText(changed) : "";
   const card = rowCard(currentRow, currentIndex, scope);
-  const four = fourCard(currentRow, currentIndex, currentLevel, levelNames, saving);
+  const profit = profitLine(currentRow, levelActive, levelShorts, levelNames);
   const summary = filterSummary(filter);
+  const scheduling = isSchedulingDay(priceFrom, today);
+  const priceFromLine = priceFromNote(priceFrom, today);
 
   const branchCell = useCallback(
     (row: PriceGridRow) => branchCellText(row, scope, here),
@@ -486,8 +529,9 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
       addedItemsRef.current.add(itemId);
       const fresh = found.map((row) => rowFromServer(row));
       commitRows([...rowsRef.current, ...fresh]);
-      setCurrent({ rowKey: fresh[0].key, column: "priceA" });
-      focusLater(fresh[0].key, "priceA");
+      const column = PRICE_KEYS[landingLevel(0, levelActiveRef.current)];
+      setCurrent({ rowKey: fresh[0].key, column });
+      focusLater(fresh[0].key, column);
     },
     [commitRows, fetchGridPage, focusLater],
   );
@@ -542,8 +586,9 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
       const at = rowIndexOfItem(rowsRef.current, item.itemId);
       if (at >= 0) {
         const row = rowsRef.current[at];
-        setCurrent({ rowKey: row.key, column: "priceA" });
-        focusLater(row.key, "priceA");
+        const column = PRICE_KEYS[landingLevel(0, levelActiveRef.current)];
+        setCurrent({ rowKey: row.key, column });
+        focusLater(row.key, column);
         return;
       }
       addItem(item.itemId, item.itemName);
@@ -606,10 +651,12 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
         }
       }
       if (loaded.length > 0) {
-        setCurrent({ rowKey: loaded[0].key, column: "priceA" });
-        focusLater(loaded[0].key, "priceA");
+        const column = PRICE_KEYS[landingLevel(0, levelActiveRef.current)];
+        setCurrent({ rowKey: loaded[0].key, column });
+        focusLater(loaded[0].key, column);
       } else {
-        setCurrent({ rowKey: null, column: null });
+        setCurrent({ rowKey: null, column: "barcodeText" });
+        focusLater(null, "barcodeText");
       }
     },
     [addItem, commitRows, confirmDiscard, fetchGridPage, focusLater, setLoading],
@@ -704,6 +751,34 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
     }
   }, [focusLater]);
 
+  /**
+   * The cursor into the grid (Qt `focusGrid`): the first row's price at the
+   * level last worked on, else the spare line's scan cell.
+   */
+  const focusGrid = useCallback(() => {
+    const first = rowsRef.current.find((row) => row.itemId);
+    if (first) {
+      const column = PRICE_KEYS[landingLevel(lastLevelRef.current, levelActiveRef.current)];
+      setCurrent({ rowKey: first.key, column });
+      focusLater(first.key, column);
+      return;
+    }
+    setCurrent({ rowKey: null, column: "barcodeText" });
+    focusLater(null, "barcodeText");
+  }, [focusLater]);
+
+  /**
+   * Back to the grid — Tab from Price from, a dialog dismissed: the cell the
+   * operator was on, else `focusGrid`.
+   */
+  const backToGrid = useCallback(() => {
+    if (currentRef.current.column) {
+      refocusCurrent();
+    } else {
+      focusGrid();
+    }
+  }, [focusGrid, refocusCurrent]);
+
   const closePicker = useCallback(() => {
     setPicker(null);
     refocusCurrent();
@@ -725,44 +800,6 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
       addItem(itemId, itemName);
     },
     [addItem],
-  );
-
-  /**
-   * The violet card: one level of the current row, typed as any of its four
-   * numbers. The row and level are the ones the typing STARTED on — leaving the
-   * box by clicking another row must not land the figure there.
-   */
-  const onFourEdit = useCallback(
-    (field: FourField, text: string, target: FourTarget) => {
-      const index = target.rowKey ? rowsRef.current.findIndex((row) => row.key === target.rowKey) : -1;
-      if (index < 0 || savingRef.current) {
-        return;
-      }
-      const value = parseAcceptable(field === "markup" || field === "margin" ? "percent" : "amount", text);
-      if (value === null) {
-        return;
-      }
-      const result = applyFourEdit(rowsRef.current[index], target.level, field, value);
-      if ("hint" in result) {
-        setHint(result.hint);
-        return;
-      }
-      const next = [...rowsRef.current];
-      next[index] = result.row;
-      commitRows(next);
-      const key = next[index].key;
-      setServerProblemKeys((keys) => {
-        if (!keys.has(key)) return keys;
-        const copy = new Set(keys);
-        copy.delete(key);
-        return copy;
-      });
-    },
-    [commitRows],
-  );
-  const fourTarget = useMemo<FourTarget>(
-    () => ({ rowKey: current.rowKey, level: currentLevel }),
-    [current.rowKey, currentLevel],
   );
 
   // ------------------------------------------------------------- rows
@@ -797,7 +834,7 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
     setServerProblemKeys(new Set());
     // The cursor stays at that line — on the row that moved up into it.
     const landing = next[at] ?? null;
-    const column = current.column ?? "priceA";
+    const column = current.column ?? PRICE_KEYS[landingLevel(0, levelActiveRef.current)];
     setCurrent({ rowKey: landing?.key ?? null, column });
     focusLater(landing?.key ?? null, landing ? column : "itemName");
   }, [commitRows, current.column, current.rowKey, focusLater]);
@@ -816,8 +853,10 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
     addedItemsRef.current.clear();
     commitRows([]);
     setServerProblemKeys(new Set());
-    setCurrent({ rowKey: null, column: null });
-  }, [commitRows, confirmDiscard]);
+    // Back to the spare line's scan cell (Qt `focusGrid` after Clear).
+    setCurrent({ rowKey: null, column: "barcodeText" });
+    focusLater(null, "barcodeText");
+  }, [commitRows, confirmDiscard, focusLater]);
 
   // ------------------------------------------------------------- F12
   /** Every live price row of the current row's item, chain and branch. */
@@ -884,11 +923,60 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
         copy.delete(dialog.rowKey);
         return copy;
       });
-      const column = PRICE_KEYS[lastLevelRef.current];
+      const column = PRICE_KEYS[landingLevel(lastLevelRef.current, levelActiveRef.current)];
       setCurrent({ rowKey: dialog.rowKey, column });
       focusLater(dialog.rowKey, column);
     },
     [bucketDialog, commitRows, focusLater],
+  );
+
+  // ------------------------------------------------------------- F9
+  const scheduleReadingRef = useRef(false);
+
+  /** The prices scheduled to start after today at this branch (notes 140 B), cancellable there. */
+  const openScheduled = useCallback(async () => {
+    const { companyId: company, branchId: branch } = liveRef.current;
+    if (scheduleReadingRef.current) {
+      return;
+    }
+    if (!company || !branch) {
+      toast.warn("Pick a company and branch first.");
+      return;
+    }
+    scheduleReadingRef.current = true;
+    try {
+      const data = await dispatch(
+        sellingPriceApi.endpoints.listPriceSchedule.initiate(
+          { companyId: company, branchId: branch },
+          { subscribe: false, forceRefetch: true },
+        ),
+      ).unwrap();
+      if (mountedRef.current) setScheduled(data);
+    } catch (error) {
+      if (mountedRef.current) toast.apiError(error, { fallback: "Could not read the scheduled prices." });
+    } finally {
+      scheduleReadingRef.current = false;
+    }
+  }, [dispatch]);
+
+  /**
+   * A cancel takes back a FUTURE row only — the rows in force today, which are
+   * all the grid shows, keep their prices — so the grid is not re-read (nor is
+   * it in Qt); the hint says what went.
+   */
+  const closeScheduled = useCallback(
+    (cancelled: number) => {
+      setScheduled(null);
+      if (cancelled > 0) {
+        setHint(
+          cancelled === 1
+            ? "1 scheduled change cancelled — today's price carries on."
+            : `${cancelled} scheduled changes cancelled — today's prices carry on.`,
+        );
+      }
+      backToGrid();
+    },
+    [backToGrid],
   );
 
   // ------------------------------------------------------------- the switch
@@ -952,10 +1040,15 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
       if (keys.size > 0) {
         const first = rowsRef.current.find((row) => keys.has(row.key));
         if (first) {
-          const column = PRICE_KEYS[lastLevelRef.current];
+          const column = PRICE_KEYS[landingLevel(lastLevelRef.current, levelActiveRef.current)];
           setCurrent({ rowKey: first.key, column });
           focusLater(first.key, column);
         }
+      }
+      // A day in the past or too far ahead: once the message is read, the
+      // cursor goes to Price from.
+      if (refusesPriceFrom(error as ApiErrorLike)) {
+        pendingFocusRef.current = "priceFrom";
       }
       showApiError(error);
     },
@@ -965,7 +1058,14 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
   const postSave = useCallback(
     async (confirmed: boolean): Promise<void> => {
       const { companyId: company, branchId: branch, levelNames: names } = liveRef.current;
-      const built = buildSavePayload(rowsRef.current, company, branch, scopeRef.current, confirmed);
+      const built = buildSavePayload(
+        rowsRef.current,
+        company,
+        branch,
+        scopeRef.current,
+        confirmed,
+        effectiveFromToSend(priceFromRef.current, todayIso()),
+      );
       if (built.payload.rows.length === 0) {
         return;
       }
@@ -999,8 +1099,15 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
         });
         return;
       }
-      // Saved. Never a plain "Saved" when a row has no stock behind it.
-      toast.info(messageContent(savedMessage(result, confirmed), "Change Selling Price"));
+      // Saved. Never a plain "Saved" when a row has no stock behind it — and
+      // a scheduled save says from when.
+      const now = todayIso();
+      toast.info(messageContent(savedMessage(result, confirmed, now), "Change Selling Price"));
+      if (scheduledDayOf(result, now)) {
+        // Back to today: the next edit is not scheduled by a day picked for
+        // this one. The re-read below shows TODAY's prices, still on the shelf.
+        setPriceFrom(now);
+      }
       setServerProblemKeys(new Set());
       settlingRef.current = true;
       try {
@@ -1009,7 +1116,7 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
         settlingRef.current = false;
       }
     },
-    [refreshItemsAfterSave, saveRows, setSaving, showServerRefusal],
+    [refreshItemsAfterSave, saveRows, setPriceFrom, setSaving, showServerRefusal],
   );
 
   /** F5 / Ctrl+Enter — save the changed rows in one transaction. */
@@ -1017,15 +1124,15 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
     if (savingRef.current || loadingRef.current) {
       return;
     }
-    // From inside an open cell (or the violet card): moving focus off it
+    // From inside an open cell (or the Price from field): moving focus off it
     // commits the typed value before anything is sent.
     const active = document.activeElement;
-    if (
+    const blurred =
       active instanceof HTMLElement &&
       active.closest('[data-selling-price-grid="true"], [data-selling-price-commit="true"]')
-    ) {
-      active.blur();
-    }
+        ? active
+        : null;
+    blurred?.blur();
     // A frame later the commit has rendered, and the rows are what is sent.
     window.requestAnimationFrame(() => {
       if (!mountedRef.current || savingRef.current || loadingRef.current) {
@@ -1037,17 +1144,39 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
       rowsRef.current.forEach((row, index) => {
         if (serverProblemKeysRef.current.has(row.key)) indices.add(index);
       });
-      const strip = validateRows(rowsRef.current, live.levelNames, live.belowCostPolicy, indices);
+      const strip = validateRows(
+        rowsRef.current,
+        live.levelNames,
+        live.belowCostPolicy,
+        indices,
+        live.levelActive,
+      );
+      // The cursor goes back where it was when nothing is sent.
+      const stay = () => {
+        if (blurred?.id === PRICE_FROM_INPUT_ID) {
+          focusPriceFrom();
+        } else if (blurred) {
+          refocusCurrent();
+        }
+      };
       if (count === 0) {
         setHint("Nothing has changed — there is nothing to save.");
+        stay();
+        return;
+      }
+      const refusal = priceFromRefusal(priceFromRef.current, todayIso());
+      if (refusal) {
+        pendingFocusRef.current = "priceFrom";
+        toast.info(refusal, { title: "Price from" });
         return;
       }
       if (strip.blocked || !live.canSaveRight) {
+        stay();
         return;
       }
       void postSave(false);
     });
-  }, [postSave]);
+  }, [focusPriceFrom, postSave, refocusCurrent]);
 
   const confirmBelowCost = useCallback(() => {
     setBelowCost(null);
@@ -1099,8 +1228,9 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
   }, [changed]);
 
   // ------------------------------------------------------------- shortcuts
-  const modalOpen = filterOpen || bucketDialog !== null || belowCost !== null || picker !== null;
-  const shortcuts = { save, clearGrid, openFilterDialog, openBucketList, modalOpen };
+  const modalOpen =
+    filterOpen || bucketDialog !== null || belowCost !== null || picker !== null || scheduled !== null;
+  const shortcuts = { save, clearGrid, openFilterDialog, openBucketList, openScheduled, modalOpen };
   const shortcutsRef = useRef(shortcuts);
   shortcutsRef.current = shortcuts;
 
@@ -1136,6 +1266,10 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
           event.preventDefault();
           shortcutsRef.current.openFilterDialog();
           break;
+        case "F9":
+          event.preventDefault();
+          void shortcutsRef.current.openScheduled();
+          break;
         case "F12":
           event.preventDefault();
           void shortcutsRef.current.openBucketList();
@@ -1148,12 +1282,62 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  // ------------------------------------------------------------- the cursor
+  // No button takes the focus (Qt, 2026-10-22): the cursor lives in the grid,
+  // and goes there on open — after a tick, past whatever the first paint
+  // focused (Qt's `showEvent`).
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (mountedRef.current && !shortcutsRef.current.modalOpen && !anyOverlayUp()) {
+        focusGrid();
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // `focusGrid` is stable: this runs on open only.
+  }, [focusGrid]);
+
+  /** The cursor back into the grid when it has fallen to nobody (a redraw, a popup gone). */
+  const focusGridIfLost = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      if (!mountedRef.current || shortcutsRef.current.modalOpen || anyOverlayUp()) {
+        return;
+      }
+      const active = document.activeElement;
+      if (active && active !== document.body) {
+        return;
+      }
+      if (pendingFocusRef.current === "priceFrom") {
+        pendingFocusRef.current = null;
+        focusPriceFrom();
+        return;
+      }
+      backToGrid();
+    });
+  }, [backToGrid, focusPriceFrom]);
+
+  // A message or a question hands the focus back to nobody when it closes;
+  // the cursor returns to the grid (or to Price from, after a refusal of it).
+  useEffect(() => {
+    const onChange = () => {
+      if (!anyOverlayUp()) {
+        focusGridIfLost();
+      }
+    };
+    const offMessages = subscribeToMessages(onChange);
+    const offConfirmations = subscribeToConfirmations(onChange);
+    return () => {
+      offMessages();
+      offConfirmations();
+    };
+  }, [focusGridIfLost]);
+
   return {
     // context
     companyId,
     branchId,
     levelNames,
     levelShorts,
+    levelActive,
     branchName,
     here,
     belowCostPolicy,
@@ -1172,7 +1356,9 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
     currentIndex,
     serverProblemKeys,
     registerReveal,
-    currentLevel,
+    focusGridIfLost,
+    focusPriceFrom,
+    backToGrid,
     lastLevel,
     saving,
     loading,
@@ -1189,10 +1375,14 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
     // panels
     validation,
     card,
-    four,
-    fourTarget,
-    onFourEdit,
+    profit,
     hint,
+    // price from
+    today,
+    priceFrom,
+    setPriceFrom,
+    priceFromLine,
+    scheduling,
     // buttons
     saveEnabled,
     saveTooltip,
@@ -1200,6 +1390,7 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
     clearGrid,
     openFilterDialog,
     openBucketList,
+    openScheduled,
     close,
     // dialogs
     filter,
@@ -1215,6 +1406,9 @@ export function useSellingPriceScreen(opts: { memory?: ScreenMemoryOption } = {}
     picker,
     closePicker,
     onPickItem,
+    scheduled,
+    closeScheduled,
+    canCancelSchedule: permissions.canEdit,
     // screen memory
     resumed,
     finishResume,

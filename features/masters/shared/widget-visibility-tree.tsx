@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./widget-visibility-tree.module.scss";
+import { treeExpandKeyAction } from "./widget-tree-keys";
 
 /** One field leaf in the visibility tree. */
 export type WidgetTreeFieldView = {
@@ -191,6 +192,30 @@ export default function WidgetVisibilityTree({
     [sections],
   );
 
+  // Ctrl++ (or Ctrl+=) expands every section and Ctrl+- collapses them, from
+  // anywhere in the popup — the browser's own zoom on those keys is held off
+  // while the tree is open. Bubble phase, so a message popup on top (which
+  // takes every key in the capture phase) keeps them.
+  const treeShown = !loading && !error && sections.length > 0;
+  useEffect(() => {
+    if (!treeShown) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+      const action = treeExpandKeyAction(event);
+      if (!action) {
+        return;
+      }
+      event.preventDefault();
+      setAllCollapsed(action === "collapse");
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [setAllCollapsed, treeShown]);
+
   if (loading) {
     return (
       <div className={styles.tree}>
@@ -220,6 +245,25 @@ export default function WidgetVisibilityTree({
 
   return (
     <div className={styles.tree}>
+      {/* Every section at once; one section still opens with its own arrow. */}
+      <div className={styles.toolbar}>
+        <button
+          type="button"
+          className={styles.toolbarButton}
+          onClick={() => setAllCollapsed(false)}
+          title="Ctrl++ — show every section's fields."
+        >
+          Expand all
+        </button>
+        <button
+          type="button"
+          className={styles.toolbarButton}
+          onClick={() => setAllCollapsed(true)}
+          title="Ctrl+- — show the sections only."
+        >
+          Collapse all
+        </button>
+      </div>
       <div className={styles.tableScroll}>
         <div className={styles.headRow}>
           <div className={styles.headCell}>

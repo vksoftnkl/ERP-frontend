@@ -1,7 +1,8 @@
 /**
  * How each grid cell reads — the Qt delegate's `paint()` as text: money at two
  * places (grouped), markups at one, "—" for an MRP / sale price there is none
- * of, and the delta chip against the loaded value in front of a price.
+ * of, and the ↑ / ↓ mark in front of a price that moved off its loaded value
+ * (the amount in its tooltip, the delegate's `helpEvent`).
  */
 import { formatCurrency } from "@/domain/pricing";
 import { isMkupKey, isPriceKey, isRateKey, levelOfColumn, type ColumnKey } from "./selling-price.constants";
@@ -77,15 +78,37 @@ export function deltaOf(row: PriceGridRow, column: ColumnKey): number | null {
   return Math.abs(delta) < 0.005 ? null : delta;
 }
 
-/** "+1.00" / "−2.00" — green up, red down. */
+/** "+1.00" / "−2.00" — the amount a price moved, for the mark's tooltip. */
 export function deltaText(delta: number): string {
   return `${delta > 0 ? "+" : "−"}${moneyText(Math.abs(delta))}`;
 }
 
 /**
- * Whether the delta chip fits beside the figure in a cell this wide: a marker
- * over the price would make both unreadable, so a too-narrow column simply
- * shows the price — the Qt delegate's rule. Digits run about 0.58em; the
+ * ↑ green / ↓ red at the left of a price that moved off what was loaded — the
+ * item card's Pricing grid mark (Qt `priceUpArrow` / `priceDownArrow`).
+ */
+export function deltaArrow(delta: number): string {
+  return delta > 0 ? "↑" : "↓";
+}
+
+/**
+ * The mark's tooltip: "Was 110.00 (+8.00)" — the cell's loaded figure (a base
+ * rate's is the loaded price before tax) and the move. "" when it has not moved.
+ */
+export function deltaTip(row: PriceGridRow, column: ColumnKey): string {
+  const delta = deltaOf(row, column);
+  if (delta === null) {
+    return "";
+  }
+  const base = row.base[levelOfColumn(column)];
+  const was = isRateKey(column) ? round2(exclusiveOfTax(base, row.taxPerc)) : base;
+  return `Was ${moneyText(was)} (${deltaText(delta)})`;
+}
+
+/**
+ * Whether the mark fits beside the figure in a cell this wide: a marker over
+ * the price would make both unreadable, so a too-narrow column simply shows
+ * the price — the Qt delegate's rule. Digits run about 0.58em; the
  * figure is drawn at 0.74 of the page unit, the chip at 0.6, with 18px of
  * padding between and around them.
  *

@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
+import { useSoftDeleteActions } from "@/features/masters/shared/use-soft-delete-actions";
 import WidgetVisibilityTree, {
   type WidgetTreeSectionView,
 } from "@/features/masters/shared/widget-visibility-tree";
@@ -25,6 +26,7 @@ import styles from "@/app/master/state-master/page.module.scss";
 import { extractRows } from "@/features/masters/shared/normalizers";
 import { getFirstDefinedValue, toDisplayValue, toSelectBoolean } from "@/features/masters/shared/value-mappers";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { buildUnitSavePayload } from "./build-save-payload";
 const API_ENDPOINTS = {
  list: "/configured-grid-sql/run?grid_id=4",
   getById: "/units/get",
@@ -308,30 +310,6 @@ function buildUnitFormFields(
     },
   ];
 }
-function toInteger(value: string, fallback: number): number {
-  const parsed = Number.parseInt(value.trim(), 10);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-function toOptionalValue(value: string): string | number | null {
-  const normalized = value.trim();
-  if (!normalized) {
-    return null;
-  }
-  const parsed = Number(normalized);
-  if (Number.isFinite(parsed)) {
-    return parsed;
-  }
-  return normalized;
-}
-function toUpdateUnitId(editingItemId: string | number | null): string | number {
-  if (typeof editingItemId === "number" && Number.isFinite(editingItemId)) {
-    return editingItemId;
-  }
-  if (typeof editingItemId === "string") {
-    return editingItemId.trim();
-  }
-  return 0;
-}
 function buildBaseUnitOptions(payload: unknown): ERPDynamicSelectOption[] {
   const optionMap = new Map<string, string>();
   const rows = extractRows(payload, LOOKUP_KEYS.array);
@@ -377,6 +355,18 @@ export default function UnitMasterPage() {
   // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
   // can see soft-deleted units. Lives beside the list search input.
   const [wantDelete, setWantDelete] = useState(false);
+  // Live view: Delete. Deleted view: the same button is Restore (`POST
+  // /units/restore`), and Edit / View are refused. A refusal is titled for what
+  // was refused — "Cannot delete" / "Cannot restore", not "Cannot save".
+  const softDeleteProps = useSoftDeleteActions({
+    showingDeleted: wantDelete,
+    deleteEndpoint: API_ENDPOINTS.delete,
+    restoreEndpoint: "/units/restore",
+    idParam: "unit_id",
+    idKeys: LOOKUP_KEYS.id,
+    entityTitle: "Unit",
+    plainRefusals: true,
+  });
   // Lookup options come from master tables that other users and other screens
   // change, so they are re-read on every data-refresh signal, not just on mount.
   const loadBaseUnitOptions = useCallback(() => {
@@ -680,6 +670,7 @@ export default function UnitMasterPage() {
   return (
     <>
     <CrudMasterPage
+      {...softDeleteProps}
       modalDraftKey="unit-master"
       title="Unit"
       iconName="item_unit_master_entry"
@@ -755,33 +746,10 @@ export default function UnitMasterPage() {
           ),
         };
       }}
-      buildRequestPayload={({ values, shouldUpdate, editingItemId }) => {
-        const unitName = (values.unitName ?? "").trim();
-        const unitAlias = (values.unitAlias ?? "").trim();
-        const unitCode = (values.unitCode ?? "").trim();
-        const unitDescription = (values.unitDescription ?? "").trim();
-        const unitDecimalCount = toInteger(values.unitDecimalCount ?? "0", 0);
-        const unitIsPackUnit = (values.unitIsPackUnit ?? "false") === "true";
-        const rawBaseUnitId = (values.unitBaseUnitId ?? "").trim();
-        const unitBaseUnitId = unitIsPackUnit && rawBaseUnitId ? rawBaseUnitId : null;
-        const unitIsActive = (values.unitIsActive ?? "true") !== "false";
-        return {
-          unit_id: shouldUpdate ? toUpdateUnitId(editingItemId) : "",
-          unit_name: unitName,
-          unit_alias: unitAlias || null,
-          unit_code: unitCode || null,
-          unit_description: unitDescription || null,
-          unit_decimal_count: unitDecimalCount,
-          unit_weight: toOptionalValue(values.unitWeight ?? ""),
-          unit_loading: toOptionalValue(values.unitLoading ?? ""),
-          unit_unloading: toOptionalValue(values.unitUnloading ?? ""),
-          unit_attach_charge: toOptionalValue(values.unitAttachCharge ?? ""),
-          unit_is_pack_unit: unitIsPackUnit,
-          unit_base_unit_id: unitBaseUnitId,
-          unit_conversion: toOptionalValue(values.unitConversion ?? ""),
-          unit_is_active: unitIsActive,
-        };
-      }}
+      // Clearable boxes go as null, so a cleared value is cleared on the server.
+      buildRequestPayload={({ values, shouldUpdate, editingItemId }) =>
+        buildUnitSavePayload({ values, shouldUpdate, editingItemId })
+      }
     />
     <ERPDynamicModalForm
       title="Visible Settings"

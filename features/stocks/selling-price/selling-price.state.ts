@@ -1,9 +1,10 @@
 /**
  * The grid rows of Change Selling Price and every rule that reads or rewrites
  * one — the Qt screen's cell logic (`fillRow`, `setLevelPrice`,
- * `onGridCellEdited`, `applyFourEdit`, `isChanged`, `verdict`,
- * `whyNotEditable`, `winningRows`, `addNewBucketRow`, `refreshItemsAfterSave`)
- * as pure functions over plain objects.
+ * `onGridCellEdited`, `isChanged`, `verdict`, `whyNotEditable`, `winningRows`,
+ * `addNewBucketRow`, `refreshItemsAfterSave`) and its "Price from" field
+ * (`priceFrom`, `refreshPriceFrom`, notes 140 A) as pure functions over plain
+ * objects.
  *
  * Qt keeps every figure in a cell as text and re-parses it; here a row is a
  * typed object, but each value is stored the way the Qt cell held it (prices
@@ -13,12 +14,19 @@
  * The blank row Qt keeps at the bottom of the grid is NOT a row here: the grid
  * renders it after the last one. Row N on screen is `rows[N - 1]`.
  */
-import { LEVEL_COUNT, isMkupKey, isPriceKey, isRateKey, levelOfColumn } from "./selling-price.constants";
+import { isRealDate, toDisplayDate } from "@/features/sales/quotation/quotation.utils";
+import {
+  ALL_LEVELS_ON,
+  LEVEL_COUNT,
+  isMkupKey,
+  isPriceKey,
+  isRateKey,
+  levelOfColumn,
+} from "./selling-price.constants";
 import type { ColumnKey } from "./selling-price.constants";
 import {
   exclusiveOfTax,
   markupOf,
-  priceFromMargin,
   priceFromMarkup,
   priceFromWot,
   rawNum,
@@ -67,7 +75,7 @@ export type PriceGridRow = {
   taxPerc: number;
   /** Nearest multiple, the item card's rule; 0 = none. */
   roundOff: number;
-  /** The four-number card is approximate. */
+  /** The profit line's figures are approximate. */
   hasCess: boolean;
   /** stp_track_signature, for a NEW row's MRP / sale-price cells. */
   trackSig: string;
@@ -269,15 +277,38 @@ export type Verdict = "ok" | "amber" | "red";
 
 const PRICE_EPSILON = 0.005;
 
+/** Whether a level is switched on — one missing from the list reads as on. */
+export function isLevelOn(levelActive: readonly boolean[], level: number): boolean {
+  return levelActive[level] !== false;
+}
+
+/**
+ * The level the cursor lands on: `level` while it is switched on, else the
+ * first one that is (Qt `applyLevelVisibility` moving `m_lastLevel`).
+ */
+export function landingLevel(level: number, levelActive: readonly boolean[]): number {
+  if (isLevelOn(levelActive, level)) {
+    return level;
+  }
+  for (let candidate = 0; candidate < LEVEL_COUNT; candidate += 1) {
+    if (isLevelOn(levelActive, candidate)) {
+      return candidate;
+    }
+  }
+  return level;
+}
+
 /**
  * Red = Save stays off (above MRP, below Min — and below cost when the setting
  * is restrict). Amber = below cost, the server asks. Only CHANGED rows are
- * judged: an untouched row is not sent, so it cannot fail the save.
+ * judged: an untouched row is not sent, so it cannot fail the save. A level
+ * the company has not switched on is not shown, so it is not judged either.
  */
 export function verdictOf(
   row: PriceGridRow,
   column: ColumnKey,
   belowCostPolicy: BelowCostPolicy,
+  levelActive: readonly boolean[] = ALL_LEVELS_ON,
 ): Verdict {
   if (!isChanged(row)) {
     return "ok";
@@ -285,13 +316,13 @@ export function verdictOf(
   const min = row.min;
   if (column === "minPrice") {
     for (let level = 0; level < LEVEL_COUNT; level += 1) {
-      if (min > 0 && row.prices[level] + PRICE_EPSILON < min) {
+      if (isLevelOn(levelActive, level) && min > 0 && row.prices[level] + PRICE_EPSILON < min) {
         return "red";
       }
     }
     return "ok";
   }
-  if (!isPriceKey(column)) {
+  if (!isPriceKey(column) || !isLevelOn(levelActive, levelOfColumn(column))) {
     return "ok";
   }
   const price = row.prices[levelOfColumn(column)];
@@ -388,7 +419,7 @@ function boundsOf(kind: CellEditorKind | "percent" | "amount"): {
       return { bottom: 0, decimals: 2 };
     case "markup":
       return { bottom: -100, decimals: 3 };
-    // The violet card: markup / margin ≥ −100, wot / price ≥ 0, three places each.
+    // A free-standing figure: a percentage ≥ −100, an amount ≥ 0, three places each.
     case "percent":
       return { bottom: -100, decimals: 3 };
     case "amount":
@@ -508,40 +539,6 @@ export function applyCellEdit(row: PriceGridRow, column: ColumnKey, value: numbe
     return { ...row, min: six(value) };
   }
   return row;
-}
-
-export type FourField = "markup" | "wot" | "price" | "margin";
-
-/**
- * The violet card: typing any one of the four derives the price (round-off
- * applies, as a derived price), and the grid and the card follow.
- */
-export function applyFourEdit(
-  row: PriceGridRow,
-  level: number,
-  field: FourField,
-  value: number,
-): { row: PriceGridRow } | { hint: string } {
-  const { cost, taxPerc, roundOff } = row;
-  let price: number;
-  if (field === "price") {
-    price = value;
-  } else if (field === "wot") {
-    price = priceFromWot(value, taxPerc, roundOff);
-  } else if (cost <= 0) {
-    return {
-      hint: "This row has no cost, so markup and margin have nothing to work from — type the price or the price wot.",
-    };
-  } else if (field === "markup") {
-    price = priceFromMarkup(cost, value, roundOff);
-  } else {
-    const fromMargin = priceFromMargin(cost, taxPerc, value, roundOff);
-    if (fromMargin === null) {
-      return { hint: "A margin of 100% or more has no price." };
-    }
-    price = fromMargin;
-  }
-  return { row: setLevelPrice(row, level, price) };
 }
 
 // ---------------------------------------------------------------------------
@@ -689,12 +686,55 @@ export function insertNewBucketRow(
   return { rows: [...rows.slice(0, at), added, ...rows.slice(at)], index: at };
 }
 
+// ---------------------------------------------------------------------------
+// Price from (notes 140 A)
+// ---------------------------------------------------------------------------
+
+/** The day the prices start: the field's, blank = today (Qt `priceFrom`). Both `YYYY-MM-DD`. */
+export function priceFromDay(value: string, today: string): string {
+  return value.trim() || today;
+}
+
+/** A later day SCHEDULES: Save reads "Schedule" and today's price stays on the shelf. */
+export function isSchedulingDay(value: string, today: string): boolean {
+  return priceFromDay(value, today) > today;
+}
+
+/** The line beside the field (Qt `refreshPriceFrom`) — "" unless it schedules. */
+export function priceFromNote(value: string, today: string): string {
+  return isSchedulingDay(value, today)
+    ? `new prices start ${toDisplayDate(priceFromDay(value, today))} — today's stay till then`
+    : "";
+}
+
+/**
+ * The `effectiveFrom` a save carries: the day, only when it is after today. A
+ * save from today sends none and runs exactly as it always has.
+ */
+export function effectiveFromToSend(value: string, today: string): string | undefined {
+  return isSchedulingDay(value, today) ? priceFromDay(value, today) : undefined;
+}
+
+/** Why Save refuses the field, "" when it does not: a day before today (Qt `save()`). */
+export function priceFromRefusal(value: string, today: string): string {
+  const day = value.trim();
+  if (!day) {
+    return "";
+  }
+  return !isRealDate(day) || day < today ? "Prices can start today or a later day, not before." : "";
+}
+
+/** A remembered day that has passed since (the screen was left overnight) comes back as today. */
+export function restoredPriceFrom(value: string | undefined, today: string): string {
+  return value && value >= today ? value : today;
+}
+
 /**
  * What screen memory (lib/screen-memory) keeps of the screen across a trip to
  * another one: the grid with its edits, the items added by search, the filter
- * that drew it, the switch and the level last worked on. The loaded figures are
- * not re-read on the way back, so they can be stale — the server re-runs every
- * check at Save.
+ * that drew it, the switch, the level last worked on and the Price from day.
+ * The loaded figures are not re-read on the way back, so they can be stale —
+ * the server re-runs every check at Save.
  */
 export type SellingPriceSnapshot = {
   /** The header's tenant when it was taken — Save posts to whichever is on the header. */
@@ -704,6 +744,8 @@ export type SellingPriceSnapshot = {
   filter: FilterState;
   scopeChoice: PriceScope | null;
   lastLevel: number;
+  /** `YYYY-MM-DD`, "" = today; a later day schedules. */
+  priceFrom: string;
 };
 
 /** Kept while any row holds an unsaved change; a save, a clear or a reload lets it go. */

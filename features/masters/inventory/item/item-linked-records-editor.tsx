@@ -16,17 +16,20 @@ import { cx } from "@/components/design-system/cx";
 import modalStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 import ItemLinkedRecordsSearchSelectCell from "./item-linked-records-search-select-cell";
 import {
+  buildLinkedRecordBandCells,
   getCellKey,
   getColumnStyle,
   getRowKey,
   getSelectPlaceholder,
   parseLinkedRecordRowsResult,
+  resolveColumnLockReason,
   resolveColumnReadOnly,
   resolveColumnOptions,
   serializeLinkedRecordRows,
   setLinkedRecordRowValue,
   type LinkedRecordCellElement,
   type LinkedRecordColumn,
+  type LinkedRecordHeaderBand,
   type LinkedRecordOption,
   type LinkedRecordRow,
 } from "./item-linked-records-editor.shared";
@@ -78,6 +81,19 @@ type ItemLinkedRecordsEditorProps = {
   onChange: (value: string) => void;
   showRowIndex?: boolean;
   value: string;
+  /** A strip above the header naming groups of columns (the price levels). */
+  headerBands?: LinkedRecordHeaderBand[];
+  /** The row the focus is in (the price grid's profit line follows it). */
+  onActiveRowChange?: (rowIndex: number) => void;
+  /** A text / number cell was left. */
+  onCellBlur?: (rowIndex: number, columnKey: string) => void;
+  /**
+   * Tab / Shift+Tab leave the grid for the next / previous field instead of
+   * walking every cell; Enter still walks the cells (Qt test_grid_tab).
+   */
+  tabLeavesGrid?: boolean;
+  /** A pick from these columns' lists moves on along the same row (Qt ItemUnitPicker). */
+  advanceAfterSelectColumnKeys?: string[];
 };
 export type LinkedRecordColumnLayoutEntry = {
   key: string;
@@ -124,10 +140,11 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 // Native <input type="number"> still lets a user type "e"/"+"/"-", so strip
-// anything but digits and a single decimal point instead of trusting it.
-function sanitizeNumericCellInput(value: string): string {
+// anything but digits and a single decimal point instead of trusting it. A
+// column that allows negatives keeps one leading "-".
+function sanitizeNumericCellInput(value: string, allowNegative = false): string {
   let hasDecimalPoint = false;
-  let result = "";
+  let result = allowNegative && value.trimStart().startsWith("-") ? "-" : "";
   for (const char of value) {
     if (char >= "0" && char <= "9") {
       result += char;
@@ -139,6 +156,37 @@ function sanitizeNumericCellInput(value: string): string {
     }
   }
   return result;
+}
+const TAB_STOP_SELECTOR =
+  'input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])';
+/**
+ * Moves the focus to the field after (or before) the grid — the first tab stop
+ * outside `grid` in its dialog. false when there is none (the browser's own
+ * Tab then runs).
+ */
+function focusFieldOutsideGrid(grid: HTMLElement, backwards: boolean): boolean {
+  const scope = grid.closest('[role="dialog"]') ?? grid.ownerDocument.body;
+  const stops = Array.from(scope.querySelectorAll<HTMLElement>(TAB_STOP_SELECTOR)).filter(
+    (element) =>
+      element.tabIndex >= 0 &&
+      (grid.contains(element) || element.getClientRects().length > 0),
+  );
+  const firstInside = stops.findIndex((element) => grid.contains(element));
+  if (firstInside < 0) {
+    return false;
+  }
+  let lastInside = firstInside;
+  stops.forEach((element, index) => {
+    if (grid.contains(element)) {
+      lastInside = index;
+    }
+  });
+  const target = backwards ? stops[firstInside - 1] : stops[lastInside + 1];
+  if (!target) {
+    return false;
+  }
+  target.focus();
+  return true;
 }
 function isColumnVisibleInLayout(
   column: LinkedRecordColumn,
@@ -385,11 +433,17 @@ export default function ItemLinkedRecordsEditor({
   onChange,
   showRowIndex = true,
   value,
+  headerBands,
+  onActiveRowChange,
+  onCellBlur,
+  tabLeavesGrid = false,
+  advanceAfterSelectColumnKeys,
 }: ItemLinkedRecordsEditorProps) {
   const { parseError, rows } = useMemo(
     () => parseLinkedRecordRowsResult(value),
     [value],
   );
+  const editorRootRef = useRef<HTMLDivElement | null>(null);
   const cellRefs = useRef(new Map<string, LinkedRecordCellElement>());
   const hasSeededInitialRowRef = useRef(false);
   const pendingFocusRef = useRef<FocusTarget | null>(null);
@@ -493,6 +547,16 @@ export default function ItemLinkedRecordsEditor({
         isColumnVisibleInLayout(column, columnLayout),
       ),
     [columnLayout, orderedColumns],
+  );
+  const bandCells = useMemo(
+    () =>
+      headerBands && headerBands.length > 0
+        ? buildLinkedRecordBandCells(
+            visibleColumns.map((column) => column.key),
+            headerBands,
+          )
+        : null,
+    [headerBands, visibleColumns],
   );
   const getResolvedColumnStyle = useCallback(
     (column: LinkedRecordColumn) => {
@@ -768,6 +832,24 @@ export default function ItemLinkedRecordsEditor({
   // e.g. the trailing blank placeholder).
   const handleEditorKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (
+      tabLeavesGrid &&
+      event.key === "Tab" &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      !event.metaKey &&
+      editorRootRef.current
+    ) {
+      // A typed value is already in the row (cells commit on every change),
+      // so leaving loses nothing; an open unit list just closes behind it.
+      if (focusFieldOutsideGrid(editorRootRef.current, event.shiftKey)) {
+        event.preventDefault();
+        if (openSearchCell) {
+          closeSearchableSelect(openSearchCell);
+        }
+      }
+      return;
+    }
+    if (
       disabled ||
       !event.ctrlKey ||
       event.altKey ||
@@ -958,7 +1040,14 @@ export default function ItemLinkedRecordsEditor({
   ) => {
     handleCellChange(rowIndex, columnKey, option.value);
     closeSearchableSelect(cellKey);
+    const advance = advanceAfterSelectColumnKeys?.includes(columnKey) === true;
     window.requestAnimationFrame(() => {
+      if (advance) {
+        // The operator goes on along THIS row, even when the pick appended
+        // the next blank row below it.
+        focusNextCellControl(rowIndex, columnKey);
+        return;
+      }
       cellRefs.current.get(cellKey)?.focus();
     });
   };
@@ -1110,7 +1199,8 @@ export default function ItemLinkedRecordsEditor({
       }
       return;
     }
-    if (event.key === " " && !isSearchOpen) {
+    // F2 opens the list too, as on every Qt grid's pick-list cell.
+    if ((event.key === " " || event.key === "F2") && !isSearchOpen) {
       event.preventDefault();
       openSearchableSelect(cellKey, filteredOptions, cellValue);
     }
@@ -1217,15 +1307,17 @@ export default function ItemLinkedRecordsEditor({
         </label>
       );
     }
+    const lockReason = resolveColumnLockReason(column, row, rowIndex, rows);
     return (
       <input
         type={columnType}
-        className={cx(styles.control, styles.input)}
+        className={cx(styles.control, styles.input, lockReason && styles.inputLocked)}
         disabled={disabled}
         min={column.min}
         readOnly={isReadOnly}
         step={column.step}
         placeholder={column.placeholder}
+        title={lockReason || undefined}
         ref={registerCellRef(rowIndex, column.key)}
         value={cellValue}
         onChange={(event) =>
@@ -1233,12 +1325,34 @@ export default function ItemLinkedRecordsEditor({
             rowIndex,
             boundColumnKey,
             columnType === "number"
-              ? sanitizeNumericCellInput(event.currentTarget.value)
+              ? sanitizeNumericCellInput(event.currentTarget.value, column.allowNegative)
               : event.currentTarget.value,
           )
         }
+        onBlur={onCellBlur ? () => onCellBlur(rowIndex, boundColumnKey) : undefined}
         onKeyDown={(event) => handleInputKeyDown(event, rowIndex, boundColumnKey)}
       />
+    );
+  };
+  const renderCellMark = (
+    row: LinkedRecordRow,
+    rowIndex: number,
+    column: LinkedRecordColumn,
+  ) => {
+    const mark = column.cellMarkResolver?.({ column, row, rowIndex, rows }) ?? null;
+    if (!mark) {
+      return null;
+    }
+    return (
+      <span
+        className={cx(
+          styles.cellMark,
+          mark.direction === "up" ? styles.cellMarkUp : styles.cellMarkDown,
+        )}
+        title={mark.title}
+      >
+        {mark.direction === "up" ? "↑" : "↓"}
+      </span>
     );
   };
   const bodyMenu =
@@ -1367,7 +1481,7 @@ export default function ItemLinkedRecordsEditor({
                               {index + 1}
                             </td>
                             <td className={styles.adminSettingsNameCell}>
-                              {column.label}
+                              {column.settingsLabel ?? column.label}
                             </td>
                             <td>
                               <input
@@ -1455,7 +1569,25 @@ export default function ItemLinkedRecordsEditor({
     <>
       {bodyMenu}
       {adminSettingsModal}
-      <div className={styles.editor} onKeyDown={handleEditorKeyDown}>
+      <div
+        className={styles.editor}
+        ref={editorRootRef}
+        onKeyDown={handleEditorKeyDown}
+        onFocus={
+          onActiveRowChange
+            ? (event) => {
+                const rowIndex = Number(
+                  (event.target as HTMLElement | null)
+                    ?.closest?.("tr[data-linked-row-index]")
+                    ?.getAttribute("data-linked-row-index"),
+                );
+                if (Number.isInteger(rowIndex)) {
+                  onActiveRowChange(rowIndex);
+                }
+              }
+            : undefined
+        }
+      >
         {parseError ? <p className={styles.parseError}>{parseError}</p> : null}
         {rows.length === 0 ? (
           <div className={styles.emptyState}>{emptyState}</div>
@@ -1463,6 +1595,33 @@ export default function ItemLinkedRecordsEditor({
           <div className={styles.tableWrap}>
           <table className={styles.table}>
             <thead>
+              {bandCells ? (
+                <tr>
+                  {showRowIndex ? <th className={styles.bandGap} /> : null}
+                  {bandCells.map((cell) =>
+                    cell.band ? (
+                      <th
+                        key={cell.key}
+                        colSpan={cell.span}
+                        className={styles.bandCell}
+                        title={cell.band.text}
+                        style={
+                          {
+                            "--table-header-text": cell.band.fg,
+                            background: cell.band.bg,
+                            color: cell.band.fg,
+                          } as CSSProperties
+                        }
+                      >
+                        {cell.band.text}
+                      </th>
+                    ) : (
+                      <th key={cell.key} colSpan={cell.span} className={styles.bandGap} />
+                    ),
+                  )}
+                  <th className={styles.bandGap} />
+                </tr>
+              ) : null}
               <tr>
                 {showRowIndex ? <th className={styles.indexCell}>#</th> : null}
                 {visibleColumns.map((column) => (
@@ -1512,8 +1671,10 @@ export default function ItemLinkedRecordsEditor({
                   {visibleColumns.map((column) => (
                     <td
                       key={`${column.key}-${rowIndex}`}
+                      className={column.cellMarkResolver ? styles.markableCell : undefined}
                       style={getResolvedColumnStyle(column)}
                     >
+                      {column.cellMarkResolver ? renderCellMark(row, rowIndex, column) : null}
                       {renderCellControl(row, rowIndex, column)}
                     </td>
                   ))}

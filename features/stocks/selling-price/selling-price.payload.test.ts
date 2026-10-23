@@ -1,7 +1,7 @@
 /**
- * The save and its answers — Qt `buildPayload`, `postSave`'s needs-confirm
- * and saved paths, `showServerRefusal` — and the strip under the grid
- * (`refreshValidation`).
+ * The save and its answers — Qt `buildPayload` (with notes 140's
+ * effectiveFrom), `postSave`'s needs-confirm, saved and scheduled paths,
+ * `showServerRefusal` — and the strip under the grid (`refreshValidation`).
  */
 import { describe, expect, it } from "vitest";
 import {
@@ -12,7 +12,9 @@ import {
   filterNotAvailableMessage,
   refusedFilterKey,
   refusedLineNumbers,
+  refusesPriceFrom,
   savedMessage,
+  scheduledDayOf,
 } from "./selling-price.payload";
 import { applyCellEdit, rowFromServer, setLevelPrice, type PriceGridRow } from "./selling-price.state";
 import { validateRows } from "./selling-price.validate";
@@ -62,6 +64,8 @@ function row(overrides: Partial<SellingPriceRow> = {}): PriceGridRow {
 function result(overrides: Partial<SellingPriceSaveResult> = {}): SellingPriceSaveResult {
   return {
     saved: 0,
+    effectiveFrom: "",
+    rows: [],
     masterRowsSaved: 0,
     noStock: [],
     needsConfirm: false,
@@ -114,6 +118,23 @@ describe("buildSavePayload", () => {
     const a = setLevelPrice(row(), 0, 111);
     const b = setLevelPrice(row({ uomId: "iuc-2" }), 0, 111);
     expect(buildSavePayload([a, b], "co", "br", "BRANCH", false).itemIds).toEqual(["item-1"]);
+  });
+
+  it("carries effectiveFrom only when the prices are scheduled (notes 140 A)", () => {
+    const edited = setLevelPrice(row(), 0, 111);
+    const scheduled = buildSavePayload([edited], "co", "br", "BRANCH", false, "2026-10-24").payload;
+    expect(scheduled.effectiveFrom).toBe("2026-10-24");
+    expect(Object.keys(scheduled)).toEqual(["companyId", "branchId", "scope", "confirmed", "effectiveFrom", "rows"]);
+    // Today: no key at all — the save it always was.
+    expect("effectiveFrom" in buildSavePayload([edited], "co", "br", "BRANCH", false).payload).toBe(false);
+    expect("effectiveFrom" in buildSavePayload([edited], "co", "br", "BRANCH", false, "").payload).toBe(false);
+  });
+
+  it("still sends a switched-off level's prices back as they were loaded", () => {
+    // The level is hidden, so nothing can move it; the server keeps PRICE as sent.
+    const edited = setLevelPrice(row(), 0, 111);
+    const [sent] = buildSavePayload([edited], "co", "br", "BRANCH", false).payload.rows;
+    expect(sent.levels.map((level) => level.price)).toEqual([111, 105, 100, 95]);
   });
 });
 
@@ -209,6 +230,21 @@ describe("the saved toast", () => {
     );
   });
 
+  it("says a scheduled save is scheduled, and from when (notes 140 A)", () => {
+    const today = "2026-10-23";
+    expect(savedMessage(result({ saved: 1, effectiveFrom: "2026-10-24" }), false, today)).toBe(
+      "1 row scheduled — the new prices start 24-10-2026; today's prices stay till then (F9 lists them).",
+    );
+    expect(savedMessage(result({ saved: 3, effectiveFrom: "2026-11-01" }), false, today)).toBe(
+      "3 rows scheduled — the new prices start 01-11-2026; today's prices stay till then (F9 lists them).",
+    );
+    // The server answers today's day for a save from today: plain "saved".
+    expect(savedMessage(result({ saved: 1, effectiveFrom: today }), false, today)).toBe("1 row saved");
+    expect(scheduledDayOf(result({ effectiveFrom: "2026-10-24T00:00:00.000Z" }), today)).toBe("2026-10-24");
+    expect(scheduledDayOf(result({ effectiveFrom: today }), today)).toBe("");
+    expect(scheduledDayOf(result({ effectiveFrom: "" }), today)).toBe("");
+  });
+
   it("says a below-cost price was confirmed, or allowed by the setting", () => {
     const problems = [
       {
@@ -285,6 +321,28 @@ describe("server refusals", () => {
     expect(refusedFilterKey({ status: 422, data: { message: "taxId" } })).toBeNull();
     expect(filterNotAvailableMessage("taxId")).toContain('does not filter by "taxId" yet');
   });
+
+  it("recognises a refusal of the Price from day (notes 140 A)", () => {
+    const tooFar = {
+      status: 400,
+      data: {
+        message: "These prices cannot be saved",
+        errors: [
+          {
+            field: "effectiveFrom",
+            code: "STOCK_PRICE_FROM_TOO_FAR",
+            message: "24-11-2027 is more than a year ahead (latest 23-10-2027). Check the year.",
+          },
+        ],
+      },
+    };
+    expect(refusesPriceFrom(tooFar)).toBe(true);
+    expect(
+      refusesPriceFrom({ status: 400, data: { errors: [{ code: "STOCK_PRICE_FROM_IN_PAST", message: "x" }] } }),
+    ).toBe(true);
+    expect(refusesPriceFrom(refusal)).toBe(false);
+    expect(refusesPriceFrom(null)).toBe(false);
+  });
 });
 
 describe("the validation strip", () => {
@@ -338,6 +396,14 @@ describe("the validation strip", () => {
     const strip = validateRows([loaded, loaded], NAMES, "warning", new Set([1]));
     expect(strip.red).toEqual(["Row 2 · refused by the server — see the message."]);
     expect(strip.blocked).toBe(true);
+  });
+
+  it("does not judge a level the company has not switched on", () => {
+    const above = setLevelPrice(loaded, 1, 125);
+    expect(validateRows([above], NAMES, "warning", new Set()).blocked).toBe(true);
+    const offRetail = validateRows([above], NAMES, "warning", new Set(), [true, false, true, true]);
+    expect(offRetail.text).toBe("");
+    expect(offRetail.blocked).toBe(false);
   });
 
   it("does not repeat a row the strip already names", () => {

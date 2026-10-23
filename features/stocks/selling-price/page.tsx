@@ -23,20 +23,31 @@
  * needsConfirm → "Price below cost" → re-post confirmed, allow = saved and
  * still reported. The toast NAMES the rows priced with no stock on hand.
  *
+ * Notes 140 — "Price from" a later day SCHEDULES the new prices (Save reads
+ * "Schedule"); today's stay on the shelf, and on the grid, till then. F9 lists
+ * what is scheduled at this branch and cancels it. A level the company has not
+ * switched on is not shown anywhere here. Under the grid, the profit line says
+ * what the current row's prices earn before tax (the item card's line).
+ *
+ * The cursor lives in the grid: no button takes the focus (each has its key),
+ * Enter walks the prices, and Tab goes grid ⇄ Price from.
+ *
  * Edits left unsaved when the operator went to another screen are kept in
  * screen memory (lib/screen-memory), and the screen then reopens on them.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { cx } from "@/components/design-system/cx";
 import qs from "@/features/sales/quotation/page.module.scss";
 import { screenMemory } from "@/lib/screen-memory";
 import { BelowCostDialog } from "./components/below-cost-dialog";
 import { BucketListDialog } from "./components/bucket-list-dialog";
-import { FourNumberCard, RowCardView, SrcLegendCard } from "./components/cards";
+import { ProfitLineView, RowCardView, SrcLegendCard } from "./components/cards";
 import { FilterDialog } from "./components/filter-dialog";
 import { ItemPicker } from "./components/item-picker";
+import { PriceFromField } from "./components/price-from-field";
 import { PriceGrid } from "./components/price-grid";
-import { SELLING_PRICE_MEMORY_KEY } from "./selling-price.constants";
+import { ScheduledPricesDialog } from "./components/scheduled-prices-dialog";
+import { PRICE_FROM_INPUT_ID, SELLING_PRICE_MEMORY_KEY } from "./selling-price.constants";
 import { useSellingPriceScope, useSellingPriceScreen } from "./use-selling-price-screen";
 import styles from "./page.module.scss";
 
@@ -44,6 +55,14 @@ const BRANCH_TIP =
   "An edit lands on THIS branch's row. A chain-priced row gets a branch override; the chain row and every other branch are untouched.";
 const CHAIN_TIP =
   "An edit lands on the CHAIN row: every branch without its own override moves at once. A row that already has a branch override updates the override.";
+
+/**
+ * No button takes the focus — not by Tab, not by a click (Qt, 2026-10-22: "the
+ * cursor stays in the grid"). The click still lands; each button has its key.
+ */
+function keepFocus(event: ReactMouseEvent<HTMLButtonElement>) {
+  event.preventDefault();
+}
 
 export default function ChangeSellingPricePage() {
   // Reopened on edits left here unsaved? Decided once, at mount: the business
@@ -62,20 +81,25 @@ export default function ChangeSellingPricePage() {
     summary,
     validation,
     card,
-    four,
-    fourTarget,
-    onFourEdit,
+    profit,
     hint,
     loading,
+    saving,
     saveEnabled,
     saveTooltip,
     save,
     clearGrid,
     openFilterDialog,
     openBucketList,
-    removeCurrentRow,
+    openScheduled,
     close,
     finishResume,
+    today,
+    priceFrom,
+    setPriceFrom,
+    priceFromLine,
+    scheduling,
+    backToGrid,
   } = screen;
 
   // The restored edits are already on the grid; all that is left is to say so — once.
@@ -107,6 +131,8 @@ export default function ChangeSellingPricePage() {
             aria-checked={scope === "BRANCH"}
             className={cx(styles.scopeButton, scope === "BRANCH" && styles.scopeButtonOn)}
             title={BRANCH_TIP}
+            tabIndex={-1}
+            onMouseDown={keepFocus}
             onClick={() => void onScopeClick("BRANCH")}
           >
             This branch
@@ -122,6 +148,8 @@ export default function ChangeSellingPricePage() {
                 ? CHAIN_TIP
                 : `All branches is an HQ action. Your user type (${userType}) edits this branch's prices only.`
             }
+            tabIndex={-1}
+            onMouseDown={keepFocus}
             onClick={() => void onScopeClick("CHAIN")}
           >
             All branches
@@ -131,6 +159,19 @@ export default function ChangeSellingPricePage() {
           All branches is an HQ action (403 otherwise) — a branch user&apos;s switch is fixed to This
           branch
         </span>
+        <span className={styles.priceFrom}>
+          <label className={styles.scopeCap} htmlFor={PRICE_FROM_INPUT_ID}>
+            Price from
+          </label>
+          <PriceFromField
+            value={priceFrom}
+            today={today}
+            disabled={saving}
+            onChange={setPriceFrom}
+            onLeave={backToGrid}
+          />
+          {priceFromLine ? <span className={styles.priceFromNote}>{priceFromLine}</span> : null}
+        </span>
       </div>
 
       <div className={styles.filterStrip}>
@@ -139,6 +180,8 @@ export default function ChangeSellingPricePage() {
       </div>
 
       <PriceGrid screen={screen} />
+
+      <ProfitLineView line={profit} />
 
       {validation.text ? (
         <div
@@ -154,7 +197,6 @@ export default function ChangeSellingPricePage() {
 
       <div className={styles.cards}>
         <SrcLegendCard />
-        <FourNumberCard four={four} target={fourTarget} onEdit={onFourEdit} />
         <RowCardView card={card} />
       </div>
 
@@ -162,19 +204,24 @@ export default function ChangeSellingPricePage() {
         {hint}
       </div>
 
+      {/* Remove row went in Qt 4ae6575: − on the grid does it. */}
       <div className={styles.buttonBar}>
         <button
           type="button"
           className={qs.button}
-          title="- (minus) on the grid — take the current row off the grid. Nothing is deleted."
-          onClick={() => void removeCurrentRow()}
+          title="F9 — prices saved to start on a later day; cancel one here."
+          tabIndex={-1}
+          onMouseDown={keepFocus}
+          onClick={() => void openScheduled()}
         >
-          Remove row
+          Scheduled<span className={qs.buttonHint}>F9</span>
         </button>
         <button
           type="button"
           className={qs.button}
           title="F12 — every live price row of the current item, chain and branch."
+          tabIndex={-1}
+          onMouseDown={keepFocus}
           onClick={() => void openBucketList()}
         >
           Bucket list<span className={qs.buttonHint}>F12</span>
@@ -183,6 +230,8 @@ export default function ChangeSellingPricePage() {
           type="button"
           className={qs.button}
           title="F7 — empty the grid."
+          tabIndex={-1}
+          onMouseDown={keepFocus}
           onClick={() => void clearGrid()}
         >
           Clear<span className={qs.buttonHint}>F7</span>
@@ -192,6 +241,8 @@ export default function ChangeSellingPricePage() {
           className={qs.button}
           disabled={loading}
           title="F8 — filter the items Load brings (group, category, brand, section, supplier, tracked as, tax, contains, active)."
+          tabIndex={-1}
+          onMouseDown={keepFocus}
           onClick={openFilterDialog}
         >
           Filter<span className={qs.buttonHint}>F8</span>
@@ -201,11 +252,20 @@ export default function ChangeSellingPricePage() {
           className={cx(qs.button, qs.buttonPrimary)}
           disabled={!saveEnabled}
           title={saveTooltip}
+          tabIndex={-1}
+          onMouseDown={keepFocus}
           onClick={save}
         >
-          Save<span className={qs.buttonHint}>F5</span>
+          {scheduling ? "Schedule" : "Save"}
+          <span className={qs.buttonHint}>F5</span>
         </button>
-        <button type="button" className={qs.button} onClick={() => void close()}>
+        <button
+          type="button"
+          className={qs.button}
+          tabIndex={-1}
+          onMouseDown={keepFocus}
+          onClick={() => void close()}
+        >
           Close
         </button>
       </div>
@@ -234,6 +294,16 @@ export default function ChangeSellingPricePage() {
           policy={screen.belowCost.policy}
           onBack={screen.cancelBelowCost}
           onSaveAnyway={screen.confirmBelowCost}
+        />
+      ) : null}
+      {screen.scheduled ? (
+        <ScheduledPricesDialog
+          rows={screen.scheduled}
+          levelNames={screen.levelNames}
+          levelActive={screen.levelActive}
+          branchName={screen.branchName || "This branch"}
+          canCancel={screen.canCancelSchedule}
+          onClose={screen.closeScheduled}
         />
       ) : null}
       {screen.picker ? (

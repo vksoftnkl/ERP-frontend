@@ -17,6 +17,10 @@ import type { UiTableKey } from "@/lib/ui-tables";
 export const SELLING_PRICE_GRID_ENDPOINT = "/stock/price-bulk";
 export const SELLING_PRICE_SAVE_ENDPOINT = "/stock/price-bulk";
 export const SELLING_PRICE_BUCKETS_ENDPOINT = "/stock/price-buckets";
+/** Notes 140 B — prices scheduled to start after today: GET ?companyId&branchId[&itemId]. */
+export const SELLING_PRICE_SCHEDULE_ENDPOINT = "/stock/price-schedule";
+/** Notes 140 B — POST { ipmId }: take a scheduled price off before it starts. */
+export const SELLING_PRICE_SCHEDULE_CANCEL_ENDPOINT = "/stock/price-schedule/cancel";
 export const PRICE_LEVEL_MASTERS_ENDPOINT = "/price-level-masters/get";
 export const BRANCH_MASTER_GET_ENDPOINT = "/branch-masters/get";
 export const ITEM_BY_BARCODE_ENDPOINT = "/master-lookups/item-by-barcode";
@@ -44,6 +48,12 @@ export const LEVEL_COUNT = 4;
 export const LEVEL_LETTERS = ["A", "B", "C", "D"] as const;
 export const DEFAULT_LEVEL_NAMES = ["Level A", "Level B", "Level C", "Level D"] as const;
 export const DEFAULT_LEVEL_SHORTS = ["A", "B", "C", "D"] as const;
+/**
+ * Which levels the company has switched on, until `/price-level-masters/get`
+ * says otherwise (Qt `m_levelActive` starts all true). A level that is off is
+ * not shown anywhere on the screen.
+ */
+export const ALL_LEVELS_ON: readonly boolean[] = [true, true, true, true];
 
 /** The band colours over each level's columns (Qt's PriceBandHeader). */
 export const LEVEL_BAND_COLOURS: ReadonlyArray<{ fg: string; bg: string }> = [
@@ -120,6 +130,9 @@ export function levelOfColumn(key: string): number {
 
 /** The grid name the Enter walker (`grid-focus.ts`) keys its cells by. */
 export const SELLING_PRICE_GRID_NAME = "selling-price-rows";
+
+/** The "Price from" field (notes 140 A) — Tab goes grid ⇄ this one. */
+export const PRICE_FROM_INPUT_ID = "csp-price-from";
 
 // ---------------------------------------------------------------- filter dialog
 /**

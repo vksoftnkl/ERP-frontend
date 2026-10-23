@@ -59,6 +59,11 @@ export type ApiErrorMessageOptions = MessageOptions & {
   kept?: string;
   /** The sentence when the thrown value carries none. */
   fallback?: string;
+  /**
+   * The title of an unworded 400/409/422 when the call was not a save —
+   * "Cannot delete", "Cannot restore" (default "Cannot save").
+   */
+  refusedTitle?: string;
 };
 
 export type AppMessage = {
@@ -145,8 +150,8 @@ export function subscribeToMessages(listener: () => void): () => void {
  * ("Cannot save", "Not allowed" …), never "409". See `@/lib/api/error-text`.
  */
 function pushApiError(error: unknown, options: ApiErrorMessageOptions = {}): string {
-  const { kept, fallback, ...rest } = options;
-  const message = refusalMessage(apiRefusalOf(error, fallback), kept);
+  const { kept, fallback, refusedTitle, ...rest } = options;
+  const message = refusalMessage(apiRefusalOf(error, fallback), kept, refusedTitle);
   return push(message.kind, message.body, {
     ...rest,
     title: rest.title ?? message.title,

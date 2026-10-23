@@ -9,26 +9,41 @@
  * live rows only. Both requests raise their refusals (409: the default
  * company, a branch still in use, its company deleted …) with the server's
  * reason, not only its title — see `server-error-text.ts`.
+ *
+ * The item masters (brand, group, section, category, godown, unit — and tax
+ * rate, which only deletes) ask for `plainRefusals`: the refusal goes through
+ * `toast.apiError` in plain words, titled "Cannot delete" / "Cannot restore"
+ * rather than "Cannot save" (Qt 4ae6575, `handleError`'s refused title).
  */
 import { useCallback, useMemo } from "react";
 import type { MasterTableRow } from "@/components/master/crud-master-page.types";
 import type { CrudMasterPageProps } from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
 import { toast } from "@/lib/notify";
-import { describeServerError } from "./server-error-text";
+import { describeServerError, toApiErrorShape } from "./server-error-text";
 import { getFirstDefinedValue, toDisplayValue } from "./value-mappers";
 
 export type SoftDeleteActionsOptions = {
   /** Shown deleted rows rather than live ones. */
   showingDeleted: boolean;
   deleteEndpoint: string;
-  restoreEndpoint: string;
+  /**
+   * Leave out for a master with no restore route and no deleted view (tax
+   * rate): the hook then only deletes, whatever `showingDeleted` says.
+   */
+  restoreEndpoint?: string;
   /** The id's query-parameter name on both routes: `compId`, `brId`. */
   idParam: string;
   /** Where the id sits on a list row's source (the grid's raw SQL aliases). */
   idKeys: readonly string[];
   /** "Company", "Branch" — for the messages. */
   entityTitle: string;
+  /**
+   * Raise a refusal through `toast.apiError` (plain words, the server's text
+   * small and grey), titled "Cannot delete" / "Cannot restore". Off: one
+   * joined sentence in an error popup (company / branch, as they were).
+   */
+  plainRefusals?: boolean;
 };
 
 export type SoftDeleteListProps = Pick<
@@ -54,13 +69,15 @@ export function useSoftDeleteActions({
   idParam,
   idKeys,
   entityTitle,
+  plainRefusals = false,
 }: SoftDeleteActionsOptions): SoftDeleteListProps {
   const entityLower = entityTitle.toLowerCase();
   const { run: runDelete } = useApi<unknown>(deleteEndpoint, {
     method: "DELETE",
     toast: { error: false, successMessage: `${entityTitle} deleted successfully` },
   });
-  const { run: runRestore } = useApi<unknown>(restoreEndpoint, {
+  // Never run without a restore route (see `restoreEndpoint`).
+  const { run: runRestore } = useApi<unknown>(restoreEndpoint ?? "", {
     method: "POST",
     toast: { error: false, successMessage: `${entityTitle} restored successfully` },
   });
@@ -69,6 +86,7 @@ export function useSoftDeleteActions({
       run: typeof runDelete,
       row: MasterTableRow,
       fallback: string,
+      refusedTitle: string,
     ): Promise<boolean> => {
       const id = rowRecordId(row, idKeys);
       if (!id) {
@@ -79,22 +97,28 @@ export function useSoftDeleteActions({
         // undefined: a newer request superseded this one; nothing changed here.
         return response !== undefined;
       } catch (error) {
-        toast.error(describeServerError(error, fallback));
+        if (plainRefusals) {
+          toast.apiError(toApiErrorShape(error), { fallback, refusedTitle });
+        } else {
+          toast.error(describeServerError(error, fallback));
+        }
         return false;
       }
     },
-    [idKeys, idParam],
+    [idKeys, idParam, plainRefusals],
   );
   const deleteRow = useCallback(
-    (row: MasterTableRow) => act(runDelete, row, `Unable to delete this ${entityLower}.`),
+    (row: MasterTableRow) =>
+      act(runDelete, row, `Unable to delete this ${entityLower}.`, "Cannot delete"),
     [act, entityLower, runDelete],
   );
   const restoreRow = useCallback(
-    (row: MasterTableRow) => act(runRestore, row, `Unable to restore this ${entityLower}.`),
+    (row: MasterTableRow) =>
+      act(runRestore, row, `Unable to restore this ${entityLower}.`, "Cannot restore"),
     [act, entityLower, runRestore],
   );
   return useMemo<SoftDeleteListProps>(() => {
-    if (!showingDeleted) {
+    if (!showingDeleted || !restoreEndpoint) {
       return { onDeleteAction: deleteRow };
     }
     const cannotOpen = `A deleted ${entityLower} cannot be opened. Restore it first.`;
@@ -109,5 +133,5 @@ export function useSoftDeleteActions({
         toast.info(cannotOpen);
       },
     };
-  }, [deleteRow, entityLower, restoreRow, showingDeleted]);
+  }, [deleteRow, entityLower, restoreEndpoint, restoreRow, showingDeleted]);
 }

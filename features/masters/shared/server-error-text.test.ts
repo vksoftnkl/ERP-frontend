@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeServerError, joinServerErrorBody } from "./server-error-text";
+import { describeServerError, joinServerErrorBody, toApiErrorShape } from "./server-error-text";
 
 describe("joinServerErrorBody", () => {
   it("keeps the reason a 409 carries under errors[]", () => {
@@ -53,5 +53,26 @@ describe("describeServerError", () => {
     expect(describeServerError(new Error("Network Error"), "x")).toBe("Network Error");
     expect(describeServerError({ response: { data: {} } }, "fallback")).toBe("fallback");
     expect(describeServerError(undefined, "fallback")).toBe("fallback");
+  });
+});
+
+describe("toApiErrorShape", () => {
+  it("lifts an axios error's status and body to the top", () => {
+    const body = { message: "Brand is in use", errors: [{ code: "BRAND_IN_USE", message: "3 items" }] };
+    const error = Object.assign(new Error("Request failed with status code 409"), {
+      response: { status: 409, data: body },
+    });
+    expect(toApiErrorShape(error)).toEqual({
+      status: 409,
+      data: body,
+      message: "Request failed with status code 409",
+    });
+  });
+
+  it("passes anything without a response through", () => {
+    const network = new Error("Network Error");
+    expect(toApiErrorShape(network)).toBe(network);
+    expect(toApiErrorShape("x")).toBe("x");
+    expect(toApiErrorShape(undefined)).toBeUndefined();
   });
 });

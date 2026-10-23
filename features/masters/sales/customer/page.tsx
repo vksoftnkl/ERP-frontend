@@ -2840,6 +2840,12 @@ export default function CustomerPage({
         modalFocusFirstInvalidFieldOnValidationError
         modalEnableArrowKeyFieldNavigation
         modalFooterLeadingActions={({ variantKey, values }) => {
+          // A new customer only (Qt 4ae6575, the user's call 2026-10-22): editing
+          // one customer must not turn it into every new customer's starting
+          // point. As the item card.
+          if (variantKey !== "master-create") {
+            return null;
+          }
           const templateValues = toTemplateValues(values);
           return (
             <SaveAsTemplateButton
@@ -2851,11 +2857,6 @@ export default function CustomerPage({
               summaryFields={CUSTOMER_TEMPLATE_SUMMARY_FIELDS}
               values={templateValues}
               labels={resolveTemplateLabels(templateValues)}
-              sourceRecordName={
-                variantKey === "master-update"
-                  ? (values.cusName ?? "").trim() || "this customer"
-                  : null
-              }
             />
           );
         }}

@@ -77,3 +77,20 @@ export function getLedgerRowsValidationError(
 
   return null;
 }
+
+/** Qt `TaxRateEntry`'s words for a rate picked as superseding itself. */
+export const SELF_SUPERSEDE_MESSAGE =
+  "A rate cannot supersede itself. Pick the older rate it replaces.";
+
+/**
+ * Supersedes names the OLDER rate this one replaces, so it can never be the
+ * rate being edited. A create has no id yet and cannot hit this.
+ */
+export function getSupersedesValidationError(
+  supersedesId: string,
+  editingTaxId: string | null,
+): string | null {
+  const picked = supersedesId.trim();
+  const self = (editingTaxId ?? "").trim();
+  return picked && self && picked === self ? SELF_SUPERSEDE_MESSAGE : null;
+}

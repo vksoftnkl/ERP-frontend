@@ -20,6 +20,7 @@ import { useDropdownMaster } from "@/components/design-system/dropdown/use-dropd
 import { useLazyRunDropdownQuery } from "@/store/api/quotationApi";
 import { SECTION_ATTR } from "../quotation.constants";
 import { fromDisplayDate, toDisplayDate } from "../quotation.utils";
+import { dateStepOf, stepIsoDate } from "@/lib/date-step";
 import styles from "../page.module.scss";
 
 export function GroupBox({
@@ -222,6 +223,15 @@ export function DateField({
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               commit(event.currentTarget.value);
+            }
+            // ↑ / ↓: the next / previous day, from today when the box is empty
+            // (Qt NexDateEdit). The operator's edit, so it goes out as a change.
+            const step = dateStepOf(event);
+            if (step !== 0) {
+              event.preventDefault();
+              const next = stepIsoDate(fromDisplayDate(event.currentTarget.value), step);
+              setText(toDisplayDate(next));
+              onChange(next);
             }
           }}
         />

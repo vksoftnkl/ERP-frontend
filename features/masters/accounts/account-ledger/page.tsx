@@ -102,7 +102,7 @@ import {
   LEDGER_GROUP_PROFILE_KEYS,
 } from "./profile";
 import {
-  createEmptyBankAccountRow,
+  commitBankAccountRow,
   extractLedgerBankAccountRows,
   getBankAccountValidationError,
   type LedgerBankAccountFieldName,
@@ -1619,18 +1619,12 @@ export default function AccountLedgerMasterPage() {
     event.currentTarget.click();
   }, []);
   // ----- Bank account handlers -----
-  const handleBankAccountAdd = useCallback(() => {
-    setBankAccounts((rows) => [...rows, createEmptyBankAccountRow()]);
+  // OK in the account popup: the account replaces its row or joins the list, and
+  // one ticked Default clears it on the others (single default per ledger).
+  const handleBankAccountCommit = useCallback((row: LedgerBankAccountFormRow) => {
+    setBankAccounts((rows) => commitBankAccountRow(rows, row));
+    setBankAccountError((current) => (current?.rowKey === row.rowKey ? null : current));
   }, []);
-  const handleBankAccountChange = useCallback(
-    (rowKey: string, patch: Partial<LedgerBankAccountFormRow>) => {
-      setBankAccounts((rows) =>
-        rows.map((row) => (row.rowKey === rowKey ? { ...row, ...patch } : row)),
-      );
-      setBankAccountError((current) => (current?.rowKey === rowKey ? null : current));
-    },
-    [],
-  );
   const handleBankAccountRemove = useCallback((rowKey: string) => {
     setBankAccounts((rows) => {
       const target = rows.find((row) => row.rowKey === rowKey);
@@ -1643,11 +1637,6 @@ export default function AccountLedgerMasterPage() {
       return rows.filter((row) => row.rowKey !== rowKey);
     });
     setBankAccountError((current) => (current?.rowKey === rowKey ? null : current));
-  }, []);
-  const handleBankAccountSetDefault = useCallback((rowKey: string) => {
-    setBankAccounts((rows) =>
-      rows.map((row) => ({ ...row, lbaIsDefault: row.rowKey === rowKey })),
-    );
   }, []);
   const clearSearchableFieldActiveIndex = useCallback((fieldName: LedgerFormFieldName) => {
     setSearchActiveOptionIndex((current) => {
@@ -2932,10 +2921,8 @@ export default function AccountLedgerMasterPage() {
                                 disabled={isReadOnlyMode || detailsLoading || saveLoading}
                                 invalidRowKey={bankAccountError?.rowKey ?? null}
                                 invalidField={bankAccountError?.field ?? null}
-                                onAddRow={handleBankAccountAdd}
-                                onChangeRow={handleBankAccountChange}
+                                onCommitRow={handleBankAccountCommit}
                                 onRemoveRow={handleBankAccountRemove}
-                                onSetDefault={handleBankAccountSetDefault}
                               />
                             </div>
                           );

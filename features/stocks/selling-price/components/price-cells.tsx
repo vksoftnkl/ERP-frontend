@@ -30,7 +30,7 @@ import {
   GRID_ROW_ATTR,
 } from "@/features/sales/quotation/quotation.constants";
 import { chipColours, isMkupKey, SELLING_PRICE_GRID_NAME, type ColumnKey } from "../selling-price.constants";
-import { cellText, deltaFits, deltaOf, deltaText, DASH } from "../selling-price.display";
+import { cellText, deltaArrow, deltaFits, deltaOf, deltaTip, DASH } from "../selling-price.display";
 import {
   acceptsTyping,
   editorKindOf,
@@ -84,23 +84,40 @@ type NumberCellProps = {
   focusStop: boolean;
   align: Align;
   tone?: string;
+  /** Shown as the ↑ / ↓ mark; null = none (or it would not fit). */
   delta: number | null;
+  /** "Was 110.00 (+8.00)" — the mark's tooltip, "" when the figure has not moved. */
+  deltaTitle: string;
   onFocus: (rowKey: string, column: ColumnKey) => void;
   onCommit: (rowKey: string, column: ColumnKey, text: string) => void;
   onRefused: (why: string) => void;
 };
 
 function NumberCell(props: NumberCellProps) {
-  const { rowKey, column, display, seed, kind, why, focusStop, align, tone, delta, onFocus, onCommit, onRefused } =
-    props;
+  const {
+    rowKey,
+    column,
+    display,
+    seed,
+    kind,
+    why,
+    focusStop,
+    align,
+    tone,
+    delta,
+    deltaTitle,
+    onFocus,
+    onCommit,
+    onRefused,
+  } = props;
   const editable = why === "";
   const [buffer, setBuffer] = useState<string | null>(null);
   const typedRef = useRef(false);
   const selectAfterRef = useRef(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // The row changed under a focused editor nobody has typed into (the violet
-  // card, a refill): show the new figure, not the stale one.
+  // The row changed under a focused editor nobody has typed into (a refill
+  // after a save): show the new figure, not the stale one.
   useEffect(() => {
     if (buffer !== null && !typedRef.current && buffer !== seed) {
       setBuffer(seed);
@@ -133,7 +150,7 @@ function NumberCell(props: NumberCellProps) {
     <div className={styles.numCell}>
       {delta !== null && buffer === null ? (
         <span className={cx(styles.delta, delta > 0 ? styles.deltaUp : styles.deltaDown)}>
-          {deltaText(delta)}
+          {deltaArrow(delta)}
         </span>
       ) : null}
       <input
@@ -143,7 +160,7 @@ function NumberCell(props: NumberCellProps) {
         readOnly={!editable}
         inputMode="decimal"
         autoComplete="off"
-        title={editable ? undefined : why}
+        title={editable ? deltaTitle || undefined : why}
         {...cellAttrs(rowKey, column, focusStop)}
         onFocus={(event) => {
           onFocus(rowKey, column);
@@ -324,6 +341,8 @@ export type PriceRowProps = {
   problem: boolean;
   saving: boolean;
   belowCostPolicy: BelowCostPolicy;
+  /** Which levels are switched on — Min is judged against those only. */
+  levelActive: readonly boolean[];
   branchText: string;
   onFocus: (rowKey: string | null, column: ColumnKey) => void;
   onCommit: (rowKey: string, column: ColumnKey, text: string) => void;
@@ -341,6 +360,7 @@ function PriceRowView(props: PriceRowProps) {
     problem,
     saving,
     belowCostPolicy,
+    levelActive,
     branchText,
     onFocus,
     onCommit,
@@ -355,7 +375,7 @@ function PriceRowView(props: PriceRowProps) {
     const kind = editorKindOf(key);
     if (kind) {
       const why = whyNotEditable(row, key, saving);
-      const verdict = verdictOf(row, key, belowCostPolicy);
+      const verdict = verdictOf(row, key, belowCostPolicy, levelActive);
       const text = cellText(row, key);
       let tone: string | undefined;
       if (key === "minPrice") {
@@ -381,10 +401,11 @@ function PriceRowView(props: PriceRowProps) {
           tone={tone}
           delta={
             delta !== null &&
-            deltaFits(deltaText(delta), text, fit.widths[key] ?? column.widthPx, fit.unitPx)
+            deltaFits(deltaArrow(delta), text, fit.widths[key] ?? column.widthPx, fit.unitPx)
               ? delta
               : null
           }
+          deltaTitle={delta !== null ? deltaTip(row, key) : ""}
           onFocus={onFocus}
           onCommit={onCommit}
           onRefused={onRefused}
@@ -508,7 +529,8 @@ export type SpareRowProps = {
 /**
  * The blank line the Qt grid always keeps last: scan a barcode into it, or
  * type in its Item cell to search. Every other cell is shut until it names an
- * item — and says so.
+ * item — and says so. Its Barcode cell is the line's one Enter stop: Enter
+ * past the last row's last price lands there, ready for the next scan.
  */
 export function SpareRow(props: SpareRowProps) {
   const { columns, barcode, current, onBarcodeChange, onBarcodeCommit, onFocus, onOpenPicker, onRefused } = props;
@@ -521,7 +543,7 @@ export function SpareRow(props: SpareRowProps) {
           content = (
             <BarcodeCell
               value={barcode}
-              focusStop={column.focus}
+              focusStop
               onChange={onBarcodeChange}
               onFocus={onFocus}
               onCommit={onBarcodeCommit}

@@ -4,9 +4,8 @@
  * it anyway; amber alone is a question the save asks.
  */
 import { formatCurrency } from "@/domain/pricing";
-import { LEVEL_COUNT } from "./selling-price.constants";
-import { PRICE_KEYS } from "./selling-price.constants";
-import { isAdded, isChanged, rowMrp, verdictOf, type PriceGridRow } from "./selling-price.state";
+import { ALL_LEVELS_ON, LEVEL_COUNT, PRICE_KEYS } from "./selling-price.constants";
+import { isAdded, isChanged, isLevelOn, rowMrp, verdictOf, type PriceGridRow } from "./selling-price.state";
 import type { BelowCostPolicy } from "./selling-price.types";
 
 /** QLocale money: two places, grouped. */
@@ -31,12 +30,15 @@ const PRICE_EPSILON = 0.005;
 /**
  * @param serverProblemRows 0-based rows the last 422 named — kept red until
  *        the operator edits them.
+ * @param levelActive a level the company has not switched on is not shown,
+ *        so it is not judged (its loaded prices go back as they came).
  */
 export function validateRows(
   rows: readonly PriceGridRow[],
   levelNames: readonly string[],
   belowCostPolicy: BelowCostPolicy,
   serverProblemRows: ReadonlySet<number>,
+  levelActive: readonly boolean[] = ALL_LEVELS_ON,
 ): ValidationStrip {
   const red: string[] = [];
   const amberRows: number[] = [];
@@ -51,9 +53,12 @@ export function validateRows(
     const min = row.min;
     let amber = false;
     for (let level = 0; level < LEVEL_COUNT; level += 1) {
+      if (!isLevelOn(levelActive, level)) {
+        continue;
+      }
       const price = row.prices[level];
       const name = levelNames[level] ?? "";
-      const verdict = verdictOf(row, PRICE_KEYS[level], belowCostPolicy);
+      const verdict = verdictOf(row, PRICE_KEYS[level], belowCostPolicy, levelActive);
       if (mrp > 0 && price > mrp + PRICE_EPSILON) {
         red.push(`Row ${lineNo} · ${name} ${money(price)} is above the row's MRP ${money(mrp)}.`);
       } else if (min > 0 && price + PRICE_EPSILON < min) {

@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
+import { useSoftDeleteActions } from "@/features/masters/shared/use-soft-delete-actions";
 import WidgetVisibilityTree, {
   type WidgetTreeSectionView,
 } from "@/features/masters/shared/widget-visibility-tree";
@@ -41,6 +42,7 @@ import {
 import { useDataRefresh } from "@/lib/data-freshness";
 import { buildGridDeletedParam, type ConfiguredGridKey } from "@/lib/configured-grids";
 import { getDropdownId, type ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
+import { dropdownParamsKey } from "@/components/design-system/dropdown/api";
 /**
  * The Grid Master row this list reads — "MAIN LIST - ITEM GROUPS". `CrudMasterPage`
  * resolves it to a grid id at runtime (see lib/configured-grids), and uses it
@@ -92,8 +94,10 @@ const WIDGET_VISIBILITY_ENDPOINT = "/widget-masters/visibility";
 const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(WIDGET_FIELD_NAME_BY_FORM_FIELD);
 // Parent Group is a lazy, server-side searchable configured dropdown
 // (fixed.dropdown_details id 17 -> item_group_master active rows). Loaded on open + on
-// debounced server-side search via /dropdown-details/run; nothing is fetched up front
-// and dropdown_param is never sent.
+// debounced server-side search via /dropdown-details/run; nothing is fetched up front.
+// Editing a group sends `dropdown_param` {"iexclude_id": <this group>}: the list then
+// leaves out the group and everything under it — a pick there is a cycle the server
+// refuses only after Save (Qt 4ae6575). A create sends no param.
 const DROPDOWN_RUN_ENDPOINT = "/dropdown-details/run";
 /** The Dropdown Master row the parent picker reads — "ITEM GROUPS". */
 const PARENT_GROUP_DROPDOWN_KEY: ConfiguredDropdownKey = "itemGroup";
@@ -167,8 +171,8 @@ function buildParentOptions(payload: unknown): ERPDynamicSelectOption[] {
   return [DEFAULT_PARENT_OPTION, ...options];
 }
 // Build the run query. An empty search is omitted so the server returns the first page;
-// dropdown_param is never sent.
-function buildParentRunQuery(search: string): Record<string, string> {
+// dropdown_param carries the group being edited (none on a create).
+function buildParentRunQuery(search: string, excludeId: string): Record<string, string> {
   const query: Record<string, string> = {
     dropdown_id: getDropdownId(PARENT_GROUP_DROPDOWN_KEY),
     page: "1",
@@ -177,6 +181,10 @@ function buildParentRunQuery(search: string): Record<string, string> {
   const trimmed = search.trim();
   if (trimmed) {
     query.search = trimmed;
+  }
+  const param = dropdownParamsKey({ iexclude_id: excludeId });
+  if (param) {
+    query.dropdown_param = param;
   }
   return query;
 }
@@ -324,6 +332,18 @@ export default function ItemGroupMasterPage() {
   // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
   // can see soft-deleted item groups. Lives beside the list search input.
   const [wantDelete, setWantDelete] = useState(false);
+  // Live view: Delete. Deleted view: the same button is Restore (`POST
+  // /item-groups/restore`), and Edit / View are refused. A refusal is titled for what
+  // was refused — "Cannot delete" / "Cannot restore", not "Cannot save".
+  const softDeleteProps = useSoftDeleteActions({
+    showingDeleted: wantDelete,
+    deleteEndpoint: API_ENDPOINTS.delete,
+    restoreEndpoint: "/item-groups/restore",
+    idParam: "itg_id",
+    idKeys: LOOKUP_KEYS.id,
+    entityTitle: "Item group",
+    plainRefusals: true,
+  });
   // Field config comes from the database, so it is read on mount and again on
   // every data-refresh signal instead of only once per page load.
   const loadWidgetFieldConfig = useCallback(() => {
@@ -359,6 +379,9 @@ export default function ItemGroupMasterPage() {
   // The parent the popup opened on (none for a create), for a draft's Discard.
   const openingParentOptionRef = useRef<ERPDynamicSelectOption | null>(null);
   const parentSearchTimeoutRef = useRef<number | null>(null);
+  // The group being edited, left out of its own parent list (with its subtree);
+  // "" on a create.
+  const excludeParentIdRef = useRef("");
   const applyParentOptions = useCallback((options: ERPDynamicSelectOption[]) => {
     parentOptionsRef.current = options;
     setParentOptions(options);
@@ -368,7 +391,9 @@ export default function ItemGroupMasterPage() {
   const fetchParentOptions = useCallback(
     async (search: string) => {
       try {
-        const payload = await runParentDropdown({ query: buildParentRunQuery(search) });
+        const payload = await runParentDropdown({
+          query: buildParentRunQuery(search, excludeParentIdRef.current),
+        });
         if (payload === undefined) {
           return;
         }
@@ -678,6 +703,7 @@ export default function ItemGroupMasterPage() {
   return (
     <>
     <CrudMasterPage
+      {...softDeleteProps}
       modalDraftKey="item-group"
       onModalDraftApplied={applyDraftParentSelection}
       title="Item Group"
@@ -724,12 +750,14 @@ export default function ItemGroupMasterPage() {
         // Clear the lazy parent dropdown when the create modal opens so no stale
         // selection from a previously edited group lingers (it reloads on open).
         if (open && variantKey === "master-create") {
+          excludeParentIdRef.current = "";
           seedSelectedParent("", "");
         }
       }}
       mapFormValues={({ source, defaults }) => {
         const rowSource = source ?? {};
         const parentGroupId = toDisplayValue(getFirstDefinedValue(rowSource, GROUP_PARENT_ID_KEYS));
+        excludeParentIdRef.current = toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.id));
         // Seed the lazy Parent Group dropdown with the saved selection so the trigger
         // shows the parent name on edit/view before the field is opened (and loaded).
         seedSelectedParent(

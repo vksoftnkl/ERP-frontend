@@ -318,8 +318,15 @@ export type RefusalMessage = {
 /**
  * The popup for a refusal. `kept` is the screen's "Bill not lost." line: a
  * refusal saved nothing, the work is still on the screen (Qt's `nexKeptLine`).
+ * `refusedTitle` titles an unworded 400/409/422 when the call was not a save —
+ * "Cannot delete" from a list's delete (Qt `handleError`'s third argument,
+ * 4ae6575); default "Cannot save".
  */
-export function refusalMessage(refusal: ApiRefusal, kept?: string | null): RefusalMessage {
+export function refusalMessage(
+  refusal: ApiRefusal,
+  kept?: string | null,
+  refusedTitle?: string | null,
+): RefusalMessage {
   const keptLine = kept?.trim() ?? "";
   const join = (...lines: string[]) => lines.filter(Boolean).join("\n");
 
@@ -354,7 +361,7 @@ export function refusalMessage(refusal: ApiRefusal, kept?: string | null): Refus
       : status === 404
         ? "Not found"
         : status === 400 || status === 409 || status === 422
-          ? "Cannot save"
+          ? refusedTitle?.trim() || "Cannot save"
           : status !== null && status >= 500
             ? "Server problem"
             : "Cannot continue";

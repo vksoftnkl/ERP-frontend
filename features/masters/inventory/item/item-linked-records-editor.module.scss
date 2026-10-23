@@ -437,4 +437,57 @@
   width: 1rem;
   height: 1rem;
   accent-color: #2563eb;
+}/* The band row above the header (the price grid's levels, as Change Selling
+   Price draws them). Specific enough to outrank the master-shell library's
+   `.erp-ms-modal .erp-ms-modal-body table thead th`; the band's own colours
+   come inline (the text through --table-header-text, which globals.css
+   forces on every th). */
+.editor .tableWrap .table thead th.bandCell,
+.editor .tableWrap .table thead th.bandGap {
+  position: static;
+  height: auto;
+  padding: 0.18rem 0.45rem;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.editor .tableWrap .table thead th.bandGap {
+  background: #ffffff;
+  border-color: transparent;
+}
+/* A cell fixed on this row (a stock-bucket row's MRP / default-level price).
+   Outranks the master-shell's `table :is(input, …)` reset (background: none). */
+.editor .tableWrap .inputLocked {
+  color: #64748b;
+  background: #f8fafc;
+  cursor: not-allowed;
+}
+/* ↑ green / ↓ red at the left of a figure moved since the record was opened
+   (the theme's rate.above / rate.below defaults). */
+.markableCell {
+  position: relative;
+}
+.cellMark {
+  position: absolute;
+  top: 50%;
+  left: 0.3rem;
+  z-index: 1;
+  transform: translateY(-50%);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: auto;
+}
+.cellMarkUp {
+  color: #2e7d32;
+}
+.cellMarkDown {
+  color: #c62828;
+}
+/* Room for the mark, so it never sits under the figure itself. */
+.editor .markableCell .control {
+  padding-left: 1.05rem;
 }

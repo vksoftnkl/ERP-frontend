@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
+import { useSoftDeleteActions } from "@/features/masters/shared/use-soft-delete-actions";
 import WidgetVisibilityTree, {
   type WidgetTreeSectionView,
 } from "@/features/masters/shared/widget-visibility-tree";
@@ -40,6 +41,7 @@ import {
 import { useDataRefresh } from "@/lib/data-freshness";
 import { buildGridDeletedParam, type ConfiguredGridKey } from "@/lib/configured-grids";
 import { getDropdownId, type ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
+import { dropdownParamsKey } from "@/components/design-system/dropdown/api";
 /**
  * The Grid Master row this list reads — "MAIN LIST - ITEM BRAND". `CrudMasterPage`
  * resolves it to a grid id at runtime (see lib/configured-grids), and uses it
@@ -86,8 +88,10 @@ const WIDGET_VISIBILITY_ENDPOINT = "/widget-masters/visibility";
 const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(WIDGET_FIELD_NAME_BY_FORM_FIELD);
 // Parent Brand is a lazy, server-side searchable configured dropdown
 // (fixed.dropdown_details id 18 -> item_brand_master active rows). Loaded on open + on
-// debounced server-side search via /dropdown-details/run; nothing is fetched up front
-// and dropdown_param is never sent.
+// debounced server-side search via /dropdown-details/run; nothing is fetched up front.
+// Editing a brand sends `dropdown_param` {"iexclude_id": <this brand>}: the list then
+// leaves out the brand and everything under it — a pick there is a cycle the server
+// refuses only after Save (Qt 4ae6575). A create sends no param.
 const DROPDOWN_RUN_ENDPOINT = "/dropdown-details/run";
 /** The Dropdown Master row the parent picker reads — "ITEM BRANDS". */
 const PARENT_BRAND_DROPDOWN_KEY: ConfiguredDropdownKey = "itemBrand";
@@ -157,8 +161,8 @@ function buildParentOptions(payload: unknown): ERPDynamicSelectOption[] {
   return [DEFAULT_PARENT_OPTION, ...options];
 }
 // Build the run query. An empty search is omitted so the server returns the first page;
-// dropdown_param is never sent.
-function buildParentRunQuery(search: string): Record<string, string> {
+// dropdown_param carries the brand being edited (none on a create).
+function buildParentRunQuery(search: string, excludeId: string): Record<string, string> {
   const query: Record<string, string> = {
     dropdown_id: getDropdownId(PARENT_BRAND_DROPDOWN_KEY),
     page: "1",
@@ -167,6 +171,10 @@ function buildParentRunQuery(search: string): Record<string, string> {
   const trimmed = search.trim();
   if (trimmed) {
     query.search = trimmed;
+  }
+  const param = dropdownParamsKey({ iexclude_id: excludeId });
+  if (param) {
+    query.dropdown_param = param;
   }
   return query;
 }
@@ -314,9 +322,24 @@ export default function ItemBrandMasterPage() {
   // The parent the popup opened on (none for a create), for a draft's Discard.
   const openingParentOptionRef = useRef<ERPDynamicSelectOption | null>(null);
   const parentSearchTimeoutRef = useRef<number | null>(null);
+  // The brand being edited, left out of its own parent list (with its subtree);
+  // "" on a create.
+  const excludeParentIdRef = useRef("");
   // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
   // can see soft-deleted item brands. Lives beside the list search input.
   const [wantDelete, setWantDelete] = useState(false);
+  // Live view: Delete. Deleted view: the same button is Restore (`POST
+  // /item-brands/restore`), and Edit / View are refused. A refusal is titled for what
+  // was refused — "Cannot delete" / "Cannot restore", not "Cannot save".
+  const softDeleteProps = useSoftDeleteActions({
+    showingDeleted: wantDelete,
+    deleteEndpoint: API_ENDPOINTS.delete,
+    restoreEndpoint: "/item-brands/restore",
+    idParam: "brand_id",
+    idKeys: LOOKUP_KEYS.id,
+    entityTitle: "Item brand",
+    plainRefusals: true,
+  });
   // Loaded on mount and again on every data-refresh signal, so a field config
   // changed in the database reaches this form without a reload.
   const loadWidgetFieldConfig = useCallback(() => {
@@ -354,7 +377,9 @@ export default function ItemBrandMasterPage() {
   const fetchParentOptions = useCallback(
     async (search: string) => {
       try {
-        const payload = await runParentDropdown({ query: buildParentRunQuery(search) });
+        const payload = await runParentDropdown({
+          query: buildParentRunQuery(search, excludeParentIdRef.current),
+        });
         if (payload === undefined) {
           return;
         }
@@ -671,6 +696,7 @@ export default function ItemBrandMasterPage() {
   return (
     <>
     <CrudMasterPage
+      {...softDeleteProps}
       modalDraftKey="item-brand"
       onModalDraftApplied={applyDraftParentSelection}
       title="Brand"
@@ -717,6 +743,7 @@ export default function ItemBrandMasterPage() {
         // Clear the lazy parent dropdown when the create modal opens so no stale
         // selection from a previously edited brand lingers (it reloads on open).
         if (open && variantKey === "master-create") {
+          excludeParentIdRef.current = "";
           seedSelectedParent("", "");
         }
       }}
@@ -725,6 +752,7 @@ export default function ItemBrandMasterPage() {
         const brandPhotoUrl = toDisplayValue(getFirstDefinedValue(rowSource, BRAND_PHOTO_URL_KEYS));
         const brandPhotoBase64 = toDisplayValue(getFirstDefinedValue(rowSource, BRAND_PHOTO_KEYS));
         const parentBrandId = toDisplayValue(getFirstDefinedValue(rowSource, BRAND_PARENT_ID_KEYS));
+        excludeParentIdRef.current = toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.id));
         // Seed the lazy Parent Brand dropdown with the saved selection so the trigger
         // shows the parent name on edit/view before the field is opened (and loaded).
         seedSelectedParent(

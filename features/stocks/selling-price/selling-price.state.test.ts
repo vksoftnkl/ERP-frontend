@@ -1,27 +1,35 @@
 /**
  * The grid row rules — Qt `fillRow`, `isChanged`, `isNewRow`, `verdict`,
- * `whyNotEditable`, `onGridCellEdited`, `applyFourEdit`, `winningRows`,
- * `addNewBucketRow` and `refreshItemsAfterSave`.
+ * `whyNotEditable`, `onGridCellEdited`, `winningRows`, `addNewBucketRow`,
+ * `refreshItemsAfterSave`, the level visibility (`applyLevelVisibility`) and
+ * the Price from day (`priceFrom`, `refreshPriceFrom`, notes 140 A).
  */
 import { describe, expect, it } from "vitest";
 import {
   acceptsTyping,
   applyCellEdit,
-  applyFourEdit,
   branchCellText,
   bucketKey,
   changedCount,
   editorText,
+  effectiveFromToSend,
   gridCounts,
   hereName,
   insertNewBucketRow,
   isChanged,
+  isLevelOn,
   isNewRow,
   isPriceWorkWorthRemembering,
   isSameFigure,
+  isSchedulingDay,
+  landingLevel,
   newBucketTemplateIndex,
   parseAcceptable,
+  priceFromDay,
+  priceFromNote,
+  priceFromRefusal,
   refreshItemRows,
+  restoredPriceFrom,
   rowFromServer,
   sameTenant,
   setLevelPrice,
@@ -231,6 +239,81 @@ describe("verdicts", () => {
   it("judges nothing but the prices and Min", () => {
     expect(verdictOf(setLevelPrice(base, 0, 500), "mkupA", "warning")).toBe("ok");
   });
+
+  it("does not judge a level the company has not switched on — not its price, not against Min", () => {
+    const offB = [true, false, true, true];
+    const aboveMrp = setLevelPrice(base, 1, 125);
+    expect(verdictOf(aboveMrp, "priceB", "warning")).toBe("red");
+    expect(verdictOf(aboveMrp, "priceB", "warning", offB)).toBe("ok");
+    // Level B (105) is the only one under a Min of 106 here… once it is off,
+    // Min has nothing to be red about. Levels A, C, D are lifted clear of it.
+    const lifted = [0, 2, 3].reduce((acc, level) => setLevelPrice(acc, level, 110), base);
+    const minAbove = applyCellEdit(lifted, "minPrice", 106);
+    expect(verdictOf(minAbove, "minPrice", "warning")).toBe("red");
+    expect(verdictOf(minAbove, "minPrice", "warning", offB)).toBe("ok");
+  });
+});
+
+describe("level visibility (applyLevelVisibility)", () => {
+  it("reads a level missing from the list as on", () => {
+    expect(isLevelOn([true, false], 0)).toBe(true);
+    expect(isLevelOn([true, false], 1)).toBe(false);
+    expect(isLevelOn([true, false], 3)).toBe(true);
+  });
+
+  it("lands the cursor on the level last worked on, else the first one switched on", () => {
+    expect(landingLevel(2, [true, true, true, true])).toBe(2);
+    expect(landingLevel(0, [false, false, true, true])).toBe(2);
+    expect(landingLevel(3, [false, true, true, false])).toBe(1);
+    // Nothing on at all (a misconfigured company): stay put.
+    expect(landingLevel(1, [false, false, false, false])).toBe(1);
+  });
+});
+
+describe("Price from (notes 140 A)", () => {
+  const today = "2026-10-23";
+
+  it("blank is today; a later day schedules, today does not", () => {
+    expect(priceFromDay("", today)).toBe(today);
+    expect(priceFromDay("2026-10-24", today)).toBe("2026-10-24");
+    expect(isSchedulingDay("", today)).toBe(false);
+    expect(isSchedulingDay(today, today)).toBe(false);
+    expect(isSchedulingDay("2026-10-24", today)).toBe(true);
+  });
+
+  it("explains a later day beside the field, and says nothing for today", () => {
+    expect(priceFromNote("2026-10-24", today)).toBe(
+      "new prices start 24-10-2026 — today's stay till then",
+    );
+    expect(priceFromNote(today, today)).toBe("");
+    expect(priceFromNote("", today)).toBe("");
+  });
+
+  it("sends effectiveFrom only when it is after today", () => {
+    expect(effectiveFromToSend("2026-11-01", today)).toBe("2026-11-01");
+    expect(effectiveFromToSend(today, today)).toBeUndefined();
+    expect(effectiveFromToSend("", today)).toBeUndefined();
+  });
+
+  it("refuses a day before today at Save — blank and today are fine", () => {
+    expect(priceFromRefusal("2026-10-22", today)).toBe(
+      "Prices can start today or a later day, not before.",
+    );
+    expect(priceFromRefusal("2026-02-30", today)).toBe(
+      "Prices can start today or a later day, not before.",
+    );
+    expect(priceFromRefusal("", today)).toBe("");
+    expect(priceFromRefusal(today, today)).toBe("");
+    expect(priceFromRefusal("2026-12-01", today)).toBe("");
+  });
+
+  it("brings a remembered day back unless it has passed", () => {
+    expect(restoredPriceFrom("2026-10-30", today)).toBe("2026-10-30");
+    expect(restoredPriceFrom(today, today)).toBe(today);
+    expect(restoredPriceFrom("2026-10-22", today)).toBe(today);
+    expect(restoredPriceFrom(undefined, today)).toBe(today);
+    expect(restoredPriceFrom("", today)).toBe(today);
+  });
 });
 
 describe("whyNotEditable", () => {
@@ -315,41 +398,6 @@ describe("cell edits (onGridCellEdited)", () => {
 
   it("Min is just the minimum", () => {
     expect(applyCellEdit(costed, "minPrice", 50).min).toBe(50);
-  });
-});
-
-describe("the violet card (applyFourEdit)", () => {
-  const costed = row({ costRate: 94.4, taxPerc: 18, roundOff: 0 }, [0, 0, 0, 0]);
-
-  it("price is the price", () => {
-    const result = applyFourEdit(costed, 1, "price", 120);
-    expect("row" in result && result.row.prices[1]).toBe(120);
-  });
-
-  it("price wot is taxed up", () => {
-    const result = applyFourEdit(costed, 0, "wot", 100);
-    expect("row" in result && result.row.prices[0]).toBe(118);
-  });
-
-  it("markup and margin price from the cost", () => {
-    const fromMarkup = applyFourEdit(costed, 2, "markup", 25);
-    expect("row" in fromMarkup && fromMarkup.row.prices[2]).toBe(118);
-    const fromMargin = applyFourEdit(costed, 3, "margin", 20);
-    expect("row" in fromMargin && fromMargin.row.prices[3]).toBe(118);
-  });
-
-  it("says why when there is no cost, or the margin has no price", () => {
-    expect(applyFourEdit(row({ costRate: 0 }), 0, "markup", 10)).toEqual({
-      hint: "This row has no cost, so markup and margin have nothing to work from — type the price or the price wot.",
-    });
-    expect(applyFourEdit(costed, 0, "margin", 100)).toEqual({
-      hint: "A margin of 100% or more has no price.",
-    });
-  });
-
-  it("still takes a price or wot when there is no cost", () => {
-    const result = applyFourEdit(row({ costRate: 0 }), 0, "wot", 10);
-    expect("row" in result).toBe(true);
   });
 });
 

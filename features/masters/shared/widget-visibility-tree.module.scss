@@ -15,6 +15,38 @@ $cols: minmax(0, 1fr) 220px;
   overflow: hidden;
 }
 
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--ds-border, #ccd8e4);
+  background: var(--ds-surface, #ffffff);
+}
+
+.toolbarButton {
+  min-height: 26px;
+  padding: 0 12px;
+  border: 1px solid var(--ds-border, #c3cbd1);
+  border-radius: var(--ds-radius-sm, 4px);
+  background: #ffffff;
+  color: var(--ds-text, #1d2b36);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--ds-primary, #0f74c9);
+    color: var(--ds-primary, #0f74c9);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(15, 116, 201, 0.35);
+  }
+}
+
 .tableScroll {
   max-height: min(calc(52vh / var(--erp-ui-scale)), 420px);
   overflow: auto;

@@ -7,7 +7,11 @@
  * with (the server decides from that and the switch which row an edit lands
  * on), and PRICE as the authoritative figure of each level — the server
  * recomputes priceWot and markup from it and discards what arrives in them.
+ *
+ * Notes 140 A — a save may start on a later day (`effectiveFrom`): the server
+ * then SCHEDULES the new prices and today's stay on the shelf till that day.
  */
+import { todayIso, toDisplayDate } from "@/features/sales/quotation/quotation.utils";
 import { LEVEL_COUNT, NOTES_76_FILTER_KEYS } from "./selling-price.constants";
 import { exclusiveOfTax, markupOf, rawNum, round2 } from "./selling-price.math";
 import { isChanged, type PriceGridRow } from "./selling-price.state";
@@ -28,12 +32,18 @@ export type BuiltSave = {
   itemIds: string[];
 };
 
+/**
+ * @param effectiveFrom `YYYY-MM-DD` after today to schedule the prices (Qt
+ *        `buildPayload`'s effectiveFrom); absent = today, and the body carries
+ *        no such key — a save from today is the save it always was.
+ */
 export function buildSavePayload(
   rows: readonly PriceGridRow[],
   companyId: string,
   branchId: string,
   scope: PriceScope,
   confirmed: boolean,
+  effectiveFrom?: string,
 ): BuiltSave {
   const out: SaveSellingPriceRow[] = [];
   const rowKeyByLine = new Map<number, string>();
@@ -77,7 +87,14 @@ export function buildSavePayload(
     }
   });
   return {
-    payload: { companyId, branchId, scope, confirmed, rows: out },
+    payload: {
+      companyId,
+      branchId,
+      scope,
+      confirmed,
+      ...(effectiveFrom ? { effectiveFrom } : {}),
+      rows: out,
+    },
     rowKeyByLine,
     itemIds,
   };
@@ -142,13 +159,34 @@ export function belowCostSummary(lineCount: number, policy: string): string {
 // ---------------------------------------------------------------------------
 
 /**
+ * The day a written save's prices start when that is after today — it was
+ * SCHEDULED, nothing on the shelf moved — else "" (Qt `postSave`).
+ */
+export function scheduledDayOf(result: SellingPriceSaveResult, today: string): string {
+  const day = (result.effectiveFrom ?? "").slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) && day > today ? day : "";
+}
+
+/**
  * What the operator reads once the save is written. Never a plain "Saved" when
  * a row has no stock behind it: those rows are NAMED (legacy fault #2). An
- * allowed or confirmed below-cost price is said too.
+ * allowed or confirmed below-cost price is said too, and a scheduled save says
+ * from when — today's prices stay till then.
  */
-export function savedMessage(result: SellingPriceSaveResult, confirmed: boolean): string {
+export function savedMessage(
+  result: SellingPriceSaveResult,
+  confirmed: boolean,
+  today: string = todayIso(),
+): string {
   const saved = Number(result.saved) || 0;
-  let message = saved === 1 ? "1 row saved" : `${saved} rows saved`;
+  const scheduledFrom = scheduledDayOf(result, today);
+  let message = scheduledFrom
+    ? `${saved === 1 ? "1 row scheduled" : `${saved} rows scheduled`} — the new prices start ${toDisplayDate(
+        scheduledFrom,
+      )}; today's prices stay till then (F9 lists them).`
+    : saved === 1
+      ? "1 row saved"
+      : `${saved} rows saved`;
   const noStock = result.noStock ?? [];
   if (noStock.length > 0) {
     const names = noStock.map((row) => {
@@ -260,6 +298,24 @@ export function refusedLineNumbers(error: ApiErrorLike | null | undefined): numb
     }
   }
   return out;
+}
+
+/**
+ * Whether a refusal is about the Price from day (notes 140 A: a day in the
+ * past, or more than a year ahead) — the cursor then goes to that field.
+ */
+export function refusesPriceFrom(error: ApiErrorLike | null | undefined): boolean {
+  const body = bodyOf(error);
+  if (!Array.isArray(body.errors)) {
+    return false;
+  }
+  return body.errors.some((entry) => {
+    if (!entry || typeof entry !== "object") {
+      return false;
+    }
+    const { field, code } = entry as { field?: unknown; code?: unknown };
+    return field === "effectiveFrom" || (typeof code === "string" && code.startsWith("STOCK_PRICE_FROM_"));
+  });
 }
 
 /**

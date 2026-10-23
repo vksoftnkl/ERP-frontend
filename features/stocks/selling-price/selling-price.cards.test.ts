@@ -1,14 +1,27 @@
 /**
  * The words and figures around the rows: the subtitle and chip
- * (`refreshTitle`), the row card (`refreshRowCard`), the violet card
- * (`refreshFourCard`), the cells' read-outs (the delegate's paint), the
- * column layout and the price-band strip.
+ * (`refreshTitle`), the row card (`refreshRowCard`), the profit line
+ * (`refreshProfitLine`), the cells' read-outs and ↑ / ↓ marks (the delegate's
+ * paint and helpEvent), the column layout with its level visibility and Enter
+ * stops, and the price-band strip.
  */
 import { describe, expect, it } from "vitest";
 import type { UiTableColumnRow } from "@/features/sales/quotation/quotation.types";
-import { changedChipText, fourCard, levelBandText, rowCard, subtitleText } from "./selling-price.cards";
-import { priceBands, resolveSellingPriceColumns, seedColumns } from "./selling-price.columns";
-import { cellText, deltaFits, deltaOf, deltaText } from "./selling-price.display";
+import {
+  changedChipText,
+  levelBandText,
+  profitLine,
+  profitLineText,
+  rowCard,
+  subtitleText,
+} from "./selling-price.cards";
+import {
+  priceBands,
+  resolveSellingPriceColumns,
+  screenColumns,
+  seedColumns,
+} from "./selling-price.columns";
+import { cellText, deltaArrow, deltaFits, deltaOf, deltaText, deltaTip } from "./selling-price.display";
 import { rowFromServer, setLevelPrice, type PriceGridRow } from "./selling-price.state";
 import type { SellingPriceRow } from "./selling-price.types";
 
@@ -124,27 +137,77 @@ describe("the row card — what Save does to the current row", () => {
   });
 });
 
-describe("the violet card", () => {
-  it("shows one level's four numbers", () => {
-    const card = fourCard(row(), 0, 0, ["Wholesale"], false);
-    expect(card).toEqual({
-      enabled: true,
-      which: "Wholesale · row 1 · Salt 1 Kg · tax 18.00%",
-      markup: "20.0",
-      wot: "120.00",
-      price: "141.60",
-      margin: "16.7",
-      cess: false,
+describe("the profit line (refreshProfitLine)", () => {
+  const SHORTS = ["WS", "RET", "C", "D"];
+  const NAMES = ["Wholesale", "Retail", "Level C", "Level D"];
+  const ALL = [true, true, true, true];
+  // Cost 118 incl. 18% = 100 before tax; WS 141.60 = 120 before tax.
+  const priced = rowFromServer(
+    serverRow({
+      levels: [
+        { level: 1, price: 141.6, priceWot: 0, markupPerc: 0, marginPerc: 0 },
+        { level: 2, price: 106.2, priceWot: 0, markupPerc: 0, marginPerc: 0 },
+      ],
+    }),
+  );
+
+  it("shows each priced level's profit before tax, % on the cost before tax", () => {
+    const line = profitLine(priced, ALL, SHORTS, NAMES);
+    expect(line.kind).toBe("line");
+    expect(profitLineText(line)).toBe(
+      "Profit per PCS (no tax):  WS ₹20.00 (20.0%)  ·  RET -₹10.00 (-10.0%)",
+    );
+    if (line.kind === "line") {
+      expect(line.parts.map((part) => part.loss)).toEqual([false, true]);
+      expect(line.tooltip).toBe(
+        "Wholesale: price ₹141.60, profit ₹20.00 (20.0%)\nRetail: price ₹106.20, profit -₹10.00 (-10.0%)",
+      );
+    }
+  });
+
+  it("marks a level whose profit moved since load, the old figure in the tooltip", () => {
+    const line = profitLine(setLevelPrice(priced, 0, 147.5), ALL, SHORTS, NAMES);
+    expect(profitLineText(line)).toBe(
+      "Profit per PCS (no tax):  WS ₹25.00 (25.0%) ↑  ·  RET -₹10.00 (-10.0%)",
+    );
+    if (line.kind === "line") {
+      expect(line.parts[0].moved).toBe("up");
+      expect(line.tooltip.split("\n")[0]).toBe(
+        "Wholesale: price ₹147.50, profit ₹25.00 (25.0%), was ₹20.00",
+      );
+    }
+    expect(profitLine(setLevelPrice(priced, 0, 130), ALL, SHORTS, NAMES)).toMatchObject({
+      parts: [{ moved: "down" }, { moved: null }],
     });
   });
 
-  it("is shut with no row, and while saving", () => {
-    expect(fourCard(null, -1, 0, [], false).which).toBe("move onto a row to see its numbers");
-    expect(fourCard(row(), 0, 0, [], true).enabled).toBe(false);
+  it("leaves out a level that is switched off or has no price", () => {
+    const line = profitLine(priced, [true, false, true, true], SHORTS, NAMES);
+    expect(profitLineText(line)).toBe("Profit per PCS (no tax):  WS ₹20.00 (20.0%)");
+    expect(profitLine(priced, [false, false, true, true], SHORTS, NAMES)).toEqual({
+      kind: "note",
+      text: "No price yet.",
+    });
   });
 
-  it("warns for a cess item", () => {
-    expect(fourCard(row({ hasCess: true }), 0, 0, [], false).cess).toBe(true);
+  it("says why there are no figures", () => {
+    expect(profitLineText(profitLine(null, ALL, SHORTS, NAMES))).toBe(
+      "Profit shows here for the row you are on.",
+    );
+    expect(profitLineText(profitLine(row({ costRate: 0, costWot: 0 }), ALL, SHORTS, NAMES))).toBe(
+      "No cost on this row, so no profit to show.",
+    );
+  });
+
+  it("calls the figures approximate for a cess item", () => {
+    expect(profitLineText(profitLine(row({ hasCess: true }), ALL, SHORTS, NAMES))).toBe(
+      "Profit per PCS (no tax):  WS ₹20.00 (20.0%)   (approximate — this item carries a cess)",
+    );
+  });
+
+  it("falls back to the level letter when no short name came", () => {
+    const line = profitLine(priced, ALL, [], NAMES);
+    expect(line.kind === "line" && line.parts.map((part) => part.level)).toEqual(["A", "B"]);
   });
 });
 
@@ -162,7 +225,7 @@ describe("cell read-outs", () => {
     expect(cellText(loaded, "costWot")).toBe("100.00");
   });
 
-  it("chips the change since load", () => {
+  it("marks the change since load ↑ / ↓, the loaded figure in the tooltip", () => {
     const edited = setLevelPrice(loaded, 0, 145);
     expect(deltaOf(loaded, "priceA")).toBeNull();
     expect(deltaOf(edited, "priceA")).toBe(3.4);
@@ -170,6 +233,13 @@ describe("cell read-outs", () => {
     expect(deltaOf(edited, "mkupA")).toBeNull();
     expect(deltaText(3.4)).toBe("+3.40");
     expect(deltaText(-2)).toBe("−2.00");
+    expect(deltaArrow(3.4)).toBe("↑");
+    expect(deltaArrow(-2)).toBe("↓");
+    expect(deltaTip(edited, "priceA")).toBe("Was 141.60 (+3.40)");
+    // A base rate's loaded figure is the loaded price before tax.
+    expect(deltaTip(edited, "rateA")).toBe("Was 120.00 (+2.88)");
+    expect(deltaTip(setLevelPrice(loaded, 0, 140), "priceA")).toBe("Was 141.60 (−1.60)");
+    expect(deltaTip(loaded, "priceA")).toBe("");
   });
 
   it("drops the chip where it would not fit beside the figure", () => {
@@ -251,5 +321,39 @@ describe("columns", () => {
       ["", 1],
     ]);
     expect(levelBandText(undefined, "A")).toBe("LEVEL  (A)");
+  });
+
+  it("draws no column and no band for a level the company has not switched on", () => {
+    const shown = screenColumns(seedColumns(), [true, false, true, false]);
+    const keys = shown.map((column) => column.key);
+    for (const gone of ["mkupB", "rateB", "priceB", "mkupD", "rateD", "priceD"]) {
+      expect(keys).not.toContain(gone);
+    }
+    expect(keys).toContain("priceC");
+    const bands = priceBands(shown, ["Wholesale", "Retail", "Dealer", "Special"]);
+    expect(bands.map((band) => [band.text, band.span])).toEqual([
+      ["one row = one row of the item price table", 11],
+      ["WHOLESALE  (A)", 3],
+      ["DEALER  (C)", 3],
+      ["", 1],
+    ]);
+  });
+
+  it("stops Enter on the prices only — one Net Rate per active level", () => {
+    const shown = screenColumns(seedColumns(), [true, true, false, true]);
+    expect(shown.filter((column) => column.focus).map((column) => column.key)).toEqual([
+      "priceA",
+      "priceB",
+      "priceD",
+    ]);
+    // The layout's own flags (markups, base rates, Min) do not count…
+    expect(seedColumns().find((column) => column.key === "minPrice")?.focus).toBe(true);
+    // …and a column the layout hides stays hidden.
+    const hiddenRate = seedColumns().map((column) =>
+      column.key === "rateA" ? { ...column, visible: false } : column,
+    );
+    expect(screenColumns(hiddenRate, [true, true, true, true]).map((column) => column.key)).not.toContain(
+      "rateA",
+    );
   });
 });

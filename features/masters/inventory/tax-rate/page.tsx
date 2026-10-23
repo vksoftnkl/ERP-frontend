@@ -7,6 +7,7 @@ import type {
 import { NexDropdownSingle } from "@/components/design-system/dropdown";
 import type { DropdownSelection } from "@/components/design-system/dropdown";
 import CrudMasterPage from "@/components/master/crud-master-page";
+import { useSoftDeleteActions } from "@/features/masters/shared/use-soft-delete-actions";
 import styles from "@/app/master/state-master/page.module.scss";
 import {
   getFirstDefinedValue,
@@ -29,7 +30,7 @@ import LedgerOverridesEditor from "./ledger-overrides-editor";
 import { createEmptyLedgerRow, extractLedgerRows } from "./lines";
 import ResolvePanel from "./resolve-panel";
 import type { TaxRateLedgerRow } from "./types";
-import { getLedgerRowsValidationError } from "./validate";
+import { getLedgerRowsValidationError, getSupersedesValidationError } from "./validate";
 import { useDropdownId } from "@/lib/configured-dropdowns";
 
 /**
@@ -138,6 +139,19 @@ export default function TaxRateMasterPage() {
   // means "only active". The checkbox reads the other way round, as the operator
   // thinks of it.
   const [showInactive, setShowInactive] = useState(false);
+  // The modal open right now ("master-update" …): names the Supersedes picker's
+  // input the way the form names its controls, so a refused Save can focus it.
+  const [modalVariantKey, setModalVariantKey] = useState<string | null>(null);
+  // Delete only — a rate has no restore route and the list no deleted view. A
+  // refusal (a rate still in use …) is titled "Cannot delete", not "Cannot save".
+  const softDeleteProps = useSoftDeleteActions({
+    showingDeleted: false,
+    deleteEndpoint: API_ENDPOINTS.delete,
+    idParam: REQUEST_PAYLOAD_KEYS.id,
+    idKeys: LOOKUP_KEYS.id,
+    entityTitle: "GST rate",
+    plainRefusals: true,
+  });
 
   const ledgerRowsError = useMemo(
     () => getLedgerRowsValidationError(ledgerRows),
@@ -165,6 +179,7 @@ export default function TaxRateMasterPage() {
       ledgerRows,
       ledgerRowsError,
       editingTaxId,
+      modalVariantKey,
       supersedesSelection,
       onAddLedgerRow: handleAddLedgerRow,
       onChangeLedgerRow: handleChangeLedgerRow,
@@ -179,6 +194,7 @@ export default function TaxRateMasterPage() {
       handleRemoveLedgerRow,
       ledgerRows,
       ledgerRowsError,
+      modalVariantKey,
       supersedesSelection,
     ],
   );
@@ -206,6 +222,7 @@ export default function TaxRateMasterPage() {
 
   return (
     <CrudMasterPage
+      {...softDeleteProps}
       title="GST Rate"
       auditHistory={{ screenName: "Tax Master" }}
       entityLabel="GST rate"
@@ -254,6 +271,7 @@ export default function TaxRateMasterPage() {
       modalSectionNavigationMode="tabs"
       modalFocusFirstInvalidFieldOnValidationError
       onModalOpenChange={(open, variantKey) => {
+        setModalVariantKey(open ? variantKey : null);
         // A create starts with no overrides — which is a complete configuration,
         // not an empty one waiting to be filled.
         if (open && variantKey === "master-create") {
@@ -324,6 +342,8 @@ function buildFormFields(context: {
   ledgerRows: TaxRateLedgerRow[];
   ledgerRowsError: ReturnType<typeof getLedgerRowsValidationError>;
   editingTaxId: string | null;
+  /** The open modal's variant, for the id its form gives the Supersedes control. */
+  modalVariantKey: string | null;
   supersedesSelection: DropdownSelection | null;
   onAddLedgerRow: () => void;
   onChangeLedgerRow: (rowKey: string, patch: Partial<TaxRateLedgerRow>) => void;
@@ -335,6 +355,7 @@ function buildFormFields(context: {
     ledgerRows,
     ledgerRowsError,
     editingTaxId,
+    modalVariantKey,
     supersedesSelection,
     onAddLedgerRow,
     onChangeLedgerRow,
@@ -478,8 +499,19 @@ function buildFormFields(context: {
       ...span(6),
       helperText:
         "A rate change makes a new rate rather than editing this one; this keeps the chain followable.",
-      render: ({ value, setValue, disabled }) => (
+      // Dropdown 53 lists every live rate, this one included, and takes no
+      // exclude parameter: "supersedes itself" is refused here, before Save
+      // (the server's 400 TAX_RATE_SELF_SUPERSEDE comes only after it — Qt
+      // 4ae6575). The form then opens the Rate tab and focuses this picker.
+      validation: {
+        custom: (value) => getSupersedesValidationError(value, editingTaxId),
+      },
+      render: ({ value, setValue, disabled, error }) => (
         <NexDropdownSingle
+          // The form's own control id (`erp-modal-form-<variant>-<field>`): the
+          // label points at it, and a refused Save focuses it.
+          id={modalVariantKey ? `erp-modal-form-${modalVariantKey}-tax_supersedes_id` : undefined}
+          invalid={Boolean(error)}
           dropdownId={rateDropdownId}
           value={
             supersedesSelection ?? (value ? { id: value, text: value } : null)

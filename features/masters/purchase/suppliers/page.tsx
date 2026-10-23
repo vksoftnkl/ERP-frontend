@@ -108,7 +108,7 @@ import type { ERPDynamicModalField } from "@/components/design-system/ui/dynamic
 // same nested `ledgerBankAccount` array the server accepts on create/update.
 import BankAccountsEditor from "@/features/masters/accounts/account-ledger/bank-accounts-editor";
 import {
-  createEmptyBankAccountRow,
+  commitBankAccountRow,
   extractLedgerBankAccountRows,
   getBankAccountValidationError,
   buildLedgerBankAccountPayload,
@@ -205,17 +205,11 @@ export default function SuppliersMasterPage() {
   // Nested bank accounts edited alongside the supplier (persisted on its linked
   // account ledger). Seeded from the loaded record on edit/view, reset on create.
   const [bankAccounts, setBankAccounts] = useState<LedgerBankAccountFormRow[]>([]);
-  const handleAddBankAccount = useCallback(() => {
-    setBankAccounts((rows) => [...rows, createEmptyBankAccountRow()]);
+  // OK in the account popup: the account replaces its row or joins the list, and
+  // one ticked Default clears it on the others (single default per ledger).
+  const handleCommitBankAccount = useCallback((row: LedgerBankAccountFormRow) => {
+    setBankAccounts((rows) => commitBankAccountRow(rows, row));
   }, []);
-  const handleChangeBankAccount = useCallback(
-    (rowKey: string, patch: Partial<LedgerBankAccountFormRow>) => {
-      setBankAccounts((rows) =>
-        rows.map((row) => (row.rowKey === rowKey ? { ...row, ...patch } : row)),
-      );
-    },
-    [],
-  );
   // A Purchase Type outside LOCAL / IMPORT on the record being edited (the web
   // form once saved "Goods Supplier"), kept selectable so it is not lost.
   const [storedPurchaseType, setStoredPurchaseType] = useState("");
@@ -232,12 +226,6 @@ export default function SuppliersMasterPage() {
   );
   const handleRemoveBankAccount = useCallback((rowKey: string) => {
     setBankAccounts((rows) => rows.filter((row) => row.rowKey !== rowKey));
-  }, []);
-  // Single default per ledger: marking one row default clears the others.
-  const handleSetDefaultBankAccount = useCallback((rowKey: string) => {
-    setBankAccounts((rows) =>
-      rows.map((row) => ({ ...row, lbaIsDefault: row.rowKey === rowKey })),
-    );
   }, []);
   // Adds the `grid_param` payload to the default page/limit/search list query.
   // The server JSON-parses it and binds each key into the matching named token in
@@ -835,21 +823,12 @@ export default function SuppliersMasterPage() {
           disabled={disabled}
           invalidRowKey={bankAccountValidationError?.rowKey ?? null}
           invalidField={bankAccountValidationError?.field ?? null}
-          onAddRow={handleAddBankAccount}
-          onChangeRow={handleChangeBankAccount}
+          onCommitRow={handleCommitBankAccount}
           onRemoveRow={handleRemoveBankAccount}
-          onSetDefault={handleSetDefaultBankAccount}
         />
       ),
     }),
-    [
-      bankAccounts,
-      bankAccountValidationError,
-      handleAddBankAccount,
-      handleChangeBankAccount,
-      handleRemoveBankAccount,
-      handleSetDefaultBankAccount,
-    ],
+    [bankAccounts, bankAccountValidationError, handleCommitBankAccount, handleRemoveBankAccount],
   );
   // ── Widget-masters config (menu 22) ────────────────────────────
   // The modal's fields are shown/hidden (and optionally re-labelled) from the

@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
+import { useSoftDeleteActions } from "@/features/masters/shared/use-soft-delete-actions";
 import WidgetVisibilityTree, {
   type WidgetTreeSectionView,
 } from "@/features/masters/shared/widget-visibility-tree";
@@ -35,6 +36,7 @@ import {
 import { useDataRefresh } from "@/lib/data-freshness";
 import { buildGridDeletedParam, type ConfiguredGridKey } from "@/lib/configured-grids";
 import { getDropdownId, type ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
+import { dropdownParamsKey } from "@/components/design-system/dropdown/api";
 /**
  * The Grid Master row this list reads — "MAIN LIST - ITEM CATEGORY". `CrudMasterPage`
  * resolves it to a grid id at runtime (see lib/configured-grids), and uses it
@@ -81,8 +83,10 @@ const WIDGET_VISIBILITY_ENDPOINT = "/widget-masters/visibility";
 const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(WIDGET_FIELD_NAME_BY_FORM_FIELD);
 // Parent Category is a lazy, server-side searchable configured dropdown
 // (fixed.dropdown_details id 20 -> item_category_master active rows). Loaded on open + on
-// debounced server-side search via /dropdown-details/run; nothing is fetched up front
-// and dropdown_param is never sent.
+// debounced server-side search via /dropdown-details/run; nothing is fetched up front.
+// Editing a category sends `dropdown_param` {"iexclude_id": <this category>}: the list
+// then leaves out the category and everything under it — a pick there is a cycle the
+// server refuses only after Save (Qt 4ae6575). A create sends no param.
 const DROPDOWN_RUN_ENDPOINT = "/dropdown-details/run";
 /** The Dropdown Master row the parent picker reads — "ITEM CATEGORIES". */
 const PARENT_CATEGORY_DROPDOWN_KEY: ConfiguredDropdownKey = "itemCategory";
@@ -410,8 +414,8 @@ const PARENT_CATEGORY_LOOKUP_KEYS: OptionLookupKeys = {
   array: ["items", "data", "results", "rows", "list"],
 };
 // Build the run query. An empty search is omitted so the server returns the first page;
-// dropdown_param is never sent.
-function buildParentRunQuery(search: string): Record<string, string> {
+// dropdown_param carries the category being edited (none on a create).
+function buildParentRunQuery(search: string, excludeId: string): Record<string, string> {
   const query: Record<string, string> = {
     dropdown_id: getDropdownId(PARENT_CATEGORY_DROPDOWN_KEY),
     page: "1",
@@ -420,6 +424,10 @@ function buildParentRunQuery(search: string): Record<string, string> {
   const trimmed = search.trim();
   if (trimmed) {
     query.search = trimmed;
+  }
+  const param = dropdownParamsKey({ iexclude_id: excludeId });
+  if (param) {
+    query.dropdown_param = param;
   }
   return query;
 }
@@ -465,9 +473,24 @@ export default function ItemCategoryMasterPage() {
   // The parent the popup opened on (none for a create), for a draft's Discard.
   const openingParentOptionRef = useRef<ERPDynamicSelectOption | null>(null);
   const parentSearchTimeoutRef = useRef<number | null>(null);
+  // The category being edited, left out of its own parent list (with its
+  // subtree); "" on a create.
+  const excludeParentIdRef = useRef("");
   // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
   // can see soft-deleted categories. Lives beside the list search input.
   const [wantDelete, setWantDelete] = useState(false);
+  // Live view: Delete. Deleted view: the same button is Restore (`POST
+  // /item-categories/restore`), and Edit / View are refused. A refusal is titled for what
+  // was refused — "Cannot delete" / "Cannot restore", not "Cannot save".
+  const softDeleteProps = useSoftDeleteActions({
+    showingDeleted: wantDelete,
+    deleteEndpoint: API_ENDPOINTS.delete,
+    restoreEndpoint: "/item-categories/restore",
+    idParam: "category_id",
+    idKeys: LOOKUP_KEYS.id,
+    entityTitle: "Item category",
+    plainRefusals: true,
+  });
   // Field config comes from the database, so it is read on mount and again on
   // every data-refresh signal instead of only once per page load.
   const loadWidgetFieldConfig = useCallback(() => {
@@ -505,7 +528,9 @@ export default function ItemCategoryMasterPage() {
   const fetchParentOptions = useCallback(
     async (search: string) => {
       try {
-        const payload = await runParentDropdown({ query: buildParentRunQuery(search) });
+        const payload = await runParentDropdown({
+          query: buildParentRunQuery(search, excludeParentIdRef.current),
+        });
         if (payload === undefined) {
           return;
         }
@@ -825,6 +850,7 @@ export default function ItemCategoryMasterPage() {
   return (
     <>
     <CrudMasterPage
+      {...softDeleteProps}
       modalDraftKey="item-category"
       onModalDraftApplied={applyDraftParentSelection}
       title="Item Category"
@@ -870,6 +896,7 @@ export default function ItemCategoryMasterPage() {
         // Clear the lazy parent dropdown when the create modal opens so no stale
         // selection from a previously edited category lingers (it reloads on open).
         if (open && variantKey === "master-create") {
+          excludeParentIdRef.current = "";
           seedSelectedParent("", "");
         }
       }}
@@ -878,6 +905,7 @@ export default function ItemCategoryMasterPage() {
         const categoryParentId = toDisplayValue(
           getFirstDefinedValue(rowSource, CATEGORY_PARENT_ID_KEYS),
         );
+        excludeParentIdRef.current = toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.id));
         // Seed the lazy Parent Category dropdown with the saved selection so the trigger
         // shows the parent name on edit/view before the field is opened (and loaded).
         seedSelectedParent(

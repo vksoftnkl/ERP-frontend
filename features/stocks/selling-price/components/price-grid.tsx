@@ -2,11 +2,15 @@
 
 /**
  * The Change Selling Price grid: ui table 44's columns under the price-band
- * strip, one row per price-table row, the spare line last.
+ * strip, one row per price-table row, the spare line last. A level the
+ * company has not switched on has no columns and no band (`screenColumns`).
  *
  * Keys, as the Qt NexTable binds them on this grid (line keys ON):
- *   Enter / Shift+Enter  the layout's Enter chain (`grid-focus.ts`)
+ *   Enter / Shift+Enter  the PRICES only — one Net Rate per active level, then
+ *                        the next row (`grid-focus.ts`; Qt `setFocusStops`),
+ *                        so changing a price is: item, price, Enter
  *   ↑ / ↓                the same column one row up / down
+ *   Tab / Shift+Tab      the Price from field (and Tab there comes back)
  *   +                    the spare line's Barcode cell (scan there, or Item)
  *   −                    take the current row off the grid (Ctrl+− on a
  *                        markup cell, where a bare − is a negative markup)
@@ -38,7 +42,7 @@ import {
 } from "@/features/sales/quotation/quotation.constants";
 import { scaledWidth, totalColumnWidth } from "@/features/sales/quotation/quotation.utils";
 import qs from "@/features/sales/quotation/page.module.scss";
-import { priceBands, resolveSellingPriceColumns } from "../selling-price.columns";
+import { priceBands, resolveSellingPriceColumns, screenColumns } from "../selling-price.columns";
 import {
   SELLING_PRICE_GRID_NAME,
   SELLING_PRICE_UI_TABLE_KEY,
@@ -83,6 +87,7 @@ export function PriceGrid({ screen }: { screen: SellingPriceScreen }) {
     serverProblemKeys,
     saving,
     belowCostPolicy,
+    levelActive,
     branchCell,
     levelNames,
     spareBarcode,
@@ -95,6 +100,8 @@ export function PriceGrid({ screen }: { screen: SellingPriceScreen }) {
     goToSpareLine,
     removeCurrentRow,
     registerReveal,
+    focusPriceFrom,
+    focusGridIfLost,
   } = screen;
 
   // ------------------------------------------------------------- columns
@@ -112,9 +119,15 @@ export function PriceGrid({ screen }: { screen: SellingPriceScreen }) {
     savingWidths: resize.saving,
     onSaveWidths: resize.saveWidths,
   });
-  const visible = useMemo(() => resize.columns.filter((column) => column.visible), [resize.columns]);
+  const visible = useMemo(() => screenColumns(resize.columns, levelActive), [levelActive, resize.columns]);
   const bands = useMemo(() => priceBands(visible, levelNames), [levelNames, visible]);
   const tableWidth = totalColumnWidth(visible);
+
+  // The layout (or the levels) landing redraws the cells in a new order, and a
+  // moved input loses the focus: put the cursor back in the grid.
+  useEffect(() => {
+    focusGridIfLost();
+  }, [focusGridIfLost, visible]);
 
   // ------------------------------------------------------------- drawn widths
   // The table stretches past the configured widths to fill the shell, so the
@@ -211,6 +224,13 @@ export function PriceGrid({ screen }: { screen: SellingPriceScreen }) {
     const rowKey = target.getAttribute(GRID_ROW_ATTR);
     const field = target.getAttribute(GRID_FIELD_ATTR);
     if (!rowKey || !field || !(target instanceof HTMLInputElement)) {
+      return;
+    }
+    if (event.key === "Tab" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      // Not cell to cell (Enter and the arrows walk the cells): the grid and
+      // Price from are the screen's two stops, and no button takes the focus.
+      event.preventDefault();
+      focusPriceFrom();
       return;
     }
     if (event.key === "Enter" && !event.ctrlKey && !event.metaKey && !event.altKey) {
@@ -323,6 +343,7 @@ export function PriceGrid({ screen }: { screen: SellingPriceScreen }) {
                   problem={serverProblemKeys.has(row.key)}
                   saving={saving}
                   belowCostPolicy={belowCostPolicy}
+                  levelActive={levelActive}
                   branchText={branchCell(row)}
                   onFocus={onCellFocus}
                   onCommit={onCellCommit}

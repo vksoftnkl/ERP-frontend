@@ -31,6 +31,31 @@ export type LinkedRecordColumn = {
   min?: number | string;
   step?: number | string;
   width?: string;
+  /** The name Table Settings lists the column by, when the heading alone is ambiguous. */
+  settingsLabel?: string;
+  /** A number cell that takes a leading "-" (a Profit % below cost). */
+  allowNegative?: boolean;
+  /**
+   * Why this cell cannot be typed in ("" = it can): the cell turns read-only,
+   * reads as fixed, and the reason is its tooltip.
+   */
+  lockReasonResolver?: (params: LinkedRecordColumnOptionsResolverParams) => string;
+  /** A small ↑ / ↓ beside the figure (moved since the record was opened). */
+  cellMarkResolver?: (
+    params: LinkedRecordColumnOptionsResolverParams,
+  ) => LinkedRecordCellMark | null;
+};
+export type LinkedRecordCellMark = {
+  direction: "up" | "down";
+  title?: string;
+};
+export type LinkedRecordHeaderBand = {
+  key: string;
+  /** The columns the band names; it spans the run of them that is visible side by side. */
+  columnKeys: string[];
+  text: string;
+  fg: string;
+  bg: string;
 };
 export type LinkedRecordCellElement =
   | HTMLButtonElement
@@ -150,6 +175,9 @@ export function resolveColumnReadOnly(
   if (column.readOnly === true) {
     return true;
   }
+  if (resolveColumnLockReason(column, row, rowIndex, rows)) {
+    return true;
+  }
   return column.readOnlyResolver
     ? column.readOnlyResolver({
         column,
@@ -158,6 +186,37 @@ export function resolveColumnReadOnly(
         rows,
       })
     : false;
+}
+export function resolveColumnLockReason(
+  column: LinkedRecordColumn,
+  row: LinkedRecordRow,
+  rowIndex: number,
+  rows: LinkedRecordRow[],
+): string {
+  return column.lockReasonResolver?.({ column, row, rowIndex, rows }) ?? "";
+}
+/**
+ * The header's band row: one cell per run of adjacent visible columns that
+ * belong to the same band, and one blank cell per run that belongs to none.
+ * null when no visible column is under a band (the row is then not drawn).
+ */
+export function buildLinkedRecordBandCells(
+  visibleColumnKeys: readonly string[],
+  bands: readonly LinkedRecordHeaderBand[],
+): Array<{ key: string; span: number; band: LinkedRecordHeaderBand | null }> | null {
+  const cells: Array<{ key: string; span: number; band: LinkedRecordHeaderBand | null }> = [];
+  let anyBand = false;
+  for (const columnKey of visibleColumnKeys) {
+    const band = bands.find((candidate) => candidate.columnKeys.includes(columnKey)) ?? null;
+    anyBand ||= band !== null;
+    const last = cells[cells.length - 1];
+    if (last && last.band === band) {
+      last.span += 1;
+      continue;
+    }
+    cells.push({ key: `${band?.key ?? "gap"}:${cells.length}`, span: 1, band });
+  }
+  return anyBand ? cells : null;
 }
 export function parseLinkedRecordRowsResult(
   value: string,

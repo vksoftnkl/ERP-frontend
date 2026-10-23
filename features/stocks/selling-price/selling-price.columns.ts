@@ -31,6 +31,7 @@ import {
   COLUMN_SLOT,
   LEVEL_BAND_COLOURS,
   LEVEL_LETTERS,
+  isPriceKey,
   levelOfColumn,
   type ColumnKey,
 } from "./selling-price.constants";
@@ -193,6 +194,30 @@ export function resolveSellingPriceColumns(
   return resolved;
 }
 
+/**
+ * What the screen draws of the layout (Qt `applyLevelVisibility` and
+ * `setFocusStops`): the shown columns, less a level the company has not
+ * switched on — its Mkup% / Base Rate / Net Rate, and so its band — and Enter
+ * stops on the PRICES only, one Net Rate per active level, whatever the layout
+ * flags ("they only want to change the price but have to go through the whole
+ * row"). Mkup%, Base Rate and Min stay editable by click and the arrows.
+ */
+export function screenColumns(
+  columns: readonly SellingPriceColumn[],
+  levelActive: readonly boolean[],
+): SellingPriceColumn[] {
+  const out: SellingPriceColumn[] = [];
+  for (const column of columns) {
+    const level = levelOfColumn(column.key);
+    if (!column.visible || (level >= 0 && levelActive[level] === false)) {
+      continue;
+    }
+    const focus = isPriceKey(column.key);
+    out.push(column.focus === focus ? column : { ...column, focus });
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------- band header
 export type PriceBand = {
   key: string;
@@ -206,9 +231,11 @@ export type PriceBand = {
 const LEAD_TEXT = "one row = one row of the item price table";
 
 /**
- * The strip above the header that names the four price levels over their
- * columns (Qt `PriceBandHeader`): one band per run of a level's markup / base
- * rate / price columns, a grey one over Min, and the lead band over the rest.
+ * The strip above the header that names the price levels over their columns
+ * (Qt `NexHeaderBands`, shared with the item card's Pricing grid): one band per
+ * run of a level's markup / base rate / price columns, a grey one over Min,
+ * and the lead band over the rest. A level that is off has no columns drawn
+ * (`screenColumns`), so it has no band.
  */
 export function priceBands(
   visible: readonly SellingPriceColumn[],

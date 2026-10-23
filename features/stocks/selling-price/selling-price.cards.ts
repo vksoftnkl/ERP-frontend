@@ -1,10 +1,17 @@
 /**
  * The words around the grid — the Qt screen's `refreshTitle`,
- * `refreshRowCard` and `refreshFourCard`, as pure text builders.
+ * `refreshRowCard` and `refreshProfitLine`, as pure text builders.
  */
-import { formatCurrency } from "@/domain/pricing";
-import { levelNumbers } from "./selling-price.math";
-import { gridCounts, isChanged, isNewRow, srcOfRow, type PriceGridRow } from "./selling-price.state";
+import { LEVEL_COUNT } from "./selling-price.constants";
+import { exclusiveOfTax } from "./selling-price.math";
+import {
+  gridCounts,
+  isChanged,
+  isLevelOn,
+  isNewRow,
+  srcOfRow,
+  type PriceGridRow,
+} from "./selling-price.state";
 import { money } from "./selling-price.validate";
 import type { PriceScope } from "./selling-price.types";
 
@@ -124,51 +131,98 @@ export function rowCard(row: PriceGridRow | null, index: number, scope: PriceSco
   return { tone, title, note };
 }
 
-// ---------------------------------------------------------------- the four card
-export type FourCard = {
-  enabled: boolean;
-  which: string;
-  markup: string;
-  wot: string;
-  price: string;
-  margin: string;
-  cess: boolean;
+// ---------------------------------------------------------------- the profit line
+/** One level on the profit line: "WS ₹10.00 (10.0%) ↑". */
+export type ProfitPart = {
+  /** The level's short code (WS, RET … — A..D until the names arrive). */
+  level: string;
+  /** "₹10.00", "-₹2.50" for a loss. */
+  amount: string;
+  /** On the cost before tax, one place: "10.0". */
+  pct: string;
+  loss: boolean;
+  /** Moved since the row was loaded: the profit rose / fell. */
+  moved: "up" | "down" | null;
 };
 
-/** One level of the current row as its four numbers. */
-export function fourCard(
-  row: PriceGridRow | null,
-  index: number,
-  level: number,
-  levelNames: readonly string[],
-  saving: boolean,
-): FourCard {
-  if (!row || !row.itemId) {
-    return {
-      enabled: false,
-      which: "move onto a row to see its numbers",
-      markup: "",
-      wot: "",
-      price: "",
-      margin: "",
-      cess: false,
+export type ProfitLine =
+  /** A sentence instead of figures: no row, no cost, no price. */
+  | { kind: "note"; text: string }
+  | {
+      kind: "line";
+      unit: string;
+      parts: ProfitPart[];
+      /** A per-unit cess is not a percentage of the price: the figures are close, not exact. */
+      cess: boolean;
+      /** One line per level, with the old profit where it moved. */
+      tooltip: string;
     };
+
+/**
+ * What the current row's prices EARN without tax, under the grid — the item
+ * card's Pricing line, which replaced the four-number card (Qt
+ * `refreshProfitLine`, 2026-10-22): each switched-on level's price before tax
+ * less the cost before tax, % on that cost; ↑ / ↓ = moved since the row was
+ * loaded (the old figure is in the tooltip).
+ */
+export function profitLine(
+  row: PriceGridRow | null,
+  levelActive: readonly boolean[],
+  levelShorts: readonly string[],
+  levelNames: readonly string[],
+): ProfitLine {
+  if (!row || !row.itemId) {
+    return { kind: "note", text: "Profit shows here for the row you are on." };
   }
-  const price = row.prices[level] ?? 0;
-  const numbers = levelNumbers(price, row.cost, row.taxPerc);
-  return {
-    enabled: !saving,
-    which: `${levelNames[level] ?? ""} · row ${index + 1} · ${row.itemName} · tax ${formatCurrency(
-      row.taxPerc,
-      2,
-      true,
-    )}%`,
-    markup: numbers.markup.toFixed(1),
-    wot: numbers.wot.toFixed(2),
-    price: numbers.price.toFixed(2),
-    margin: numbers.margin.toFixed(1),
-    cess: row.hasCess,
-  };
+  const costWot = row.costWot;
+  if (costWot <= 0) {
+    return { kind: "note", text: "No cost on this row, so no profit to show." };
+  }
+  const parts: ProfitPart[] = [];
+  const tips: string[] = [];
+  for (let level = 0; level < LEVEL_COUNT; level += 1) {
+    const price = row.prices[level];
+    if (!isLevelOn(levelActive, level) || price <= 0) {
+      continue;
+    }
+    const profit = exclusiveOfTax(price, row.taxPerc) - costWot;
+    const was = exclusiveOfTax(row.base[level], row.taxPerc) - costWot;
+    const amount = `${profit < 0 ? "-₹" : "₹"}${Math.abs(profit).toFixed(2)}`;
+    const pct = ((profit / costWot) * 100).toFixed(1);
+    const moved = Math.abs(profit - was) >= 0.005 ? (profit > was ? "up" : "down") : null;
+    parts.push({
+      level: levelShorts[level] || String.fromCharCode(65 + level),
+      amount,
+      pct,
+      loss: profit < 0,
+      moved,
+    });
+    tips.push(
+      `${levelNames[level] ?? ""}: price ₹${price.toFixed(2)}, profit ${amount} (${pct}%)` +
+        (moved ? `, was ₹${was.toFixed(2)}` : ""),
+    );
+  }
+  if (parts.length === 0) {
+    return { kind: "note", text: "No price yet." };
+  }
+  return { kind: "line", unit: row.unitName, parts, cess: row.hasCess, tooltip: tips.join("\n") };
+}
+
+/** The line as plain text: "Profit per PCS (no tax):  WS ₹10.00 (10.0%) ↑  ·  RET ₹12.00 (12.0%)". */
+export function profitLineText(line: ProfitLine): string {
+  if (line.kind === "note") {
+    return line.text;
+  }
+  const parts = line.parts.map(
+    (part) =>
+      `${part.level} ${part.amount} (${part.pct}%)${
+        part.moved === "up" ? " ↑" : part.moved === "down" ? " ↓" : ""
+      }`,
+  );
+  return (
+    `Profit per ${line.unit} (no tax):  ${parts.join("  ·  ")}` +
+    (line.cess ? "   (approximate — this item carries a cess)" : "")
+  );
 }
 
 // ---------------------------------------------------------------- the band header

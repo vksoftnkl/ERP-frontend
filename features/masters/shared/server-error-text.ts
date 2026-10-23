@@ -53,3 +53,21 @@ export function describeServerError(error: unknown, fallback: string): string {
   }
   return text(error) || fallback;
 }
+
+/**
+ * A thrown request in the `{ status, data }` shape `toast.apiError` reads (RTK
+ * Query's). `useApi` throws the raw axios error, whose body sits under
+ * `response`; anything without a response (a network failure, a plain throw)
+ * passes through untouched.
+ */
+export function toApiErrorShape(error: unknown): unknown {
+  if (!isRecord(error) || !isRecord(error.response)) {
+    return error;
+  }
+  const { status, data } = error.response;
+  return {
+    status: typeof status === "number" ? status : undefined,
+    data,
+    message: text(error.message),
+  };
+}

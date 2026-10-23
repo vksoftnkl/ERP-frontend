@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { createEmptyLedgerRow, extractLedgerRows, roleAllowsSupplyNature } from "./lines";
 import type { TaxRateLedgerRow } from "./types";
-import { getLedgerRowsValidationError } from "./validate";
+import {
+  getLedgerRowsValidationError,
+  getSupersedesValidationError,
+  SELF_SUPERSEDE_MESSAGE,
+} from "./validate";
 
 function row(overrides: Partial<TaxRateLedgerRow> = {}): TaxRateLedgerRow {
   return {
@@ -143,5 +147,18 @@ describe("extractLedgerRows", () => {
       ],
     });
     expect(rows[0].rowKey).not.toBe(rows[1].rowKey);
+  });
+});
+
+describe("getSupersedesValidationError", () => {
+  it("refuses the rate being edited as the one it supersedes", () => {
+    expect(getSupersedesValidationError("tax-7", "tax-7")).toBe(SELF_SUPERSEDE_MESSAGE);
+    expect(getSupersedesValidationError(" tax-7 ", "tax-7")).toBe(SELF_SUPERSEDE_MESSAGE);
+  });
+
+  it("accepts another rate, none, and anything on a create", () => {
+    expect(getSupersedesValidationError("tax-3", "tax-7")).toBeNull();
+    expect(getSupersedesValidationError("", "tax-7")).toBeNull();
+    expect(getSupersedesValidationError("tax-7", null)).toBeNull();
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
+import { useSoftDeleteActions } from "@/features/masters/shared/use-soft-delete-actions";
 import WidgetVisibilityTree, {
   type WidgetTreeSectionView,
 } from "@/features/masters/shared/widget-visibility-tree";
@@ -17,13 +18,18 @@ import { useApi } from "@/hooks/useApi";
 import {
   ERPDynamicModalForm,
   type ERPDynamicModalController,
+  type ERPDynamicModalDraftAppliedPayload,
   type ERPDynamicModalField,
   type ERPDynamicModalVariant,
   type ERPDynamicSelectOption,
 } from "@/components/design-system/ui/dynamic-modal-form";
 import styles from "@/app/master/state-master/page.module.scss";
-import { extractRows } from "@/features/masters/shared/normalizers";
 import { getFirstDefinedValue, toDisplayValue } from "@/features/masters/shared/value-mappers";
+import {
+  useLazyConfiguredDropdown,
+  type LazyDropdownHandlers,
+  type UseLazyConfiguredDropdownOptions,
+} from "@/features/masters/shared/use-lazy-configured-dropdown";
 import { useDataRefresh } from "@/lib/data-freshness";
 const API_ENDPOINTS = {
  list: "/configured-grid-sql/run?grid_id=10",
@@ -63,10 +69,18 @@ const WIDGET_VISIBILITY_ENDPOINT = "/widget-masters/visibility";
 // Backend fieldNames (lowercased) that map to a real form field, so their popup
 // checkbox can actually show/hide something. Others are left out of the popup.
 const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(WIDGET_FIELD_NAME_BY_FORM_FIELD);
-const SECTION_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
-const SECTION_LOOKUP_QUERY = {
-  module: "itemSections",
-} as const;
+// Parent Section is the lazy, server-side searchable configured dropdown "ITEM
+// SECTIONS" (sec_id, sec_name … from item_section_master live rows), loaded on open
+// and on debounced typing. Editing a section sends `dropdown_param`
+// {"iexclude_id": <this section>}: the list then leaves out the section and
+// everything under it — a pick there is a cycle the server refuses only after Save
+// (Qt 4ae6575). A create sends no param.
+const PARENT_SECTION_DROPDOWN = {
+  dropdownKey: "itemSection",
+  idKeys: ["sec_id", "secId"],
+  labelKeys: ["sec_name", "secName"],
+  defaultOption: { value: "", label: "None" },
+} as const satisfies UseLazyConfiguredDropdownOptions;
 const LOOKUP_KEYS = {
   id: [
     "sec_id",
@@ -160,6 +174,12 @@ const SECTION_PARENT_ID_KEYS = [
   "parent_id",
   "parentId",
 ] as const;
+const SECTION_PARENT_NAME_KEYS = [
+  "sec_parent_name",
+  "section_parent_name",
+  "parent_name",
+  "parentName",
+] as const;
 const SECTION_LEVEL_KEYS = ["sec_level", "section_level", "level"] as const;
 const SECTION_COLOR_CODE_KEYS = [
   "sec_color_code",
@@ -194,7 +214,10 @@ const SECTION_INITIAL_FORM_VALUES = {
   secPhotoUrl: "",
   masterDescription: "",
 } as const;
-function buildSectionFormFields(sectionOptions: ERPDynamicSelectOption[]): ERPDynamicModalField[] {
+function buildSectionFormFields(
+  sectionOptions: ERPDynamicSelectOption[],
+  lazyParent: LazyDropdownHandlers,
+): ERPDynamicModalField[] {
   return [
     {
       name: "masterName",
@@ -233,7 +256,11 @@ function buildSectionFormFields(sectionOptions: ERPDynamicSelectOption[]): ERPDy
       type: "select",
       colSpan:2,
       searchable: true,
+      serverSearch: true,
       options: sectionOptions,
+      onSearchOpenChange: lazyParent.onSearchOpenChange,
+      onSearchQueryChange: lazyParent.onSearchQueryChange,
+      onValueChange: lazyParent.onValueChange,
     },
     
     {
@@ -285,65 +312,52 @@ function getBase64FromDataUrl(dataUrl: string): string {
   const commaIndex = dataUrl.indexOf(",");
   return commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
 }
-function buildSectionOptions(payload: unknown): ERPDynamicSelectOption[] {
-  const optionMap = new Map<string, string>();
-  const rows = extractRows(payload, LOOKUP_KEYS.array);
-  for (const row of rows) {
-    if (!row || typeof row !== "object" || Array.isArray(row)) {
-      continue;
-    }
-    const source = row as Record<string, unknown>;
-    const id = toDisplayValue(getFirstDefinedValue(source, LOOKUP_KEYS.id));
-    if (!id) {
-      continue;
-    }
-    const name = toDisplayValue(getFirstDefinedValue(source, LOOKUP_KEYS.name));
-    const label = name || id;
-    if (!optionMap.has(id)) {
-      optionMap.set(id, label);
-    }
-  }
-  return Array.from(optionMap.entries())
-    .map(([value, label]) => ({ value, label }))
-    .sort((left, right) => left.label.localeCompare(right.label));
-}
 export default function ItemSectionMasterPage() {
-  const { getAll: getSectionOptions } = useApi<unknown>(SECTION_LOOKUP_ENDPOINT);
+  // The section being edited, left out of its own parent list (with its subtree);
+  // "" on a create.
+  const [excludeParentId, setExcludeParentId] = useState("");
+  const parentSection = useLazyConfiguredDropdown({
+    ...PARENT_SECTION_DROPDOWN,
+    params: { iexclude_id: excludeParentId },
+  });
+  const seedParentSection = parentSection.seedSelected;
+  // The <id, name> Parent Section was seeded with as the popup opened, so a
+  // draft's Discard can name the record's own parent again.
+  const openingParentRef = useRef({ id: "", name: "" });
+  // A restored draft (or its Discard) sets Parent Section without the user
+  // picking it: re-seed it so it shows a name — the record's own for the value
+  // the popup opened on, else the one the draft saved beside its choice.
+  const applyDraftParentSelection = useCallback(
+    ({ values, labels }: ERPDynamicModalDraftAppliedPayload) => {
+      const id = (values.secParentId ?? "").trim();
+      const opening = openingParentRef.current;
+      const openingName = id && id === opening.id ? opening.name : "";
+      seedParentSection(id, id ? openingName || labels.secParentId?.[id] || "" : "");
+    },
+    [seedParentSection],
+  );
   // Silent progressive enhancement: a failed config fetch leaves the form on its
   // hardcoded labels/order (empty map), so don't nag the user with an error toast.
   const { getAll: getWidgetConfig } = useApi<WidgetMastersResponse>(WIDGET_CONFIG_ENDPOINT, {
     toast: { error: false },
   });
-  const [sectionOptions, setSectionOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [widgetFieldConfig, setWidgetFieldConfig] = useState<Map<string, ResolvedFieldConfig>>(
     () => new Map(),
   );
   // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
   // can see soft-deleted item sections. Lives beside the list search input.
   const [wantDelete, setWantDelete] = useState(false);
-  // Lookup options come from master tables that other users and other screens
-  // change, so they are re-read on every data-refresh signal, not just on mount.
-  const loadSectionOptions = useCallback(() => {
-    let mounted = true;
-    void (async () => {
-      try {
-        const payload = await getSectionOptions(SECTION_LOOKUP_QUERY);
-        if (mounted) {
-          setSectionOptions(buildSectionOptions(payload));
-        }
-      } catch {
-        if (mounted) {
-          setSectionOptions([]);
-        }
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [getSectionOptions]);
-  useEffect(() => loadSectionOptions(), [loadSectionOptions]);
-  useDataRefresh(() => {
-    loadSectionOptions();
+  // Live view: Delete. Deleted view: the same button is Restore (`POST
+  // /item-sections/restore`), and Edit / View are refused. A refusal is titled for what
+  // was refused — "Cannot delete" / "Cannot restore", not "Cannot save".
+  const softDeleteProps = useSoftDeleteActions({
+    showingDeleted: wantDelete,
+    deleteEndpoint: API_ENDPOINTS.delete,
+    restoreEndpoint: "/item-sections/restore",
+    idParam: "sec_id",
+    idKeys: LOOKUP_KEYS.id,
+    entityTitle: "Item section",
+    plainRefusals: true,
   });
   // Field config comes from the database, so it is read on mount and again on
   // every data-refresh signal instead of only once per page load.
@@ -376,11 +390,11 @@ export default function ItemSectionMasterPage() {
   const sectionFormFields = useMemo(
     () =>
       applyWidgetFieldConfig(
-        buildSectionFormFields(sectionOptions),
+        buildSectionFormFields(parentSection.options, parentSection.handlers),
         widgetFieldConfig,
         WIDGET_FIELD_NAME_BY_FORM_FIELD,
       ),
-    [sectionOptions, widgetFieldConfig],
+    [parentSection.options, parentSection.handlers, widgetFieldConfig],
   );
   // Adds the `grid_param` payload to the default page/limit/search list query.
   // The server JSON-parses it and binds each key into the matching named token in
@@ -600,7 +614,9 @@ export default function ItemSectionMasterPage() {
   return (
     <>
     <CrudMasterPage
+      {...softDeleteProps}
       modalDraftKey="item-section"
+      onModalDraftApplied={applyDraftParentSelection}
       title="Item Section"
       iconName="item_section_master_entry"
       auditHistory={{ screenName: "Item Section Master" }}
@@ -641,8 +657,23 @@ export default function ItemSectionMasterPage() {
       modalPanelStyle={{ width: "min(52rem, calc(100vw - 2rem))", maxHeight: "min(82vh, 42rem)" }}
       customFields={sectionFormFields}
       createInitialValues={SECTION_INITIAL_FORM_VALUES}
+      onModalOpenChange={(open, variantKey) => {
+        // A create: no record to leave out, no saved parent to show.
+        if (open && variantKey === "master-create") {
+          setExcludeParentId("");
+          seedParentSection("", "");
+          openingParentRef.current = { id: "", name: "" };
+        }
+      }}
       mapFormValues={({ source, defaults }) => {
         const rowSource = source ?? {};
+        const secParentId = toDisplayValue(getFirstDefinedValue(rowSource, SECTION_PARENT_ID_KEYS));
+        const secParentName = toDisplayValue(getFirstDefinedValue(rowSource, SECTION_PARENT_NAME_KEYS));
+        setExcludeParentId(toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.id)));
+        openingParentRef.current = { id: secParentId, name: secParentName };
+        // Seed the lazy dropdown so the trigger shows the saved parent's name on
+        // edit/view, before the list is opened and fetched.
+        seedParentSection(secParentId, secParentName);
         return {
           ...SECTION_INITIAL_FORM_VALUES,
           masterName:
@@ -658,7 +689,7 @@ export default function ItemSectionMasterPage() {
           position:
             toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.position)) ||
             defaults.position,
-          secParentId: toDisplayValue(getFirstDefinedValue(rowSource, SECTION_PARENT_ID_KEYS)),
+          secParentId,
           secLevel: toDisplayValue(getFirstDefinedValue(rowSource, SECTION_LEVEL_KEYS)) || "0",
           secColorCode: toDisplayValue(getFirstDefinedValue(rowSource, SECTION_COLOR_CODE_KEYS)),
           secIcon: toDisplayValue(getFirstDefinedValue(rowSource, SECTION_ICON_KEYS)),

@@ -1,0 +1,39 @@
+/* The Pricing grid and the one line under it (item-price-grid.tsx). */
+.priceGrid {
+  display: grid;
+  /* The line is clipped, never allowed to widen the card (the tooltip has it all). */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.35rem;
+  min-width: 0;
+}
+.profitLine {
+  margin: 0;
+  min-width: 0;
+  padding: 0.2rem 0.4rem;
+  overflow: hidden;
+  color: #334155;
+  font-size: 0.76rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.profitHeading {
+  margin-right: 0.55rem;
+  font-weight: 600;
+}
+.profitSeparator {
+  margin: 0 0.5rem;
+  color: #94a3b8;
+}
+/* The theme's rate.above / rate.below defaults: the direction of the money. */
+.profitGain {
+  color: #2e7d32;
+  font-weight: 600;
+}
+.profitLoss {
+  color: #c62828;
+  font-weight: 600;
+}
+.profitHint {
+  color: #64748b;
+}

@@ -2,7 +2,7 @@
  * Change Selling Price — the screen's skin. Buttons, inputs, modals and the
  * picker list wear the quotation's stylesheet (imported by the components
  * that use those classes); this file carries the grid, its band header and
- * chips, the three cards and the strips.
+ * chips, the profit line, the two cards and the strips.
  *
  * Lengths are `u(n)` off `--erp-q-u`, the transaction screens' fluid unit
  * (declared on :root by the quotation stylesheet), with a fixed fallback.
@@ -111,6 +111,22 @@
 .scopeNote {
   color: var(--text-muted, #666666);
   font-size: u(0.68);
+}
+/* Price from (notes 140 A), at the row's right end. */
+.priceFrom {
+  display: inline-flex;
+  align-items: center;
+  gap: u(0.45);
+  margin-left: auto;
+}
+.priceFromField {
+  display: inline-block;
+  width: u(7.6);
+}
+.priceFromNote {
+  color: #b45309;
+  font-size: u(0.68);
+  font-weight: 600;
 }
 
 /* ---------------------------------------------------------------- filter strip */
@@ -266,7 +282,7 @@
   color: #6d28d9;
 }
 
-/* The price cell: delta chip at the left edge, the figure at the right. */
+/* The price cell: the ↑ / ↓ mark at the left edge, the figure at the right. */
 .numCell {
   position: relative;
 }
@@ -275,8 +291,8 @@
   top: 50%;
   left: u(0.3);
   transform: translateY(-50%);
-  font-size: u(0.6);
-  font-weight: 600;
+  font-size: u(0.74);
+  font-weight: 700;
   pointer-events: none;
 }
 .deltaUp {
@@ -387,11 +403,33 @@
   color: var(--text-muted, #666666);
   font-size: u(0.72);
 }
+/* Under the grid: what the current row's prices earn before tax. */
+.profitLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: u(0.2) u(0.5);
+  min-height: u(1.2);
+  padding: u(0.1) u(0.45);
+  color: var(--text-main, #333333);
+  font-size: u(0.74);
+}
+.profitCaption {
+  color: var(--text-muted, #666666);
+  font-weight: 600;
+}
+.profitDot {
+  color: var(--text-soft, #aaaaaa);
+}
+.profitCess {
+  color: #b45309;
+  font-size: u(0.68);
+}
 
 /* ---------------------------------------------------------------- cards */
 .cards {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: u(0.9);
 }
 .card {
@@ -422,60 +460,6 @@
   justify-self: start;
   min-width: u(5.2);
   text-align: center;
-}
-
-.fourCard {
-  border-color: #ddd6fe;
-  background: #f5f3ff;
-}
-.fourCard .cardTitle {
-  color: #6d28d9;
-}
-.fourWhich {
-  color: #4c1d95;
-  font-size: u(0.7);
-  font-weight: 600;
-}
-.fourGrid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: u(0.15) u(0.25);
-  align-items: center;
-}
-.fourCap {
-  color: #6d28d9;
-  font-size: u(0.62);
-  font-weight: 600;
-}
-.fourArrow {
-  color: #8b5cf6;
-  text-align: center;
-}
-.fourInput {
-  width: 100%;
-  max-width: u(6.5);
-  padding: u(0.15) u(0.3);
-  border: 1px solid #c4b5fd;
-  border-radius: var(--erp-radius, 4px);
-  background: #ffffff;
-  font: inherit;
-  font-size: u(0.74);
-  text-align: right;
-}
-.fourInput:disabled {
-  background: #f3f4f6;
-  color: #9ca3af;
-}
-.fourNote {
-  color: #5b21b6;
-  font-size: u(0.64);
-  line-height: 1.4;
-}
-.cessNote {
-  color: #b45309;
-  font-size: u(0.66);
-  font-weight: 600;
-  line-height: 1.4;
 }
 
 .rowCardNew {

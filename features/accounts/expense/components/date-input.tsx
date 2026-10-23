@@ -15,6 +15,7 @@
 import { useState } from "react";
 import { cx } from "@/components/design-system/cx";
 import { fromDisplayDate, toDisplayDate } from "@/features/sales/quotation/quotation.utils";
+import { dateStepOf, stepIsoDate } from "@/lib/date-step";
 import styles from "../expense.module.scss";
 
 export type DateInputProps = {
@@ -66,6 +67,17 @@ export function DateInput({ value, disabled, title, fieldProps, onChange, ...res
           if (iso) onChange(iso);
         }}
         onBlur={(event) => commit(event.target.value)}
+        onKeyDown={(event) => {
+          // ↑ / ↓: the next / previous day, from today when the box is empty
+          // (Qt NexDateEdit). The operator's edit, so it goes out as a change.
+          const step = dateStepOf(event);
+          if (step !== 0) {
+            event.preventDefault();
+            const next = stepIsoDate(fromDisplayDate(event.currentTarget.value), step);
+            setText(toDisplayDate(next));
+            onChange(next);
+          }
+        }}
       />
       <span className={styles.dateDrop} aria-hidden="true">
         <svg viewBox="0 0 10 6" className={styles.dateDropIcon}>

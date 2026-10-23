@@ -114,6 +114,13 @@ export type SaveSellingPriceBulkPayload = {
   branchId: string;
   scope: PriceScope;
   confirmed: boolean;
+  /**
+   * Notes 140 A — the day the new prices start, `YYYY-MM-DD`. Absent (or
+   * today): today's row is updated, as always. A later day leaves today's
+   * price alone and SCHEDULES the new one; before today is a 400
+   * STOCK_PRICE_FROM_IN_PAST, more than a year ahead STOCK_PRICE_FROM_TOO_FAR.
+   */
+  effectiveFrom?: string;
   rows: SaveSellingPriceRow[];
 };
 
@@ -141,8 +148,24 @@ export type SellingPriceNoStockRow = {
 };
 
 /** `POST /stock/price-bulk` — data. */
+/** Notes 140 A — one row a save wrote, and the period it prices. */
+export type SellingPriceSavedRow = {
+  lineNo: number;
+  /** The item_price_master row written (for a split, the NEW row). */
+  bucketId: string;
+  /** True when the row starts after today: scheduled, not yet on the shelf. */
+  scheduled: boolean;
+  /** `YYYY-MM-DD`. */
+  effectiveFrom: string;
+  effectiveTo: string;
+};
+
 export type SellingPriceSaveResult = {
   saved: number;
+  /** Notes 140 A — the day the saved prices start (`YYYY-MM-DD`): the body's, else today. */
+  effectiveFrom: string;
+  /** Notes 140 A — per row written, in the order sent; empty on `needsConfirm`. */
+  rows: SellingPriceSavedRow[];
   /** Always 0 since the one price table; kept by the server for one release. */
   masterRowsSaved: number;
   noStock: SellingPriceNoStockRow[];
@@ -152,11 +175,47 @@ export type SellingPriceSaveResult = {
   belowCostPolicy: BelowCostPolicy | string;
 };
 
-/** `GET /price-level-masters/get` — one level (only the names matter here). */
+/** `GET /price-level-masters/get` — one level: its names, and whether it is on. */
 export type PriceLevelMasterRow = {
   priceLvlId: number;
   priceLvlName: string | null;
   priceLvlShort: string | null;
+  /**
+   * A level the company has not switched on is not shown — not as a column,
+   * not as a band, not in the scheduled list (Qt `m_levelActive`). Missing on
+   * the wire reads as on.
+   */
+  priceLvlIsActive: boolean;
+};
+
+/** Notes 140 B — the prices a scheduled row replaces: the row before it, else what the shelf showed. */
+export type SellingPriceSchedulePrevious = {
+  /** The ipm_id that priced the bucket the day before; null when nothing did. */
+  bucketId: string | null;
+  priceScope: PriceScope | string | null;
+  levels: SellingPriceLevelValue[];
+};
+
+/**
+ * Notes 140 B — `GET /stock/price-schedule`: one price saved to start after
+ * today. A grid row (its `bucketId` is the scheduled ipm_id), its period, and
+ * what it replaces — so a list can say "110 → 118 from 23-10".
+ */
+export type SellingPriceScheduleRow = SellingPriceRow & {
+  /** `YYYY-MM-DD`, after today. */
+  effectiveFrom: string;
+  effectiveTo: string;
+  previous: SellingPriceSchedulePrevious | null;
+};
+
+/** Notes 140 B — `POST /stock/price-schedule/cancel`: what a cancel did. */
+export type SellingPriceScheduleCancelResult = {
+  /** The scheduled row, now deleted. */
+  bucketId: string;
+  /** The row before it, which now runs to the cancelled row's end; null when there was none. */
+  restoredId: string | null;
+  /** `YYYY-MM-DD` — the restored row's new end, null with no restored row. */
+  restoredTo: string | null;
 };
 
 /** `GET /branch-masters/get?brId=` — the two names the screen shows. */
