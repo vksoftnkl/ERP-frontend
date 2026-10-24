@@ -4,6 +4,7 @@ import {
   OPENING_STOCK_COLUMNS,
   isCellEditable,
   isCellGreyed,
+  isEnterStop,
   resolveOpeningStockColumns,
 } from "./opening-stock.columns";
 import { OS_COLUMN_COUNT, OS_COL } from "./opening-stock.constants";
@@ -115,5 +116,40 @@ describe("which cells open", () => {
     expect(isCellEditable(column(OS_COL.TrackedBy), tracked, true)).toBe(false);
     expect(isCellEditable(column(OS_COL.CostPerUnit), tracked, true)).toBe(true);
     expect(isCellEditable(column(OS_COL.Bucket), tracked, true)).toBe(true);
+  });
+});
+
+describe("where Enter stops — Qt setFocusCellFilter, per row", () => {
+  const stopsOf = (line: ReturnType<typeof blankLine>) =>
+    OPENING_STOCK_COLUMNS.filter((meaning) => isEnterStop(meaning, line)).map((meaning) => meaning.key);
+
+  it("stops a blank row at Barcode, then Item", () => {
+    expect(stopsOf(blankLine())).toEqual(["barcode", "itemName"]);
+  });
+
+  it("stops a row with an item at Qty, the cells its item is tracked by, then Cost / Unit", () => {
+    const untracked = { ...blankLine(), itemId: "i", trackSignature: "N" };
+    expect(stopsOf(untracked)).toEqual(["qty", "costPerUnit"]);
+    const tracked = { ...blankLine(), itemId: "i", trackSignature: "BEMSRP" };
+    expect(stopsOf(tracked)).toEqual([
+      "qty",
+      "batchNo",
+      "mfgDate",
+      "expiryDate",
+      "mrp",
+      "salePrice",
+      "serialNo",
+      "costPerUnit",
+      "supplierName",
+    ]);
+    // Never a greyed cell: an item tracked by batch alone skips expiry and MRP.
+    expect(stopsOf({ ...blankLine(), itemId: "i", trackSignature: "B" })).toEqual(["qty", "batchNo", "costPerUnit"]);
+  });
+
+  it("is never a cell the row is not keyed through (Free, Tax, Bucket stay click-only)", () => {
+    const line = { ...blankLine(), itemId: "i", trackSignature: "B" };
+    for (const number of [OS_COL.FreeQty, OS_COL.TaxPerc, OS_COL.Bucket, OS_COL.Barcode, OS_COL.Description]) {
+      expect(isEnterStop(column(number), line)).toBe(false);
+    }
   });
 });

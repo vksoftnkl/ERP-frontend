@@ -13,21 +13,28 @@
  * `opening-stock.state.ts`; the round trips, questions and messages are
  * `use-opening-stock-draft.ts`.
  *
- * Keys, as the Qt screen binds them: F5 Save Draft, F6 Save & Post, F8 Show
- * List, F2 Edit, Esc Close, and Ctrl+Enter saves the draft from anywhere —
- * including inside a grid cell. Plain Enter belongs to the grid (it commits the
- * cell and steps on), which is why no button here is a default button.
+ * ── Layout (Qt .ui, 2026-10-23) ───────────────────────────────────────────
+ * The title block on the left — name, scope, status pill, who created / posted
+ * it and a notice line — and the voucher details on the right in a four-column
+ * card: Voucher No, Date, Rate Source, and the godown in its own highlighted box
+ * at the right end (red until chosen: no item can be keyed before it is). Enter
+ * and Tab follow the reading order: Date, Rate Source, Godown, Your Ref No,
+ * Remarks, then the grid.
+ *
+ * ── Keys: the shared transaction set (`lib/txn-keys`) ─────────────────────
+ * Alt+N New, Ctrl+S Save Draft, Ctrl+Enter Save & Post (it still asks), F2 Edit,
+ * Alt+X Cancel, Ctrl+O Show List, Ctrl+H History, Esc Close, Ctrl+D Split batch,
+ * Alt+PgUp / Alt+PgDn the previous / next document, F1 the key sheet. A key runs
+ * only what its button may. Plain Enter belongs to the grid (it commits the cell
+ * and steps on), which is why no button here is a default button. Bare F5 — Save
+ * Draft until the Qt rework — is swallowed so a habit press cannot reload the
+ * page and lose the document.
  */
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent as ReactKeyboardEvent,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { cx } from "@/components/design-system/cx";
+import { TxnHistoryDialog, type TxnHistoryTarget } from "@/components/txn/txn-history-dialog";
+import { TxnKeysSheet } from "@/components/txn/txn-keys-sheet";
+import { useTxnKeys } from "@/components/txn/use-txn-keys";
 import { formatCurrency } from "@/domain/pricing";
 import {
   DateField,
@@ -36,13 +43,13 @@ import {
   SelectField,
   TextField,
 } from "@/features/sales/quotation/components/fields";
-import { focusFirstCell } from "@/features/sales/quotation/components/grid-focus";
 import { moveHeaderFocus } from "@/features/sales/quotation/components/header-focus";
 import quotationStyles from "@/features/sales/quotation/page.module.scss";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { useDropdownId } from "@/lib/configured-dropdowns";
 import { useGridId } from "@/lib/configured-grids";
 import { documentRights } from "@/lib/permissions/document-rights";
+import { keySheetRows, withKey, type TxnKeyRow } from "@/lib/txn-keys";
 import { useUiTableId } from "@/lib/ui-tables";
 import type { ScreenMemoryOption } from "@/lib/use-screen-memory";
 import { useGetQuotationGridLayoutQuery } from "@/store/api/quotationApi";
@@ -52,7 +59,6 @@ import { resolveOpeningStockColumns } from "../opening-stock.columns";
 import {
   GODOWN_DROPDOWN_KEY,
   ITEM_PICKER_GRID_KEY,
-  OPENING_STOCK_GRID_NAME,
   OPENING_STOCK_LINES_UI_TABLE_KEY,
   RATE_SOURCES,
   REMARKS_MAX_LENGTH,
@@ -60,7 +66,8 @@ import {
   USR_REFNO_MAX_LENGTH,
   type RateSource,
 } from "../opening-stock.constants";
-import { scopeLabelOf } from "../opening-stock.state";
+import { hasItem } from "../opening-stock.lines";
+import { auditLinesOf, scopeLabelOf } from "../opening-stock.state";
 import type { OpeningStockDocKey } from "../opening-stock.types";
 import {
   DATE_FIELD_ID,
@@ -69,7 +76,7 @@ import {
 } from "../use-opening-stock-draft";
 import { CancelReasonDialog } from "./cancel-reason-dialog";
 import { GridPickerModal, type PickerFallbackColumn } from "./grid-picker-modal";
-import { OpeningStockGrid } from "./opening-stock-grid";
+import { focusEntryCellOfRow, OpeningStockGrid } from "./opening-stock-grid";
 import styles from "../page.module.scss";
 
 const RATE_SOURCE_OPTIONS = RATE_SOURCES.map((source) => ({ value: source, label: source }));
@@ -87,6 +94,37 @@ const STATUS_CLASS: Record<string, string | undefined> = {
   POSTED: styles.statusPosted,
   CANCELLED: styles.statusCancelledTone,
 };
+
+/** F1 — the grid's own keys, under "Lines" (Qt `installHelp()`). */
+const LINE_KEYS: readonly TxnKeyRow[] = [
+  { label: "Item list (type a name in Barcode)", keyText: "↓" },
+  { label: "Change the line's unit", keyText: "F4" },
+  { label: "Add a line", keyText: "+" },
+  { label: "Remove a line", keyText: "−" },
+  { label: "Next cell", keyText: "Enter" },
+  { label: "Leave the grid", keyText: "Tab" },
+];
+
+/** The keys this screen binds, in the Qt `bind()` order; Split batch is listed by its button's name. */
+const KEY_SHEET = keySheetRows(
+  [
+    "new",
+    "saveDraft",
+    "post",
+    "edit",
+    "cancelDoc",
+    "history",
+    "open",
+    "close",
+    { action: "duplicateLine", label: "Split batch" },
+    "previous",
+    "next",
+  ],
+  LINE_KEYS,
+);
+
+const GRID_HINT =
+  "Barcode: scan, or type a name and press ↓ for the item list  ·  F4 changes the unit  ·  + / − add or remove a line  ·  greyed cells are ones the item is not tracked by";
 
 export type OpeningStockEntryViewProps = {
   initialDocument?: OpeningStockDocKey;
@@ -161,6 +199,9 @@ export function OpeningStockEntryView({
   );
 
   const [activeRowKey, setActiveRowKey] = useState<string | null>(null);
+  const [keysOpen, setKeysOpen] = useState(false);
+  /** Held, not derived: the trail dialog refetches whenever its target object changes. */
+  const [historyTarget, setHistoryTarget] = useState<TxnHistoryTarget | null>(null);
 
   const isDraft = draft.status === "DRAFT";
   const isPosted = draft.status === "POSTED";
@@ -171,6 +212,7 @@ export function OpeningStockEntryView({
   const canPost = isDraft && rights.mayPost;
   const canCancel = saved && (isDraft || isPosted) && rights.mayCancelDocument(isPosted);
   const canEdit = isDraft && rights.mayEdit;
+  const godownChosen = Boolean(draft.header.godownId);
 
   /**
    * Commit whatever is being typed into a cell before acting on the document:
@@ -185,7 +227,7 @@ export function OpeningStockEntryView({
 
   const runSave = useCallback(
     (post: boolean) => {
-      // F5, F6 and Ctrl+Enter land here too: a key runs only what its button may.
+      // The keys land here too: a key runs only what its button may.
       if (working || !(post ? canPost : canSaveDraft)) {
         return;
       }
@@ -195,70 +237,51 @@ export function OpeningStockEntryView({
     [api, canPost, canSaveDraft, commitActiveCell, working],
   );
 
-  // ── Window keys ───────────────────────────────────────────────────────
-  const keyStateRef = useRef({ runSave, api, editable, canEdit, isDraft, working, mode: draft.mode });
-  useLayoutEffect(() => {
-    keyStateRef.current = { runSave, api, editable, canEdit, isDraft, working, mode: draft.mode };
-  });
+  const openHistory = useCallback(() => {
+    if (!draft.svhId) {
+      return;
+    }
+    setHistoryTarget({
+      docId: draft.svhId,
+      companyId: draft.companyId,
+      accYear: draft.accYear,
+      refNo: draft.refno,
+    });
+  }, [draft.accYear, draft.companyId, draft.refno, draft.svhId]);
 
+  // ── Window keys — the shared transaction set ──────────────────────────
+  // A handler left null is not intercepted at all: its button is off.
+  const postKey = !working && canPost ? () => runSave(true) : null;
+  useTxnKeys(
+    {
+      new: !working && rights.mayStartNew ? () => void api.newDocument() : null,
+      saveDraft: !working && canSaveDraft ? () => runSave(false) : null,
+      post: postKey,
+      // In browse mode only: on a draft already open for entry the key is the
+      // grid's (F2 opens a picker cell), and Edit would only move the cursor.
+      edit: !working && canEdit && draft.mode === "browse" ? api.edit : null,
+      cancelDoc: !working && canCancel ? api.requestCancel : null,
+      open: !working ? () => void api.showList() : null,
+      close: !working ? () => void api.close() : null,
+      history: saved ? openHistory : null,
+      previous: !working ? () => void api.stepDocument(true) : null,
+      next: !working ? () => void api.stepDocument(false) : null,
+      duplicateLine: !working && editable ? () => api.splitLine(activeRowKey) : null,
+    },
+    { onHelp: () => setKeysOpen(true) },
+  );
+
+  // F5 was Save Draft until the Qt rework moved it to Ctrl+S. A habit press
+  // must not reload the page and take the unsaved document with it — swallowed,
+  // under a dialog too (capture), and nothing else.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.altKey || event.metaKey) {
-        return;
-      }
-      // A dialog over the screen owns the keyboard — but F5 must not reload the
-      // page behind it and take the unsaved document with it.
-      if (document.querySelector('[aria-modal="true"]')) {
-        if (event.key === "F5") {
-          event.preventDefault();
-        }
-        return;
-      }
-      const state = keyStateRef.current;
-      // Ctrl+Enter — save the draft, from anywhere (both Enter keys arrive as "Enter").
-      if (event.ctrlKey && event.key === "Enter") {
+      if (event.key === "F5" && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
         event.preventDefault();
-        if (state.mode === "browse" || !state.isDraft) {
-          return; // a posted document has nothing to save
-        }
-        state.runSave(false);
-        return;
-      }
-      if (event.ctrlKey || event.shiftKey) {
-        return;
-      }
-      switch (event.key) {
-        case "F5":
-          event.preventDefault();
-          state.runSave(false);
-          return;
-        case "F6":
-          event.preventDefault();
-          state.runSave(true);
-          return;
-        case "F8":
-          event.preventDefault();
-          if (!state.working) {
-            void state.api.showList();
-          }
-          return;
-        case "F2":
-          event.preventDefault();
-          if (!state.working && state.canEdit) {
-            state.api.edit();
-          }
-          return;
-        case "Escape":
-          event.preventDefault();
-          if (!state.working) {
-            void state.api.close();
-          }
-          return;
-        default:
       }
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, []);
 
   // An unsaved document asks before the tab closes, as Close does.
@@ -274,142 +297,143 @@ export function OpeningStockEntryView({
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [draft.dirty]);
 
-  /** Enter walks the header; Enter on its last field hands over to the grid. */
+  /**
+   * Enter and Tab walk the header in reading order — Date, Rate Source,
+   * Godown, Your Ref No, Remarks (Qt `setTabOrder`) — and the last field hands
+   * over to the grid: the first row still without an item, on its Barcode.
+   * Tab is taken here rather than left to the browser so it cannot step into
+   * the godown's open option list.
+   */
   const onHeaderKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "Enter" || event.defaultPrevented || event.ctrlKey) {
+    const isTab = event.key === "Tab";
+    if ((event.key !== "Enter" && !isTab) || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) {
       return;
     }
     const target = event.target as HTMLElement | null;
-    if (target?.getAttribute("aria-expanded") === "true") {
-      return;
+    if (!isTab && target?.getAttribute("aria-expanded") === "true") {
+      return; // Enter picks from the open list
     }
     if (moveHeaderFocus(event.currentTarget, event.target, event.shiftKey ? -1 : 1)) {
       event.preventDefault();
       return;
     }
-    if (!event.shiftKey && focusFirstCell(OPENING_STOCK_GRID_NAME, "itemName")) {
-      event.preventDefault();
+    if (!event.shiftKey && editable) {
+      const row = draft.lines.find((line) => !hasItem(line)) ?? draft.lines[draft.lines.length - 1];
+      if (row) {
+        event.preventDefault();
+        focusEntryCellOfRow(row.key);
+      }
     }
   };
 
   const problemLines = draft.lines.filter((line) => line.problem);
+  const auditLines = auditLinesOf(draft);
+  const notice = draft.notice ?? "";
 
   return (
     <div className={quotationStyles.page}>
-      <header className={quotationStyles.titleBar}>
-        <span className={styles.titleLeft}>
-          <button type="button" className={quotationStyles.button} onClick={() => void api.close()}>
-            ‹ Opening Stock
-          </button>
-          <h1 className={quotationStyles.title}>Opening Stock</h1>
+      <div className={styles.topBand}>
+        {/* ── the title block ─────────────────────────────────────────── */}
+        <div className={styles.titleBlock}>
+          <div className={styles.titleLine}>
+            <button type="button" className={quotationStyles.button} onClick={() => void api.close()}>
+              ‹ Opening Stock
+            </button>
+            <h1 className={quotationStyles.title}>Opening Stock</h1>
+          </div>
           <span
             className={styles.scope}
-            title="The company, branch and accounting year this document belongs to. A voucher is saved back to its own, never the session's."
+            title="The godown and accounting year this document belongs to. A voucher is saved back to its own, never the session's."
           >
             {scopeLabelOf(draft)}
           </span>
-        </span>
-        <div className={quotationStyles.titleMeta}>
-          {draft.audit ? <span className={styles.audit}>{draft.audit}</span> : null}
-          {busy === "loading" ? <span>loading…</span> : null}
-          {draft.mode === "browse" ? <span className={quotationStyles.readOnlyBadge}>Read only</span> : null}
-          {draft.dirty ? <span className={quotationStyles.dirtyDot}>● unsaved</span> : null}
-          <span
-            className={cx(quotationStyles.statusBadge, STATUS_CLASS[draft.status])}
-            title="DRAFT, POSTED or CANCELLED — there is no fourth state."
+          <div className={styles.statusLine}>
+            <span
+              className={cx(quotationStyles.statusBadge, styles.statusPill, STATUS_CLASS[draft.status])}
+              title="DRAFT, POSTED or CANCELLED — there is no fourth state."
+            >
+              {draft.status}
+            </span>
+            {draft.mode === "browse" ? <span className={quotationStyles.readOnlyBadge}>Read only</span> : null}
+            {draft.dirty ? <span className={quotationStyles.dirtyDot}>● unsaved</span> : null}
+            {busy === "loading" ? <span className={styles.scope}>loading…</span> : null}
+          </div>
+          <div
+            className={styles.audit}
+            title="Who created this opening and when — and, once posted, who posted it"
           >
-            {draft.status}
-          </span>
+            {auditLines.map((line) => (
+              <span key={line}>{line}</span>
+            ))}
+            {notice ? (
+              <span className={styles.notice} role="status">
+                {notice}
+              </span>
+            ) : null}
+          </div>
         </div>
-      </header>
 
-      <div className={styles.quickBar}>
-        <button
-          type="button"
-          className={quotationStyles.button}
-          disabled={!editable || working}
-          title="Insert a line above the current one (or just press + on the grid)"
-          onClick={() => api.insertLine(activeRowKey)}
-        >
-          + Line
-        </button>
-        <button
-          type="button"
-          className={quotationStyles.button}
-          disabled={!editable || working}
-          title="Remove the current line (or press - on the grid)"
-          onClick={() => void api.removeLine(activeRowKey)}
-        >
-          - Line
-        </button>
-        <button
-          type="button"
-          className={quotationStyles.button}
-          disabled={!editable || working}
-          title="Copy this line as another allocation of the same item — one line drawn from two batches is two rows sharing a line number"
-          onClick={() => api.splitLine(activeRowKey)}
-        >
-          Split batch
-        </button>
-        <span className={styles.gridHint}>
-          Greyed cells are greyed by the ITEM, not by the screen — batch, expiry, MRP and serial open only when its
-          tracking policy says so.
-        </span>
-      </div>
-
-      <div className={styles.headerPanel} onKeyDown={onHeaderKeyDown}>
-        <ReadOnlyInput
-          id="opening-stock-refno"
-          label="Voucher No"
-          value={draft.refno}
-          placeholder="minted on save"
-        />
-        <DateField
-          id={DATE_FIELD_ID}
-          label="Date"
-          value={draft.header.docDate}
-          disabled={!editable}
-          onChange={(value) => api.setHeaderField("docDate", value)}
-        />
-        <DropdownCombo
-          id={GODOWN_FIELD_ID}
-          label="Godown *"
-          dropdownId={godownDropdownId}
-          valueKey="gdl_id"
-          labelKey="gdl_name"
-          value={draft.header.godownId}
-          selectedLabel={draft.header.godownName}
-          disabled={!editable}
-          placeholder=""
-          onSelect={(id, name) => api.setGodown(id, name)}
-        />
-        <SelectField
-          id="opening-stock-rate-source"
-          label="Rate Source"
-          value={draft.header.rateSource}
-          options={RATE_SOURCE_OPTIONS}
-          disabled={!editable}
-          title="What fills a line LEFT AT COST 0. On an opening it is normally MANUAL: on go-live day stock_item_cost is empty, so AVG_COST and LAST_PURCHASE have nothing to read. A cost typed on the line wins over this."
-          onChange={(value) => api.setRateSource(value as RateSource)}
-        />
-        <TextField
-          id="opening-stock-usr-refno"
-          label="Your Ref No"
-          value={draft.header.usrRefno}
-          maxLength={USR_REFNO_MAX_LENGTH}
-          disabled={!editable}
-          title="The shop's own reference. Free text; neither the engine nor any report reads it."
-          onChange={(value) => api.setHeaderField("usrRefno", value)}
-        />
-        <TextField
-          id="opening-stock-remarks"
-          label="Remarks"
-          value={draft.header.remarks}
-          maxLength={REMARKS_MAX_LENGTH}
-          disabled={!editable}
-          title="Describes the opening. NOT the cancellation reason: cancelling asks for its own."
-          onChange={(value) => api.setHeaderField("remarks", value)}
-        />
+        {/* ── the voucher details: four columns, the godown at the right end ── */}
+        <div className={styles.fieldsCard} onKeyDown={onHeaderKeyDown}>
+          <ReadOnlyInput
+            id="opening-stock-refno"
+            label="Voucher No"
+            value={draft.refno}
+            placeholder="given on save"
+          />
+          <DateField
+            id={DATE_FIELD_ID}
+            label="Date"
+            value={draft.header.docDate}
+            disabled={!editable}
+            onChange={(value) => api.setHeaderField("docDate", value)}
+          />
+          <SelectField
+            id="opening-stock-rate-source"
+            label="Rate Source"
+            value={draft.header.rateSource}
+            options={RATE_SOURCE_OPTIONS}
+            disabled={!editable}
+            title="What fills a line LEFT AT COST 0. On an opening it is normally MANUAL: on go-live day stock_item_cost is empty, so AVG_COST and LAST_PURCHASE have nothing to read. A cost typed on the line wins over this."
+            onChange={(value) => api.setRateSource(value as RateSource)}
+          />
+          <div
+            className={cx(styles.godownBox, godownChosen ? styles.godownSet : styles.godownMissing)}
+            data-tone={godownChosen ? "set" : "missing"}
+            title="Where the stock arrives. Required: an opening is inward, and every line's godown is copied from this one."
+          >
+            <DropdownCombo
+              id={GODOWN_FIELD_ID}
+              label="Godown *  — where the stock opens"
+              dropdownId={godownDropdownId}
+              valueKey="gdl_id"
+              labelKey="gdl_name"
+              value={draft.header.godownId}
+              selectedLabel={draft.header.godownName}
+              disabled={!editable}
+              placeholder="Choose the godown"
+              onSelect={(id, name) => api.setGodown(id, name)}
+            />
+          </div>
+          <TextField
+            id="opening-stock-usr-refno"
+            label="Your Ref No"
+            value={draft.header.usrRefno}
+            maxLength={USR_REFNO_MAX_LENGTH}
+            disabled={!editable}
+            title="The shop's own reference. Free text; neither the engine nor any report reads it."
+            onChange={(value) => api.setHeaderField("usrRefno", value)}
+          />
+          <TextField
+            id="opening-stock-remarks"
+            label="Remarks"
+            value={draft.header.remarks}
+            maxLength={REMARKS_MAX_LENGTH}
+            disabled={!editable}
+            title="Describes the opening. NOT the cancellation reason: cancelling asks for its own."
+            onChange={(value) => api.setHeaderField("remarks", value)}
+          />
+        </div>
       </div>
 
       <div className={quotationStyles.gridsRow}>
@@ -417,9 +441,7 @@ export function OpeningStockEntryView({
           <div className={quotationStyles.gridHead}>
             <span className={quotationStyles.gridHeadTitle}>Lines</span>
             <span className={quotationStyles.gridHeadActions}>
-              <span className={quotationStyles.modalNote}>
-                Enter next cell · + / - line · F4 unit · type on Item to search · ↓ on Barcode opens the picker
-              </span>
+              <span className={quotationStyles.modalNote}>F1 lists the keys</span>
             </span>
           </div>
           {problemLines.length ? (
@@ -440,18 +462,45 @@ export function OpeningStockEntryView({
             onActiveRowChange={setActiveRowKey}
             onSetField={api.setLineField}
             onOpenItemPicker={api.openItemPicker}
+            onSearchItems={api.searchItemsFromBarcode}
             onOpenSupplierPicker={api.openSupplierPicker}
             onInsertLine={api.insertLine}
             onRemoveLine={(rowKey) => void api.removeLine(rowKey)}
-            onSwitchUnit={api.switchUnit}
-            onCtrlEnter={() => {
-              // A posted document has nothing to save.
-              if (draft.mode === "entry" && isDraft) {
-                runSave(false);
-              }
-            }}
+            onSwitchUnit={(rowKey) => void api.switchUnit(rowKey)}
+            onPostKey={postKey}
           />
         </section>
+      </div>
+
+      <div className={styles.quickBar}>
+        <button
+          type="button"
+          className={quotationStyles.button}
+          disabled={!editable || working}
+          title="Insert a line above the current one (or just press + on the grid)"
+          onClick={() => api.insertLine(activeRowKey)}
+        >
+          + Line
+        </button>
+        <button
+          type="button"
+          className={quotationStyles.button}
+          disabled={!editable || working}
+          title="Remove the current line (or press - on the grid)"
+          onClick={() => void api.removeLine(activeRowKey)}
+        >
+          − Line
+        </button>
+        <button
+          type="button"
+          className={quotationStyles.button}
+          disabled={!editable || working}
+          title="Copy this line as another allocation of the same item — one line drawn from two batches is two rows sharing a line number"
+          onClick={() => api.splitLine(activeRowKey)}
+        >
+          {withKey("Split batch", "duplicateLine")}
+        </button>
+        <span className={styles.gridHint}>{GRID_HINT}</span>
       </div>
 
       <div className={styles.footerRow}>
@@ -473,7 +522,17 @@ export function OpeningStockEntryView({
       </div>
 
       <div className={quotationStyles.buttonBar}>
-        <span className={styles.footerHint}>Ctrl+Enter saves the draft</span>
+        <span className={styles.footerHint}>
+          F1 · keys on this screen · Alt+PgUp / Alt+PgDn previous / next opening
+        </span>
+        <button
+          type="button"
+          className={quotationStyles.button}
+          disabled={working || !rights.mayStartNew}
+          onClick={() => void api.newDocument()}
+        >
+          {withKey("New", "new")}
+        </button>
         <button
           type="button"
           className={quotationStyles.button}
@@ -481,7 +540,7 @@ export function OpeningStockEntryView({
           title="Writes the document and nothing else. No stock moves."
           onClick={() => runSave(false)}
         >
-          {busy === "saving" ? "Saving…" : "Save Draft"} <span className={quotationStyles.buttonHint}>F5</span>
+          {busy === "saving" ? "Saving…" : withKey("Save Draft", "saveDraft")}
         </button>
         <button
           type="button"
@@ -490,23 +549,7 @@ export function OpeningStockEntryView({
           title="Saves, runs the pre-post check, then posts. Posting is one way: the document is frozen afterwards and can only be cancelled."
           onClick={() => runSave(true)}
         >
-          {busy === "posting" ? "Posting…" : "Save & Post"} <span className={quotationStyles.buttonHint}>F6</span>
-        </button>
-        <button
-          type="button"
-          className={quotationStyles.button}
-          disabled={working}
-          onClick={() => void api.showList()}
-        >
-          Show List <span className={quotationStyles.buttonHint}>F8</span>
-        </button>
-        <button
-          type="button"
-          className={quotationStyles.button}
-          disabled={working || !canEdit}
-          onClick={api.edit}
-        >
-          Edit <span className={quotationStyles.buttonHint}>F2</span>
+          {busy === "posting" ? "Posting…" : withKey("Save & Post", "post")}
         </button>
         <button
           type="button"
@@ -515,18 +558,35 @@ export function OpeningStockEntryView({
           title="Writes one reversing ledger row per posted row. Never a delete, never an edit — and it can legitimately fail if the stock has since been sold."
           onClick={api.requestCancel}
         >
-          {busy === "cancelling" ? "Cancelling…" : "Cancel Voucher"}
+          {busy === "cancelling" ? "Cancelling…" : withKey("Cancel", "cancelDoc")}
         </button>
         <button
           type="button"
           className={quotationStyles.button}
-          disabled={working || !rights.mayStartNew}
-          onClick={() => void api.newDocument()}
+          disabled={working || !canEdit}
+          onClick={api.edit}
         >
-          New
+          {withKey("Edit", "edit")}
+        </button>
+        <button
+          type="button"
+          className={quotationStyles.button}
+          disabled={!saved}
+          title="Every step of this document — who saved, posted or cancelled it, when, on which device, and why."
+          onClick={openHistory}
+        >
+          {withKey("History", "history")}
+        </button>
+        <button
+          type="button"
+          className={quotationStyles.button}
+          disabled={working}
+          onClick={() => void api.showList()}
+        >
+          {withKey("Show List", "open")}
         </button>
         <button type="button" className={quotationStyles.button} disabled={working} onClick={() => void api.close()}>
-          Close <span className={quotationStyles.buttonHint}>Esc</span>
+          {withKey("Close", "close")}
         </button>
       </div>
 
@@ -560,6 +620,17 @@ export function OpeningStockEntryView({
         question="Why is this opening being reversed?"
         onCancel={api.closeReason}
         onAccept={(reason) => void api.acceptCancelReason(reason)}
+      />
+      <TxnKeysSheet
+        open={keysOpen}
+        onClose={() => setKeysOpen(false)}
+        document={KEY_SHEET.document}
+        lines={KEY_SHEET.lines}
+      />
+      <TxnHistoryDialog
+        target={historyTarget}
+        docLabel="Opening Stock"
+        onClose={() => setHistoryTarget(null)}
       />
     </div>
   );

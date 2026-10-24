@@ -10,13 +10,19 @@
  * clicked.
  *
  * The cells are the quotation's `GridCell`s, so the Enter walk (`grid-focus`)
- * and the edit buffer behave exactly as on every other voucher grid; the layout's
- * focus flags decide where Enter stops.
+ * and the edit buffer behave exactly as on every other voucher grid. Where
+ * Enter STOPS is this screen's rule, per row (`isEnterStop`, Qt
+ * `setFocusCellFilter`): a blank row stops at Barcode then Item; a row with an
+ * item at Qty, the identity cells its item is tracked by, Cost / Unit — and on
+ * to the next row's Barcode.
  *
  * Keys, as the Qt grid binds them: Enter commits and steps on; `+` / `-` add a
  * line above / remove the current one (on a figure or picker cell — a text cell
- * keeps them as characters, so Ctrl+`+` / Ctrl+`-` work anywhere); F4 is the
- * unit; typing on the Item or Supplier cell opens its picker with the key.
+ * keeps them as characters, so Ctrl+`+` / Ctrl+`-` work anywhere); F4 switches
+ * the line's unit; ↓ in Barcode opens the item list with what was typed; typing
+ * on the Item or Supplier cell opens its picker with the key; Tab leaves the
+ * grid. The document keys (Ctrl+Enter, Ctrl+S …) are the screen's shared set —
+ * this grid only lets them through.
  */
 import { useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { cx } from "@/components/design-system/cx";
@@ -26,6 +32,7 @@ import type { GridCellKind } from "@/features/sales/quotation/quotation.constant
 import {
   GRID_FIELD_ATTR,
   GRID_GRID_ATTR,
+  GRID_LOOKUP_ATTR,
   GRID_ROW_ATTR,
 } from "@/features/sales/quotation/quotation.constants";
 import quotationStyles from "@/features/sales/quotation/page.module.scss";
@@ -33,6 +40,7 @@ import { scaledWidth } from "@/features/sales/quotation/quotation.utils";
 import {
   isCellEditable,
   isCellGreyed,
+  isEnterStop,
   type OpeningStockColumnKind,
   type ResolvedOpeningStockColumn,
 } from "../opening-stock.columns";
@@ -50,6 +58,45 @@ import styles from "../page.module.scss";
 const ROW_ACTION_PX = 30;
 
 const BUCKET_OPTIONS = STOCK_BUCKETS.map((bucket) => ({ value: bucket, label: bucket }));
+
+/** ↓ in the Barcode cell is the item search: the cell drops its typed text rather than commit it. */
+const BARCODE_SEARCH_KEYS: readonly string[] = ["ArrowDown"];
+
+/** The two cells a row with no item is keyed through. */
+const BLANK_ROW_FIELDS = new Set(["barcode", "itemName"]);
+
+/** The td attribute naming its column — what a click on a blank row reads. */
+const CELL_COLUMN_ATTR = "data-os-column";
+
+const TABBABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Tab — leave the grid (Qt `leaveGrid()`): the next focusable thing after the
+ * grid's viewport, or the last one before it on Shift+Tab, rather than the next
+ * of the grid's own forty-odd cells. The cell commits on the way out (blur).
+ */
+function leaveGrid(from: HTMLElement, forward: boolean): boolean {
+  const viewport = from.closest<HTMLElement>('[data-erp-table-viewport="true"]');
+  if (!viewport) {
+    return false;
+  }
+  const candidates = Array.from(document.querySelectorAll<HTMLElement>(TABBABLE)).filter(
+    (element) => element.tabIndex >= 0 && !viewport.contains(element) && element.getClientRects().length > 0,
+  );
+  const target = forward
+    ? candidates.find(
+        (element) => (viewport.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+      )
+    : [...candidates]
+        .reverse()
+        .find((element) => (viewport.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_PRECEDING) !== 0);
+  if (!target) {
+    return false;
+  }
+  target.focus();
+  return true;
+}
 
 /** The cells where a bare `+` / `-` is a line key rather than a character. */
 const LINE_KEY_KINDS = new Set<OpeningStockColumnKind>([
@@ -116,6 +163,16 @@ export function focusFirstCellOfRow(rowKey: string): void {
   });
 }
 
+/**
+ * Lands on the cell a row is keyed from: Barcode — the scan field AND the item
+ * search — or the Item cell on a layout that hides Barcode.
+ */
+export function focusEntryCellOfRow(rowKey: string): void {
+  if (!focusCell(OPENING_STOCK_GRID_NAME, rowKey, "barcode")) {
+    focusCell(OPENING_STOCK_GRID_NAME, rowKey, "itemName");
+  }
+}
+
 /** Lands on a named cell once React has rendered the row it is on. */
 export function focusCellAfterRender(rowKey: string, field: string): void {
   window.requestAnimationFrame(() => {
@@ -136,12 +193,19 @@ export type OpeningStockGridProps = {
   onActiveRowChange: (rowKey: string) => void;
   onSetField: (rowKey: string, field: OpeningStockLineField, raw: string) => void;
   onOpenItemPicker: (rowKey: string, typed: string) => void;
+  /** ↓ in a blank row's Barcode — the item list, searched for what was typed there. */
+  onSearchItems: (rowKey: string, typed: string) => void;
   onOpenSupplierPicker: (rowKey: string, typed: string) => void;
   onInsertLine: (rowKey: string) => void;
   onRemoveLine: (rowKey: string) => void;
-  onSwitchUnit: () => void;
-  /** Ctrl+Enter from inside a cell — save the draft. */
-  onCtrlEnter: () => void;
+  /** F4 — the line's next unit. */
+  onSwitchUnit: (rowKey: string) => void;
+  /**
+   * Save & Post (Ctrl+Enter), for the one place the shared key cannot reach:
+   * a picker cell, whose Enter opens its picker and stops there. `null` while
+   * the button is off. Every other cell lets the key through to the screen.
+   */
+  onPostKey: (() => void) | null;
   /** Right-click: "save column width" and "Admin settings". */
   onContextMenu?: (event: ReactMouseEvent<HTMLElement>) => void;
   /** A heading dragged to a new width — saved from the right-click menu. */
@@ -159,11 +223,12 @@ export function OpeningStockGrid(props: OpeningStockGridProps) {
     onActiveRowChange,
     onSetField,
     onOpenItemPicker,
+    onSearchItems,
     onOpenSupplierPicker,
     onInsertLine,
     onRemoveLine,
     onSwitchUnit,
-    onCtrlEnter,
+    onPostKey,
     onContextMenu,
     resizingKey = null,
     onColumnResizeStart,
@@ -216,7 +281,18 @@ export function OpeningStockGrid(props: OpeningStockGridProps) {
 
     if (event.key === "F4") {
       event.preventDefault();
-      onSwitchUnit();
+      // Commit what is being typed first (the cell commits on blur), then hand
+      // the cursor back: the switch reads the committed quantity and cost.
+      target.blur();
+      target.focus();
+      onSwitchUnit(rowKey);
+      return;
+    }
+
+    if (event.key === "Tab" && !event.ctrlKey && !event.altKey && !event.metaKey) {
+      if (leaveGrid(target, !event.shiftKey)) {
+        event.preventDefault();
+      }
       return;
     }
 
@@ -259,11 +335,33 @@ export function OpeningStockGrid(props: OpeningStockGridProps) {
       return;
     }
 
-    if (event.key === "Enter") {
+    // Ctrl+Enter is Save & Post — the screen's key, not a cell step.
+    if (event.key === "Enter" && !event.ctrlKey && !event.metaKey && !event.altKey) {
       // The cell has already committed its buffer; move on.
       event.preventDefault();
       moveCellFocus(OPENING_STOCK_GRID_NAME, event.target, event.shiftKey ? -1 : 1);
     }
+  };
+
+  /**
+   * A blank row has nothing but its Barcode and Item cells — every other cell
+   * is shut until an item is picked. A click on one of those lands on the
+   * row's Barcode instead of on a cell that would take nothing (Qt
+   * `eventFilter`, user 2026-10-23). The row's disabled inputs are made
+   * transparent to the pointer (`.blankEntryRow`) — Chromium fires no mouse
+   * event on a disabled input, and none bubbles — so this sees the click.
+   */
+  const onBlankRowMouseDown = (event: ReactMouseEvent<HTMLTableRowElement>, line: OpeningStockLine) => {
+    if (!editable || hasItem(line) || event.button !== 0) {
+      return;
+    }
+    const cell = (event.target as HTMLElement).closest<HTMLElement>(`[${CELL_COLUMN_ATTR}]`);
+    const column = cell?.getAttribute(CELL_COLUMN_ATTR);
+    if (!column || BLANK_ROW_FIELDS.has(column)) {
+      return; // the row action cell, or a cell the row is keyed through
+    }
+    event.preventDefault();
+    focusEntryCellOfRow(line.key);
   };
 
   return (
@@ -302,15 +400,21 @@ export function OpeningStockGrid(props: OpeningStockGridProps) {
         </thead>
         <tbody
           onKeyDownCapture={(event) => {
-            // Ctrl+Enter saves the draft from inside a cell (a window shortcut
-            // in Qt). Taken here, before the cell's own Enter commits-and-walks
-            // or a picker cell opens its picker; the save blurs the cell, which
-            // commits what is being typed.
-            if (event.ctrlKey && event.key === "Enter") {
+            // Ctrl+Enter is the screen's Save & Post (the shared keys), and it
+            // reaches the screen from every cell — the cell commits first. A
+            // picker cell is the exception: its Enter opens the picker and goes
+            // no further, so the key is handed over from here instead.
+            if (
+              (event.ctrlKey || event.metaKey) &&
+              event.key === "Enter" &&
+              (event.target as HTMLElement).hasAttribute(GRID_LOOKUP_ATTR)
+            ) {
               event.preventDefault();
               event.stopPropagation();
               lastKeyRef.current = null;
-              onCtrlEnter();
+              if (!event.repeat) {
+                onPostKey?.();
+              }
               return;
             }
             lastKeyRef.current = event.key;
@@ -330,10 +434,16 @@ export function OpeningStockGrid(props: OpeningStockGridProps) {
                   rowIndex % 2 === 0 ? quotationStyles.rowOdd : quotationStyles.rowEven,
                   isActive && quotationStyles.rowActive,
                   line.problem && styles.problemRow,
+                  // Only while it can be keyed: the class costs the row's shut
+                  // cells their hover text, which a read-only document keeps.
+                  editable && !hasItem(line) && styles.blankEntryRow,
                 )}
                 title={line.problem || undefined}
                 onFocusCapture={() => onActiveRowChange(line.key)}
-                onMouseDown={() => onActiveRowChange(line.key)}
+                onMouseDown={(event) => {
+                  onActiveRowChange(line.key);
+                  onBlankRowMouseDown(event, line);
+                }}
               >
                 {visible.map((column, columnIndex) => {
                   const cellEditable = isCellEditable(column, line, editable);
@@ -344,7 +454,7 @@ export function OpeningStockGrid(props: OpeningStockGridProps) {
                         ? trackedBy(line.trackSignature)
                         : ""
                       : column.read === "computedLineNo"
-                        ? (lineNumbers.get(line.key) ?? "")
+                        ? (lineNumbers.get(line.key)?.lineNo ?? "")
                         : line[column.read];
                   const invalid =
                     (flagged?.rowKey === line.key && flagged.field === column.key) ||
@@ -368,6 +478,7 @@ export function OpeningStockGrid(props: OpeningStockGridProps) {
                   return (
                     <td
                       key={column.key}
+                      {...{ [CELL_COLUMN_ATTR]: column.key }}
                       className={cx(greyed && styles.untrackedCell)}
                       title={
                         greyed
@@ -390,13 +501,16 @@ export function OpeningStockGrid(props: OpeningStockGridProps) {
                               ? isTrailing && editable
                                 ? "Press Enter to pick…"
                                 : ""
-                              : undefined
+                              : column.key === "barcode" && isTrailing && editable
+                                ? "Scan, or type + ↓"
+                                : undefined
                         }
                         gridName={OPENING_STOCK_GRID_NAME}
                         rowKey={line.key}
                         fieldKey={column.key}
                         columnIndex={columnIndex}
-                        focusStop={column.focus}
+                        focusStop={isEnterStop(column, line)}
+                        dropBufferOnKeys={column.key === "barcode" ? BARCODE_SEARCH_KEYS : undefined}
                         onOpenPicker={() => openPicker(column.kind, line, "")}
                         onCommit={(text) => {
                           if (column.write) {
@@ -408,10 +522,12 @@ export function OpeningStockGrid(props: OpeningStockGridProps) {
                             return;
                           }
                           const input = event.target as HTMLInputElement;
-                          if (event.key === "Enter") {
-                            // The cell has committed the scan, and the commit
-                            // resolves it; the walk does not move on from here —
-                            // a resolved scan lands on the row's Qty itself.
+                          const modified = event.ctrlKey || event.metaKey || event.altKey;
+                          if (event.key === "Enter" && !modified) {
+                            // Enter is the BARCODE check and nothing else: the
+                            // cell has committed the scan, and the commit
+                            // resolves it. The walk does not move on from here
+                            // — a resolved scan lands on the row's Qty itself.
                             event.preventDefault();
                             event.stopPropagation();
                             if (!input.value.trim()) {
@@ -419,11 +535,14 @@ export function OpeningStockGrid(props: OpeningStockGridProps) {
                             }
                             return;
                           }
-                          if (event.key === "ArrowDown") {
-                            // Bail out of the scanner into the item picker.
+                          if (event.key === "ArrowDown" && !modified && !event.shiftKey) {
+                            // The cell is the item SEARCH too: what was typed
+                            // goes to the list. The cell has dropped it
+                            // (`dropBufferOnKeys`), so nothing is committed as
+                            // a code — the input still shows it here.
                             event.preventDefault();
                             event.stopPropagation();
-                            onOpenItemPicker(line.key, "");
+                            onSearchItems(line.key, input.value);
                           }
                         }}
                       />

@@ -77,11 +77,12 @@ export const openingStockApi = baseApi.injectEndpoints({
 
     /**
      * Fills a line from one item: unit, base unit, factor, tax, the tracking
-     * signature in force on `onDate`, and whether the item is already opened.
-     * Deliberately NO cost. A 404 is an answer and names its cause.
+     * signature in force on `onDate`, and whether the item is already opened —
+     * in the line's godown (and bucket) when they are sent. Deliberately NO
+     * cost. A 404 is an answer and names its cause.
      */
     getOpeningStockItemLookup: builder.query<OpeningStockItemLookup, OpeningStockItemLookupQuery>({
-      query: ({ companyId, branchId, itemId, uomId, onDate }) => ({
+      query: ({ companyId, branchId, itemId, uomId, onDate, godownId, bucket }) => ({
         url: OPENING_STOCK_ITEM_LOOKUP_ENDPOINT,
         params: {
           companyId,
@@ -89,6 +90,8 @@ export const openingStockApi = baseApi.injectEndpoints({
           itemId,
           ...(uomId ? { uomId } : {}),
           onDate,
+          ...(godownId ? { godownId } : {}),
+          ...(bucket ? { bucket } : {}),
         },
       }),
       transformResponse: (payload: ApiSuccessResponse<OpeningStockItemLookup>) => payload.data,

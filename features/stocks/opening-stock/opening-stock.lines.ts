@@ -200,19 +200,60 @@ export function recalcLine(line: OpeningStockLine): OpeningStockLine {
   };
 }
 
+/** Where a row stands in the document as the save will number it. */
+export type LineNumber = { lineNo: number; splitNo: number };
+
+/**
+ * (lineNo, splitNo) for every row that has an item, by row key — Qt
+ * `lineNumbers()`, the ONE statement of what a "line" is. The totals' line
+ * count, the `#` column, the payload and the pre-post check's answer all read
+ * it, so they cannot disagree about which rows are one line.
+ *
+ * A row continues the line above it only when it is marked a split (> 1) AND
+ * carries the same item as that line. '-' on a split's first row, or '+' and a
+ * new item between two splits, used to leave a split attached to whatever line
+ * was above it (another item, or none). Splits are renumbered 1, 2, 3 in row
+ * order, so a split copied from one that already has later ones cannot send
+ * the same (line, split) twice. Rows with no item have no number and do not
+ * break a line.
+ */
+export function lineNumbersOf(lines: readonly OpeningStockLine[]): Map<string, LineNumber> {
+  const numbers = new Map<string, LineNumber>();
+  let lineNo = 0;
+  let splitNo = 0;
+  let lineItem = "";
+  for (const line of lines) {
+    if (!hasItem(line)) {
+      continue;
+    }
+    const continues = lineNo > 0 && line.itemId === lineItem && Math.trunc(line.splitNo) > 1;
+    if (continues) {
+      splitNo += 1;
+    } else {
+      lineNo += 1;
+      splitNo = 1;
+      lineItem = line.itemId;
+    }
+    numbers.set(line.key, { lineNo, splitNo });
+  }
+  return numbers;
+}
+
 /** The document totals — `recalcTotals()`. */
 export function computeTotals(lines: readonly OpeningStockLine[]): OpeningStockTotals {
+  const numbers = lineNumbersOf(lines);
   let count = 0;
   let qty = 0;
   let value = 0;
   let valueWot = 0;
   for (const line of lines) {
-    if (!hasItem(line)) {
+    const number = numbers.get(line.key);
+    if (!number) {
       continue;
     }
-    // svh_line_count counts LINES, not rows: a split of 1 starts a line, the
-    // same rule the payload numbers them by.
-    if (Math.max(1, Math.trunc(line.splitNo)) === 1) {
+    // svh_line_count counts LINES, not rows — the ledger writes a row per
+    // split, which is why "3 lines" and "5 ledger rows" are both right.
+    if (number.splitNo === 1) {
       count += 1;
     }
     qty += line.baseQty + line.freeBaseQty;
@@ -220,26 +261,6 @@ export function computeTotals(lines: readonly OpeningStockLine[]): OpeningStockT
     valueWot += line.valueWot;
   }
   return { lines: count, qty, value, valueWot };
-}
-
-/**
- * The line number each row will be SAVED under, by row key. A split of 1 opens
- * a new line; a higher split belongs to the line above it. Rows with no item
- * have none.
- */
-export function lineNumbersOf(lines: readonly OpeningStockLine[]): Map<string, number> {
-  const numbers = new Map<string, number>();
-  let lineNo = 0;
-  for (const line of lines) {
-    if (!hasItem(line)) {
-      continue;
-    }
-    if (Math.max(1, Math.trunc(line.splitNo)) === 1) {
-      lineNo += 1;
-    }
-    numbers.set(line.key, Math.max(lineNo, 1));
-  }
-  return numbers;
 }
 
 // ---------------------------------------------------------------------------

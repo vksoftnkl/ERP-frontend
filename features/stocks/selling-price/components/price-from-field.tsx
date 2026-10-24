@@ -27,6 +27,8 @@ export function PriceFromField({
   disabled,
   onChange,
   onLeave,
+  id = PRICE_FROM_INPUT_ID,
+  title = TIP,
 }: {
   /** `YYYY-MM-DD`, "" = today. */
   value: string;
@@ -36,6 +38,9 @@ export function PriceFromField({
   onChange: (value: string) => void;
   /** Back to the grid. */
   onLeave: () => void;
+  /** Another screen's field (the quick rate popup) — its own id and tooltip. */
+  id?: string;
+  title?: string;
 }) {
   const [text, setText] = useState(() => toDisplayDate(value));
   // The day can change from outside (back to today after a scheduled save):
@@ -65,14 +70,14 @@ export function PriceFromField({
   return (
     <span className={cx(qs.dateField, styles.priceFromField)}>
       <input
-        id={PRICE_FROM_INPUT_ID}
+        id={id}
         className={cx(qs.input, qs.dateInput)}
         value={text}
         placeholder="today"
         inputMode="numeric"
         autoComplete="off"
         aria-label="Price from"
-        title={TIP}
+        title={title}
         disabled={disabled}
         // F5 / Ctrl+Enter from here commits a half-typed day before the save reads it.
         data-selling-price-commit="true"

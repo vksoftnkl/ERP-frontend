@@ -41,6 +41,14 @@ export const CONFIGURED_GRIDS = {
   itemGroupList: { name: "MAIN LIST - ITEM GROUPS", fallbackId: "48", deletedParam: "iitg_is_deleted" },
   itemBrandList: { name: "MAIN LIST - ITEM BRAND", fallbackId: "49", deletedParam: "ibrand_is_deleted" },
   itemCategoryList: { name: "MAIN LIST - ITEM CATEGORY", fallbackId: "51", deletedParam: "icategory_is_deleted" },
+  /**
+   * Item Size Master (menu 291) — textile. Also binds a bare `iisz_company_id`
+   * (shared sizes + this company's own) that must ALWAYS be sent: unsent, the
+   * literal stays in the statement and the whole query fails.
+   */
+  itemSizeList: { name: "MAIN LIST - ITEM SIZE", fallbackId: "181", deletedParam: "iisz_is_deleted" },
+  /** Item Colour Master (menu 292) — textile. Binds `iicl_company_id`, always sent. */
+  itemColourList: { name: "MAIN LIST - ITEM COLOUR", fallbackId: "182", deletedParam: "iicl_is_deleted" },
   godownList: { name: "MAIN LIST - GODOWNS", fallbackId: "55", deletedParam: "igdl_is_deleted" },
   stateList: { name: "MAIN LIST - CUSTOMER STATES", fallbackId: "57", deletedParam: "istm_is_deleted" },
   cityList: { name: "MAIN LIST - CUSTOMER CITES", fallbackId: "58", deletedParam: "ictm_is_deleted" },

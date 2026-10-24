@@ -194,6 +194,13 @@ export type SaleOrderDraftApi = {
   pickItem: (lineKey: string, itemId: string, itemUnitId?: string) => Promise<void>;
   recoverBaseFactor: (lineKey: string) => Promise<void>;
   switchUnit: (lineKey: string) => Promise<void>;
+  /**
+   * The quick rate popup (Ctrl+R, notes 146) saved with "apply to this line":
+   * re-price the line through this screen's own lookup, on its own unit — F4's
+   * price step without the unit cycle. Nothing when the line no longer holds
+   * `itemId`.
+   */
+  repriceLine: (lineKey: string, itemId?: string) => Promise<void>;
   setLineUnit: (lineKey: string, itemUnitId: string) => Promise<void>;
   resolveBarcode: (lineKey: string, barcode: string) => Promise<boolean>;
   applyPriceLevel: (
@@ -609,6 +616,31 @@ export function useSaleOrderDraft(
       }
     },
     [dispatch, draft.lines, fetchItemPrice, fetchNextUnit, priceQueryFor],
+  );
+  /**
+   * The quick rate popup (Ctrl+R, notes 146) saved with "apply to this line":
+   * the same price lookup F4 runs, on the line's OWN unit — no unit cycle — and
+   * only while the line still holds the item whose rates were changed.
+   */
+  const repriceLine = useCallback(
+    async (lineKey: string, itemId?: string) => {
+      const line = draft.lines.find((row) => row.key === lineKey);
+      if (!line?.itemId || (itemId && line.itemId !== itemId)) {
+        return;
+      }
+      setBusy("pricing");
+      try {
+        const lookup = await fetchItemPrice(
+          priceQueryFor(line, line.itemId, line.itemUnitId || undefined, line.priceLevel),
+        ).unwrap();
+        dispatch(itemPriceApplied({ key: lineKey, lookup }));
+      } catch (error) {
+        toast.error(errorMessage(error));
+      } finally {
+        setBusy("idle");
+      }
+    },
+    [dispatch, draft.lines, fetchItemPrice, priceQueryFor],
   );
 
   const resolveBarcode = useCallback(
@@ -1176,6 +1208,7 @@ export function useSaleOrderDraft(
     pickItem,
     recoverBaseFactor,
     switchUnit,
+    repriceLine,
     setLineUnit,
     resolveBarcode,
     applyPriceLevel,

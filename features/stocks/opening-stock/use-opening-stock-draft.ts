@@ -16,24 +16,31 @@
  * godown, date and rate source (`startNextDocument`) — a filed document is not
  * left on screen to be keyed into twice.
  *
+ * ── Replies that land on a LINE (Qt `LineTicket`) ────────────────────────
+ * A lookup is asked for one row and answered later; by then the operator may
+ * have inserted or removed rows, pressed New, saved, loaded another document
+ * or left the screen. A ticket names the line by its row key (which follows
+ * inserts and removals, and dies with its row) and the document by a
+ * generation bumped on every reset / load / next document. A reply whose row
+ * is gone, whose generation moved, or whose row now holds another item is
+ * dropped — the older answer must not win over a re-pick or a second scan.
+ *
  * The draft is held in state AND in a ref advanced synchronously by `apply()`,
- * so a save fired straight after a cell commits (Ctrl+Enter blurs the cell
+ * so a save fired straight after a cell commits (the shared keys blur the cell
  * first) reads the committed value rather than the render before it.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useBusinessContext } from "@/components/layout/business-context";
+import { useGetTxnAdjacentMutation } from "@/components/txn/txn-adjacent";
 import { formatCurrency } from "@/domain/pricing";
-import {
-  focusCell,
-  focusFirstCell,
-  focusNextStopFrom,
-} from "@/features/sales/quotation/components/grid-focus";
+import { focusCell, focusNextStopFrom } from "@/features/sales/quotation/components/grid-focus";
 import { accountingYearOf, isRealDate, todayIso } from "@/features/sales/quotation/quotation.utils";
 import { getUserInfo } from "@/lib/auth/session";
 import { confirm } from "@/lib/confirm";
 import { toast } from "@/lib/notify";
 import { RESTORED_MESSAGE_OPTIONS, restoredMessage, screenMemory, type ScreenScope } from "@/lib/screen-memory";
 import { useForgetIfWritingOnUnmount, useRecalledOnce, type ScreenMemoryOption } from "@/lib/use-screen-memory";
+import { useLazySwitchItemUomQuery } from "@/store/api/quotationApi";
 import {
   useCancelOpeningStockVoucherMutation,
   useLazyGetOpeningStockItemByBarcodeQuery,
@@ -74,12 +81,17 @@ import {
   type OpeningStockAction,
 } from "./opening-stock.state";
 import { missingIdentityLines, notADraftMessage, validateBeforeSave } from "./opening-stock.validate";
-import { say } from "./components/say";
-import { focusCellAfterRender, focusFirstCellOfRow } from "./components/opening-stock-grid";
+import { say, type SayKind } from "./components/say";
+import {
+  focusCellAfterRender,
+  focusEntryCellOfRow,
+  focusFirstCellOfRow,
+} from "./components/opening-stock-grid";
 import type {
   GridRow,
   OpeningStockDocKey,
   OpeningStockDraft,
+  OpeningStockLine,
   OpeningStockLineField,
   OpeningStockViolation,
 } from "./opening-stock.types";
@@ -91,7 +103,13 @@ export const DATE_FIELD_ID = "opening-stock-date";
 export type OpeningStockBusy = "idle" | "loading" | "saving" | "posting" | "cancelling";
 
 export type PickerState =
-  | { kind: "item"; rowKey: string; query: string }
+  | {
+      kind: "item";
+      rowKey: string;
+      query: string;
+      /** The cell the list was opened from — where a cancelled list hands the cursor back. */
+      origin: "barcode" | "itemName";
+    }
   | { kind: "supplier"; rowKey: string; query: string }
   | null;
 
@@ -104,6 +122,14 @@ const NUMERIC_DECIMALS: Partial<Record<OpeningStockLineField, number>> = {
   landedRate: 6,
   taxPerc: 3,
 };
+
+/** What Qt says when Previous / Next has nowhere to go. */
+export const STEP_NOTICES = {
+  newHasNoNext: "A new document is the newest — nothing comes after it.",
+  none: "There are no openings yet.",
+  oldest: "This is the oldest opening.",
+  newest: "This is the newest opening.",
+} as const;
 
 function focusById(id: string): void {
   window.setTimeout(() => {
@@ -143,6 +169,9 @@ function memoryScopeOf(draft: OpeningStockDraft): ScreenScope {
   return { companyId: draft.companyId, branchId: draft.branchId, accYear: draft.accYear };
 }
 
+/** One line's ticket: the row, and the document it was asked for. */
+type LineTicket = { rowKey: string; generation: number };
+
 export type UseOpeningStockDraftOptions = {
   initialDocument?: OpeningStockDocKey;
   /** "entry" opens a loaded DRAFT for edit (still read-only for anything else). */
@@ -181,8 +210,34 @@ export function useOpeningStockDraft({
   const [loadVoucherQuery] = useLazyGetOpeningStockVoucherQuery();
   const [lookupItemQuery] = useLazyGetOpeningStockItemLookupQuery();
   const [barcodeQuery] = useLazyGetOpeningStockItemByBarcodeQuery();
+  const [switchUomQuery] = useLazySwitchItemUomQuery();
   const [saveVoucher] = useSaveOpeningStockVoucherMutation();
   const [cancelVoucherMutation] = useCancelOpeningStockVoucherMutation();
+  const [adjacentMutation] = useGetTxnAdjacentMutation();
+
+  /**
+   * Bumped whenever the document on screen changes (New, a load, the next
+   * document after a write): a lookup still in flight belongs to the old one.
+   */
+  const generationRef = useRef(0);
+
+  /**
+   * False once the screen is gone. A lookup that answers after that still
+   * reaches the REMEMBERED document (screen memory, below) — but it no longer
+   * says anything or moves a cursor on a screen the operator has left.
+   */
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
+  const tell = useCallback((kind: SayKind, title: string, text: string) => {
+    if (aliveRef.current) {
+      say(kind, title, text);
+    }
+  }, []);
 
   // Screen memory is written HERE, in the funnel every change goes through,
   // rather than from an effect: an item lookup that answers after the screen is
@@ -192,6 +247,9 @@ export function useOpeningStockDraft({
   const discarded = useRef(false);
   const apply = useCallback(
     (action: OpeningStockAction) => {
+      if (action.type === "reset" || action.type === "startNext" || action.type === "documentLoaded") {
+        generationRef.current += 1;
+      }
       draftRef.current = openingStockReducer(draftRef.current, action);
       setDraft(draftRef.current);
       const next = draftRef.current;
@@ -205,6 +263,19 @@ export function useOpeningStockDraft({
     },
     [memoryKey],
   );
+
+  const lineTicket = useCallback(
+    (rowKey: string): LineTicket => ({ rowKey, generation: generationRef.current }),
+    [],
+  );
+
+  /** The row a reply may land on — null when the document moved on or the row is gone. */
+  const ticketRow = useCallback((ticket: LineTicket): OpeningStockLine | null => {
+    if (ticket.generation !== generationRef.current) {
+      return null;
+    }
+    return draftRef.current.lines.find((line) => line.key === ticket.rowKey) ?? null;
+  }, []);
 
   const setBusy = useCallback((next: OpeningStockBusy) => {
     busyRef.current = next;
@@ -240,18 +311,50 @@ export function useOpeningStockDraft({
     return { companyId, branchId, accYear, deviceId };
   }, []);
 
+  /** A DRAFT open for entry — the only state a pick, a scan or a unit switch may change a line in. */
+  const editableNow = useCallback(
+    () => draftRef.current.mode === "entry" && draftRef.current.status === "DRAFT",
+    [],
+  );
+
+  /**
+   * Where keying starts (`focusEntryStart()`): the godown while there is none,
+   * else the first row still without an item — on its Barcode, which is the
+   * scan field AND the item search. A read-only document takes no cursor.
+   */
+  const focusEntryStart = useCallback(() => {
+    window.requestAnimationFrame(() =>
+      window.setTimeout(() => {
+        const current = draftRef.current;
+        if (!aliveRef.current || current.mode !== "entry" || current.status !== "DRAFT") {
+          return;
+        }
+        if (!current.header.godownId) {
+          focusById(GODOWN_FIELD_ID);
+          return;
+        }
+        const row = current.lines.find((line) => !hasItem(line)) ?? current.lines[current.lines.length - 1];
+        if (row) {
+          focusEntryCellOfRow(row.key);
+        }
+      }, 0),
+    );
+  }, []);
+
   /** "That one is filed, here is the next." */
   const startNextDocument = useCallback(() => {
     apply({ type: "startNext", scope: sessionScope(), today: todayIso() });
     setFlagged(null);
-    window.setTimeout(() => focusFirstCell(OPENING_STOCK_GRID_NAME, "itemName"), 0);
-  }, [apply, sessionScope]);
+    focusEntryStart();
+  }, [apply, focusEntryStart, sessionScope]);
 
   // ── Load ──────────────────────────────────────────────────────────────
   const loadVoucher = useCallback(
-    async (key: OpeningStockDocKey, openForEdit: boolean) => {
+    async (key: OpeningStockDocKey, openForEdit: boolean): Promise<boolean> => {
       // The document's OWN scope, from the list row; the session is only the
-      // fallback for a key assembled by hand.
+      // fallback for a key assembled by hand. Taken over only when the
+      // document ARRIVES: a load that fails leaves the screen as it was, under
+      // its own scope (`documentLoaded` is the only place the scope changes).
       const scope = {
         companyId: key.companyId || sessionRef.current.companyId,
         branchId: key.branchId || sessionRef.current.branchId,
@@ -261,18 +364,20 @@ export function useOpeningStockDraft({
       try {
         const document = await loadVoucherQuery({ ...scope, svhId: key.svhId }).unwrap();
         if (!document?.header?.svhId) {
-          say("warn", "Not found", "That opening stock voucher no longer exists.");
-          return;
+          tell("warn", "Not found", "That opening stock voucher no longer exists.");
+          return false;
         }
         apply({ type: "documentLoaded", document, scope, openForEdit });
         setFlagged(null);
+        return true;
       } catch (error) {
-        say("error", "", describeError(error, "The opening stock voucher could not be loaded."));
+        tell("error", "", describeError(error, "The opening stock voucher could not be loaded."));
+        return false;
       } finally {
         setBusy("idle");
       }
     },
-    [apply, loadVoucherQuery, setBusy],
+    [apply, loadVoucherQuery, setBusy, tell],
   );
 
   // A fresh screen belongs to the session's scope — re-seeded once the
@@ -282,7 +387,11 @@ export function useOpeningStockDraft({
     if (initialDocument) {
       if (!loadedRef.current) {
         loadedRef.current = true;
-        void loadVoucher(initialDocument, initialMode === "entry");
+        void loadVoucher(initialDocument, initialMode === "entry").then((loaded) => {
+          if (loaded) {
+            focusEntryStart();
+          }
+        });
       }
       return;
     }
@@ -298,7 +407,18 @@ export function useOpeningStockDraft({
     ) {
       apply({ type: "reset", scope: sessionScope(), today: todayIso() });
     }
-  }, [apply, initialDocument, initialMode, loadVoucher, session, sessionScope]);
+  }, [apply, focusEntryStart, initialDocument, initialMode, loadVoucher, session, sessionScope]);
+
+  // The first show: the cursor goes where keying starts, not wherever the
+  // browser left it (Qt `showEvent()`).
+  const shownRef = useRef(false);
+  useEffect(() => {
+    if (shownRef.current || initialDocument) {
+      return;
+    }
+    shownRef.current = true;
+    focusEntryStart();
+  }, [focusEntryStart, initialDocument]);
 
   // ── Header ────────────────────────────────────────────────────────────
   const setHeaderField = useCallback(
@@ -326,14 +446,14 @@ export function useOpeningStockDraft({
     if (draftRef.current.header.godownId) {
       return true;
     }
-    say(
+    tell(
       "warn",
       "Godown first",
       "Choose the godown before keying items — it is where each line's stock opens, and a line without one cannot be saved.",
     );
     focusById(GODOWN_FIELD_ID);
     return false;
-  }, []);
+  }, [tell]);
 
   // ── Item lookup ───────────────────────────────────────────────────────
   /**
@@ -342,14 +462,39 @@ export function useOpeningStockDraft({
    * seeded cost would switch the rate source off. A 404 is an answer (a
    * service item, no unit conversion, a unit not the item's) and empties the
    * row so a half-filled line cannot be saved.
+   *
+   * `keepLineValues` — F4's unit switch: the line already has its MRP, sale
+   * price and cost, carried across (the reducer); the reply lands only while
+   * the line is still on the unit it was switched FROM, and a refused lookup
+   * leaves the line exactly as it was.
    */
   const fetchItemDetail = useCallback(
-    async (rowKey: string, itemId: string, unitId: string) => {
+    async (
+      rowKey: string,
+      itemId: string,
+      unitId: string,
+      options: { keepLineValues?: boolean; fromUnitId?: string } = {},
+    ) => {
       if (!itemId) {
         return;
       }
+      const keep = options.keepLineValues === true;
+      const ticket = lineTicket(rowKey);
       const current = draftRef.current;
+      const row = current.lines.find((line) => line.key === rowKey);
       const onDate = isRealDate(current.header.docDate) ? current.header.docDate : todayIso();
+      // Still there, still this document's, still this item — and, for a unit
+      // switch, still on the unit it was switched from.
+      const landing = (): OpeningStockLine | null => {
+        const target = ticketRow(ticket);
+        if (!target || target.itemId !== itemId) {
+          return null;
+        }
+        if (keep && target.uomId !== (options.fromUnitId ?? "")) {
+          return null;
+        }
+        return target;
+      };
       try {
         const lookup = await lookupItemQuery({
           companyId: current.companyId,
@@ -357,49 +502,112 @@ export function useOpeningStockDraft({
           itemId,
           ...(unitId ? { uomId: unitId } : {}),
           onDate,
+          // The line's godown narrows "already opened" to the holding's grain
+          // (notes 143 #8). Not the bucket: it is chosen after the pick.
+          ...(row?.godownId ? { godownId: row.godownId } : {}),
         }).unwrap();
-        // A newer pick on the same row wins over this answer.
-        const row = draftRef.current.lines.find((line) => line.key === rowKey);
-        if (!row || row.itemId !== itemId) {
+        if (!landing()) {
           return;
         }
-        apply({ type: "itemLookupApplied", rowKey, lookup });
+        apply({ type: "itemLookupApplied", rowKey, lookup, keepLineValues: keep });
         if (lookup.alreadyOpened) {
           // Not a refusal: the engine's rule is per HOLDING, which this cannot
           // see — said while the operator is typing, not at post.
-          apply({ type: "auditSet", text: `${lookup.itemName} already has an opening in this branch` });
+          apply({
+            type: "noticeSet",
+            text: `${lookup.itemName} already has an opening in this godown this year`,
+          });
         }
       } catch (error) {
-        const row = draftRef.current.lines.find((line) => line.key === rowKey);
-        if (row && row.itemId === itemId) {
-          apply({ type: "lineCleared", rowKey });
+        if (!landing()) {
+          return; // the screen, the document or the line has moved on
+        }
+        if (keep) {
+          // A refused unit switch leaves the line as it was.
+          tell("error", "", describeError(error, "The unit could not be changed."));
+          return;
+        }
+        apply({ type: "lineCleared", rowKey });
+        if (aliveRef.current) {
           focusCellAfterRender(rowKey, "itemName");
         }
-        say("error", "", describeError(error, "The item could not be read."));
+        tell("error", "", describeError(error, "The item could not be read."));
       }
     },
-    [apply, lookupItemQuery],
+    [apply, lineTicket, lookupItemQuery, tell, ticketRow],
   );
 
   // ── Pickers ───────────────────────────────────────────────────────────
+  /**
+   * The item list for one row. From the Item cell it can re-pick a line; from
+   * the Barcode cell (↓) it is the search for a row with no item yet, and the
+   * typed text is its query.
+   */
   const openItemPicker = useCallback(
-    (rowKey: string, typed: string) => {
-      if (draftRef.current.mode !== "entry" || draftRef.current.status !== "DRAFT") {
-        return;
+    (rowKey: string, typed: string, origin: "barcode" | "itemName" = "itemName"): boolean => {
+      if (!editableNow()) {
+        return false;
+      }
+      const line = draftRef.current.lines.find((candidate) => candidate.key === rowKey);
+      if (!line || (origin === "barcode" && hasItem(line))) {
+        return false;
       }
       if (!requireHeaderGodown()) {
-        return;
+        return false;
       }
-      setPicker({ kind: "item", rowKey, query: typed });
+      setPicker({
+        kind: "item",
+        rowKey,
+        query: origin === "barcode" ? typed.replace(/\s+/g, " ").trim() : typed,
+        origin,
+      });
+      return true;
     },
-    [requireHeaderGodown],
+    [editableNow, requireHeaderGodown],
   );
+
+  /**
+   * ↓ in the Barcode cell — the item list, searched for what was typed. The
+   * cell has already DROPPED its edit (`dropBufferOnKeys`), so the typed text
+   * is never committed and resolved as a code; the pick then clears the cell
+   * so the item's own barcode fills it.
+   */
+  const searchItemsFromBarcode = useCallback(
+    (rowKey: string, typed: string) => {
+      openItemPicker(rowKey, typed, "barcode");
+    },
+    [openItemPicker],
+  );
+
+  /** On to Qty after a pick — the only thing left to key on the line. */
+  const focusQtyOf = useCallback((rowKey: string) => {
+    window.requestAnimationFrame(() =>
+      window.setTimeout(() => {
+        if (!aliveRef.current) {
+          return;
+        }
+        if (!focusCell(OPENING_STOCK_GRID_NAME, rowKey, "qty")) {
+          // A layout that hides Qty: the next stop after the Item cell.
+          if (!focusNextStopFrom(OPENING_STOCK_GRID_NAME, rowKey, "itemName")) {
+            focusCell(OPENING_STOCK_GRID_NAME, rowKey, "itemName");
+          }
+        }
+      }, 0),
+    );
+  }, []);
 
   const pickItem = useCallback(
     (row: GridRow) => {
       const target = picker;
       setPicker(null);
       if (!target || target.kind !== "item") {
+        return;
+      }
+      // A posted, cancelled or browsed document takes no pick.
+      if (!editableNow()) {
+        return;
+      }
+      if (!draftRef.current.lines.some((line) => line.key === target.rowKey)) {
         return;
       }
       if (!requireHeaderGodown()) {
@@ -410,36 +618,33 @@ export function useOpeningStockDraft({
       if (!itemId) {
         return;
       }
+      // Grid 71 names it item_name_en; reading item_name left the Item cell
+      // blank until the lookup returned.
       const itemName = String(row.item_name_en ?? row.item_name ?? "");
+      const unitName = String(row.unit_name ?? "");
       // A duplicate item is NOT a warning here: one line per batch, per MRP,
       // per bucket is the normal shape of an opening.
-      apply({ type: "itemPicked", rowKey: target.rowKey, itemId, itemName });
+      apply({ type: "itemPicked", rowKey: target.rowKey, itemId, itemName, unitName });
       setFlagged(null);
-      // On to the next stop from the Item cell, now that the row has an item
-      // and its cells have opened.
-      window.requestAnimationFrame(() =>
-        window.setTimeout(() => {
-          if (!focusNextStopFrom(OPENING_STOCK_GRID_NAME, target.rowKey, "itemName")) {
-            focusCell(OPENING_STOCK_GRID_NAME, target.rowKey, "itemName");
-          }
-        }, 0),
-      );
+      focusQtyOf(target.rowKey);
       void fetchItemDetail(target.rowKey, itemId, unitId);
     },
-    [apply, fetchItemDetail, picker, requireHeaderGodown],
+    [apply, editableNow, fetchItemDetail, focusQtyOf, picker, requireHeaderGodown],
   );
 
-  const openSupplierPicker = useCallback((rowKey: string, typed: string) => {
-    const current = draftRef.current;
-    if (current.mode !== "entry" || current.status !== "DRAFT") {
-      return;
-    }
-    const line = current.lines.find((candidate) => candidate.key === rowKey);
-    if (!line || !hasItem(line)) {
-      return;
-    }
-    setPicker({ kind: "supplier", rowKey, query: typed });
-  }, []);
+  const openSupplierPicker = useCallback(
+    (rowKey: string, typed: string) => {
+      if (!editableNow()) {
+        return;
+      }
+      const line = draftRef.current.lines.find((candidate) => candidate.key === rowKey);
+      if (!line || !hasItem(line)) {
+        return;
+      }
+      setPicker({ kind: "supplier", rowKey, query: typed });
+    },
+    [editableNow],
+  );
 
   /**
    * The supplier picked onto ONE line. Refused on an item not tracked
@@ -450,7 +655,7 @@ export function useOpeningStockDraft({
     (row: GridRow) => {
       const target = picker;
       setPicker(null);
-      if (!target || target.kind !== "supplier") {
+      if (!target || target.kind !== "supplier" || !editableNow()) {
         return;
       }
       const line = draftRef.current.lines.find((candidate) => candidate.key === target.rowKey);
@@ -474,23 +679,39 @@ export function useOpeningStockDraft({
       });
       focusCellAfterRender(target.rowKey, "supplierName");
     },
-    [apply, picker],
+    [apply, editableNow, picker],
   );
 
-  const closePicker = useCallback(() => setPicker(null), []);
+  /** A list closed without a pick: the cursor goes back to the cell it was opened from. */
+  const closePicker = useCallback(() => {
+    const target = picker;
+    setPicker(null);
+    if (!target) {
+      return;
+    }
+    const field = target.kind === "supplier" ? "supplierName" : target.origin;
+    focusCellAfterRender(target.rowKey, field);
+  }, [picker]);
 
   // ── Barcode ───────────────────────────────────────────────────────────
+  /** A scan per row still being looked up — a second commit of the same code is the same scan. */
+  const pendingScansRef = useRef(new Map<string, string>());
+
   /**
-   * The scan path: the EAN becomes the row's item and unit, then the SAME
-   * lookup the picker uses fills the rest — a scanned line and a picked one
-   * cannot drift apart.
+   * The scan path — Enter in Barcode is the barcode check and nothing else
+   * (only ↓ opens the item list). The EAN becomes the row's item and unit,
+   * then the SAME lookup the picker uses fills the rest, so a scanned line and
+   * a picked one cannot drift apart. The scanned code is KEPT: the item's
+   * default barcode only fills a blank cell.
    */
   const commitBarcode = useCallback(
     async (rowKey: string, barcode: string) => {
       const code = barcode.trim();
-      const current = draftRef.current;
-      const line = current.lines.find((candidate) => candidate.key === rowKey);
-      if (!code || !line || hasItem(line) || current.mode !== "entry") {
+      const line = draftRef.current.lines.find((candidate) => candidate.key === rowKey);
+      if (!code || !line || hasItem(line) || !editableNow()) {
+        return;
+      }
+      if (pendingScansRef.current.get(rowKey) === code) {
         return;
       }
       // A scan is an item pick, so it answers to the same rule.
@@ -498,24 +719,45 @@ export function useOpeningStockDraft({
         apply({ type: "barcodeCleared", rowKey });
         return;
       }
+      // Lands only on the same line, still blank, still this document: a second
+      // scan into the cell, '+' / '-' around it, New, Save or a load all leave
+      // this answer with nowhere to go.
+      const ticket = lineTicket(rowKey);
+      pendingScansRef.current.set(rowKey, code);
       try {
-        const item = await barcodeQuery({ barcode: code, companyId: current.companyId }).unwrap();
-        if (!item?.itemId) {
+        const item = await barcodeQuery({ barcode: code, companyId: draftRef.current.companyId }).unwrap();
+        const row = ticketRow(ticket);
+        if (!row || hasItem(row) || !editableNow() || !item?.itemId) {
           return;
         }
         apply({ type: "barcodeResolved", rowKey, barcode: code, itemId: item.itemId });
         void fetchItemDetail(rowKey, item.itemId, item.unitId ?? "");
         // Straight to the quantity — the only thing left to key after a scan.
-        focusCellAfterRender(rowKey, "qty");
+        if (aliveRef.current) {
+          focusCellAfterRender(rowKey, "qty");
+        }
       } catch (error) {
-        // No ACTIVE item carries the code: clear it so the next scan lands in
-        // an empty cell, and stay where the operator is.
-        apply({ type: "barcodeCleared", rowKey });
-        focusCellAfterRender(rowKey, "barcode");
-        say("error", "", describeError(error, `No item carries the barcode ${code}.`));
+        const row = ticketRow(ticket);
+        if (!row) {
+          return; // the line, or the document, is gone — nothing to say
+        }
+        // No ACTIVE item carries the code: clear it (if the cell still holds
+        // it) so the next scan lands in an empty cell, and stay where the
+        // operator is.
+        if (row.barcode.trim() === code) {
+          apply({ type: "barcodeCleared", rowKey });
+        }
+        if (aliveRef.current) {
+          focusCellAfterRender(rowKey, "barcode");
+        }
+        tell("error", "", describeError(error, `No item carries the barcode ${code}.`));
+      } finally {
+        if (pendingScansRef.current.get(rowKey) === code) {
+          pendingScansRef.current.delete(rowKey);
+        }
       }
     },
-    [apply, barcodeQuery, fetchItemDetail, requireHeaderGodown],
+    [apply, barcodeQuery, editableNow, fetchItemDetail, lineTicket, requireHeaderGodown, tell, ticketRow],
   );
 
   // ── Cells ─────────────────────────────────────────────────────────────
@@ -528,9 +770,17 @@ export function useOpeningStockDraft({
       setFlagged((current) => (current?.rowKey === rowKey ? null : current));
       switch (field) {
         case "barcode":
-          apply({ type: "lineFieldSet", rowKey, field, value: raw });
+          // Keyed only on a row with no item — the cell shuts once one lands, and
+          // a commit arriving after that (focus leaving a cell that has just
+          // been disabled) must not overwrite the item's own barcode.
+          if (hasItem(line)) {
+            return;
+          }
+          // Not a change by itself: the scan marks the document dirty when an
+          // item actually lands.
+          apply({ type: "barcodeTyped", rowKey, barcode: raw });
           // The scan IS the item pick on a row that has none.
-          if (!hasItem(line) && raw.trim()) {
+          if (raw.trim()) {
             void commitBarcode(rowKey, raw);
           }
           return;
@@ -567,11 +817,6 @@ export function useOpeningStockDraft({
   );
 
   // ── Rows ──────────────────────────────────────────────────────────────
-  const editableNow = useCallback(
-    () => draftRef.current.mode === "entry" && draftRef.current.status === "DRAFT",
-    [],
-  );
-
   /** + Line — a blank row ABOVE the current one. */
   const insertLine = useCallback(
     (rowKey: string | null) => {
@@ -620,7 +865,7 @@ export function useOpeningStockDraft({
     [apply, editableNow],
   );
 
-  /** Split batch — another allocation of the SAME line, from another batch. */
+  /** Split batch (Ctrl+D) — another allocation of the SAME line, from another batch. */
   const splitLine = useCallback(
     (rowKey: string | null) => {
       if (!editableNow()) {
@@ -640,20 +885,48 @@ export function useOpeningStockDraft({
   );
 
   /**
-   * F4 — the unit. Deliberately not a server round trip: changing the unit
-   * would have to carry the base quantity with it, so the unit comes with the
-   * item and is not switched afterwards.
+   * F4 — steps the line to the item's next unit (BOX → PCS → … → BOX), the
+   * sales screens' key. `/item-switch-uom` names the next conversion; the line
+   * is then re-read through the same lookup a picked item takes, keeping its
+   * values: the quantity stays as typed (it is now in the new unit — that is
+   * why the unit was switched), MRP and sale price stay, and the cost is
+   * carried at the same rate per BASE unit. A one-unit item answers the unit
+   * it already has, and nothing happens.
    */
-  const switchUnit = useCallback(() => {
-    if (!editableNow()) {
-      return;
-    }
-    say(
-      "info",
-      "Unit",
-      "Pick the unit with the item. Changing it afterwards would have to re-derive the base quantity, and the base quantity is what the document is valued on.",
-    );
-  }, [editableNow]);
+  const switchUnit = useCallback(
+    async (rowKey: string | null) => {
+      if (!editableNow() || !rowKey) {
+        return;
+      }
+      const line = draftRef.current.lines.find((candidate) => candidate.key === rowKey);
+      if (!line || !hasItem(line) || !line.uomId) {
+        return; // a blank row has no unit to switch (nor one still being looked up)
+      }
+      const itemId = line.itemId;
+      const fromUnitId = line.uomId;
+      const ticket = lineTicket(rowKey);
+      let nextUnitId = "";
+      try {
+        const next = await switchUomQuery({ item_id: itemId, iuc_id: fromUnitId }).unwrap();
+        nextUnitId = String(next?.iuc_id ?? "");
+      } catch (error) {
+        if (ticketRow(ticket)) {
+          tell("error", "", describeError(error, "The unit could not be changed."));
+        }
+        return;
+      }
+      // Still the same line, item and unit it was asked for.
+      const row = ticketRow(ticket);
+      if (!row || !editableNow() || row.itemId !== itemId || row.uomId !== fromUnitId) {
+        return;
+      }
+      if (!nextUnitId || nextUnitId === fromUnitId) {
+        return;
+      }
+      await fetchItemDetail(rowKey, itemId, nextUnitId, { keepLineValues: true, fromUnitId });
+    },
+    [editableNow, fetchItemDetail, lineTicket, switchUomQuery, tell, ticketRow],
+  );
 
   // ── Save / Post ───────────────────────────────────────────────────────
   const focusViolation = useCallback((violation: OpeningStockViolation) => {
@@ -854,7 +1127,8 @@ export function useOpeningStockDraft({
       return;
     }
     apply({ type: "modeSet", mode: "entry" });
-  }, [apply]);
+    focusEntryStart();
+  }, [apply, focusEntryStart]);
 
   /** New — throw this away and start genuinely blank. */
   const newDocument = useCallback(async () => {
@@ -872,7 +1146,8 @@ export function useOpeningStockDraft({
     }
     apply({ type: "reset", scope: sessionScope(), today: todayIso() });
     setFlagged(null);
-  }, [apply, sessionScope]);
+    focusEntryStart();
+  }, [apply, focusEntryStart, sessionScope]);
 
   /** Close — Esc. */
   const close = useCallback(async () => {
@@ -893,7 +1168,7 @@ export function useOpeningStockDraft({
     onLeave();
   }, [forgetRemembered, onLeave]);
 
-  /** Show List — F8. Opening another document replaces this one, so it asks what Close asks. */
+  /** Show List — Ctrl+O. Opening another document replaces this one, so it asks what Close asks. */
   const showList = useCallback(async () => {
     if (
       draftRef.current.dirty &&
@@ -911,6 +1186,76 @@ export function useOpeningStockDraft({
     onLeave();
   }, [forgetRemembered, onLeave]);
 
+  /**
+   * Previous / Next (Alt+PgUp / Alt+PgDn) — this document's neighbour in the
+   * list, through the one server walk every document type shares
+   * (`GET /txn/adjacent`): the opening entered just before / after this one in
+   * its company, branch and year, in the list's own order. On a new document,
+   * Previous opens the newest. A found document opens READ-ONLY (F2 to edit a
+   * draft); at either end the notice line says so and the screen stays.
+   */
+  const stepDocument = useCallback(
+    async (previous: boolean) => {
+      if (busyRef.current !== "idle") {
+        return;
+      }
+      const current = draftRef.current;
+      if (!current.svhId && !previous) {
+        apply({ type: "noticeSet", text: STEP_NOTICES.newHasNoNext });
+        return;
+      }
+      if (
+        current.dirty &&
+        !(await confirm({
+          title: "Open another opening",
+          message: "This opening has unsaved changes. Discard it and open another?",
+          confirmLabel: "Discard",
+          cancelLabel: "No",
+          iconVariant: "replace",
+        }))
+      ) {
+        return;
+      }
+      setBusy("loading");
+      let found: OpeningStockDocKey | null = null;
+      try {
+        const answer = await adjacentMutation({
+          docType: "OPENING_STOCK",
+          companyId: current.companyId,
+          branchId: current.branchId,
+          accYear: current.accYear,
+          ...(current.svhId ? { docId: current.svhId } : {}),
+          direction: previous ? "prev" : "next",
+        }).unwrap();
+        const doc = answer.doc;
+        if (!doc) {
+          apply({
+            type: "noticeSet",
+            text: !current.svhId ? STEP_NOTICES.none : previous ? STEP_NOTICES.oldest : STEP_NOTICES.newest,
+          });
+          return;
+        }
+        found = {
+          svhId: doc.docId,
+          companyId: doc.companyId,
+          branchId: doc.branchId,
+          accYear: doc.accYear,
+          refno: doc.refno ?? undefined,
+          status: doc.status,
+        };
+      } catch (error) {
+        tell("error", "", describeError(error, "The next opening could not be found."));
+        return;
+      } finally {
+        setBusy("idle");
+      }
+      if (found) {
+        await loadVoucher(found, false);
+      }
+    },
+    [adjacentMutation, apply, loadVoucher, setBusy, tell],
+  );
+
   const totals = useMemo(() => computeTotals(draft.lines), [draft.lines]);
 
   return {
@@ -925,6 +1270,7 @@ export function useOpeningStockDraft({
     setRateSource,
     setGodown,
     openItemPicker,
+    searchItemsFromBarcode,
     pickItem,
     openSupplierPicker,
     pickSupplier,
@@ -943,6 +1289,8 @@ export function useOpeningStockDraft({
     newDocument,
     close,
     showList,
+    stepDocument,
+    focusEntryStart,
     // screen memory
     resumed,
     finishResume,

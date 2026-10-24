@@ -36,7 +36,9 @@ export function BelowCostDialog({ lines, policy, onBack, onSaveAnyway }: BelowCo
       footer={
         <div className={styles.dialogButtons}>
           <span className={styles.dialogButtonsSpacer} />
-          <button ref={backRef} type="button" className={qs.button} onClick={onBack}>
+          {/* autoFocus too: ModalPortal mounts a commit late, and the frame
+              above can miss it (memory: modal portal focus race). */}
+          <button ref={backRef} type="button" className={qs.button} autoFocus onClick={onBack}>
             Go back
           </button>
           <button type="button" className={`${qs.button} ${qs.buttonPrimary}`} onClick={onSaveAnyway}>

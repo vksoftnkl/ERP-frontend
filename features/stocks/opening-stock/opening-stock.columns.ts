@@ -15,8 +15,8 @@
  * figures (value, base quantities, the per-base-unit cost) never open at all.
  */
 import type { UiTableColumnRow } from "@/features/sales/quotation/quotation.types";
-import { OS_COL } from "./opening-stock.constants";
-import { hasItem, isUntrackedIdentityField } from "./opening-stock.lines";
+import { OS_COL, TRACK, type TrackFacet } from "./opening-stock.constants";
+import { hasItem, isUntrackedIdentityField, tracks } from "./opening-stock.lines";
 import type { OpeningStockLine, OpeningStockLineField } from "./opening-stock.types";
 
 export type OpeningStockColumnKind =
@@ -249,4 +249,48 @@ export function isCellGreyed(
     return false;
   }
   return isUntrackedIdentityField(line, column.read);
+}
+
+/**
+ * The identity cells Enter stops on, and the letter that makes each a stop —
+ * the same letters that open them (`isCellEditable`).
+ */
+const TRACKED_STOP: Partial<Record<number, TrackFacet>> = {
+  [OS_COL.BatchNo]: TRACK.Batch,
+  [OS_COL.MfgDate]: TRACK.Expiry,
+  [OS_COL.ExpiryDate]: TRACK.Expiry,
+  [OS_COL.Mrp]: TRACK.Mrp,
+  [OS_COL.SalePrice]: TRACK.SalePrice,
+  [OS_COL.SerialNo]: TRACK.Serial,
+  [OS_COL.SupplierName]: TRACK.Supplier,
+};
+
+/**
+ * Whether Enter stops on this cell of this row — Qt `setFocusStops()` +
+ * `setFocusCellFilter()`, which override the layout's own focus flags on this
+ * screen.
+ *
+ * A row with no item: Barcode, then Item (Enter there opens the list). A row
+ * with an item: Qty, the identity cells its item is TRACKED by, then Cost /
+ * Unit — and on to the next row's Barcode. A greyed cell is never a stop, so
+ * Enter does not land where nothing can be typed; every other cell (Free, Tax,
+ * Bucket …) stays editable by click.
+ */
+export function isEnterStop(
+  column: Pick<OpeningStockColumnMeaning, "number">,
+  line: Pick<OpeningStockLine, "itemId" | "trackSignature">,
+): boolean {
+  const itemOnRow = hasItem(line);
+  switch (column.number) {
+    case OS_COL.Barcode:
+    case OS_COL.Description:
+      return !itemOnRow;
+    case OS_COL.Qty:
+    case OS_COL.CostPerUnit:
+      return itemOnRow;
+    default: {
+      const facet = TRACKED_STOP[column.number];
+      return facet !== undefined && itemOnRow && tracks(line.trackSignature, facet);
+    }
+  }
 }

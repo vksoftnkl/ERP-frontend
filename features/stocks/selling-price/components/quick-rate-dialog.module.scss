@@ -1,0 +1,352 @@
+/*
+ * The quick rate popup (Qt QuickRateDialog, notes 146) — its skin over the
+ * quotation's ModalShell. Lengths are `u(n)` off `--erp-q-u` (declared on
+ * :root by the quotation stylesheet, which ModalShell loads), with a fallback.
+ *
+ * globals.css forces every th's colour (`--table-header-text`) and every
+ * control's radius (`--erp-radius`) with !important: the band colours go in
+ * through the variable, and no control here sets a radius of its own.
+ */
+@function u($n) {
+  @return calc(#{$n} * var(--erp-q-u, 14px));
+}
+
+/* Qt resizes the dialog to 1260 wide; the height follows what it holds. */
+.panel {
+  width: min(u(84), 100%);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.45);
+  min-height: 0;
+  overflow: auto;
+  outline: none;
+  font-size: u(0.76);
+  color: var(--text-main, #222222);
+}
+
+/* ---------------------------------------------------------------- title */
+.top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: u(1);
+}
+.titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+/* The ITEM is the headline (user, 2026-10-23: "make product name visible better"). */
+.title {
+  overflow: hidden;
+  color: var(--primary, #7b1515);
+  font-size: u(1.15);
+  font-weight: 700;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sub {
+  color: var(--text-muted, #666666);
+  font-size: u(0.7);
+}
+.side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  color: var(--text-main, #222222);
+  font-size: u(0.72);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- controls */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: u(0.45);
+}
+.cap {
+  margin-left: u(0.4);
+  color: var(--text-muted, #666666);
+  font-size: u(0.64);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.cap:first-child {
+  margin-left: 0;
+}
+.scopeGroup {
+  display: inline-flex;
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  overflow: hidden;
+}
+.scopeButton {
+  padding: u(0.2) u(0.7);
+  border: 0;
+  background: #ffffff;
+  color: var(--text-main, #222222);
+  font: inherit;
+  font-size: u(0.72);
+  font-weight: 600;
+  cursor: pointer;
+}
+.scopeButton + .scopeButton {
+  border-left: 1px solid var(--border, #c9c9c9);
+}
+.scopeButton:disabled {
+  color: var(--text-soft, #aaaaaa);
+  cursor: not-allowed;
+}
+.scopeButtonOn {
+  background: var(--primary, #7b1515);
+  color: #ffffff;
+}
+.showAll {
+  display: inline-flex;
+  align-items: center;
+  gap: u(0.3);
+  margin-left: u(0.4);
+  font-size: u(0.72);
+  cursor: pointer;
+}
+.controlsSpacer {
+  flex: 1 1 auto;
+}
+.rights {
+  font-size: u(0.7);
+  font-weight: 600;
+}
+.toneOk {
+  color: #15803d;
+}
+.toneWarn {
+  color: #b45309;
+}
+
+/* ---------------------------------------------------------------- the grid */
+/* As tall as its rows, up to six, so the panels below keep their room. */
+.gridViewport {
+  max-height: calc(#{u(1.3)} + #{u(1.5)} + 6 * #{u(2.1)} + 2px);
+  overflow: auto;
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: #ffffff;
+  overscroll-behavior: contain;
+}
+.grid {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: auto;
+  font-size: u(0.76);
+}
+.grid thead th {
+  position: sticky;
+  z-index: 2;
+  padding: 0 u(0.3);
+  border-right: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--border, #c9c9c9);
+  white-space: nowrap;
+}
+.bandRow th {
+  top: 0;
+  height: u(1.3);
+  background: #ffffff;
+  font-size: u(0.6);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-align: center;
+}
+.headRow th {
+  top: u(1.3);
+  height: u(1.5);
+  background: var(--header-bg, #efe6e6);
+  font-size: u(0.68);
+  text-align: center;
+}
+.grid tbody td {
+  position: relative;
+  height: u(2.1);
+  padding: 0;
+  border-right: 1px solid #eeeeee;
+  border-bottom: 1px solid #eeeeee;
+  white-space: nowrap;
+}
+.rowCurrent > td {
+  background: var(--row-selected, #fbf6f6);
+}
+.unitCell {
+  padding: 0 u(0.45) !important;
+  font-weight: 600;
+  text-align: left;
+}
+.numCell {
+  padding: 0 u(0.45) !important;
+  text-align: right;
+}
+.muted {
+  color: var(--text-muted, #6b7280);
+}
+.empty {
+  padding: u(0.6) !important;
+  color: var(--text-muted, #666666);
+  text-align: center;
+}
+
+.inputCell {
+  min-width: u(5.2);
+}
+.cellInput {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: u(2.05);
+  padding: 0 u(0.45);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+  outline: none;
+}
+.cellInput.muted {
+  color: var(--text-muted, #6b7280);
+}
+.cellInputReadOnly {
+  cursor: default;
+}
+.cellCurrent {
+  box-shadow: inset 0 0 0 2px var(--primary, #7b1515);
+}
+.cellInputMoved {
+  font-weight: 700;
+}
+/* A changed figure: tinted green (up) / red (down), the move at the left. */
+.cellUp {
+  background: #e8f5ea !important;
+  box-shadow: inset 0 0 0 1px #15803d;
+  color: #15803d;
+}
+.cellDown {
+  background: #fdecec !important;
+  box-shadow: inset 0 0 0 1px #b42318;
+  color: #b42318;
+}
+.cellUp.cellCurrent,
+.cellDown.cellCurrent {
+  box-shadow: inset 0 0 0 2px var(--primary, #7b1515);
+}
+.delta {
+  position: absolute;
+  top: 50%;
+  left: u(0.35);
+  transform: translateY(-50%);
+  font-size: u(0.62);
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.live {
+  min-height: u(1.1);
+  margin: 0;
+  color: var(--text-main, #222222);
+  font-size: u(0.72);
+}
+.liveWarn {
+  color: #b45309;
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------- panels */
+.lower {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.6) u(1);
+  align-items: flex-start;
+}
+.lowerPanel {
+  display: flex;
+  flex: 1 1 u(24);
+  flex-direction: column;
+  gap: u(0.25);
+  min-width: 0;
+}
+.section {
+  margin: 0;
+  color: var(--primary, #7b1515);
+  font-size: u(0.72);
+  font-weight: 700;
+}
+.small {
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  border-collapse: collapse;
+  font-size: u(0.68);
+  table-layout: auto;
+}
+.small th {
+  padding: u(0.15) u(0.3);
+  border-bottom: 1px solid var(--border, #c9c9c9);
+  background: var(--header-bg, #efe6e6);
+  font-size: u(0.64);
+  text-align: left;
+  white-space: nowrap;
+}
+.small td {
+  max-width: u(14);
+  padding: u(0.15) u(0.3);
+  overflow: hidden;
+  border-bottom: 1px solid #f0f0f0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.small .num {
+  text-align: right;
+}
+.small .stretch {
+  width: 100%;
+}
+.small .wrapCell {
+  max-width: none;
+  white-space: normal;
+}
+/* An empty table still reads as one: two rows' height, no lines. */
+.blankRow td {
+  height: calc(2 * #{u(1.25)});
+  border-bottom: 0;
+}
+.note {
+  margin: 0;
+  color: var(--text-muted, #666666);
+  font-size: u(0.66);
+}
+
+/* ---------------------------------------------------------------- footer */
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: u(0.5);
+  width: 100%;
+}
+.footerSpacer {
+  flex: 1 1 auto;
+}
+.applyLine {
+  display: inline-flex;
+  align-items: center;
+  gap: u(0.35);
+  font-size: u(0.74);
+  font-weight: 600;
+  cursor: pointer;
+}

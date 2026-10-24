@@ -7,20 +7,25 @@
  *   reset             resetScreenState()     — btnNew: start genuinely blank
  *   startNext         startNextDocument()    — after a write: the header carries over
  *   godownSet         ddGodown::selected     — + applyHeaderGodownToBlankLines()
- *   itemPicked        applyPickedItem()      — before the lookup answers
+ *   itemPicked        applyPickedItem()      — before the lookup answers; a RE-pick
+ *                                            drops what the old item brought
  *   itemLookupApplied fetchItemDetail() ok   — unit, factor, tax, signature; recalcRow()
+ *                                            (keepLineValues: F4's unit switch)
  *   lineCleared       fetchItemDetail() 404  — the half-filled row is emptied
+ *   barcodeTyped      onGridCellEdited(Barcode) — the code, NOT a change by itself
  *   barcodeResolved   resolveBarcode() ok
  *   supplierPicked    applyPickedSupplier()
  *   lineFieldSet      onGridCellEdited()     — the recalc rules per column
  *   lineInserted      addLineRow()           — a blank row ABOVE the current one
  *   lineRemoved       removeLineRow()
  *   lineSplit         splitCurrentLine()
- *   documentLoaded    applyFetchedVoucher()
+ *   documentLoaded    applyFetchedVoucher()  — + showAudit()
  *   statusApplied     applyStatus()
+ *   noticeSet         m_auditNotice          — the line under the audit
  *
  * Invariants kept here rather than by every caller: the grid always ends in one
- * row with no item, and any edit marks the document dirty.
+ * row with no item, and any edit marks the document dirty — except a Barcode
+ * commit, which changes nothing until a scan actually lands an item.
  */
 import {
   DEFAULT_RATE_SOURCE,
@@ -41,11 +46,14 @@ import {
 import {
   headerFromPayload,
   lineFromPayload,
+  stampsFromHeader,
   statusOf,
   type LineProblem,
 } from "./opening-stock.payload";
 import { toNumber } from "@/features/sales/quotation/quotation.utils";
+import { dateTime12Of } from "@/lib/time-format";
 import type {
+  OpeningStockAuditStamps,
   OpeningStockDocumentPayload,
   OpeningStockDraft,
   OpeningStockItemLookup,
@@ -68,9 +76,20 @@ export type OpeningStockAction =
   | { type: "headerSet"; field: "docDate" | "usrRefno" | "remarks"; value: string }
   | { type: "rateSourceSet"; value: RateSource }
   | { type: "godownSet"; godownId: string; godownName: string }
-  | { type: "itemPicked"; rowKey: string; itemId: string; itemName: string }
-  | { type: "itemLookupApplied"; rowKey: string; lookup: OpeningStockItemLookup }
+  | { type: "itemPicked"; rowKey: string; itemId: string; itemName: string; unitName?: string }
+  | {
+      type: "itemLookupApplied";
+      rowKey: string;
+      lookup: OpeningStockItemLookup;
+      /**
+       * F4's unit switch: the line keeps its MRP and sale price (the lot's, not
+       * the unit's), its cost is carried at the same rate per BASE unit, and the
+       * old unit's barcode gives way to the new unit's.
+       */
+      keepLineValues?: boolean;
+    }
   | { type: "lineCleared"; rowKey: string }
+  | { type: "barcodeTyped"; rowKey: string; barcode: string }
   | { type: "barcodeResolved"; rowKey: string; barcode: string; itemId: string }
   | { type: "barcodeCleared"; rowKey: string }
   | { type: "supplierPicked"; rowKey: string; supplierId: string; supplierName: string }
@@ -87,7 +106,7 @@ export type OpeningStockAction =
     }
   | { type: "statusApplied"; status: string }
   | { type: "modeSet"; mode: "entry" | "browse" }
-  | { type: "auditSet"; text: string }
+  | { type: "noticeSet"; text: string }
   | { type: "problemsApplied"; problems: LineProblem[] }
   | { type: "problemsCleared" };
 
@@ -112,8 +131,37 @@ export function createDraft(scope: DraftScope, today: string): OpeningStockDraft
     lines: [blankLine()],
     mode: "entry",
     dirty: false,
-    audit: "",
+    stamps: null,
+    notice: "",
   };
+}
+
+/** One audit line — "Created 23-10-2026 10:15 AM by VKPOS" — from whichever halves there are. */
+function auditLine(verb: string, on: string, by: string): string {
+  const when = dateTime12Of(on);
+  const who = by.trim();
+  if (!when && !who) {
+    return "";
+  }
+  return [verb, when, who ? `by ${who}` : ""].filter(Boolean).join(" ");
+}
+
+/**
+ * The lines under the title (`showAudit()` / `refreshAuditLabel()`): who
+ * created the document and when, then who posted or cancelled it — and "New —
+ * not saved yet" on a document never saved. Times are the house 12-hour
+ * format. The notice line is separate (`draft.notice`).
+ */
+export function auditLinesOf(draft: Pick<OpeningStockDraft, "svhId" | "stamps">): string[] {
+  const stamps: OpeningStockAuditStamps | null = draft.stamps ?? null;
+  if (!draft.svhId || !stamps) {
+    return draft.svhId ? [] : ["New — not saved yet"];
+  }
+  return [
+    auditLine("Created", stamps.createdOn, stamps.createdBy),
+    auditLine("Posted", stamps.postedOn, stamps.postedBy),
+    auditLine("Cancelled", stamps.cancelledOn, ""),
+  ].filter(Boolean);
 }
 
 /**
@@ -170,10 +218,12 @@ const NUMBER_FIELDS = new Set<OpeningStockLineField>([
 ]);
 
 /**
- * `onGridCellEdited()`. A changed quantity, cost or tax clears the without-tax
- * rate before recalculating — otherwise `recalcLine()` would see the stale
- * figure and treat it as typed. A typed without-tax rate is recalculated from
- * as it stands. Everything else is stored and nothing is derived from it.
+ * `onGridCellEdited()`. A changed cost or tax clears the without-tax rate
+ * before recalculating — otherwise `recalcLine()` would see the stale figure
+ * and treat it as typed. A quantity does not change the RATE, so a cost without
+ * tax the operator typed (a per-unit cess) stays and only the values re-derive.
+ * A typed without-tax rate is recalculated from as it stands. Everything else
+ * is stored and nothing is derived from it.
  */
 export function applyLineEdit(
   line: OpeningStockLine,
@@ -191,11 +241,11 @@ export function applyLineEdit(
   next.problem = "";
 
   switch (field) {
-    case "qty":
-    case "freeQty":
     case "costPerUnit":
     case "taxPerc":
       return recalcLine({ ...next, costRateWot: 0 });
+    case "qty":
+    case "freeQty":
     case "costRateWot":
       return recalcLine(next);
     default:
@@ -231,6 +281,37 @@ export function splitCopyOf(line: OpeningStockLine, key: string = newLineKey()):
     decimalCount: line.decimalCount,
     trackSignature: line.trackSignature,
     splitNo: Math.max(1, Math.trunc(line.splitNo)) + 1,
+  };
+}
+
+/**
+ * A RE-pick on a line that had an item: everything the OLD item brought goes —
+ * its barcode, code, unit, base unit, factor, tax, a cost without tax, the
+ * identity cells, supplier, lot, decimals — so none of it is saved against the
+ * new one. The quantity and the cost typed per unit stay: the operator keyed
+ * those.
+ */
+export function clearedForRepick(line: OpeningStockLine): OpeningStockLine {
+  return {
+    ...line,
+    barcode: "",
+    itemCode: "",
+    uomId: "",
+    unitName: "",
+    baseUomId: "",
+    toBaseFactor: 0,
+    taxPerc: 0,
+    costRateWot: 0,
+    batchNo: "",
+    mfgDate: "",
+    expiryDate: "",
+    mrp: 0,
+    salePrice: 0,
+    serialNo: "",
+    supplierId: "",
+    supplierName: "",
+    lotId: "",
+    decimalCount: 0,
   };
 }
 
@@ -314,13 +395,17 @@ export function openingStockReducer(
     case "itemPicked": {
       // Seeded to "N" — tracks nothing — so the row is in a defined state
       // before the lookup answers instead of briefly opening every identity
-      // cell. A re-pick replaces the item but keeps what was keyed against it.
+      // cell. The Barcode cell is emptied — on a blank row whatever was typed
+      // there was a SEARCH, not a code — so the item's own barcode fills it;
+      // a re-pick drops everything the old item brought (`clearedForRepick`).
       const lines = mapLine(draft, action.rowKey, (line) =>
         withHeaderGodown(
           {
-            ...line,
+            ...(hasItem(line) ? clearedForRepick(line) : line),
             itemId: action.itemId,
             itemName: action.itemName,
+            // The picker row's unit, shown until the lookup names it.
+            unitName: action.unitName ?? "",
             itemCode: "",
             barcode: "",
             splitNo: 1,
@@ -336,27 +421,38 @@ export function openingStockReducer(
 
     case "itemLookupApplied": {
       const { lookup } = action;
+      const keep = action.keepLineValues === true;
       const lines = mapLine(draft, action.rowKey, (line) => {
         const factor = toNumber(lookup.toBaseFactor);
+        // A factor of 0 would fail ck_svi_to_base_factor; 1 is the honest
+        // fallback for an item whose only unit is its base.
+        const toBaseFactor = factor > 0 ? factor : 1;
+        // F4: the rate the line is valued at, per BASE unit, before the unit moves.
+        const keptCostRate = keep ? line.costRate : 0;
         return recalcLine({
           ...line,
           itemId: lookup.itemId || line.itemId,
           itemCode: lookup.itemCode ?? "",
           itemName: lookup.itemName || line.itemName,
-          // The symbol actually scanned is what the barcode column keeps; an
-          // item picked by name takes the item's own.
-          barcode: line.barcode || (lookup.barcode ?? ""),
+          // The item's DEFAULT barcode only fills a blank cell: a scanned code
+          // stays what was scanned (750252 picked the item; the default 750257
+          // used to overwrite it). An EAN belongs to ONE unit, so a unit switch
+          // replaces the old unit's code with the new unit's default.
+          barcode: keep ? (lookup.barcode ?? "") : line.barcode.trim() ? line.barcode : (lookup.barcode ?? ""),
           // Both iuc_ids — conversion rows, never unit ids.
           uomId: lookup.uomId ?? "",
-          unitName: lookup.unitName ?? "",
+          unitName: lookup.unitName || (keep ? "" : line.unitName),
           baseUomId: lookup.baseUomId ?? "",
-          // A factor of 0 would fail ck_svi_to_base_factor; 1 is the honest
-          // fallback for an item whose only unit is its base.
-          toBaseFactor: factor > 0 ? factor : 1,
+          toBaseFactor,
           taxPerc: toNumber(lookup.taxPerc),
           // Lot IDENTITY, not a price: sent only when the signature tracks them.
-          mrp: toNumber(lookup.mrp),
-          salePrice: toNumber(lookup.salePrice),
+          // A unit switch keeps what the line already has — they are the lot's.
+          mrp: keep && line.mrp !== 0 ? line.mrp : toNumber(lookup.mrp),
+          salePrice: keep && line.salePrice !== 0 ? line.salePrice : toNumber(lookup.salePrice),
+          // The same stock at the same cost: 1 BOX of 12 at 240 becomes 1 PCS
+          // at 20. The quantity stays as typed — it is now in the new unit,
+          // which is why the unit was switched.
+          costPerUnit: keptCostRate > 0 ? keptCostRate * toBaseFactor : line.costPerUnit,
           trackSignature: normalizeSignature(lookup.trackSignature),
         });
       });
@@ -369,6 +465,17 @@ export function openingStockReducer(
       const lines = mapLine(draft, action.rowKey, (line) => blankLine(line.key));
       return withLines(draft, lines, false);
     }
+
+    case "barcodeTyped":
+      // A Barcode commit changes nothing by itself — an empty one, or a code
+      // that turns out to match no item, leaves the document as it was. The
+      // resolve marks it dirty when an item actually lands.
+      return {
+        ...draft,
+        lines: mapLine(draft, action.rowKey, (line) =>
+          hasItem(line) ? line : { ...line, barcode: action.barcode },
+        ),
+      };
 
     case "barcodeResolved": {
       const lines = mapLine(draft, action.rowKey, (line) =>
@@ -475,7 +582,8 @@ export function openingStockReducer(
         lines: withTrailingBlank(lines),
         mode: editable ? "entry" : "browse",
         dirty: false,
-        audit: "",
+        stamps: stampsFromHeader(header),
+        notice: "",
       };
     }
 
@@ -487,17 +595,19 @@ export function openingStockReducer(
     case "modeSet":
       return { ...draft, mode: action.mode };
 
-    case "auditSet":
-      return { ...draft, audit: action.text };
+    case "noticeSet":
+      return { ...draft, notice: action.text };
 
     case "problemsApplied": {
+      // Located by the numbers THIS screen sent — the same rule built them.
       const numbers = lineNumbersOf(draft.lines);
       const lines = draft.lines.map((line) => {
-        const lineNo = numbers.get(line.key);
-        const split = Math.max(1, Math.trunc(line.splitNo));
-        const matched = action.problems.filter(
-          (problem) => problem.lineNo === lineNo && problem.splitNo === split,
-        );
+        const number = numbers.get(line.key);
+        const matched = number
+          ? action.problems.filter(
+              (problem) => problem.lineNo === number.lineNo && problem.splitNo === number.splitNo,
+            )
+          : [];
         return { ...line, problem: matched.map((problem) => problem.message).join("\n") };
       });
       return { ...draft, lines };

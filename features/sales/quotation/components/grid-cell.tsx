@@ -76,6 +76,14 @@ export type GridCellProps = {
   /** Opens the item / charge picker for a lookup cell. */
   onOpenPicker?: () => void;
   onKeyDown?: (event: KeyboardEvent<HTMLElement>) => void;
+  /**
+   * Unmodified keys that DROP what is being typed, as Escape does, before
+   * `onKeyDown` sees them — so focus leaving the cell afterwards commits
+   * nothing. The text input only. The Opening Stock Barcode cell's ↓ hands the
+   * typed text to the item list instead of resolving it as a code; the handler
+   * reads it off `event.target.value`, which still holds it.
+   */
+  dropBufferOnKeys?: readonly string[];
 };
 
 const NUMERIC_KINDS: GridCellKind[] = ["qty", "currency", "rate", "perc", "int"];
@@ -136,6 +144,7 @@ export function GridCell(props: GridCellProps) {
     onToggle,
     onOpenPicker,
     onKeyDown,
+    dropBufferOnKeys,
   } = props;
 
   const [buffer, setBuffer] = useState<string | null>(null);
@@ -457,6 +466,16 @@ export function GridCell(props: GridCellProps) {
           event.preventDefault();
           setBuffer(null);
           return;
+        }
+        if (
+          buffer !== null &&
+          dropBufferOnKeys?.includes(event.key) &&
+          !event.ctrlKey &&
+          !event.altKey &&
+          !event.metaKey &&
+          !event.shiftKey
+        ) {
+          setBuffer(null);
         }
         onKeyDown?.(event);
       }}

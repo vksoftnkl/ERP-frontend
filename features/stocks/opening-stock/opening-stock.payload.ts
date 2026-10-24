@@ -22,11 +22,13 @@ import {
   dateFromWire,
   dateToWire,
   hasItem,
+  lineNumbersOf,
   normalizeSignature,
   tracks,
 } from "./opening-stock.lines";
 import type {
   ApiFieldError,
+  OpeningStockAuditStamps,
   OpeningStockDraft,
   OpeningStockHeaderPayload,
   OpeningStockLine,
@@ -58,8 +60,9 @@ function trimmed(value: string | null | undefined): string {
 
 /**
  * The lines, exactly as the DTO wants them. Rows with no item are skipped (the
- * trailing blank row, and any the operator emptied). A split of 1 starts a new
- * line; a higher split belongs to the line above it.
+ * trailing blank row, and any the operator emptied). Lines and splits are
+ * numbered by `lineNumbersOf()` — a split continues its line only under the
+ * same item — the rule the totals and the `#` column read too.
  *
  * Identity columns are sent ONLY when the item is tracked that way: an untracked
  * batch number is discarded by the engine anyway, and a reprint showing a batch
@@ -67,20 +70,17 @@ function trimmed(value: string | null | undefined): string {
  */
 export function buildLines(lines: readonly OpeningStockLine[]): SaveOpeningStockLineDto[] {
   const out: SaveOpeningStockLineDto[] = [];
-  let lineNo = 0;
+  const numbers = lineNumbersOf(lines);
 
   for (const line of lines) {
-    if (!hasItem(line)) {
+    const number = numbers.get(line.key);
+    if (!number || !hasItem(line)) {
       continue;
-    }
-    const splitNo = Math.max(1, Math.trunc(line.splitNo));
-    if (splitNo === 1) {
-      lineNo += 1;
     }
 
     const dto: SaveOpeningStockLineDto = {
-      lineNo: Math.max(lineNo, 1),
-      splitNo,
+      lineNo: number.lineNo,
+      splitNo: number.splitNo,
       itemId: line.itemId,
       uomId: line.uomId,
       baseUomId: line.baseUomId,
@@ -260,6 +260,28 @@ export function headerFromPayload(header: OpeningStockHeaderPayload): OpeningSto
     rateSource: rateSourceOf(header.rateSource),
     usrRefno: header.usrRefno ?? "",
     remarks: header.remarks ?? "",
+  };
+}
+
+/** A UUID — what `svh_created_by` holds when a USER saved the document. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Who created / posted / cancelled the document, and when — read off the GET's
+ * header for the lines under the title (`showAudit()`).
+ *
+ * The creator is the display name when the server has one. Without it, the
+ * stored `createdBy` is shown only when it is not a bare user id (a till or an
+ * import job's name says something; a uuid does not).
+ */
+export function stampsFromHeader(header: OpeningStockHeaderPayload): OpeningStockAuditStamps {
+  const createdBy = trimmed(header.createdBy);
+  return {
+    createdOn: trimmed(header.createdOn),
+    createdBy: trimmed(header.createdByName) || (UUID.test(createdBy) ? "" : createdBy),
+    postedOn: trimmed(header.postedOn),
+    postedBy: trimmed(header.postedByName),
+    cancelledOn: trimmed(header.cancelledOn),
   };
 }
 

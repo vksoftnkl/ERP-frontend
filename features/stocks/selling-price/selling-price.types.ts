@@ -107,6 +107,12 @@ export type SaveSellingPriceRow = {
   levels: SaveSellingPriceLevel[];
   minPrice: number;
   roundOff: number;
+  /**
+   * Notes 147 B — the PRICE ROW's own cost for one of this unit, tax inclusive
+   * (the quick rate popup). Absent or null = unchanged; sent only when the
+   * operator changed it, and only where `costBasis` is PRICE_ROW.
+   */
+  costPrice?: number | null;
 };
 
 export type SaveSellingPriceBulkPayload = {
@@ -122,6 +128,13 @@ export type SaveSellingPriceBulkPayload = {
    */
   effectiveFrom?: string;
   rows: SaveSellingPriceRow[];
+  /**
+   * Notes 146 B — the quick rate popup: the menu of the screen it was opened
+   * from (12 Sale Bill, 14 Quotation, 11 Sales Order, 29 the item list). The
+   * Price Change Log adds "via <menu> (menu N)" to the change's reason. Omitted
+   * on menu 30 itself.
+   */
+  originMenuId?: number;
 };
 
 export type SellingPriceProblem = {
@@ -186,6 +199,8 @@ export type PriceLevelMasterRow = {
    * the wire reads as on.
    */
   priceLvlIsActive: boolean;
+  /** A deleted level is never shown (the quick rate popup reads it; missing reads as not deleted). */
+  priceLvlIsDeleted?: boolean;
 };
 
 /** Notes 140 B — the prices a scheduled row replaces: the row before it, else what the shelf showed. */
@@ -230,6 +245,31 @@ export type ItemPickerRow = {
   item_uom_id: string;
   item_name_en: string;
   unit_name: string;
+};
+
+/**
+ * `GET /stock/item-inward-history?companyId&branchId&itemId&limit` — one inward
+ * movement (an opening or a purchase) of the item at this branch, newest first
+ * (notes 146 A, the quick rate popup's "Recent inward").
+ */
+export type ItemInwardRow = {
+  /** `YYYY-MM-DD`. */
+  date: string;
+  txnType: string;
+  refno: string | null;
+  supplierId: string | null;
+  supplierName: string | null;
+  /** In the unit the document was keyed in (`unitName`), free quantity apart. */
+  qty: number;
+  freeQty: number;
+  unitName: string | null;
+  baseQty: number;
+  costWot: number;
+  /** cost ÷ cost w/o tax − 1, as a percentage; null when the cost w/o tax is 0. */
+  taxPerc: number | null;
+  cost: number;
+  mrp: number | null;
+  batchNo: string | null;
 };
 
 /** A server refusal, as the base query hands it over. */

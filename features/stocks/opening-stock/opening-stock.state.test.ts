@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { blankLine } from "./opening-stock.lines";
 import {
   applyLineEdit,
+  auditLinesOf,
   createDraft,
   isOpeningWorthRemembering,
   openingStockReducer,
@@ -123,6 +124,57 @@ describe("picking an item", () => {
     expect(row(draft, key).trackSignature).toBe("N");
   });
 
+  it("names the item from the picker row and shows its unit until the lookup answers", () => {
+    let draft = withGodown(createDraft(SCOPE, TODAY));
+    const key = draft.lines[0].key;
+    draft = openingStockReducer(draft, {
+      type: "itemPicked",
+      rowKey: key,
+      itemId: "item-1",
+      itemName: "Samsung H1",
+      unitName: "PCS",
+    });
+    expect(row(draft, key).itemName).toBe("Samsung H1");
+    expect(row(draft, key).unitName).toBe("PCS");
+  });
+
+  it("a RE-pick drops everything the old item brought, and keeps the qty and the typed cost", () => {
+    let draft = pickedDraft();
+    draft = openingStockReducer(draft, { type: "lineFieldSet", rowKey: "r1", field: "qty", value: 5 });
+    draft = openingStockReducer(draft, { type: "lineFieldSet", rowKey: "r1", field: "costPerUnit", value: 240 });
+    draft = openingStockReducer(draft, { type: "lineFieldSet", rowKey: "r1", field: "batchNo", value: "B1" });
+    draft = openingStockReducer(draft, { type: "lineFieldSet", rowKey: "r1", field: "costRateWot", value: 15 });
+    draft = openingStockReducer(draft, { type: "supplierPicked", rowKey: "r1", supplierId: "s1", supplierName: "Sup" });
+    draft = openingStockReducer(draft, {
+      type: "itemPicked",
+      rowKey: "r1",
+      itemId: "item-2",
+      itemName: "Other",
+      unitName: "KG",
+    });
+    const repicked = row(draft, "r1");
+    expect(repicked.itemId).toBe("item-2");
+    expect(repicked.qty).toBe(5);
+    expect(repicked.costPerUnit).toBe(240);
+    for (const field of ["barcode", "itemCode", "uomId", "baseUomId", "batchNo", "supplierId", "supplierName"] as const) {
+      expect(repicked[field]).toBe("");
+    }
+    expect(repicked.unitName).toBe("KG");
+    expect(repicked.toBaseFactor).toBe(0);
+    expect(repicked.taxPerc).toBe(0);
+    expect(repicked.costRateWot).toBe(0);
+    expect(repicked.mrp).toBe(0);
+    expect(repicked.trackSignature).toBe("N");
+    // The lookup then fills the new item's barcode into the cleared cell.
+    draft = openingStockReducer(draft, {
+      type: "itemLookupApplied",
+      rowKey: "r1",
+      lookup: lookup({ itemId: "item-2", barcode: "222", toBaseFactor: 1 }),
+    });
+    expect(row(draft, "r1").barcode).toBe("222");
+    expect(row(draft, "r1").costRate).toBe(240);
+  });
+
   it("keeps the scanned symbol over the item's own barcode", () => {
     let draft = withGodown(createDraft(SCOPE, TODAY));
     const key = draft.lines[0].key;
@@ -138,6 +190,90 @@ describe("picking an item", () => {
   });
 });
 
+describe("F4 — the unit switch (itemLookupApplied, keepLineValues)", () => {
+  it("1 BOX of 12 at 240 becomes 1 PCS at 20: qty kept, cost per BASE unit kept", () => {
+    let draft = pickedDraft();
+    draft = openingStockReducer(draft, { type: "lineFieldSet", rowKey: "r1", field: "qty", value: 1 });
+    draft = openingStockReducer(draft, { type: "lineFieldSet", rowKey: "r1", field: "costPerUnit", value: 240 });
+    expect(row(draft, "r1").costRate).toBe(20);
+    draft = openingStockReducer(draft, {
+      type: "itemLookupApplied",
+      rowKey: "r1",
+      keepLineValues: true,
+      lookup: lookup({ uomId: "iuc-pcs", unitName: "PCS", toBaseFactor: 1, barcode: "PCS-EAN", mrp: 3 }),
+    });
+    const switched = row(draft, "r1");
+    expect(switched.uomId).toBe("iuc-pcs");
+    expect(switched.unitName).toBe("PCS");
+    expect(switched.qty).toBe(1);
+    expect(switched.costPerUnit).toBe(20);
+    expect(switched.costRate).toBe(20);
+    expect(switched.baseQty).toBe(1);
+    expect(switched.value).toBe(20);
+    // The line's MRP is the lot's, not the unit's.
+    expect(switched.mrp).toBe(30);
+    // An EAN belongs to one unit: the old unit's code gives way to the new one's.
+    expect(switched.barcode).toBe("PCS-EAN");
+  });
+
+  it("takes the lookup's MRP and sale price where the line has none", () => {
+    let draft = pickedDraft();
+    draft = openingStockReducer(draft, { type: "lineFieldSet", rowKey: "r1", field: "mrp", value: 0 });
+    draft = openingStockReducer(draft, {
+      type: "itemLookupApplied",
+      rowKey: "r1",
+      keepLineValues: true,
+      lookup: lookup({ uomId: "iuc-pcs", toBaseFactor: 1, mrp: 3, salePrice: 2.5 }),
+    });
+    expect(row(draft, "r1").mrp).toBe(3);
+    expect(row(draft, "r1").salePrice).toBe(2.5);
+    // No cost typed: none is invented.
+    expect(row(draft, "r1").costPerUnit).toBe(0);
+  });
+});
+
+describe("the barcode cell", () => {
+  it("holds a typed code without making the document dirty", () => {
+    let draft = withGodown(createDraft(SCOPE, TODAY));
+    draft = { ...draft, dirty: false };
+    const key = draft.lines[0].key;
+    draft = openingStockReducer(draft, { type: "barcodeTyped", rowKey: key, barcode: "750252" });
+    expect(row(draft, key).barcode).toBe("750252");
+    expect(draft.dirty).toBe(false);
+    // The resolve does — an item landed.
+    draft = openingStockReducer(draft, { type: "barcodeResolved", rowKey: key, barcode: "750252", itemId: "item-1" });
+    expect(draft.dirty).toBe(true);
+  });
+
+  it("never writes a typed code over a row that already has its item", () => {
+    const draft = openingStockReducer(pickedDraft(), { type: "barcodeTyped", rowKey: "r1", barcode: "sams" });
+    expect(row(draft, "r1").barcode).toBe("8901234567890");
+  });
+
+  it("an item picked from the ↓ search clears the typed text so its own barcode fills the cell", () => {
+    let draft = withGodown(createDraft(SCOPE, TODAY));
+    const key = draft.lines[0].key;
+    draft = openingStockReducer(draft, { type: "barcodeTyped", rowKey: key, barcode: "sams" });
+    draft = openingStockReducer(draft, { type: "itemPicked", rowKey: key, itemId: "item-1", itemName: "X" });
+    expect(row(draft, key).barcode).toBe("");
+    draft = openingStockReducer(draft, { type: "itemLookupApplied", rowKey: key, lookup: lookup() });
+    expect(row(draft, key).barcode).toBe("8901234567890");
+  });
+});
+
+describe("the audit lines and the notice", () => {
+  it("says a fresh document is new", () => {
+    expect(auditLinesOf(createDraft(SCOPE, TODAY))).toEqual(["New — not saved yet"]);
+  });
+
+  it("keeps a notice until a load or a fresh document clears it", () => {
+    let draft = openingStockReducer(createDraft(SCOPE, TODAY), { type: "noticeSet", text: "This is the newest opening." });
+    expect(draft.notice).toBe("This is the newest opening.");
+    draft = openingStockReducer(draft, { type: "reset", scope: SCOPE, today: TODAY });
+    expect(draft.notice).toBe("");
+  });
+});
+
 describe("editing a cell — onGridCellEdited", () => {
   it("re-derives the base rate and the value from the per-unit cost", () => {
     let draft = pickedDraft();
@@ -150,19 +286,25 @@ describe("editing a cell — onGridCellEdited", () => {
     expect(edited.costRateWot).toBeCloseTo(20 / 1.12, 6);
   });
 
-  it("keeps a typed without-tax rate until the qty, cost or tax changes", () => {
+  it("keeps a typed without-tax rate until the cost or tax changes — a quantity does not change the rate", () => {
     let line = row(pickedDraft(), "r1");
     line = applyLineEdit(line, "costPerUnit", 240);
     line = applyLineEdit(line, "qty", 1);
     line = applyLineEdit(line, "costRateWot", 15);
     expect(line.costRateWot).toBe(15);
     expect(line.valueWot).toBe(12 * 15);
+    // Qty and Free keep it (Qt 6d56fa6: a typed per-unit cess survives a
+    // quantity change); only the values re-derive.
+    const requantified = applyLineEdit(line, "qty", 2);
+    expect(requantified.costRateWot).toBe(15);
+    expect(requantified.valueWot).toBe(24 * 15);
+    expect(applyLineEdit(line, "freeQty", 1).costRateWot).toBe(15);
     // A tax change clears it and re-derives.
     const retaxed = applyLineEdit(line, "taxPerc", 5);
     expect(retaxed.costRateWot).toBeCloseTo(20 / 1.05, 6);
-    // So does a quantity change — the Qt switch falls through for Qty too.
-    const requantified = applyLineEdit(line, "qty", 2);
-    expect(requantified.costRateWot).toBeCloseTo(20 / 1.12, 6);
+    // So does a cost change.
+    const recosted = applyLineEdit(line, "costPerUnit", 120);
+    expect(recosted.costRateWot).toBeCloseTo(10 / 1.12, 6);
   });
 
   it("stores text cells without recalculating", () => {
@@ -320,6 +462,31 @@ describe("loading a document", () => {
     expect(read.mode).toBe("browse");
   });
 
+  it("shows who created and posted it, in the 12-hour house format, and clears the notice", () => {
+    let draft = openingStockReducer(createDraft(SCOPE, TODAY), { type: "noticeSet", text: "old notice" });
+    draft = openingStockReducer(draft, {
+      type: "documentLoaded",
+      document: {
+        ...document,
+        header: {
+          ...document.header,
+          status: "POSTED",
+          createdOn: "2026-10-23T10:15:00",
+          createdByName: "VKPOS",
+          postedOn: "2026-10-23T22:18:00",
+          postedByName: "VKPOS",
+        },
+      },
+      scope: { companyId: "company-1", branchId: "branch-1", accYear: "2025-2026" },
+      openForEdit: false,
+    });
+    expect(draft.notice).toBe("");
+    expect(auditLinesOf(draft)).toEqual([
+      "Created 23-10-2026 10:15 AM by VKPOS",
+      "Posted 23-10-2026 10:18 PM by VKPOS",
+    ]);
+  });
+
   it("opens a POSTED document read-only whatever was asked", () => {
     const posted = openingStockReducer(createDraft(SCOPE, TODAY), {
       type: "documentLoaded",
@@ -333,6 +500,18 @@ describe("loading a document", () => {
 });
 
 describe("the pre-post check's answer", () => {
+  it("locates problems by the RENUMBERED split the screen sent", () => {
+    let draft = pickedDraft();
+    draft = openingStockReducer(draft, { type: "lineSplit", rowKey: "r1", newKey: "r2" });
+    // Typed as split 5, sent as split 2.
+    draft = openingStockReducer(draft, { type: "lineFieldSet", rowKey: "r2", field: "splitNo", value: 5 });
+    draft = openingStockReducer(draft, {
+      type: "problemsApplied",
+      problems: [{ lineNo: 1, splitNo: 2, message: "Line 1 split 2 (X): batch is blank" }],
+    });
+    expect(row(draft, "r2").problem).toContain("batch is blank");
+  });
+
   it("lands each problem on the row it names, by line and split", () => {
     let draft = pickedDraft();
     draft = openingStockReducer(draft, { type: "lineSplit", rowKey: "r1", newKey: "r2" });

@@ -40,10 +40,26 @@ export function ModalShell({ title, isOpen, narrow, wide, fixedHeight, footer, p
       return;
     }
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        onClose();
+      if (event.key !== "Escape") {
+        return;
       }
+      // Decided per EVENT, never from state: with dialogs stacked, every shell
+      // hears this keydown on `document`, and React can commit the upper
+      // one's close between two listeners (memory: nested dialog Escape race).
+      // Only the topmost modal surface — portals land at the end of <body> in
+      // the order they open — takes the key, and only if nothing above it
+      // (a confirm, a nested picker) already did.
+      if (event.defaultPrevented) {
+        return;
+      }
+      const panel = panelRef.current;
+      const modals = document.querySelectorAll('[aria-modal="true"]');
+      if (panel && modals.length > 0 && modals[modals.length - 1] !== panel) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
     };
     // Capture, so Escape closes the dialog rather than reaching the screen's own
     // shortcut handler underneath it.

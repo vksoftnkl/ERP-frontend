@@ -9,10 +9,16 @@ import {
   lineFromPayload,
   lineProblemsOf,
   rateSourceOf,
+  stampsFromHeader,
   statusOf,
 } from "./opening-stock.payload";
 import { createDraft } from "./opening-stock.state";
-import type { OpeningStockDraft, OpeningStockLine, OpeningStockLinePayload } from "./opening-stock.types";
+import type {
+  OpeningStockDraft,
+  OpeningStockHeaderPayload,
+  OpeningStockLine,
+  OpeningStockLinePayload,
+} from "./opening-stock.types";
 
 function line(overrides: Partial<OpeningStockLine> = {}): OpeningStockLine {
   return {
@@ -50,7 +56,7 @@ function draftWith(lines: OpeningStockLine[]): OpeningStockDraft {
 }
 
 describe("buildLines", () => {
-  it("numbers lines by split: a split of 1 opens a line, a higher one belongs to the line above", () => {
+  it("numbers lines by lineNumbersOf(): a split continues the line above under the same item", () => {
     const lines = buildLines([
       line({ splitNo: 1, batchNo: "B1", trackSignature: "B" }),
       line({ splitNo: 2, batchNo: "B2", trackSignature: "B" }),
@@ -61,6 +67,19 @@ describe("buildLines", () => {
       [1, 1],
       [1, 2],
       [2, 1],
+    ]);
+  });
+
+  it("sends a split under ANOTHER item as its own line, and renumbers splits in row order", () => {
+    const lines = buildLines([
+      line({ itemId: "item-1", splitNo: 1 }),
+      line({ itemId: "item-2", splitNo: 2 }),
+      line({ itemId: "item-2", splitNo: 2, batchNo: "B2", trackSignature: "B" }),
+    ]);
+    expect(lines.map((dto) => [dto.lineNo, dto.splitNo])).toEqual([
+      [1, 1],
+      [2, 1],
+      [2, 2],
     ]);
   });
 
@@ -224,6 +243,50 @@ describe("reading the stored document", () => {
     expect(header.docDate).toBe("2026-04-01");
     expect(header.rateSource).toBe("MANUAL");
     expect(header.usrRefno).toBe("");
+  });
+
+  it("reads who created and posted it — the display name, never a bare user id", () => {
+    const base: OpeningStockHeaderPayload = {
+      svhId: "s",
+      accYear: "2026-2027",
+      companyId: "c",
+      branchId: "b",
+      deviceId: "d",
+      refno: "OPN0006",
+      usrRefno: null,
+      docDate: "2026-10-23",
+      godownId: "g",
+      godownName: "Main",
+      status: "POSTED",
+      lineCount: 1,
+      totalQty: 1,
+      totalValue: 1,
+      totalValueWot: 1,
+      rateSource: "MANUAL",
+      remarks: null,
+      createdOn: "2026-10-23T04:45:00.000Z",
+      createdBy: "019c8ea6-19e9-78a8-b15f-749e1cde7292",
+      createdByName: "VKPOS",
+      postedOn: "2026-10-23T04:48:00.000Z",
+      postedByName: "VKPOS",
+    };
+    expect(stampsFromHeader(base)).toEqual({
+      createdOn: "2026-10-23T04:45:00.000Z",
+      createdBy: "VKPOS",
+      postedOn: "2026-10-23T04:48:00.000Z",
+      postedBy: "VKPOS",
+      cancelledOn: "",
+    });
+    // No name for it: a till or job name is shown, a user id is not.
+    expect(stampsFromHeader({ ...base, createdByName: null }).createdBy).toBe("");
+    expect(stampsFromHeader({ ...base, createdByName: null, createdBy: "IMPORT" }).createdBy).toBe("IMPORT");
+    // A server that does not send them yet: blank, not "undefined".
+    const older = { ...base };
+    delete older.createdOn;
+    delete older.createdBy;
+    delete older.createdByName;
+    expect(stampsFromHeader(older).createdOn).toBe("");
+    expect(stampsFromHeader(older).createdBy).toBe("");
   });
 });
 

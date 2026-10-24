@@ -4,8 +4,9 @@
  * The page, the grid, the buttons and the dialogs are the quotation's skin
  * (`features/sales/quotation/page.module.scss`), the same one the order and the
  * bill wear; this file holds only what the opening stock screen has and they do
- * not: the three-pair header, the quick bar, the item-greyed cells, the pre-post
- * problems, the totals and the list's status pills.
+ * not: the title block and four-column header with its godown box, the quick
+ * bar, the item-greyed cells, the pre-post problems, the totals and the list's
+ * status pills.
  *
  * Lengths are in the voucher skin's fluid unit, `--erp-q-u` (declared on
  * `:root` by that skin), so this screen scales with the rest of it.
@@ -14,12 +15,33 @@
   @return calc(#{$n} * var(--erp-q-u));
 }
 
-/* ------------------------------------------------------------ title bar */
-.titleLeft {
+/* ------------------------------------------------------------- top band */
+/*
+ * The Qt .ui's top band (2026-10-23): the title block on the left, the voucher
+ * details on the right at three times its width — the title column never
+ * narrower than the Qt 340px.
+ */
+.topBand {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: minmax(u(15), 1fr) minmax(0, 3fr);
+  gap: u(0.9);
+  align-items: start;
+  padding-bottom: u(0.35);
+  border-bottom: 3px solid var(--primary, #7b1515);
+}
+
+.titleBlock {
   display: flex;
-  gap: u(0.6);
-  align-items: baseline;
+  flex-direction: column;
+  gap: u(0.25);
   min-width: 0;
+}
+
+.titleLine {
+  display: flex;
+  gap: u(0.5);
+  align-items: baseline;
 }
 
 .scope {
@@ -28,7 +50,32 @@
   white-space: nowrap;
 }
 
+.statusLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.5);
+  align-items: center;
+  font-size: u(0.72);
+}
+
+/* The status as a pill, the Qt lblStatus. */
+.statusPill {
+  padding: u(0.02) u(0.55);
+  border: 1px solid currentcolor;
+  border-radius: 999px;
+  font-size: u(0.72);
+}
+
+/* Who created / posted / cancelled it — one line each — and the notice under them. */
 .audit {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.1);
+  color: var(--text-muted, #666666);
+  font-size: u(0.7);
+}
+
+.notice {
   color: #a15c00;
   font-weight: 600;
 }
@@ -41,9 +88,85 @@
   color: var(--text-muted, #666666);
 }
 
+/* ------------------------------------------------------- voucher details */
+/*
+ * Four columns: Voucher No · Date · Rate Source on the first row, the godown
+ * box at the right end across both rows, Your Ref No and Remarks (spanning to
+ * the godown) on the second. DOM order is the reading order Enter and Tab
+ * follow: Date, Rate Source, Godown, Your Ref No, Remarks.
+ */
+.fieldsCard {
+  display: grid;
+  grid-template-columns:
+    auto minmax(0, 2fr)
+    auto minmax(0, 2fr)
+    auto minmax(0, 2fr)
+    minmax(u(13), 3fr);
+  gap: u(0.45) u(0.5);
+  align-items: center;
+  padding: u(0.55) u(0.75);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: var(--card-bg, #ffffff);
+}
+
+.fieldsCard :global(#opening-stock-remarks) {
+  grid-column: 4 / span 3;
+}
+
+/* The godown in its own box: required, and no item is keyed before it. */
+.godownBox {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.25);
+  grid-row: 1 / span 2;
+  grid-column: 7;
+  align-self: stretch;
+  justify-content: center;
+  padding: u(0.35) u(0.6) u(0.5);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+}
+
+.godownMissing {
+  border-color: var(--danger, #b3261e);
+  background: #fdecec;
+}
+
+.godownMissing > label {
+  color: var(--danger, #b3261e);
+}
+
+.godownSet {
+  border-color: var(--success-text, #1c6b2e);
+  background: #eef7f0;
+}
+
+@container erp-txn-page (max-width: 1100px) {
+  .topBand {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container erp-txn-page (max-width: 760px) {
+  .fieldsCard {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .fieldsCard :global(#opening-stock-remarks) {
+    grid-column: auto;
+  }
+
+  .godownBox {
+    grid-row: auto;
+    grid-column: 1 / -1;
+  }
+}
+
 /* ------------------------------------------------------------ quick bar */
 .quickBar {
   display: flex;
+  flex: 0 0 auto;
   flex-wrap: wrap;
   gap: u(0.35);
   align-items: center;
@@ -53,28 +176,7 @@
   margin-left: auto;
   color: var(--text-muted, #666666);
   font-size: u(0.68);
-}
-
-/* --------------------------------------------------------------- header */
-/* Three field pairs across, two rows down — the Qt header's grid. */
-.headerPanel {
-  display: grid;
-  grid-template-columns:
-    minmax(u(5.5), auto) minmax(0, 1fr)
-    minmax(u(5.5), auto) minmax(0, 1fr)
-    minmax(u(5.5), auto) minmax(0, 1fr);
-  gap: u(0.4) u(0.6);
-  align-items: center;
-  padding: u(0.6) u(0.9);
-  border: 1px solid var(--border, #c9c9c9);
-  border-radius: var(--erp-radius, 4px);
-  background: var(--card-bg, #ffffff);
-}
-
-@container erp-txn-page (max-width: 900px) {
-  .headerPanel {
-    grid-template-columns: minmax(u(5.5), auto) minmax(0, 1fr);
-  }
+  white-space: pre-wrap;
 }
 
 /* ------------------------------------------------------------------ grid */
@@ -93,6 +195,18 @@
 .untrackedCell select,
 .untrackedCell span {
   color: var(--text-soft, #9a9a9a) !important;
+}
+
+/*
+ * A row with no item, while the document can be keyed: a click on any of its
+ * shut cells goes to its Barcode. Chromium fires no mouse event on a DISABLED
+ * input — not even one that bubbles — so they are made transparent to the
+ * pointer and the row sees the click (the quotation's `.rowSizable`). Scoped:
+ * it costs those cells their hover text, which a read-only document keeps.
+ */
+.blankEntryRow input:disabled,
+.blankEntryRow select:disabled {
+  pointer-events: none;
 }
 
 /* A line the server's pre-post check refused. */

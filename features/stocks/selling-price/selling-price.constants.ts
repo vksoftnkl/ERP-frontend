@@ -27,6 +27,8 @@ export const ITEM_BY_BARCODE_ENDPOINT = "/master-lookups/item-by-barcode";
 /** The opening-stock item lookup: the only route that answers an item's track signature. */
 export const ITEM_TRACK_LOOKUP_ENDPOINT = "/stock/opening/item-lookup";
 export const CONFIGURED_GRID_RUN_ENDPOINT = "/configured-grid-sql/run";
+/** Notes 146 A — an item's last inward rows at a branch: GET ?companyId&branchId&itemId&limit (1–50). */
+export const ITEM_INWARD_HISTORY_ENDPOINT = "/stock/item-inward-history";
 
 // ---------------------------------------------------------------- registries
 export const SELLING_PRICE_MENU_ID = 30;

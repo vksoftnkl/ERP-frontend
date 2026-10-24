@@ -97,9 +97,19 @@ export type OpeningStockHeaderPayload = {
   rateSource: string | null;
   remarks: string | null;
   postedOn?: string | null;
+  postedBy?: string | null;
   postedByName?: string | null;
   cancelledOn?: string | null;
   cancelReason?: string | null;
+  /** When the document was first saved — shown under the title ("Created … by …"). */
+  createdOn?: string | null;
+  /**
+   * svh_created_by as stored — free TEXT, usually a user id but possibly a till
+   * or an import job's name. `createdByName` is that user's display name, null
+   * when the value names no user.
+   */
+  createdBy?: string | null;
+  createdByName?: string | null;
 };
 
 export type OpeningStockLinePayload = {
@@ -189,6 +199,13 @@ export type OpeningStockItemLookupQuery = {
   uomId?: string;
   /** The DOCUMENT's date — the tracking policy is resolved as at this day. */
   onDate: string;
+  /**
+   * The line's godown: narrows `alreadyOpened` to openings in this godown
+   * (notes 143 #8). Not the bucket — it is chosen after the pick.
+   */
+  godownId?: string;
+  /** The line's bucket, narrowing `alreadyOpened` further. Not sent by this screen. */
+  bucket?: string;
 };
 
 export type OpeningStockItemLookup = {
@@ -340,12 +357,32 @@ export type OpeningStockDraft = {
   /** FormMode: Entry (keyable) or Browse (read-only). */
   mode: "entry" | "browse";
   dirty: boolean;
-  /** lblAudit — "X already has an opening in this branch". */
-  audit: string;
+  /**
+   * Who created / posted / cancelled the document and when, from the header it
+   * was loaded with — the lines under the title (`showAudit()`). Null on a
+   * document never saved, which reads "New — not saved yet".
+   */
+  stamps: OpeningStockAuditStamps | null;
+  /**
+   * The notice line under them (`m_auditNotice`): "X already has an opening in
+   * this godown this year", "This is the newest opening." Cleared by a load and
+   * by a fresh document.
+   */
+  notice: string;
+};
+
+/** The header's audit halves, as the GET carries them. Blank = not there. */
+export type OpeningStockAuditStamps = {
+  createdOn: string;
+  /** The display name when the server has one, else what was stored (see `createdBy`). */
+  createdBy: string;
+  postedOn: string;
+  postedBy: string;
+  cancelledOn: string;
 };
 
 export type OpeningStockTotals = {
-  /** Counted by SPLIT NO — a split of 1 starts a line, so three splits are one line. */
+  /** LINES, not rows — `lineNumbersOf()`: three splits of one item are one line. */
   lines: number;
   /** BASE units, free goods included — the quantity the ledger will carry. */
   qty: number;

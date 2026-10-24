@@ -14,6 +14,7 @@ import {
   BRANCH_MASTER_GET_ENDPOINT,
   CONFIGURED_GRID_RUN_ENDPOINT,
   ITEM_BY_BARCODE_ENDPOINT,
+  ITEM_INWARD_HISTORY_ENDPOINT,
   ITEM_PICKER_BRANCH_TOKEN,
   ITEM_PICKER_COMPANY_TOKEN,
   ITEM_TRACK_LOOKUP_ENDPOINT,
@@ -27,6 +28,7 @@ import {
 import type {
   BarcodeItem,
   BranchNames,
+  ItemInwardRow,
   ItemPickerRow,
   PriceLevelMasterRow,
   SaveSellingPriceBulkPayload,
@@ -137,9 +139,27 @@ export const sellingPriceApi = baseApi.injectEndpoints({
               priceLvlName: row?.priceLvlName ?? null,
               priceLvlShort: row?.priceLvlShort ?? null,
               priceLvlIsActive: row?.priceLvlIsActive !== false,
+              priceLvlIsDeleted: row?.priceLvlIsDeleted === true,
             }))
           : [],
       keepUnusedDataFor: 300,
+    }),
+    /**
+     * Notes 146 A — the item's last inward rows at this branch (the quick rate
+     * popup's "Recent inward"). A GET MUTATION: one uncached read per popup,
+     * and the next purchase must show the moment it posts (`@CacheTTL(0)`).
+     */
+    getItemInwardHistory: builder.mutation<
+      ItemInwardRow[],
+      { companyId: string; branchId: string; itemId: string; limit?: number }
+    >({
+      query: ({ companyId, branchId, itemId, limit }) => ({
+        url: ITEM_INWARD_HISTORY_ENDPOINT,
+        method: "GET",
+        params: { companyId, branchId, itemId, ...(limit ? { limit } : {}) },
+      }),
+      transformResponse: (payload: ApiSuccessResponse<ItemInwardRow[]>) =>
+        Array.isArray(payload?.data) ? payload.data : [],
     }),
     /** This branch's full and short names. */
     getSellingPriceBranchNames: builder.query<BranchNames, string>({
@@ -222,4 +242,5 @@ export const {
   useGetSellingPriceLevelNamesQuery,
   useGetSellingPriceBranchNamesQuery,
   useSearchSellingPriceItemsQuery,
+  useGetItemInwardHistoryMutation,
 } = sellingPriceApi;

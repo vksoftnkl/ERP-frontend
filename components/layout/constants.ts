@@ -149,6 +149,9 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
         { label: "Item Brand Master", href: "/master/item-brand-master" },
         { label: "Item Section Master", href: "/master/item-section-master" },
         { label: "Unit Master", href: "/master/unit-master" },
+        // Menus 291 / 292 (textile, server notes 147).
+        { label: "Item Size Master", href: "/master/item-size-master" },
+        { label: "Item Colour Master", href: "/master/item-colour-master" },
         { label: "Godown Master", href: "/master/godown-master" },
         { label: "Tax Master", href: "/master/tax-master" },
 
@@ -239,6 +242,9 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
       // Menu 279, straight under Reports (server seed + the
       // party_outstanding_menu_reports migration). Grant it in User Administration.
       { label: "Party Outstanding", href: "/reports/party-outstanding" },
+      // Menu 290, straight under Reports (server notes 144). Its VIEW right is
+      // the report's access: every /item-price-log route 403s without it.
+      { label: "Price Change Log", href: "/reports/price-change-log" },
       {
         label: "Financial Statements",
         children: [
@@ -430,6 +436,8 @@ export const ERP_MENU_OBJECT: ERPMenuObject = {
       "Item Brand Master": null,
       "Item Section Master": null,
       "Unit Master": null,
+      "Item Size Master": null,
+      "Item Colour Master": null,
       "Godown Master": null,
       "Tax Master": null,
     },

@@ -89,6 +89,12 @@ import {
 import { rateWarning } from "@/features/sales/quotation/quotation.validate";
 import quotationStyles from "@/features/sales/quotation/page.module.scss";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
+import { QuickRateDialog } from "@/features/stocks/selling-price/components/quick-rate-dialog";
+import {
+  quickRateLineTarget,
+  type QuickRateLineTarget,
+} from "@/features/stocks/selling-price/quick-rate";
+import { txnKeyOf } from "@/lib/txn-keys";
 import { documentRights } from "@/lib/permissions/document-rights";
 import {
   chargeFieldSet,
@@ -114,6 +120,7 @@ import {
   SALE_BILL_HOLD_KIND,
   SALE_BILL_ITEM_COLUMN_WIDTH_UNIT,
   SALE_BILL_ITEM_GRID_UI_TABLE_KEY,
+  SALE_BILL_WIDGET_MENU_ID,
 } from "@/features/sales/testbill/constants";
 import { lastFilledLineBefore } from "@/features/sales/testbill/state/factories";
 import { isBillHold } from "@/features/sales/testbill/state/hold";
@@ -274,6 +281,12 @@ export function SaleBillScreen({
   const pickedChargeRow = useRef<string | null>(null);
   const [priceLevelPrompt, setPriceLevelPrompt] = useState<number | null>(null);
   const [pendingGuard, setPendingGuard] = useState<PendingGuard>(null);
+  /**
+   * Ctrl+R — the current line's item rates (the quick rate popup, notes 146),
+   * and the element to give the cursor back to when it closes.
+   */
+  const [quickRate, setQuickRate] = useState<QuickRateLineTarget | null>(null);
+  const quickRateReturnFocus = useRef<HTMLElement | null>(null);
   const [invalidCells, setInvalidCells] = useState<Record<string, true>>({});
   const [listOpen, setListOpen] = useState(false);
   const [importQuotationOpen, setImportQuotationOpen] = useState(false);
@@ -1356,7 +1369,33 @@ export function SaleBillScreen({
     api.openSources !== null ||
     partB !== null ||
     reprintOpen ||
-    pendingGuard !== null;
+    pendingGuard !== null ||
+    quickRate !== null;
+
+  /**
+   * Ctrl+R on the current line: its item's selling rates, without leaving the
+   * bill (Qt QuickRateDialog::openForLine). A blank line has no item to price;
+   * "Apply to this line" only while the bill can be edited.
+   */
+  const openQuickRate = useCallback(() => {
+    const line = activeRowKey ? draft.lines.find((row) => row.key === activeRowKey) : undefined;
+    const target = quickRateLineTarget(line, editable);
+    if (!target) {
+      return;
+    }
+    quickRateReturnFocus.current = document.activeElement as HTMLElement | null;
+    setQuickRate(target);
+  }, [activeRowKey, draft.lines, editable]);
+  const closeQuickRate = useCallback(() => {
+    setQuickRate(null);
+    const back = quickRateReturnFocus.current;
+    quickRateReturnFocus.current = null;
+    window.requestAnimationFrame(() => {
+      if (back?.isConnected) {
+        back.focus();
+      }
+    });
+  }, []);
 
   /**
    * The legacy screen's bindings, and only the ones that DO something:
@@ -1466,6 +1505,7 @@ export function SaleBillScreen({
     validateOnServer: api.validateOnServer,
     openDiscountPrompt: () => setDiscountPromptOpen(true),
     showLineCost,
+    openQuickRate,
     modalOpen,
   };
   const shortcutsRef = useRef(shortcuts);
@@ -1474,6 +1514,15 @@ export function SaleBillScreen({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const current = shortcutsRef.current;
+      // Ctrl+R — the current line's rates. Never the browser's reload, which
+      // would throw the bill away, so it is claimed even under a dialog.
+      if (txnKeyOf(event) === "changeRate") {
+        event.preventDefault();
+        if (!current.modalOpen && !event.repeat) {
+          current.openQuickRate();
+        }
+        return;
+      }
       if (current.modalOpen || event.repeat) {
         return;
       }
@@ -1752,7 +1801,7 @@ export function SaleBillScreen({
             <span className={quotationStyles.gridHeadActions}>
               <span className={quotationStyles.modalNote}>
                 Enter next cell · F1 next panel · F3 sizes · F4 unit · Ctrl+± row ·
-                Alt+R copy row · Ctrl+1..{PRICE_LEVEL_COUNT} price level
+                Alt+R copy row · Ctrl+R rate · Ctrl+1..{PRICE_LEVEL_COUNT} price level
               </span>
             </span>
           </div>
@@ -2413,6 +2462,22 @@ export function SaleBillScreen({
           setRecovery(null);
         }}
       />
+      {quickRate ? (
+        <QuickRateDialog
+          itemId={quickRate.itemId}
+          unitId={quickRate.unitId}
+          itemName={quickRate.itemName}
+          originMenuId={Number(SALE_BILL_WIDGET_MENU_ID)}
+          fromLine={quickRate.fromLine}
+          lineText={quickRate.lineText}
+          onClose={closeQuickRate}
+          onSaved={({ itemId, applyToLine }) => {
+            if (applyToLine) {
+              void api.repriceLine(quickRate.lineKey, itemId);
+            }
+          }}
+        />
+      ) : null}
     </div>
   );
 }

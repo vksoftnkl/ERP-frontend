@@ -99,6 +99,12 @@ import {
 } from "../use-sale-order-draft";
 import type { ScreenMemoryOption } from "@/lib/use-screen-memory";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
+import { QuickRateDialog } from "@/features/stocks/selling-price/components/quick-rate-dialog";
+import {
+  quickRateLineTarget,
+  type QuickRateLineTarget,
+} from "@/features/stocks/selling-price/quick-rate";
+import { txnKeyOf } from "@/lib/txn-keys";
 import { documentRights } from "@/lib/permissions/document-rights";
 import { saveAllowed } from "../sale-order.rights";
 import { NumberPromptModal } from "./number-prompt-modal";
@@ -135,6 +141,8 @@ const TEXT_LINE_FIELDS = new Set<keyof DraftLine>([
 ]);
 
 type PendingGuard = "list" | "clear" | "back" | "import" | null;
+/** `fixed.menu_master.menu_id` 11 — "Sales Order": the Price Change Log's "via Sales Order (menu 11)". */
+const SALE_ORDER_MENU_ID = 11;
 
 const NEW_DOCUMENT = " new";
 
@@ -259,6 +267,12 @@ export function SaleOrderEntryView({
   const [optionQuestion, setOptionQuestion] = useState<OptionQuestion | null>(null);
   const [discountPromptOpen, setDiscountPromptOpen] = useState(false);
   const [hikePromptOpen, setHikePromptOpen] = useState(false);
+  /**
+   * Ctrl+R — the current line's item rates (the quick rate popup, notes 146),
+   * and the element to give the cursor back to when it closes.
+   */
+  const [quickRate, setQuickRate] = useState<QuickRateLineTarget | null>(null);
+  const quickRateReturnFocus = useRef<HTMLElement | null>(null);
   /** Whether the save the credit question interrupted was a Save & Print. */
   const creditSavePrint = useRef(false);
 
@@ -815,7 +829,33 @@ export function SaleOrderEntryView({
     duplicateQuestion !== null ||
     optionQuestion !== null ||
     discountPromptOpen ||
-    hikePromptOpen;
+    hikePromptOpen ||
+    quickRate !== null;
+
+  /**
+   * Ctrl+R on the current line: its item's selling rates, without leaving the
+   * order (Qt QuickRateDialog::openForLine). A blank line has no item to
+   * price; "Apply to this line" only while the order can be edited.
+   */
+  const openQuickRate = useCallback(() => {
+    const line = activeRowKey ? draft.lines.find((row) => row.key === activeRowKey) : undefined;
+    const target = quickRateLineTarget(line, editable);
+    if (!target) {
+      return;
+    }
+    quickRateReturnFocus.current = document.activeElement as HTMLElement | null;
+    setQuickRate(target);
+  }, [activeRowKey, draft.lines, editable]);
+  const closeQuickRate = useCallback(() => {
+    setQuickRate(null);
+    const back = quickRateReturnFocus.current;
+    quickRateReturnFocus.current = null;
+    window.requestAnimationFrame(() => {
+      if (back?.isConnected) {
+        back.focus();
+      }
+    });
+  }, []);
 
   const shortcuts = {
     onF5,
@@ -826,6 +866,7 @@ export function SaleOrderEntryView({
     printLastSaved,
     showCurrentLineCost,
     openDiscountPrompt: () => setDiscountPromptOpen(true),
+    openQuickRate,
     editable,
     modalOpen,
   };
@@ -834,6 +875,15 @@ export function SaleOrderEntryView({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      // Ctrl+R — the current line's rates. Never the browser's reload, which
+      // would throw the order away, so it is claimed even under a dialog.
+      if (txnKeyOf(event) === "changeRate") {
+        event.preventDefault();
+        if (!shortcutsRef.current.modalOpen && !event.repeat) {
+          shortcutsRef.current.openQuickRate();
+        }
+        return;
+      }
       if (shortcutsRef.current.modalOpen || event.repeat) {
         return;
       }
@@ -1117,7 +1167,7 @@ export function SaleOrderEntryView({
             <span className={quotationStyles.gridHeadActions}>
               <span className={quotationStyles.modalNote}>
                 Enter next cell · F4 unit · Ctrl+± row price level · Alt+± row · Alt+R copy row ·
-                Ctrl+1..{settings.priceLevelCount} price level · back-orders allowed
+                Ctrl+R rate · Ctrl+1..{settings.priceLevelCount} price level · back-orders allowed
               </span>
             </span>
           </div>
@@ -1397,6 +1447,22 @@ export function SaleOrderEntryView({
         onCancel={() => setPendingGuard(null)}
         onConfirm={onGuardConfirm}
       />
+      {quickRate ? (
+        <QuickRateDialog
+          itemId={quickRate.itemId}
+          unitId={quickRate.unitId}
+          itemName={quickRate.itemName}
+          originMenuId={SALE_ORDER_MENU_ID}
+          fromLine={quickRate.fromLine}
+          lineText={quickRate.lineText}
+          onClose={closeQuickRate}
+          onSaved={({ itemId, applyToLine }) => {
+            if (applyToLine) {
+              void api.repriceLine(quickRate.lineKey, itemId);
+            }
+          }}
+        />
+      ) : null}
     </div>
   );
 }

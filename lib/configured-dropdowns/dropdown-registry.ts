@@ -41,6 +41,10 @@ export const CONFIGURED_DROPDOWNS = {
   itemBrand: { name: "ITEM BRANDS", fallbackId: "18", paramBound: false },
   itemSection: { name: "ITEM SECTIONS", fallbackId: "19", paramBound: false },
   itemCategory: { name: "ITEM CATEGORIES", fallbackId: "20", paramBound: false },
+  /** Textile sizes for the purchase line: shared + this company's. Binds a QUOTED `'icompany_id'`. */
+  itemSize: { name: "ITEM SIZES", fallbackId: "70", paramBound: true },
+  /** Textile colours for the purchase line. Binds a QUOTED `'icompany_id'`. */
+  itemColour: { name: "ITEM COLOURS", fallbackId: "71", paramBound: true },
   /** The 2-char GST `state_code`, not the `state_master` uuid — see `customerState`. */
   gstStateCode: { name: "GST - STATE CODES", fallbackId: "21", paramBound: false },
   company: { name: "COMPANYS", fallbackId: "22", paramBound: false },

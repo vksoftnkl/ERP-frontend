@@ -96,8 +96,8 @@ describe("recalcLine", () => {
   });
 });
 
-describe("totals and line numbers", () => {
-  it("counts LINES by split number and sums base quantities", () => {
+describe("totals and line numbers — Qt lineNumbers(), the one rule", () => {
+  it("counts LINES, not rows, and sums base quantities", () => {
     const rows = [
       line({ key: "a", splitNo: 1, baseQty: 10, value: 100, valueWot: 90 }),
       line({ key: "b", splitNo: 2, baseQty: 5, freeBaseQty: 1, value: 50, valueWot: 45 }),
@@ -106,10 +106,50 @@ describe("totals and line numbers", () => {
     ];
     expect(computeTotals(rows)).toEqual({ lines: 2, qty: 18, value: 170, valueWot: 155 });
     const numbers = lineNumbersOf(rows);
-    expect(numbers.get("a")).toBe(1);
-    expect(numbers.get("b")).toBe(1);
-    expect(numbers.get("c")).toBe(2);
+    expect(numbers.get("a")).toEqual({ lineNo: 1, splitNo: 1 });
+    expect(numbers.get("b")).toEqual({ lineNo: 1, splitNo: 2 });
+    expect(numbers.get("c")).toEqual({ lineNo: 2, splitNo: 1 });
     expect(numbers.has("d")).toBe(false);
+  });
+
+  it("continues a line only under the SAME item — a split under another item is its own line", () => {
+    const rows = [
+      line({ key: "a", itemId: "item-1", splitNo: 1 }),
+      line({ key: "b", itemId: "item-2", splitNo: 2 }),
+      line({ key: "c", itemId: "item-2", splitNo: 3 }),
+    ];
+    const numbers = lineNumbersOf(rows);
+    expect(numbers.get("a")).toEqual({ lineNo: 1, splitNo: 1 });
+    // Used to be counted as split 2 of item-1's line.
+    expect(numbers.get("b")).toEqual({ lineNo: 2, splitNo: 1 });
+    expect(numbers.get("c")).toEqual({ lineNo: 2, splitNo: 2 });
+    expect(computeTotals(rows).lines).toBe(2);
+  });
+
+  it("starts a line on a split with nothing above it (its first row was removed)", () => {
+    const numbers = lineNumbersOf([line({ key: "a", splitNo: 2 }), line({ key: "b", splitNo: 3 })]);
+    expect(numbers.get("a")).toEqual({ lineNo: 1, splitNo: 1 });
+    expect(numbers.get("b")).toEqual({ lineNo: 1, splitNo: 2 });
+  });
+
+  it("renumbers splits 1, 2, 3 in row order, so a (line, split) is never sent twice", () => {
+    const numbers = lineNumbersOf([
+      line({ key: "a", splitNo: 1 }),
+      line({ key: "b", splitNo: 3 }),
+      line({ key: "c", splitNo: 2 }),
+      line({ key: "d", splitNo: 2 }),
+    ]);
+    expect([...numbers.values()]).toEqual([
+      { lineNo: 1, splitNo: 1 },
+      { lineNo: 1, splitNo: 2 },
+      { lineNo: 1, splitNo: 3 },
+      { lineNo: 1, splitNo: 4 },
+    ]);
+  });
+
+  it("is not broken by a blank row between two splits", () => {
+    const numbers = lineNumbersOf([line({ key: "a", splitNo: 1 }), blankLine("x"), line({ key: "b", splitNo: 2 })]);
+    expect(numbers.get("b")).toEqual({ lineNo: 1, splitNo: 2 });
   });
 
   it("keeps exactly one trailing row with no item", () => {
