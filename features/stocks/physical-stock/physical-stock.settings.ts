@@ -1,27 +1,35 @@
 /**
- * The app settings this screen obeys. The Qt count screen reads exactly one,
- * and reads it through the shared list (`TxnMainView::openForMenu`):
+ * The app settings this screen obeys. The Qt count screen reads two:
  *
  *   system.txn_entry_first   menu 45 lands on the LIST (false, the catalog
  *                            default) or on the count screen itself (true),
- *                            whose F8 then reaches the same list.
+ *                            whose Ctrl+O then reaches the same list — read
+ *                            through the shared list (`TxnMainView::openForMenu`).
+ *   stock.auto_batch_no      the company numbers its own batches (textile), so
+ *                            a scanned code that is no item's barcode may be a
+ *                            batch LABEL (AppSession `autoBatchNo()`, Qt 74b755c).
  *
- * Its max scope is USER, so it is read with the user and device ids as well as
- * the company and branch. Pure: `use-physical-stock-settings.ts` fetches.
+ * `system.txn_entry_first`'s max scope is USER, so the settings are read with
+ * the user and device ids as well as the company and branch. Pure:
+ * `use-physical-stock-settings.ts` fetches.
  */
 import type { EffectiveSetting } from "@/features/settings/app-settings/types";
+import { AUTO_BATCH_NO_SETTING_KEY } from "@/features/stocks/shared/batch-detail";
 
 export const PHYSICAL_STOCK_SETTING_KEYS = {
   txnEntryFirst: "system.txn_entry_first",
+  autoBatchNo: AUTO_BATCH_NO_SETTING_KEY,
 } as const;
 
 export type PhysicalStockSettings = {
   txnEntryFirst: boolean;
+  autoBatchNo: boolean;
 };
 
 /** The catalog's default — an unread setting behaves as an untouched installation. */
 export const DEFAULT_PHYSICAL_STOCK_SETTINGS: PhysicalStockSettings = {
   txnEntryFirst: false,
+  autoBatchNo: false,
 };
 
 function valueOf(rows: readonly EffectiveSetting[], key: string): string | null {
@@ -51,6 +59,10 @@ export function parsePhysicalStockSettings(
     txnEntryFirst: asBoolean(
       valueOf(rows, PHYSICAL_STOCK_SETTING_KEYS.txnEntryFirst),
       DEFAULT_PHYSICAL_STOCK_SETTINGS.txnEntryFirst,
+    ),
+    autoBatchNo: asBoolean(
+      valueOf(rows, PHYSICAL_STOCK_SETTING_KEYS.autoBatchNo),
+      DEFAULT_PHYSICAL_STOCK_SETTINGS.autoBatchNo,
     ),
   };
 }

@@ -62,6 +62,17 @@ export type SaveOpeningStockLineDto = {
   mrp?: number;
   salePrice?: number;
   supplierId?: string;
+  /**
+   * Textile (Qt 74b755c): kept by the server in `stock.stock_batch_detail`
+   * against the batch number it gives this line — so sent only on a line whose
+   * batch is the server's to give. On a typed batch they are refused (422
+   * STOCK_BATCH_DETAIL_NEEDS_AUTO_BATCH). Left out = none: an update replaces
+   * the lines, so omitting one clears what was kept before.
+   */
+  sizeId?: string;
+  colourId?: string;
+  /** Free text, `@NullableStringStrict(100)`. */
+  model?: string;
   barcode?: string;
   remarks?: string;
 };
@@ -150,6 +161,16 @@ export type OpeningStockLinePayload = {
   remarks: string | null;
   /** The effective policy on the DOCUMENT's date — the same answer item-lookup gives. */
   trackSignature: string | null;
+  /**
+   * Textile addendum 2 E2 — what the line's batch carries (its
+   * `stock_batch_detail` row); null when the batch was typed or has none.
+   * Optional: a server older than the textile work leaves them out.
+   */
+  sizeId?: string | null;
+  sizeName?: string | null;
+  colourId?: string | null;
+  colourName?: string | null;
+  model?: string | null;
 };
 
 export type OpeningStockDocumentPayload = {
@@ -243,6 +264,17 @@ export type ConfiguredGridPage<TRow> = {
 /** One row of a configured popup grid, keyed by its SELECT's own column names. */
 export type GridRow = Record<string, unknown>;
 
+/** One row of the Size or Colour list (dropdowns 70 / 71): its id and its name. */
+export type BatchDetailChoice = { id: string; name: string };
+
+/** The two textile lists and the item's earlier models, as the grid offers them. */
+export type BatchDetailChoices = {
+  sizes: readonly BatchDetailChoice[];
+  colours: readonly BatchDetailChoice[];
+  /** Item id → the models used on it before, newest first (`/stock/batch-detail/models`). */
+  modelsByItem: Readonly<Record<string, readonly string[]>>;
+};
+
 /** A failed write's body: `{ success:false, message, errors:[{ field, message }] }`. */
 export type ApiFieldError = { field?: string; message?: string };
 
@@ -303,6 +335,24 @@ export type OpeningStockLine = {
   trackSignature: string;
   /** svi_cost_rate — PER BASE UNIT, derived from costPerUnit; the wire value. */
   costRate: number;
+  /**
+   * Textile — what the batch IS (cols 39–44). Keyable only while the company
+   * numbers its own batches, on an item tracked by batch, and only with a
+   * batch number left for the server to give. The id is blank while the name
+   * is one not on the list yet (the screen offers to add it).
+   */
+  sizeId: string;
+  sizeName: string;
+  colourId: string;
+  colourName: string;
+  model: string;
+  /**
+   * The operator TYPED this line's batch number (Qt BatchTyped "1"). A
+   * server-given number and a typed one look alike in the cell, but only the
+   * given one can carry a size, colour or model. A loaded batch counts as
+   * given — the server decides on save whether it carries them.
+   */
+  batchTyped: boolean;
   /** What the server's pre-post check said about this line, when Save & Post was refused. */
   problem: string;
 };
@@ -315,7 +365,10 @@ export type OpeningStockLineTextField =
   | "expiryDate"
   | "serialNo"
   | "bucket"
-  | "remarks";
+  | "remarks"
+  | "sizeName"
+  | "colourName"
+  | "model";
 
 /** The numeric fields of a line the grid can write. */
 export type OpeningStockLineNumberField =

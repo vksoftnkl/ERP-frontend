@@ -1,0 +1,104 @@
+/* My profile + Change password — the user menu's dialogs, inside `ModalShell`. */
+@function u($n) {
+  @return calc(#{$n} * var(--erp-q-u, 1rem));
+}
+
+.identity {
+  display: flex;
+  gap: u(0.7);
+  align-items: center;
+  padding-bottom: u(0.6);
+  border-bottom: 1px solid var(--border, #c9c9c9);
+}
+
+.avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: u(2.6);
+  height: u(2.6);
+  border-radius: 50%;
+  background: var(--primary, #7b1515);
+  color: #ffffff;
+  font-size: u(0.95);
+  font-weight: 700;
+}
+
+.identityText {
+  min-width: 0;
+}
+
+.name {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-main, #222222);
+  font-size: u(0.95);
+  font-weight: 700;
+}
+
+.meta {
+  margin: 0;
+  color: var(--text-muted, #666666);
+  font-size: u(0.74);
+}
+
+.details {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: u(0.35) u(1.2);
+  margin: 0;
+}
+
+.row {
+  display: contents;
+}
+
+.term {
+  color: var(--text-muted, #666666);
+  font-size: u(0.74);
+}
+
+.value {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-main, #222222);
+  font-size: u(0.76);
+  font-weight: 600;
+}
+
+.note {
+  margin: 0;
+  color: var(--text-muted, #666666);
+  font-size: u(0.72);
+}
+
+.actions {
+  display: flex;
+  gap: u(0.4);
+  margin-left: auto;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.6);
+  min-width: u(20);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.2);
+}
+
+.label {
+  color: var(--text-main, #222222);
+  font-size: u(0.74);
+  font-weight: 600;
+}
+
+.error {
+  margin: 0;
+  color: #b42318;
+  font-size: u(0.7);
+}

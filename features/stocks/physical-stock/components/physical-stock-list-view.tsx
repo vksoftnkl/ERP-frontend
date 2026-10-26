@@ -2,8 +2,8 @@
 
 /**
  * Physical Stock Counts — the list menu 45 opens (grid 101, "MAIN LIST -
- * PHYSICAL STOCK"), and the same list the count screen's F8 raises as a
- * picker. `TxnDocTypes::physicalStock()` on the shared `CrudMasterPage` shell:
+ * PHYSICAL STOCK"), and the same list the count screen's Show List (Ctrl+O)
+ * raises as a picker. `TxnDocTypes::physicalStock()` on the shared `CrudMasterPage` shell:
  *
  *  - grid 101's tokens are bare and svh-prefixed (`isvh_company_id`, …) and
  *    none is optional — an unbound token stays in the SQL as a word and the
@@ -131,7 +131,7 @@ function SelectionReporter({
 }
 
 export type PhysicalStockListViewProps = {
-  /** Raised from the count screen (F8): a pick loads into that screen. */
+  /** Raised from the count screen (Ctrl+O): a pick loads into that screen. */
   pickMode: boolean;
   onCreate: () => void;
   onOpen: (key: PhysicalStockDocKey, openForEdit: boolean) => void;

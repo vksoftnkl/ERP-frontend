@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * Cancel — the same steps from the entry's "Cancel document" and the list's
- * F3 (`confirmAndCancelStockAdjustment`): the reason is asked for, the
+ * Cancel — the same steps from the entry's Cancel (Alt+X) and the list's F3
+ * (`confirmAndCancelStockAdjustment`): the reason is asked for, the
  * consequence is spelled out, and only then is the one route called. A DRAFT
  * can be cancelled as well as a POSTED document, and the question says which
  * it is doing.

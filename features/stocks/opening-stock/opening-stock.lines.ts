@@ -9,8 +9,8 @@
  * and `OpeningStockEntry::recalcRow()` / `recalcTotals()`.
  */
 import { isRealDate } from "@/features/sales/quotation/quotation.utils";
-import { DEFAULT_BUCKET, TRACK, type TrackFacet } from "./opening-stock.constants";
-import type { OpeningStockLine, OpeningStockTotals } from "./opening-stock.types";
+import { DEFAULT_BUCKET, LINE_MODEL_MAX_LENGTH, TRACK, type TrackFacet } from "./opening-stock.constants";
+import type { BatchDetailChoice, OpeningStockLine, OpeningStockTotals } from "./opening-stock.types";
 
 // ---------------------------------------------------------------------------
 // Tracking signature
@@ -58,14 +58,168 @@ const IDENTITY_FACET: Partial<Record<keyof OpeningStockLine, TrackFacet>> = {
 
 /**
  * True when the field is an identity cell the row's item does not track — what
- * both refuses the editor and greys the cell (`isUntrackedIdentityCell`).
+ * both refuses the editor and greys the cell (`isUntrackedIdentityCell`). Size,
+ * Colour and Model answer to `isLockedBatchDetail` instead.
  */
 export function isUntrackedIdentityField(
-  line: Pick<OpeningStockLine, "trackSignature">,
+  line: Pick<OpeningStockLine, "trackSignature" | "batchTyped">,
   field: keyof OpeningStockLine,
+  autoBatchNo = false,
 ): boolean {
+  if (isBatchDetailField(field)) {
+    return isLockedBatchDetail(line, autoBatchNo);
+  }
   const facet = IDENTITY_FACET[field];
   return facet !== undefined && !tracks(line.trackSignature, facet);
+}
+
+// ---------------------------------------------------------------------------
+// Textile — what the batch IS (Qt 74b755c, plan-textile-auto-batch-2 E4)
+// ---------------------------------------------------------------------------
+
+/** The three cells a batch's detail is keyed in. */
+const BATCH_DETAIL_FIELDS = new Set<keyof OpeningStockLine>(["sizeName", "colourName", "model"]);
+
+export function isBatchDetailField(field: keyof OpeningStockLine | string): boolean {
+  return BATCH_DETAIL_FIELDS.has(field as keyof OpeningStockLine);
+}
+
+/**
+ * Whether this line takes a size, colour and model at all: the company numbers
+ * batches itself (`stock.auto_batch_no`) and the item is tracked by batch. The
+ * batch number itself must also be blank or server-given — see `batchTyped`.
+ * Qt `OpeningStockCols::takesBatchDetail()`.
+ */
+export function takesBatchDetail(autoBatchNo: boolean, signature: string | null | undefined): boolean {
+  return autoBatchNo && tracks(signature, TRACK.Batch);
+}
+
+/**
+ * Size / Colour / Model are shut — Qt `isLockedBatchDetailCell()`: the line
+ * does not take them, or its batch number was typed by hand. A typed number
+ * carries none of them; the server refuses them with one
+ * (STOCK_BATCH_DETAIL_NEEDS_AUTO_BATCH).
+ */
+export function isLockedBatchDetail(
+  line: Pick<OpeningStockLine, "trackSignature" | "batchTyped">,
+  autoBatchNo: boolean,
+): boolean {
+  return !takesBatchDetail(autoBatchNo, line.trackSignature) || line.batchTyped === true;
+}
+
+/** The five cells a typed batch number clears (Qt SizeName … Model). */
+const NO_BATCH_DETAIL = {
+  sizeId: "",
+  sizeName: "",
+  colourId: "",
+  colourName: "",
+  model: "",
+} as const;
+
+/** Whether the line holds any of the five — what makes clearing them worth a word. */
+export function hasBatchDetail(
+  line: Pick<OpeningStockLine, "sizeId" | "sizeName" | "colourId" | "colourName" | "model">,
+): boolean {
+  return [line.sizeId, line.sizeName, line.colourId, line.colourName, line.model].some(
+    (value) => (value ?? "") !== "",
+  );
+}
+
+/**
+ * Batch No committed — Qt `onBatchNoEdited()`. Anything non-blank is a number
+ * the operator TYPED; blank hands the numbering back to the server. With auto
+ * batch numbers on, a typed number carries no size, colour or model, so the
+ * five are cleared — and `cleared` says whether there was anything to clear,
+ * which is when the operator is told.
+ */
+export function withBatchNoEdited(
+  line: OpeningStockLine,
+  batchNo: string,
+  autoBatchNo: boolean,
+): { line: OpeningStockLine; cleared: boolean } {
+  const typed = batchNo.trim() !== "";
+  const next: OpeningStockLine = { ...line, batchNo, batchTyped: typed };
+  if (!typed || !autoBatchNo) {
+    return { line: next, cleared: false };
+  }
+  return { line: { ...next, ...NO_BATCH_DETAIL }, cleared: hasBatchDetail(line) };
+}
+
+/** Qt `QString::simplified()` — runs of whitespace become one space, the ends trimmed. */
+export function simplified(text: string | null | undefined): string {
+  return (text ?? "").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * A Size / Colour name as committed — Qt `setModelData()` for the choice
+ * combos: a name equal to a list row's, ignoring case, TAKES that row (its id
+ * and its own spelling); any other name keeps the id blank, and the screen
+ * offers to add it. The first row wins when two share a name (a company's own
+ * and a shared one).
+ */
+export function resolveChoice(
+  choices: readonly BatchDetailChoice[],
+  typed: string,
+): BatchDetailChoice {
+  const name = simplified(typed);
+  if (!name) {
+    return { id: "", name: "" };
+  }
+  const folded = name.toLowerCase();
+  const match = choices.find((choice) => choice.name.trim().toLowerCase() === folded);
+  return match ? { id: match.id, name: match.name } : { id: "", name };
+}
+
+/**
+ * The list a cell offers: names in list order, a name shared by two rows
+ * offered once. Matching anywhere in the name, ignoring case, is the
+ * completer's (the browser's datalist).
+ */
+export function choiceNames(choices: readonly BatchDetailChoice[]): string[] {
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const choice of choices) {
+    const key = choice.name.trim().toLowerCase();
+    if (key && !seen.has(key)) {
+      seen.add(key);
+      names.push(choice.name);
+    }
+  }
+  return names;
+}
+
+/** A Model as committed: whitespace collapsed (the Qt cell's `simplified()`), held to `sbd_model`'s 100. */
+export function normalizeModel(raw: string): string {
+  return simplified(raw).slice(0, LINE_MODEL_MAX_LENGTH).trim();
+}
+
+/**
+ * A model typed on this screen is a suggestion for the item's next line too —
+ * in FRONT, unless the item already has it (ignoring case).
+ */
+export function withTypedModel(known: readonly string[], model: string): string[] {
+  const folded = model.toLowerCase();
+  if (!model || known.some((entry) => entry.toLowerCase() === folded)) {
+    return [...known];
+  }
+  return [model, ...known];
+}
+
+/**
+ * The server's models (newest first) BEHIND the ones typed meanwhile — Qt
+ * `fetchModels()`: "models typed on this screen meanwhile stay in front".
+ */
+export function withFetchedModels(known: readonly string[], fetched: readonly string[]): string[] {
+  const out = [...known];
+  const seen = new Set(out.map((entry) => entry.toLowerCase()));
+  for (const model of fetched) {
+    const text = (model ?? "").trim();
+    if (text && !seen.has(text.toLowerCase())) {
+      seen.add(text.toLowerCase());
+      out.push(text);
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -121,6 +275,8 @@ export function blankLine(key: string = newLineKey()): OpeningStockLine {
     decimalCount: 0,
     trackSignature: "",
     costRate: 0,
+    ...NO_BATCH_DETAIL,
+    batchTyped: false,
     problem: "",
   };
 }

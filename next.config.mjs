@@ -1,5 +1,15 @@
+import { readFileSync } from "node:fs";
+
+// The package's version, shown in the user menu's footer.
+const { version: appVersion } = JSON.parse(
+  readFileSync(new URL("./package.json", import.meta.url), "utf8"),
+);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  env: {
+    NEXT_PUBLIC_APP_VERSION: appVersion,
+  },
   // Allow browser access through the LAN URL printed by `next dev`.
   allowedDevOrigins: ["192.168.0.*"],
   // Tree-shake barrel packages (react-icons/fi etc.) so a few-icon import doesn't

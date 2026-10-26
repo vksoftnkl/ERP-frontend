@@ -28,6 +28,16 @@
  * The draft is held in state AND in a ref advanced synchronously by `apply()`,
  * so a save fired straight after a cell commits (the shared keys blur the cell
  * first) reads the committed value rather than the render before it.
+ *
+ * ── Textile: size / colour / model on the line (Qt 74b755c, E4) ───────────
+ * When the company numbers its own batches (`stock.auto_batch_no`), a line on
+ * an item tracked by batch may leave Batch No blank: the server gives it the
+ * next number on save (CBE26-00001) and keeps the line's size, colour and model
+ * against that number in `stock.stock_batch_detail`. The sale bill reads them
+ * back when the label is scanned. A batch number typed by hand carries none of
+ * them, so typing one clears and locks the three cells. The Size and Colour
+ * lists (dropdowns 70 / 71) are read once per screen, every page; an item's
+ * earlier models once per item; a name not on a list is offered for adding.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useBusinessContext } from "@/components/layout/business-context";
@@ -36,6 +46,7 @@ import { formatCurrency } from "@/domain/pricing";
 import { focusCell, focusNextStopFrom } from "@/features/sales/quotation/components/grid-focus";
 import { accountingYearOf, isRealDate, todayIso } from "@/features/sales/quotation/quotation.utils";
 import { getUserInfo } from "@/lib/auth/session";
+import { useDropdownId } from "@/lib/configured-dropdowns";
 import { confirm } from "@/lib/confirm";
 import { toast } from "@/lib/notify";
 import { RESTORED_MESSAGE_OPTIONS, restoredMessage, screenMemory, type ScreenScope } from "@/lib/screen-memory";
@@ -43,15 +54,23 @@ import { useForgetIfWritingOnUnmount, useRecalledOnce, type ScreenMemoryOption }
 import { useLazySwitchItemUomQuery } from "@/store/api/quotationApi";
 import {
   useCancelOpeningStockVoucherMutation,
+  useGetOpeningStockBatchModelsMutation,
   useLazyGetOpeningStockItemByBarcodeQuery,
   useLazyGetOpeningStockItemLookupQuery,
   useLazyGetOpeningStockVoucherQuery,
+  useQuickAddOpeningStockChoiceMutation,
+  useRunOpeningStockChoicePageMutation,
   useSaveOpeningStockVoucherMutation,
+  type BatchDetailChoiceRow,
 } from "./opening-stock.api";
 import {
+  CHOICE_MAX_PAGES,
+  CHOICE_PAGE_SIZE,
+  COLOUR_DROPDOWN_KEY,
   LINE_IDENTITY_MAX_LENGTH,
   LINE_REMARKS_MAX_LENGTH,
   OPENING_STOCK_GRID_NAME,
+  SIZE_DROPDOWN_KEY,
   TRACK,
   type RateSource,
 } from "./opening-stock.constants";
@@ -60,14 +79,21 @@ import {
   computeTotals,
   hasItem,
   normalizeGridDate,
+  normalizeModel,
   parseGridNumber,
   qtyDecimals,
+  resolveChoice,
   tracks,
+  withBatchNoEdited,
+  withFetchedModels,
+  withTypedModel,
 } from "./opening-stock.lines";
 import {
+  autoBatchLineIndexes,
   buildPayload,
   describeError,
   fieldErrorsOf,
+  givenBatchesText,
   lineFromPayload,
   lineProblemsOf,
   statusOfError,
@@ -88,6 +114,8 @@ import {
   focusFirstCellOfRow,
 } from "./components/opening-stock-grid";
 import type {
+  BatchDetailChoice,
+  BatchDetailChoices,
   GridRow,
   OpeningStockDocKey,
   OpeningStockDraft,
@@ -95,6 +123,7 @@ import type {
   OpeningStockLineField,
   OpeningStockViolation,
 } from "./opening-stock.types";
+import { useOpeningStockSettings } from "./use-opening-stock-settings";
 
 /** The DOM ids the hook sends the cursor to. */
 export const GODOWN_FIELD_ID = "opening-stock-godown";
@@ -172,6 +201,19 @@ function memoryScopeOf(draft: OpeningStockDraft): ScreenScope {
 /** One line's ticket: the row, and the document it was asked for. */
 type LineTicket = { rowKey: string; generation: number };
 
+/** The Size / Colour cells, and what each is called inside a sentence. */
+type ChoiceField = "sizeName" | "colourName";
+const CHOICE_WORD: Record<ChoiceField, "size" | "colour"> = { sizeName: "size", colourName: "colour" };
+
+/** A list row (`isz_*` / `icl_*`) as id + name; null when it names neither. */
+function choiceOf(row: BatchDetailChoiceRow, prefix: "isz" | "icl"): BatchDetailChoice | null {
+  const id = String(row[`${prefix}_id`] ?? "").trim();
+  const name = String(row[`${prefix}_name`] ?? "").trim();
+  return id && name ? { id, name } : null;
+}
+
+const NO_CHOICES: readonly BatchDetailChoice[] = [];
+
 export type UseOpeningStockDraftOptions = {
   initialDocument?: OpeningStockDocKey;
   /** "entry" opens a loaded DRAFT for edit (still read-only for anything else). */
@@ -214,6 +256,38 @@ export function useOpeningStockDraft({
   const [saveVoucher] = useSaveOpeningStockVoucherMutation();
   const [cancelVoucherMutation] = useCancelOpeningStockVoucherMutation();
   const [adjacentMutation] = useGetTxnAdjacentMutation();
+  const [runChoicePage] = useRunOpeningStockChoicePageMutation();
+  const [batchModelsMutation] = useGetOpeningStockBatchModelsMutation();
+  const [quickAddMutation] = useQuickAddOpeningStockChoiceMutation();
+
+  // `stock.auto_batch_no` — AppSession `autoBatchNo()`, the session's company
+  // and branch. Held in a ref too: a cell commit and a save read it from a
+  // callback.
+  const { settings } = useOpeningStockSettings(session.companyId, session.branchId);
+  const autoBatchNo = settings.autoBatchNo;
+  const autoBatchNoRef = useRef(autoBatchNo);
+  useLayoutEffect(() => {
+    autoBatchNoRef.current = autoBatchNo;
+  }, [autoBatchNo]);
+
+  // The Size / Colour lists (dropdowns 70 / 71). In a ref as well: a commit
+  // resolves the typed name against them synchronously.
+  const sizeDropdownId = useDropdownId(SIZE_DROPDOWN_KEY);
+  const colourDropdownId = useDropdownId(COLOUR_DROPDOWN_KEY);
+  const [choiceLists, setChoiceLists] = useState<Record<ChoiceField, readonly BatchDetailChoice[]>>({
+    sizeName: NO_CHOICES,
+    colourName: NO_CHOICES,
+  });
+  const choiceListsRef = useRef(choiceLists);
+  const setChoiceList = useCallback((field: ChoiceField, list: readonly BatchDetailChoice[]) => {
+    choiceListsRef.current = { ...choiceListsRef.current, [field]: list };
+    setChoiceLists(choiceListsRef.current);
+  }, []);
+
+  /** Item id → the Model cell's suggestions (Qt `m_modelsByItem`). */
+  const [modelsByItem, setModelsByItem] = useState<Record<string, readonly string[]>>({});
+  /** Asked once per item, for the life of the screen. */
+  const modelsAskedRef = useRef(new Set<string>());
 
   /**
    * Bumped whenever the document on screen changes (New, a load, the next
@@ -281,6 +355,89 @@ export function useOpeningStockDraft({
     busyRef.current = next;
     setBusyState(next);
   }, []);
+
+  // ── Textile: the lists and the models ─────────────────────────────────
+  /**
+   * The Size and Colour lists, every page (`/dropdown-details/run` caps a page
+   * at 100) — Qt `loadBatchDetailChoices()`, only while the company numbers its
+   * own batches. For the DOCUMENT's company: it is the one the server checks a
+   * size against. A failed read is silent, as in Qt: the cell then offers no
+   * list, and a typed name still goes through the quick-add.
+   */
+  const choicesCompanyId = draft.companyId;
+  useEffect(() => {
+    if (!autoBatchNo || !choicesCompanyId) {
+      return;
+    }
+    let active = true;
+    const load = async (field: ChoiceField, dropdownId: string, prefix: "isz" | "icl") => {
+      if (!dropdownId) {
+        return;
+      }
+      const loaded: BatchDetailChoice[] = [];
+      for (let page = 1; page <= CHOICE_MAX_PAGES; page += 1) {
+        const rows = await runChoicePage({ dropdownId, companyId: choicesCompanyId, page }).unwrap();
+        if (!active) {
+          return;
+        }
+        for (const row of rows) {
+          const choice = choiceOf(row, prefix);
+          if (choice) {
+            loaded.push(choice);
+          }
+        }
+        if (rows.length < CHOICE_PAGE_SIZE) {
+          break;
+        }
+      }
+      setChoiceList(field, loaded);
+    };
+    load("sizeName", sizeDropdownId, "isz").catch(() => undefined);
+    load("colourName", colourDropdownId, "icl").catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [autoBatchNo, choicesCompanyId, colourDropdownId, runChoicePage, setChoiceList, sizeDropdownId]);
+
+  /**
+   * The Model cell's suggestions for one item — Qt `fetchModels()`, asked once
+   * per item. Models typed on this screen meanwhile stay in front. Silent on a
+   * failure: the cell is free text either way.
+   */
+  const fetchModels = useCallback(
+    async (itemId: string) => {
+      if (!autoBatchNoRef.current || !itemId || modelsAskedRef.current.has(itemId)) {
+        return;
+      }
+      modelsAskedRef.current.add(itemId);
+      try {
+        const fetched = await batchModelsMutation({ companyId: draftRef.current.companyId, itemId }).unwrap();
+        setModelsByItem((current) => ({ ...current, [itemId]: withFetchedModels(current[itemId] ?? [], fetched) }));
+      } catch {
+        // Nothing to say: no suggestions is not an error.
+      }
+    },
+    [batchModelsMutation],
+  );
+
+  // Every item on screen gets its models asked for — a picked or scanned one,
+  // each line of a loaded document (Qt calls `fetchModels()` from
+  // `applyPickedItem()` and `applyLines()`), and all of them at once if the
+  // setting answers after the document is already up.
+  const itemIdsOnScreen = useMemo(
+    () => [...new Set(draft.lines.filter(hasItem).map((line) => line.itemId))].join("\n"),
+    [draft.lines],
+  );
+  useEffect(() => {
+    if (!autoBatchNo) {
+      return;
+    }
+    for (const itemId of itemIdsOnScreen.split("\n")) {
+      if (itemId) {
+        void fetchModels(itemId);
+      }
+    }
+  }, [autoBatchNo, fetchModels, itemIdsOnScreen]);
 
   // A save / post / cancel still in flight when the screen goes lands after it:
   // the document must not come back to be posted twice. (A refusal that marks
@@ -760,6 +917,66 @@ export function useOpeningStockDraft({
     [apply, barcodeQuery, editableNow, fetchItemDetail, lineTicket, requireHeaderGodown, tell, ticketRow],
   );
 
+  // ── Size / Colour quick-add ───────────────────────────────────────────
+  /**
+   * A Size / Colour name typed that is not on the list — Qt `quickAddChoice()`:
+   * "Add it?", and on Yes the master's own `/create`, the new row landing on
+   * the line and on the list for the next line. No clears the cell; a refused
+   * create clears it and shows the server's words.
+   *
+   * Reached through a ticket from a QUEUED call, never from inside the cell's
+   * commit (the question is a modal). Asks only while the line still holds that
+   * name without an id, and lands the answer only on the same terms: the
+   * operator may have picked a row from the list, re-typed the cell, removed
+   * the line or moved to another document meanwhile.
+   */
+  const quickAddChoice = useCallback(
+    async (ticket: LineTicket, field: ChoiceField, name: string) => {
+      const idField = field === "sizeName" ? "sizeId" : "colourId";
+      const stillWaiting = (): boolean => {
+        const row = ticketRow(ticket);
+        return Boolean(row && row[field].trim() === name && !row[idField]);
+      };
+      if (!aliveRef.current || !editableNow() || !stillWaiting()) {
+        return;
+      }
+      const word = CHOICE_WORD[field];
+      const clearCell = () => {
+        if (stillWaiting()) {
+          apply({ type: "batchDetailChoiceSet", rowKey: ticket.rowKey, field, id: "", name: "" });
+        }
+      };
+      const yes = await confirm({
+        title: word === "size" ? "New size" : "New colour",
+        message: `"${name}" is not in the ${word} list. Add it?`,
+        confirmLabel: "Add",
+        cancelLabel: "No",
+      });
+      if (!yes) {
+        clearCell();
+        return;
+      }
+      const prefix = word === "size" ? "isz" : "icl";
+      try {
+        const row = await quickAddMutation({ kind: word, name, companyId: draftRef.current.companyId }).unwrap();
+        const id = String(row[`${prefix}_id`] ?? "").trim();
+        if (!id) {
+          return;
+        }
+        const added: BatchDetailChoice = { id, name: String(row[`${prefix}_name`] ?? "").trim() || name };
+        // On the list for the next line, whether or not this one still wants it.
+        setChoiceList(field, [...choiceListsRef.current[field], added]);
+        if (stillWaiting()) {
+          apply({ type: "batchDetailChoiceSet", rowKey: ticket.rowKey, field, id: added.id, name: added.name });
+        }
+      } catch (error) {
+        clearCell();
+        tell("error", "", describeError(error, `The ${word} "${name}" could not be added.`));
+      }
+    },
+    [apply, editableNow, quickAddMutation, setChoiceList, tell, ticketRow],
+  );
+
   // ── Cells ─────────────────────────────────────────────────────────────
   const setLineField = useCallback(
     (rowKey: string, field: OpeningStockLineField, raw: string) => {
@@ -784,11 +1001,61 @@ export function useOpeningStockDraft({
             void commitBarcode(rowKey, raw);
           }
           return;
-        case "batchNo":
+        case "batchNo": {
+          // `@NullableStringStrict(100)` — held to it here rather than refused at save.
+          const value = raw.slice(0, LINE_IDENTITY_MAX_LENGTH);
+          // Typed, or handed back to the server to number (Qt `onBatchNoEdited()`).
+          const autoBatch = autoBatchNoRef.current;
+          const { cleared } = withBatchNoEdited(line, value, autoBatch);
+          apply({ type: "batchNoSet", rowKey, value, autoBatchNo: autoBatch });
+          if (cleared) {
+            const lineNo = draftRef.current.lines.findIndex((candidate) => candidate.key === rowKey) + 1;
+            // Once the commit is over, as Qt queues it.
+            window.setTimeout(
+              () =>
+                tell(
+                  "info",
+                  "Batch number typed",
+                  `Line ${lineNo}: size, colour and model go only with a batch number the system gives, ` +
+                    "so they were cleared. Empty the batch cell to have one given and key them again.",
+                ),
+              0,
+            );
+          }
+          return;
+        }
         case "serialNo":
           // `@NullableStringStrict(100)` — held to it here rather than refused at save.
           apply({ type: "lineFieldSet", rowKey, field, value: raw.slice(0, LINE_IDENTITY_MAX_LENGTH) });
           return;
+        case "sizeName":
+        case "colourName": {
+          // A name equal to a list row's (ignoring case) takes that row; any
+          // other keeps the id blank, and the screen offers to add it.
+          const choice = resolveChoice(choiceListsRef.current[field], raw);
+          apply({ type: "batchDetailChoiceSet", rowKey, field, id: choice.id, name: choice.name });
+          if (choice.name && !choice.id) {
+            // Queued, like the Qt slot: the offer is a modal, and this runs
+            // inside the cell's commit.
+            const ticket = lineTicket(rowKey);
+            window.setTimeout(() => void quickAddChoice(ticket, field, choice.name), 0);
+          }
+          return;
+        }
+        case "model": {
+          const model = normalizeModel(raw);
+          apply({ type: "lineFieldSet", rowKey, field, value: model });
+          // A model typed here is a suggestion for the item's next line too.
+          const itemId = line.itemId;
+          if (model && itemId) {
+            setModelsByItem((current) => {
+              const known = current[itemId] ?? [];
+              const next = withTypedModel(known, model);
+              return next.length === known.length ? current : { ...current, [itemId]: next };
+            });
+          }
+          return;
+        }
         case "remarks":
           apply({ type: "lineFieldSet", rowKey, field, value: raw.slice(0, LINE_REMARKS_MAX_LENGTH) });
           return;
@@ -813,7 +1080,7 @@ export function useOpeningStockDraft({
         }
       }
     },
-    [apply, commitBarcode],
+    [apply, commitBarcode, lineTicket, quickAddChoice, tell],
   );
 
   // ── Rows ──────────────────────────────────────────────────────────────
@@ -946,8 +1213,10 @@ export function useOpeningStockDraft({
 
   const saveAndPost = useCallback(async () => {
     const current = draftRef.current;
-    // The identity the engine refuses on, caught before the round trip.
-    const pending = missingIdentityLines(current.lines);
+    const autoBatch = autoBatchNoRef.current;
+    // The identity the engine refuses on, caught before the round trip. With
+    // auto batch numbers a blank batch is the server's to fill.
+    const pending = missingIdentityLines(current.lines, autoBatch);
     if (pending.length) {
       say(
         "warn",
@@ -973,9 +1242,17 @@ export function useOpeningStockDraft({
     setBusy("posting");
     apply({ type: "problemsCleared" });
     try {
-      const result = await saveVoucher(buildPayload(draftRef.current, { post: true })).unwrap();
+      const posting = draftRef.current;
+      // Which lines the server is to number, read BEFORE it fills them in.
+      const autoBatchLines = autoBatchLineIndexes(posting.lines, autoBatch);
+      const result = await saveVoucher(buildPayload(posting, { post: true, autoBatchNo: autoBatch })).unwrap();
       const refno = result.header?.refno ?? "";
-      say("success", "Posted", `${refno} posted — ${result.rowsPosted ?? 0} ledger rows written.`);
+      // The given numbers are on the reply's lines — said before the screen clears.
+      say(
+        "success",
+        "Posted",
+        `${refno} posted — ${result.rowsPosted ?? 0} ledger rows written.${givenBatchesText(autoBatchLines, result.lines)}`,
+      );
       // Posting is the end of this document; Cancel is reached through the list.
       startNextDocument();
     } catch (error) {
@@ -1020,19 +1297,27 @@ export function useOpeningStockDraft({
         return;
       }
       setBusy("saving");
+      const autoBatch = autoBatchNoRef.current;
+      // Which lines the server is to number, read BEFORE it fills them in.
+      const autoBatchLines = autoBatchLineIndexes(current.lines, autoBatch);
       try {
-        const result = await saveVoucher(buildPayload(current)).unwrap();
+        const result = await saveVoucher(buildPayload(current, { autoBatchNo: autoBatch })).unwrap();
         const refno = result.header?.refno ?? "";
-        // Read from the server's answer — it owns the lines now.
-        const pending = missingIdentityLines((result.lines ?? []).map((line) => lineFromPayload(line)));
+        // Read from the server's answer — it owns the lines now, the batch
+        // numbers it gave included.
+        const pending = missingIdentityLines(
+          (result.lines ?? []).map((line) => lineFromPayload(line)),
+          autoBatch,
+        );
+        const given = givenBatchesText(autoBatchLines, result.lines);
         if (pending.length) {
           say(
             "info",
             "Saved",
-            `${refno} saved as a draft. No stock has moved.\n\nThese lines still need what their item is tracked by, and Post will refuse the document until they have it:\n\n${pending.join("\n")}`,
+            `${refno} saved as a draft. No stock has moved.\n\nThese lines still need what their item is tracked by, and Post will refuse the document until they have it:\n\n${pending.join("\n")}${given}`,
           );
         } else {
-          say("success", "Saved", `${refno} saved as a draft. No stock has moved.`);
+          say("success", "Saved", `${refno} saved as a draft. No stock has moved.${given}`);
         }
         startNextDocument();
       } catch (error) {
@@ -1258,9 +1543,16 @@ export function useOpeningStockDraft({
 
   const totals = useMemo(() => computeTotals(draft.lines), [draft.lines]);
 
+  const batchDetail = useMemo<BatchDetailChoices>(
+    () => ({ sizes: choiceLists.sizeName, colours: choiceLists.colourName, modelsByItem }),
+    [choiceLists, modelsByItem],
+  );
+
   return {
     draft,
     totals,
+    autoBatchNo,
+    batchDetail,
     busy,
     flagged,
     picker,

@@ -10,11 +10,20 @@
  *
  * No cache on the document or the lookup: these are live balances and live
  * statuses, and a stale "this item has no opening yet" is worse than none.
+ *
+ * The textile reads (the Size / Colour lists, an item's earlier models) are
+ * GET MUTATIONS: asked once per screen or per item, from effects, so every call
+ * is its own request — a query endpoint would hand a second call for a pending
+ * key the first one's promise — and the store's write announcer ignores a GET.
  */
+import { ITEM_COLOUR_SPEC, ITEM_SIZE_SPEC } from "@/features/masters/inventory/item-attribute/item-attribute";
+import { BATCH_MODELS_ENDPOINT } from "@/features/stocks/shared/batch-detail";
 import { baseApi } from "@/store/api/baseApi";
 import type { ApiSuccessResponse } from "@/utils/types";
 import {
+  CHOICE_PAGE_SIZE,
   CONFIGURED_GRID_RUN_ENDPOINT,
+  DROPDOWN_RUN_ENDPOINT,
   ITEM_BY_BARCODE_ENDPOINT,
   OPENING_STOCK_CANCEL_ENDPOINT,
   OPENING_STOCK_CREATE_ENDPOINT,
@@ -34,6 +43,23 @@ import type {
   OpeningStockSaveResult,
   SaveOpeningStockDto,
 } from "./opening-stock.types";
+
+/** One page of the Size or Colour list (dropdown 70 / 71), bound to the company. */
+export type BatchDetailChoicePageQuery = {
+  dropdownId: string;
+  companyId: string;
+  page: number;
+};
+
+/** A row of dropdown 70 / 71 or of a quick-add's answer, by column name (`isz_*` / `icl_*`). */
+export type BatchDetailChoiceRow = Record<string, unknown>;
+
+/** The quick-add: a size or colour created from the line, for the document's company. */
+export type BatchDetailQuickAddArgs = {
+  kind: "size" | "colour";
+  name: string;
+  companyId: string;
+};
 
 /** A page of a configured popup grid, with the grid's own tokens bound. */
 export type PickerGridQuery = {
@@ -128,6 +154,67 @@ export const openingStockApi = baseApi.injectEndpoints({
         payload.data ?? { items: [], meta: { page: 1, limit: 20, total: 0 } },
       keepUnusedDataFor: 30,
     }),
+
+    /**
+     * One page of the Size or Colour list. Both SELECTs bind a QUOTED
+     * `'icompany_id'` (this company's rows and the shared ones), so the param
+     * always travels.
+     */
+    runOpeningStockChoicePage: builder.mutation<BatchDetailChoiceRow[], BatchDetailChoicePageQuery>({
+      query: ({ dropdownId, companyId, page }) => ({
+        url: DROPDOWN_RUN_ENDPOINT,
+        method: "GET",
+        params: {
+          dropdown_id: dropdownId,
+          page,
+          limit: CHOICE_PAGE_SIZE,
+          dropdown_param: JSON.stringify({ icompany_id: companyId }),
+        },
+      }),
+      transformResponse: (payload: ApiSuccessResponse<{ items?: unknown } | null>) => {
+        const items = payload.data?.items;
+        return Array.isArray(items)
+          ? items.filter((row): row is BatchDetailChoiceRow => typeof row === "object" && row !== null)
+          : [];
+      },
+    }),
+
+    /** `GET /stock/batch-detail/models` — the item's earlier models, newest first, at most 20. */
+    getOpeningStockBatchModels: builder.mutation<string[], { companyId: string; itemId: string }>({
+      query: ({ companyId, itemId }) => ({
+        url: BATCH_MODELS_ENDPOINT,
+        method: "GET",
+        params: { companyId, itemId },
+      }),
+      transformResponse: (payload: ApiSuccessResponse<unknown>) =>
+        Array.isArray(payload.data)
+          ? payload.data.filter((model): model is string => typeof model === "string")
+          : [],
+    }),
+
+    /**
+     * The quick-add (Qt `quickAddChoice()`): the masters' own `/create`, with
+     * only the name, the company, sort 0 and active — what the Size / Colour
+     * master would save for a name typed there. Answers the row (`isz_*` /
+     * `icl_*`); a name already live is a 409, shown as it comes.
+     */
+    quickAddOpeningStockChoice: builder.mutation<BatchDetailChoiceRow, BatchDetailQuickAddArgs>({
+      query: ({ kind, name, companyId }) => {
+        const spec = kind === "size" ? ITEM_SIZE_SPEC : ITEM_COLOUR_SPEC;
+        const p = spec.prefix;
+        return {
+          url: spec.endpoints.create,
+          method: "POST",
+          body: {
+            [`${p}_name`]: name,
+            [`${p}_company_id`]: companyId,
+            [`${p}_sort`]: 0,
+            [`${p}_is_active`]: true,
+          },
+        };
+      },
+      transformResponse: (payload: ApiSuccessResponse<BatchDetailChoiceRow | null>) => payload.data ?? {},
+    }),
   }),
 });
 
@@ -138,4 +225,7 @@ export const {
   useLazyGetOpeningStockItemLookupQuery,
   useLazyGetOpeningStockItemByBarcodeQuery,
   useRunOpeningStockPickerGridQuery,
+  useRunOpeningStockChoicePageMutation,
+  useGetOpeningStockBatchModelsMutation,
+  useQuickAddOpeningStockChoiceMutation,
 } = openingStockApi;

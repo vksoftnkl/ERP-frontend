@@ -1,13 +1,21 @@
 /**
- * Stock Adjustment — the voucher's window keys and the Type row's arrows.
+ * Stock Adjustment — the voucher's keys: the shared transaction set it binds
+ * (lib/txn-keys, as Opening Stock), the F1 sheet, its own F12 / F5, and the
+ * Type row's arrows.
  */
 import { describe, expect, it } from "vitest";
-import { documentRights, type DocumentRightsInput } from "@/lib/permissions/document-rights";
-import { FULL_MENU_PERMISSIONS } from "@/lib/permissions/menu-permissions";
+import { txnKeyOf, withKey } from "@/lib/txn-keys";
 import { KIND_BUTTONS } from "./stock-adjustment.constants";
-import { entryKeyAction, kindStep, type EntryKeyEvent, type EntryKeyState } from "./stock-adjustment.keys";
+import {
+  KEY_SHEET,
+  kindStep,
+  LINE_KEYS,
+  screenKeyAction,
+  type ScreenKeyEvent,
+  type ScreenKeyState,
+} from "./stock-adjustment.keys";
 
-function press(key: string, extra: Partial<EntryKeyEvent> = {}): EntryKeyEvent {
+function press(key: string, extra: Partial<ScreenKeyEvent> = {}): ScreenKeyEvent {
   return {
     key,
     ctrlKey: false,
@@ -20,134 +28,108 @@ function press(key: string, extra: Partial<EntryKeyEvent> = {}): EntryKeyEvent {
   };
 }
 
-/** Every right, less the ones named. */
-function rightsWithout(...denied: (keyof DocumentRightsInput)[]) {
-  const input: DocumentRightsInput = { ...FULL_MENU_PERMISSIONS };
-  for (const right of denied) {
-    input[right] = false;
-  }
-  return documentRights(input);
-}
+const KEYING: ScreenKeyState = { overlayOpen: false, editable: true };
+const BROWSING: ScreenKeyState = { overlayOpen: false, editable: false };
+const UNDER_A_DIALOG: ScreenKeyState = { overlayOpen: true, editable: true };
 
-/** A new document being keyed, by a user with every right. */
-const KEYING: EntryKeyState = {
-  overlayOpen: false,
-  mode: "entry",
-  status: "DRAFT",
-  saved: false,
-  busy: false,
-  rights: rightsWithout(),
-};
-/** A saved draft opened read-only from the list. */
-const BROWSING_DRAFT: EntryKeyState = { ...KEYING, mode: "browse", saved: true };
-const POSTED: EntryKeyState = { ...KEYING, mode: "browse", status: "POSTED", saved: true };
-
-describe("entryKeyAction", () => {
-  it("maps the function keys while keying", () => {
-    expect(entryKeyAction(press("F5"), KEYING)).toEqual({ action: "save", swallow: true });
-    expect(entryKeyAction(press("F4"), KEYING).action).toBe("saveDraft");
-    expect(entryKeyAction(press("F9"), KEYING).action).toBe("validate");
-    expect(entryKeyAction(press("F7"), KEYING).action).toBe("new");
-    expect(entryKeyAction(press("F8"), KEYING).action).toBe("list");
-    expect(entryKeyAction(press("F2"), KEYING).action).toBe("pick");
-    expect(entryKeyAction(press("F12"), KEYING).action).toBe("pick");
-    expect(entryKeyAction(press("F6"), KEYING).action).toBe("print");
-    expect(entryKeyAction(press("Escape"), KEYING).action).toBe("close");
-    expect(entryKeyAction(press("F1"), KEYING).action).toBe("panelNext");
-    expect(entryKeyAction(press("F1", { shiftKey: true }), KEYING).action).toBe("panelPrev");
+describe("the shared document keys", () => {
+  it("are the Opening Stock set, the web chords where Chrome keeps the Qt ones", () => {
+    expect(txnKeyOf(press("n", { altKey: true }))).toBe("new");
+    expect(txnKeyOf(press("s", { ctrlKey: true }))).toBe("saveDraft");
+    expect(txnKeyOf(press("Enter", { ctrlKey: true }))).toBe("post");
+    expect(txnKeyOf(press("F2"))).toBe("edit");
+    expect(txnKeyOf(press("x", { altKey: true }))).toBe("cancelDoc");
+    expect(txnKeyOf(press("h", { ctrlKey: true }))).toBe("history");
+    expect(txnKeyOf(press("o", { ctrlKey: true }))).toBe("open");
+    expect(txnKeyOf(press("Escape"))).toBe("close");
+    expect(txnKeyOf(press("PageUp", { altKey: true }))).toBe("previous");
+    expect(txnKeyOf(press("PageDown", { altKey: true }))).toBe("next");
   });
 
-  it("Ctrl+Enter is Save & Print, like F6", () => {
-    expect(entryKeyAction(press("Enter", { ctrlKey: true }), KEYING)).toEqual({ action: "print", swallow: true });
-    expect(entryKeyAction(press("Enter", { metaKey: true }), KEYING).action).toBe("print");
-    expect(entryKeyAction(press("Enter"), KEYING)).toEqual({ action: null, swallow: false });
+  it("caption the buttons as the .ui does", () => {
+    expect(withKey("New", "new")).toBe("New · Alt+N");
+    expect(withKey("Save Draft", "saveDraft")).toBe("Save Draft · Ctrl+S");
+    expect(withKey("Save & Post", "post")).toBe("Save & Post · Ctrl+Enter");
+    expect(withKey("Cancel", "cancelDoc")).toBe("Cancel · Alt+X");
+    expect(withKey("Edit", "edit")).toBe("Edit · F2");
+    expect(withKey("History", "history")).toBe("History · Ctrl+H");
+    expect(withKey("Show List", "open")).toBe("Show List · Ctrl+O");
+    expect(withKey("Close", "close")).toBe("Close · Esc");
   });
 
-  it("F2 opens a browsed draft for edit, and nothing else", () => {
-    expect(entryKeyAction(press("F2"), BROWSING_DRAFT).action).toBe("edit");
-    expect(entryKeyAction(press("F2"), { ...BROWSING_DRAFT, rights: rightsWithout("canEdit") })).toEqual({
+  it("the old function keys are not document keys any more", () => {
+    for (const key of ["F3", "F4", "F5", "F6", "F7", "F8", "F9"]) {
+      expect(txnKeyOf(press(key))).toBeNull();
+    }
+  });
+});
+
+describe("the F1 sheet", () => {
+  it("lists the document keys in the Qt bind() order", () => {
+    expect(KEY_SHEET.document.map((row) => `${row.label} — ${row.keyText}`)).toEqual([
+      "New / Clear — Alt+N",
+      "Save Draft — Ctrl+S",
+      "Save & Post — Ctrl+Enter",
+      "Edit — F2",
+      "Cancel — Alt+X",
+      "History — Ctrl+H",
+      "List / Open — Ctrl+O",
+      "Close — Esc",
+      "Previous document — Alt+PgUp",
+      "Next document — Alt+PgDn",
+    ]);
+  });
+
+  it("lists the grid's own keys under Lines, Pick from stock on F12", () => {
+    expect(KEY_SHEET.lines).toEqual(LINE_KEYS);
+    expect(LINE_KEYS.map((row) => `${row.label} — ${row.keyText}`)).toEqual([
+      "Pick from stock (the line's lot) — F12",
+      "Item list (type a name in Barcode) — ↓",
+      "Add a line — +",
+      "Remove a line — −",
+      "Next cell — Enter",
+      "Leave the grid — Tab",
+    ]);
+  });
+});
+
+describe("screenKeyAction", () => {
+  it("F12 picks from stock while a draft is keyed", () => {
+    expect(screenKeyAction(press("F12"), KEYING)).toEqual({ action: "pick", swallow: true });
+  });
+
+  it("F12 on a read-only document does nothing, and still stays away from the browser", () => {
+    expect(screenKeyAction(press("F12"), BROWSING)).toEqual({ action: null, swallow: true });
+  });
+
+  it("F12 under a dialog is left alone — there it is only DevTools", () => {
+    expect(screenKeyAction(press("F12"), UNDER_A_DIALOG)).toEqual({ action: null, swallow: false });
+  });
+
+  it("a held F12 opens nothing again; one already claimed is not run twice", () => {
+    expect(screenKeyAction(press("F12", { repeat: true }), KEYING)).toEqual({ action: null, swallow: true });
+    expect(screenKeyAction(press("F12", { defaultPrevented: true }), KEYING)).toEqual({
       action: null,
       swallow: true,
     });
-    expect(entryKeyAction(press("F2"), POSTED).action).toBeNull();
-    expect(entryKeyAction(press("F12"), BROWSING_DRAFT).action).toBeNull();
   });
 
-  it("F3 cancels only a saved, live document: a posted one on Cancel, a draft on Delete", () => {
-    expect(entryKeyAction(press("F3"), KEYING).action).toBeNull();
-    expect(entryKeyAction(press("F3"), BROWSING_DRAFT).action).toBe("cancel");
-    expect(entryKeyAction(press("F3"), POSTED).action).toBe("cancel");
-    expect(entryKeyAction(press("F3"), { ...POSTED, status: "CANCELLED" }).action).toBeNull();
-    expect(entryKeyAction(press("F3"), { ...POSTED, rights: rightsWithout("canCancel") }).action).toBeNull();
-    expect(entryKeyAction(press("F3"), { ...POSTED, rights: rightsWithout("canDelete") }).action).toBe("cancel");
-    expect(entryKeyAction(press("F3"), { ...BROWSING_DRAFT, rights: rightsWithout("canDelete") }).action).toBeNull();
-    expect(entryKeyAction(press("F3"), { ...BROWSING_DRAFT, rights: rightsWithout("canCancel") }).action).toBe(
-      "cancel",
-    );
+  it("bare F5 — Save until the rework — never reloads the page, under a dialog too", () => {
+    expect(screenKeyAction(press("F5"), KEYING)).toEqual({ action: null, swallow: true });
+    expect(screenKeyAction(press("F5"), BROWSING)).toEqual({ action: null, swallow: true });
+    expect(screenKeyAction(press("F5"), UNDER_A_DIALOG)).toEqual({ action: null, swallow: true });
   });
 
-  it("a posted document saves and validates nothing", () => {
-    expect(entryKeyAction(press("F5"), POSTED)).toEqual({ action: null, swallow: true });
-    expect(entryKeyAction(press("F4"), POSTED).action).toBeNull();
-    expect(entryKeyAction(press("F9"), POSTED).action).toBeNull();
-    expect(entryKeyAction(press("F8"), POSTED).action).toBe("list");
+  it("F2 is Edit now (the shared set's), never Pick from stock", () => {
+    expect(screenKeyAction(press("F2"), KEYING)).toEqual({ action: null, swallow: false });
   });
 
-  it("follows the document rights: F5 is Post, F4 is Create (Edit once saved), F7 is Create or Post", () => {
-    const viewer = { ...KEYING, rights: rightsWithout("canCreate", "canEdit", "canPost") };
-    expect(entryKeyAction(press("F5"), viewer).action).toBeNull();
-    expect(entryKeyAction(press("F4"), viewer).action).toBeNull();
-    expect(entryKeyAction(press("F7"), viewer).action).toBeNull();
-
-    // Post without Create — "no drafts": New, then Save (and post); Save draft stays off.
-    const postOnly = { ...KEYING, rights: rightsWithout("canCreate", "canEdit") };
-    expect(entryKeyAction(press("F5"), postOnly).action).toBe("save");
-    expect(entryKeyAction(press("F4"), postOnly).action).toBeNull();
-    expect(entryKeyAction(press("F7"), postOnly).action).toBe("new");
-
-    // Create without Post — drafts only.
-    const draftsOnly = { ...KEYING, rights: rightsWithout("canPost") };
-    expect(entryKeyAction(press("F5"), draftsOnly)).toEqual({ action: null, swallow: true });
-    expect(entryKeyAction(press("F4"), draftsOnly).action).toBe("saveDraft");
-    expect(entryKeyAction(press("F7"), draftsOnly).action).toBe("new");
-
-    // A saved draft is saved again on Edit, not Create.
-    const savedDraft = { ...KEYING, saved: true };
-    expect(entryKeyAction(press("F4"), { ...savedDraft, rights: rightsWithout("canCreate") }).action).toBe("saveDraft");
-    expect(entryKeyAction(press("F4"), { ...savedDraft, rights: rightsWithout("canEdit") }).action).toBeNull();
-  });
-
-  it("does nothing while a request is in flight — not even leave", () => {
-    const busy = { ...KEYING, busy: true };
-    for (const key of ["F4", "F5", "F7", "F8", "F9", "Escape"]) {
-      expect(entryKeyAction(press(key), busy)).toEqual({ action: null, swallow: true });
-    }
-  });
-
-  it("under a dialog runs nothing, but keeps the screen's F-keys from the browser", () => {
-    const covered = { ...KEYING, overlayOpen: true };
-    expect(entryKeyAction(press("F5"), covered)).toEqual({ action: null, swallow: true });
-    expect(entryKeyAction(press("F1"), covered)).toEqual({ action: null, swallow: true });
-    expect(entryKeyAction(press("F12"), covered)).toEqual({ action: null, swallow: false });
-    expect(entryKeyAction(press("Escape"), covered)).toEqual({ action: null, swallow: false });
-    expect(entryKeyAction(press("Enter", { ctrlKey: true }), covered)).toEqual({ action: null, swallow: false });
-  });
-
-  it("a held key repeats nothing, and a held F5 never reloads", () => {
-    expect(entryKeyAction(press("F5", { repeat: true }), KEYING)).toEqual({ action: null, swallow: true });
-    expect(entryKeyAction(press("Escape", { repeat: true }), KEYING)).toEqual({ action: null, swallow: false });
-  });
-
-  it("leaves a key alone once something else has claimed it", () => {
-    expect(entryKeyAction(press("Escape", { defaultPrevented: true }), KEYING)).toEqual({ action: null, swallow: false });
-    expect(entryKeyAction(press("F2", { defaultPrevented: true }), KEYING).action).toBeNull();
-  });
-
-  it("ignores Alt, and Ctrl / Shift with anything but their own keys", () => {
-    expect(entryKeyAction(press("F5", { altKey: true }), KEYING)).toEqual({ action: null, swallow: false });
-    expect(entryKeyAction(press("F5", { ctrlKey: true }), KEYING)).toEqual({ action: null, swallow: false });
-    expect(entryKeyAction(press("F5", { shiftKey: true }), KEYING)).toEqual({ action: null, swallow: false });
-    expect(entryKeyAction(press("a"), KEYING)).toEqual({ action: null, swallow: false });
+  it("leaves modified keys and everything else alone", () => {
+    expect(screenKeyAction(press("F5", { ctrlKey: true }), KEYING)).toEqual({ action: null, swallow: false });
+    expect(screenKeyAction(press("F12", { shiftKey: true }), KEYING)).toEqual({ action: null, swallow: false });
+    expect(screenKeyAction(press("F12", { altKey: true }), KEYING)).toEqual({ action: null, swallow: false });
+    expect(screenKeyAction(press("F7"), KEYING)).toEqual({ action: null, swallow: false });
+    expect(screenKeyAction(press("a"), KEYING)).toEqual({ action: null, swallow: false });
   });
 });
 

@@ -13,6 +13,7 @@
 import { skipToken } from "@reduxjs/toolkit/query";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useBusinessContext } from "@/components/layout/business-context";
+import { useGetTxnAdjacentMutation } from "@/components/txn/txn-adjacent";
 import { getUserInfo } from "@/lib/auth/session";
 import { toast } from "@/lib/notify";
 import { RESTORED_MESSAGE_OPTIONS, restoredMessage, screenMemory, type ScreenScope } from "@/lib/screen-memory";
@@ -31,13 +32,16 @@ import {
   useStockAdjustmentPickStockQuery,
   useStockReasonsForKindQuery,
 } from "./stock-adjustment.api";
-import { COL, saveType, type Kind } from "./stock-adjustment.constants";
+import { BATCH_LABEL_PICK_LIMIT, COL, saveType, STEP_NOTICES, type Kind } from "./stock-adjustment.constants";
 import { applySaveResult, buildLines, buildPayload, draftFromPayload } from "./stock-adjustment.payload";
 import {
   applyAvailability,
   applyItemDetail,
   applyPickedHolding,
   applyReasons,
+  batchLabelBucket,
+  batchLabelNotFound,
+  batchLabelOutcome,
   changeGodown,
   changeKind,
   changeRateSource,
@@ -66,6 +70,7 @@ import {
   checkBeforeSave,
   errorDetailsOf,
   GODOWN_FIRST,
+  httpStatusOf,
   mapServerRefusal,
   mapValidateRows,
   type SaveRefusal,
@@ -74,8 +79,13 @@ import { notify } from "./components/notify";
 
 export type Busy = "loading" | "saving" | "validating" | "cancelling" | "deleting" | null;
 
-/** Where the view should put the cursor next — a line's cell, or a header field. */
-export type FocusTarget = { target: "cell"; key: string; column: number } | { target: "godown" | "date" };
+/**
+ * Where the view should put the cursor next — a line's cell, a header field,
+ * or wherever keying starts (`entryStartTarget`, worked out when it lands).
+ */
+export type FocusTarget =
+  | { target: "cell"; key: string; column: number }
+  | { target: "godown" | "date" | "entryStart" };
 export type FocusRequest = FocusTarget & { seq: number };
 
 /** The session's scope — what a NEW document is raised under. */
@@ -105,13 +115,26 @@ function memoryScopeOf(draft: AdjustmentDraft): ScreenScope {
   return { companyId: draft.companyId, branchId: draft.branchId, accYear: draft.accYear };
 }
 
-export function useStockAdjustmentDraft(opts: { memory?: ScreenMemoryOption } = {}) {
+export type UseStockAdjustmentDraftOptions = {
+  memory?: ScreenMemoryOption;
+  /**
+   * `stock.auto_batch_no` — the company numbers its own batches (textile), so a
+   * scanned code that is no item barcode may be a batch label.
+   */
+  autoBatchNo?: boolean;
+};
+
+export function useStockAdjustmentDraft(opts: UseStockAdjustmentDraftOptions = {}) {
   const { memory } = opts;
   const scope = useSessionScope();
   const scopeRef = useRef(scope);
   useEffect(() => {
     scopeRef.current = scope;
   }, [scope]);
+  const autoBatchNoRef = useRef(Boolean(opts.autoBatchNo));
+  useLayoutEffect(() => {
+    autoBatchNoRef.current = Boolean(opts.autoBatchNo);
+  });
 
   // The document the operator left on this screen, when the page is reopening
   // on it (lib/screen-memory). Read once; null for every fresh open. It is dirty
@@ -127,6 +150,8 @@ export function useStockAdjustmentDraft(opts: { memory?: ScreenMemoryOption } = 
     busyRef.current = busy;
   });
   const [pickKey, setPickKey] = useState<string | null>(null);
+  /** What Pick from stock opens searched for — a scanned batch label; "" otherwise. */
+  const [pickSearch, setPickSearch] = useState("");
   const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
   const focusSeq = useRef(0);
 
@@ -138,6 +163,7 @@ export function useStockAdjustmentDraft(opts: { memory?: ScreenMemoryOption } = 
   const [saveMutation] = useSaveStockAdjustmentMutation();
   const [cancelMutation] = useCancelStockAdjustmentMutation();
   const [deleteMutation] = useDeleteStockAdjustmentMutation();
+  const [adjacentMutation] = useGetTxnAdjacentMutation();
 
   // -------------------------------------------------------------- commit
   const requestFocus = useCallback((request: FocusTarget) => {
@@ -247,9 +273,14 @@ export function useStockAdjustmentDraft(opts: { memory?: ScreenMemoryOption } = 
     [apply, commit, triggerItemLookup],
   );
 
-  /** openPickDialog's gates: a keyable DRAFT, a godown, and a line (the last one when none is named). */
+  /**
+   * openPickDialog's gates: a keyable DRAFT, a godown, and a line (the last one
+   * when none is named). `search` starts the list filtered — a scanned batch
+   * label. Every bucket is listed whatever the kind (the dialog never filters
+   * by one), so a label finds its lot wherever it sits.
+   */
   const openPick = useCallback(
-    (key: string | null) => {
+    (key: string | null, search = "") => {
       const current = draftRef.current;
       if (!isEditable(current)) {
         return;
@@ -261,6 +292,7 @@ export function useStockAdjustmentDraft(opts: { memory?: ScreenMemoryOption } = 
       const found = key ? current.lines.find((line) => line.key === key) : undefined;
       const target = found ?? current.lines[current.lines.length - 1];
       if (target) {
+        setPickSearch(search.trim());
         setPickKey(target.key);
       }
     },
@@ -394,6 +426,9 @@ export function useStockAdjustmentDraft(opts: { memory?: ScreenMemoryOption } = 
 
   const setHint = useCallback((hint: string) => commit({ ...draftRef.current, hint }), [commit]);
 
+  /** The notice line under the audit (`m_auditNotice`). */
+  const setNotice = useCallback((notice: string) => commit({ ...draftRef.current, notice }), [commit]);
+
   // ------------------------------------------------------------ the lines
   /** applyPickedItem — the item picker's answer, refused without a godown. */
   const pickItem = useCallback(
@@ -407,13 +442,71 @@ export function useStockAdjustmentDraft(opts: { memory?: ScreenMemoryOption } = 
     [apply, refuse],
   );
 
-  /** resolveBarcode — a scan resolves to its item and unit, scoped to this company. */
+  /**
+   * resolveBatchLabel — a scanned batch label (textile, auto batch numbers):
+   * pick-stock with the EXACT batch (notes 151 #9), every bucket of the godown
+   * — an expiry write-off keeps its own bucket. One holding is taken straight
+   * away, the same as picking it from the dialog; several (the batch in more
+   * than one bucket) open Pick from stock on that batch; none says so.
+   *
+   * The line is followed by its KEY: an answer for a line that has gone, or has
+   * taken an item meanwhile, is dropped.
+   */
+  const resolveBatchLabel = useCallback(
+    async (key: string, batchNo: string): Promise<boolean> => {
+      const current = draftRef.current;
+      const line = current.lines.find((candidate) => candidate.key === key);
+      if (!line || rowHasItem(line) || !current.godownId) {
+        return false;
+      }
+      const bucket = batchLabelBucket(current.kind, line);
+      const godownName = current.godownName;
+      try {
+        const rows = await triggerPickStock({
+          companyId: current.companyId,
+          branchId: current.branchId,
+          godownId: current.godownId,
+          ...(bucket ? { bucket } : {}),
+          batchNo,
+          limit: BATCH_LABEL_PICK_LIMIT,
+        }).unwrap();
+        const now = draftRef.current;
+        const still = now.lines.find((candidate) => candidate.key === key);
+        if (!still || rowHasItem(still) || !isEditable(now)) {
+          return false;
+        }
+        switch (batchLabelOutcome(rows)) {
+          case "take":
+            apply(applyPickedHolding(now, key, rows[0]));
+            return true;
+          case "choose":
+            openPick(key, batchNo);
+            return true;
+          default:
+            notify("warn", "Not found", batchLabelNotFound(batchNo, godownName));
+            return false;
+        }
+      } catch (error) {
+        notify("warn", "Error", apiErrorText(error));
+        return false;
+      }
+    },
+    [apply, openPick, triggerPickStock],
+  );
+
+  /**
+   * resolveBarcode — a scan resolves to its item and unit, scoped to this
+   * company. Not an item's barcode (404) on a company that numbers its own
+   * batches: it may be a batch label, looked up in this godown's stock. The
+   * line is followed by its KEY, never its position, so an answer lands on the
+   * line that was scanned even if lines were added or removed meanwhile.
+   */
   const resolveBarcode = useCallback(
     async (key: string, barcode: string): Promise<boolean> => {
       const code = barcode.trim();
       const current = draftRef.current;
       const line = current.lines.find((candidate) => candidate.key === key);
-      if (!code || !line || rowHasItem(line)) {
+      if (!code || !line || rowHasItem(line) || !isEditable(current)) {
         return false;
       }
       if (!current.godownId) {
@@ -425,8 +518,13 @@ export function useStockAdjustmentDraft(opts: { memory?: ScreenMemoryOption } = 
         if (!found?.itemId) {
           return false;
         }
+        const now = draftRef.current;
+        const still = now.lines.find((candidate) => candidate.key === key);
+        if (!still || rowHasItem(still) || !isEditable(now)) {
+          return false;
+        }
         apply(
-          startItemLine(draftRef.current, key, {
+          startItemLine(now, key, {
             itemId: found.itemId,
             itemName: found.itemName ?? "",
             unitId: found.unitId ?? "",
@@ -435,11 +533,14 @@ export function useStockAdjustmentDraft(opts: { memory?: ScreenMemoryOption } = 
         );
         return true;
       } catch (error) {
+        if (autoBatchNoRef.current && httpStatusOf(error) === 404) {
+          return resolveBatchLabel(key, code);
+        }
         notify("warn", "Error", apiErrorText(error));
         return false;
       }
     },
-    [apply, refuse, triggerBarcode],
+    [apply, refuse, resolveBatchLabel, triggerBarcode],
   );
 
   const editLine = useCallback(
@@ -451,7 +552,10 @@ export function useStockAdjustmentDraft(opts: { memory?: ScreenMemoryOption } = 
 
   const deleteLine = useCallback((key: string) => apply(removeLine(draftRef.current, key)), [apply]);
 
-  const closePick = useCallback(() => setPickKey(null), []);
+  const closePick = useCallback(() => {
+    setPickKey(null);
+    setPickSearch("");
+  }, []);
 
   const applyHolding = useCallback(
     (key: string, holding: PickStockRow) => apply(applyPickedHolding(draftRef.current, key, holding)),
@@ -478,17 +582,24 @@ export function useStockAdjustmentDraft(opts: { memory?: ScreenMemoryOption } = 
   );
 
   // ------------------------------------------------------- the document
-  const startNextDocument = useCallback(() => {
-    const next = nextDocument(draftRef.current, scopeRef.current);
-    commit(next);
-    requestFocus({ target: "cell", key: next.lines[0].key, column: COL.Description });
-  }, [commit, requestFocus]);
+  /**
+   * focusEntryStart — the cursor goes where keying starts: the godown while
+   * there is none, else the first line still without an item (see
+   * `entryStartTarget`); a document that cannot be keyed takes the grid.
+   */
+  const focusEntryStart = useCallback(() => requestFocus({ target: "entryStart" }), [requestFocus]);
 
-  /** New (F7) — a blank document of the same kind; the godown and date start over. */
+  const startNextDocument = useCallback(() => {
+    commit(nextDocument(draftRef.current, scopeRef.current));
+    focusEntryStart();
+  }, [commit, focusEntryStart]);
+
+  /** New (Alt+N) — a blank document of the same kind; the godown and date start over. */
   const newDocument = useCallback(() => {
     const current = draftRef.current;
     commit(createDraft(scopeRef.current, todayIso(), current.kind));
-  }, [commit]);
+    focusEntryStart();
+  }, [commit, focusEntryStart]);
 
   /** Edit — open this DRAFT for keying, and read every line's holding again. */
   const beginEdit = useCallback((): boolean => {
@@ -544,6 +655,66 @@ export function useStockAdjustmentDraft(opts: { memory?: ScreenMemoryOption } = 
     [commit, triggerLoad],
   );
 
+  /**
+   * Previous / Next (Alt+PgUp / Alt+PgDn; Qt `stepDocument`) — the document
+   * entered just before / after this one in its company, branch and year, in
+   * the list's order, through the walk every document type shares
+   * (`GET /txn/adjacent`, docType STOCK_ADJUSTMENT: the four write-off kinds
+   * and the re-lot pair are one docType). On a new document Previous opens the
+   * newest. A found document opens READ-ONLY (F2 to edit a draft); at either
+   * end the notice line says so and the screen stays. The view has already
+   * asked before discarding unsaved changes.
+   */
+  const stepDocument = useCallback(
+    async (previous: boolean): Promise<void> => {
+      if (busyRef.current !== null) {
+        return;
+      }
+      const current = draftRef.current;
+      if (!current.svhId && !previous) {
+        commit({ ...current, notice: STEP_NOTICES.newHasNoNext });
+        return;
+      }
+      setBusy("loading");
+      let found: StockAdjustmentDocKey | null = null;
+      try {
+        const answer = await adjacentMutation({
+          docType: "STOCK_ADJUSTMENT",
+          companyId: current.companyId,
+          branchId: current.branchId,
+          accYear: current.accYear,
+          ...(current.svhId ? { docId: current.svhId } : {}),
+          direction: previous ? "prev" : "next",
+        }).unwrap();
+        const doc = answer.doc;
+        if (!doc) {
+          commit({
+            ...draftRef.current,
+            notice: !current.svhId ? STEP_NOTICES.none : previous ? STEP_NOTICES.oldest : STEP_NOTICES.newest,
+          });
+          return;
+        }
+        found = {
+          svhId: doc.docId,
+          companyId: doc.companyId,
+          branchId: doc.branchId,
+          accYear: doc.accYear,
+          refno: doc.refno ?? undefined,
+          status: doc.status,
+        };
+      } catch (error) {
+        notify("warn", "Error", apiErrorText(error));
+        return;
+      } finally {
+        setBusy(null);
+      }
+      if (found && (await load(found, false))) {
+        focusEntryStart();
+      }
+    },
+    [adjacentMutation, commit, focusEntryStart, load],
+  );
+
   /** saveDocument's gates, shown when one refuses. True = the save may go ahead. */
   const gate = useCallback(
     (post: boolean): boolean => {
@@ -585,7 +756,7 @@ export function useStockAdjustmentDraft(opts: { memory?: ScreenMemoryOption } = 
         notify(
           "info",
           "Saved",
-          `${saved.refno} saved as a draft. No stock has moved — Save (F5) posts it.`,
+          `${saved.refno} saved as a draft. No stock has moved — Save & Post (Ctrl+Enter) posts it.`,
         );
         return true;
       } catch (error) {
@@ -632,7 +803,7 @@ export function useStockAdjustmentDraft(opts: { memory?: ScreenMemoryOption } = 
         const { problems, byKey } = mapValidateRows(rows, saved.sentKeys);
         commit({ ...draftRef.current, serverProblems: byKey });
         if (problems.length === 0) {
-          notify("info", "Validate", `All ${rows.length} line(s) are clean. Save (F5) posts it.`);
+          notify("info", "Validate", `All ${rows.length} line(s) are clean. Save & Post (Ctrl+Enter) posts it.`);
         } else {
           notify("warn", "Validate", problems.join("\n"));
         }
@@ -697,7 +868,8 @@ export function useStockAdjustmentDraft(opts: { memory?: ScreenMemoryOption } = 
         current.lines.filter(rowHasItem).map((line) => ({ type: "availability" as const, key: line.key })),
       );
     }
-  }, []);
+    focusEntryStart();
+  }, [focusEntryStart]);
 
   /** The operator discarded the document: it must not come back. */
   const forgetRemembered = useCallback(() => {
@@ -741,13 +913,16 @@ export function useStockAdjustmentDraft(opts: { memory?: ScreenMemoryOption } = 
       loading: damagedActive && damagedQuery.isFetching,
     },
     pickKey,
+    pickSearch,
     focusRequest,
+    focusEntryStart,
     // header
     setKind,
     setGodown,
     setRateSource,
     setHeader,
     setHint,
+    setNotice,
     // lines
     pickItem,
     resolveBarcode,
@@ -768,6 +943,7 @@ export function useStockAdjustmentDraft(opts: { memory?: ScreenMemoryOption } = 
     load,
     newDocument,
     beginEdit,
+    stepDocument,
     // screen memory
     resumed,
     finishResume,

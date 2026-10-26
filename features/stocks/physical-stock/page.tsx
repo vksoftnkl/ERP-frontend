@@ -4,8 +4,8 @@
  * Physical Stock Update (menu 45) — the route. `TxnMainView::openForMenu`:
  * the menu lands on the LIST (grid 101) unless `system.txn_entry_first` says
  * to land on the count screen itself. Either way neither loses a route — the
- * list's Add / Enter open the screen, and the screen's F8 raises the same list
- * as a picker.
+ * list's Add / Enter open the screen, and the screen's Ctrl+O (Show List)
+ * raises the same list as a picker.
  *
  * The picker is the list shown OVER a live count screen: the screen stays
  * mounted (hidden) while it is up, so Esc / Back returns to the sheet exactly
@@ -34,7 +34,7 @@ type PageState = {
    * count, not on an explicit Create / Open.
    */
   entry: { id: number; pending: PendingLoad | null; resume?: boolean } | null;
-  /** The list was raised from the screen (F8): a pick loads into it. */
+  /** The list was raised from the screen (Ctrl+O): a pick loads into it. */
   pickMode: boolean;
 };
 
@@ -134,6 +134,7 @@ export default function PhysicalStockPage() {
             onShowList={onShowList}
             onClose={onClose}
             memory={memory}
+            autoBatchNo={settings.autoBatchNo}
           />
         </div>
       ) : null}

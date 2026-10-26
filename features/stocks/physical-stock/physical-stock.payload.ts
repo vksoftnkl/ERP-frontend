@@ -2,13 +2,22 @@
  * Translations between the screen and `/stock/physical/*` — what goes out on a
  * save, and how the answers are read back. Pure.
  */
-import { formatNetQty, parseCounted, toWireInstant } from "./physical-stock.format";
+import { batchDetailItemText } from "@/features/stocks/shared/batch-detail";
+import { holdingKey } from "./physical-stock.state";
+import {
+  formatNetQty,
+  g13,
+  parseCounted,
+  toNumberOrNull,
+  toWireInstant,
+} from "./physical-stock.format";
 import type {
   CountLine,
   CountSheetRow,
   CountTotals,
   PhysicalStockDraft,
   PhysicalStockLineProblem,
+  PhysicalStockWireLine,
   SavePhysicalStockHeader,
   SavePhysicalStockLine,
   SavePhysicalStockPayload,
@@ -30,6 +39,9 @@ function toInt(value: number | null): number {
  * route — "not counted yet" is not "0 found" — so a half-walked sheet saves the
  * lines that HAVE been walked, and the next save (a full replace) picks the
  * rest up as they are counted.
+ *
+ * A SAVED line sends its `sviId`, so the server updates that row — and can tell
+ * the operator its book figure moved since (Qt 74b755c, notes 150 #4).
  */
 export function buildLines(lines: readonly CountLine[]): SavePhysicalStockLine[] {
   const out: SavePhysicalStockLine[] = [];
@@ -41,6 +53,7 @@ export function buildLines(lines: readonly CountLine[]): SavePhysicalStockLine[]
       continue;
     }
     const entry: SavePhysicalStockLine = {
+      ...(line.sviId ? { sviId: line.sviId } : {}),
       lineNo: toInt(line.lineNo),
       splitNo: Math.max(1, toInt(line.splitNo)),
       itemId: line.itemId,
@@ -135,6 +148,98 @@ export function postConfirmMessage(totals: CountTotals): string {
       : "")
   );
 }
+
+// ---------------------------------------------------------------------------
+// The book moved since the lines were drawn
+// ---------------------------------------------------------------------------
+
+/** How far apart two book figures must be to count as moved — Qt `qAbs(before - now) > 0.0005`. */
+const BOOK_MOVED_EPSILON = 0.0005;
+
+/**
+ * The book figure on screen of every COUNTED line, by holding, taken just
+ * before a save. The save re-reads every book quantity from stock_balance, so a
+ * sheet drawn hours ago, with stock moving since, comes back counted against a
+ * NEW book — the difference changes without anyone touching the line. On a
+ * re-save the server says so per line (`bookChanged`); on a first save only
+ * the screen knows what it drew (Qt `saveDraft()`).
+ */
+export function bookBeforeSave(lines: readonly CountLine[]): Map<string, number> {
+  const before = new Map<string, number>();
+  for (const line of lines) {
+    if (line.lotId && line.countedText.trim() !== "") {
+      // cellNumber(): a blank book cell reads as 0.
+      before.set(holdingKey(line.lotId, line.bucket), line.bookQty ?? 0);
+    }
+  }
+  return before;
+}
+
+/**
+ * "Line 3  Shirt · XL — book 2 → 3" for every line whose book moved: the
+ * server says so (`bookChanged`, with `previousBookQty`), or the figure the
+ * screen showed differs from the one the save came back with.
+ */
+export function bookMovedLines(
+  saved: readonly PhysicalStockWireLine[],
+  before: ReadonlyMap<string, number>,
+): string[] {
+  const moved: string[] = [];
+  for (const line of saved) {
+    const key = holdingKey(line.lotId ?? "", line.bucket ?? "");
+    const now = toNumberOrNull(line.bookQty) ?? 0;
+    const serverSays = line.bookChanged === true;
+    const was = serverSays ? (toNumberOrNull(line.previousBookQty) ?? 0) : (before.get(key) ?? now);
+    if (serverSays || Math.abs(was - now) > BOOK_MOVED_EPSILON) {
+      moved.push(
+        `Line ${Math.trunc(Number(line.lineNo) || 0)}  ${batchDetailItemText(line)} — book ` +
+          `${g13(was)} → ${g13(now)}`,
+      );
+    }
+  }
+  return moved;
+}
+
+/** What the Saved message carries after its own text — nothing when no book moved. */
+export function bookMovedText(moved: readonly string[]): string {
+  if (moved.length === 0) {
+    return "";
+  }
+  return (
+    "\n\nStock moved since these lines were drawn, so their book quantity — and the " +
+    `difference — changed. Check the count is still right:\n${moved.join("\n")}`
+  );
+}
+
+/** The draft save's message (Qt `saveDraft()`), with the moved lines after it. */
+export function savedDraftMessage(
+  refno: string,
+  unwalked: number,
+  onScreen: number,
+  moved: readonly string[],
+): string {
+  const head =
+    unwalked > 0
+      ? `${refno} saved as a draft. No stock has moved.\n\n${unwalked} of ${onScreen} ` +
+        "holdings on screen have not been counted yet, so they are NOT on the saved " +
+        "document — count them and save again to add them. A blank is not the same as " +
+        "counting zero."
+      : `${refno} saved as a draft. No stock has moved.`;
+  return head + bookMovedText(moved);
+}
+
+/** The posted-sheet cancel question (Qt 74b755c): a second count is usually the fix. */
+export const CANCEL_POSTED_CONFIRM =
+  "This writes one reversing ledger row for every variance row the count posted, so the " +
+  "book goes back to the figure the shelf disagreed with. Nothing is deleted — the sheet " +
+  "stays in the list as CANCELLED.\n\nIf the counter miscounted, a SECOND COUNT is usually " +
+  "the right fix, not a cancel. A cancel is refused once the stock has been sold, or once " +
+  "the holding has been counted again.";
+
+/** A draft's cancel question — nothing had posted. */
+export const CANCEL_DRAFT_CONFIRM =
+  "This draft has posted no variance, so there is nothing to reverse. Nothing is deleted — " +
+  "the sheet stays in the list as CANCELLED, with the reason against it.";
 
 // ---------------------------------------------------------------------------
 // In

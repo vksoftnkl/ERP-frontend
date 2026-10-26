@@ -36,7 +36,7 @@ describe("clientProblems", () => {
 
   it("a move and an expiry write-off must pick; a move names a different bucket", () => {
     const expiry = withLines(draftOf("Expiry"), [itemLine({ reasonId: "r-short", qty: "-1", direction: "OUT" })]);
-    expect([...clientProblems(expiry).values()][0]).toBe("Line 1 — Rice 1kg names no lot — pick it from stock (F2).");
+    expect([...clientProblems(expiry).values()][0]).toBe("Line 1 — Rice 1kg names no lot — pick it from stock (F12).");
     const move = withLines(draftOf("Move"), [
       itemLine({ reasonId: "r-md", qty: "1", lotId: "lot-1", bucket: "DAMAGED", toBucket: "DAMAGED", available: 5 }),
       itemLine({ reasonId: "r-md", qty: "1", lotId: "lot-1", bucket: "SALEABLE", toBucket: "", available: 5 }),
@@ -65,7 +65,7 @@ describe("clientProblems", () => {
     const out = itemLine({ reasonId: "r-rout", qty: "-3", direction: "OUT", trackSignature: "B", batchNo: "OLD" });
     const same = itemLine({ reasonId: "r-rin", qty: "2", direction: "IN", trackSignature: "B", batchNo: "OLD" });
     const problems = clientProblems(withLines(draftOf("Relot"), [out, same]));
-    expect(problems.get(out.key)).toBe("Line 1 — the OUT half of a re-lot must name the lot it leaves (F2).");
+    expect(problems.get(out.key)).toBe("Line 1 — the OUT half of a re-lot must name the lot it leaves (F12).");
     expect(problems.get(same.key)).toBe(
       "Line 2 — the IN half has the same batch / expiry / MRP as the lot it leaves — key the CORRECT identity.",
     );

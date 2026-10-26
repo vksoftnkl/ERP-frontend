@@ -24,6 +24,7 @@ import {
   hasItem,
   lineNumbersOf,
   normalizeSignature,
+  takesBatchDetail,
   tracks,
 } from "./opening-stock.lines";
 import type {
@@ -67,8 +68,15 @@ function trimmed(value: string | null | undefined): string {
  * Identity columns are sent ONLY when the item is tracked that way: an untracked
  * batch number is discarded by the engine anyway, and a reprint showing a batch
  * the stock does not have is worse than one showing none.
+ *
+ * `autoBatchNo` — `stock.auto_batch_no`: a batch-tracked line with its batch
+ * left blank or server-given also carries its size, colour and model.
  */
-export function buildLines(lines: readonly OpeningStockLine[]): SaveOpeningStockLineDto[] {
+export function buildLines(
+  lines: readonly OpeningStockLine[],
+  options: { autoBatchNo?: boolean } = {},
+): SaveOpeningStockLineDto[] {
+  const autoBatchNo = options.autoBatchNo === true;
   const out: SaveOpeningStockLineDto[] = [];
   const numbers = lineNumbersOf(lines);
 
@@ -131,6 +139,24 @@ export function buildLines(lines: readonly OpeningStockLine[]): SaveOpeningStock
     if (tracks(signature, TRACK.Supplier) && trimmed(line.supplierId)) {
       dto.supplierId = trimmed(line.supplierId);
     }
+    // Textile: kept by the server against the batch number it gives this line.
+    // Only on a line whose batch is the server's to give — a typed one is
+    // refused with them (STOCK_BATCH_DETAIL_NEEDS_AUTO_BATCH). A name not on
+    // the list has no id yet, and goes nowhere.
+    if (takesBatchDetail(autoBatchNo, signature) && !line.batchTyped) {
+      const sizeId = trimmed(line.sizeId);
+      if (sizeId) {
+        dto.sizeId = sizeId;
+      }
+      const colourId = trimmed(line.colourId);
+      if (colourId) {
+        dto.colourId = colourId;
+      }
+      const model = trimmed(line.model);
+      if (model) {
+        dto.model = model;
+      }
+    }
     if (trimmed(line.barcode)) {
       dto.barcode = trimmed(line.barcode);
     }
@@ -152,7 +178,7 @@ export function buildLines(lines: readonly OpeningStockLine[]): SaveOpeningStock
  */
 export function buildPayload(
   draft: OpeningStockDraft,
-  options: { post?: boolean } = {},
+  options: { post?: boolean; autoBatchNo?: boolean } = {},
 ): SaveOpeningStockDto {
   const totals = computeTotals(draft.lines);
   const header: SaveOpeningStockHeaderDto = {
@@ -180,7 +206,55 @@ export function buildPayload(
   if (options.post) {
     header.status = "POSTED";
   }
-  return { header, lines: buildLines(draft.lines) };
+  return { header, lines: buildLines(draft.lines, { autoBatchNo: options.autoBatchNo }) };
+}
+
+/**
+ * The SENT lines whose batch is left to the server — indexes into
+ * `buildLines()`'s output, which skips a row with no item exactly as this does.
+ * Worked out BEFORE the save, while a blank batch still means "give me one";
+ * the reply then says what each was given (`givenBatchesText`). Qt
+ * `autoBatchLineIndexes()`.
+ */
+export function autoBatchLineIndexes(lines: readonly OpeningStockLine[], autoBatchNo: boolean): number[] {
+  const indexes: number[] = [];
+  if (!autoBatchNo) {
+    return indexes;
+  }
+  let sent = 0;
+  for (const line of lines) {
+    if (!hasItem(line)) {
+      continue; // buildLines() skips it too
+    }
+    if (tracks(line.trackSignature, TRACK.Batch) && !trimmed(line.batchNo)) {
+      indexes.push(sent);
+    }
+    sent += 1;
+  }
+  return indexes;
+}
+
+/**
+ * A "Batch numbers given:" paragraph — one "Line 1  Shirt — CBE26-00001" per
+ * line — appended to the Saved / Posted message so the numbers can be read out
+ * before the screen moves on; empty when none was given. Read off the reply's lines by the same index: the
+ * reply is ordered by line and split, the order the lines were sent in (Qt
+ * `givenBatchesText()` reads the grid the reply was painted into, row = index).
+ */
+export function givenBatchesText(
+  lineIndexes: readonly number[],
+  replyLines: readonly OpeningStockLinePayload[] | null | undefined,
+): string {
+  const lines = replyLines ?? [];
+  const given: string[] = [];
+  for (const index of lineIndexes) {
+    const line = lines[index];
+    const batch = trimmed(line?.batchNo);
+    if (line && batch) {
+      given.push(`Line ${index + 1}  ${trimmed(line.itemName)} — ${batch}`);
+    }
+  }
+  return given.length ? `\n\nBatch numbers given:\n${given.join("\n")}` : "";
 }
 
 // ---------------------------------------------------------------------------
@@ -248,6 +322,15 @@ export function lineFromPayload(line: OpeningStockLinePayload, key?: string): Op
     // NULL while the document is a draft and filled at Post — not missing data.
     lotId: line.lotId ?? "",
     trackSignature: normalizeSignature(line.trackSignature),
+    // Textile: the batch's size / colour / model, read from its batch detail
+    // row. A loaded batch number counts as GIVEN, not typed — the server
+    // decides on save whether it carries them.
+    sizeId: line.sizeId ?? "",
+    sizeName: line.sizeName ?? "",
+    colourId: line.colourId ?? "",
+    colourName: line.colourName ?? "",
+    model: line.model ?? "",
+    batchTyped: false,
   };
 }
 

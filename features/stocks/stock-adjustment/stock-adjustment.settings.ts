@@ -5,27 +5,35 @@
  *
  *  - `system.txn_entry_first` — the Qt `TxnMainView::openForMenu` switch:
  *    false (the default, the legacy TXN_POPUP's) lands on the document list,
- *    true opens the voucher ready to key with the list behind F8.
+ *    true opens the voucher ready to key with the list behind Ctrl+O.
  *  - `stock.expiry_writeoff_grace_days` — decision D-A2: a lot may be written
  *    off as expired up to this many days after the document date. The server
  *    applies it at save; the pick dialog uses it so the lots it offers for an
  *    expiry write-off are the ones the server will take. Default 0.
+ *  - `stock.auto_batch_no` — textile: the company numbers its own batches and
+ *    prints them on a label, so a scanned code that is no item barcode may be
+ *    a batch label; the screen then looks the batch up in the godown's stock
+ *    (Qt `AppSession::autoBatchNo()`, read once). Off by default.
  */
 import type { EffectiveSetting } from "@/features/settings/app-settings/types";
+import { AUTO_BATCH_NO_SETTING_KEY } from "@/features/stocks/shared/batch-detail";
 
 export const STOCK_ADJUSTMENT_SETTING_KEYS = {
   txnEntryFirst: "system.txn_entry_first",
   expiryGraceDays: "stock.expiry_writeoff_grace_days",
+  autoBatchNo: AUTO_BATCH_NO_SETTING_KEY,
 } as const;
 
 export type StockAdjustmentSettings = {
   txnEntryFirst: boolean;
   expiryGraceDays: number;
+  autoBatchNo: boolean;
 };
 
 export const DEFAULT_STOCK_ADJUSTMENT_SETTINGS: StockAdjustmentSettings = {
   txnEntryFirst: false,
   expiryGraceDays: 0,
+  autoBatchNo: false,
 };
 
 /** `app_setting_values` stores every value as raw TEXT, whatever its type. */
@@ -68,5 +76,6 @@ export function parseStockAdjustmentSettings(
   return {
     txnEntryFirst: asBoolean(valueOf(rows, K.txnEntryFirst), DEFAULT_STOCK_ADJUSTMENT_SETTINGS.txnEntryFirst),
     expiryGraceDays: asGraceDays(valueOf(rows, K.expiryGraceDays)),
+    autoBatchNo: asBoolean(valueOf(rows, K.autoBatchNo), DEFAULT_STOCK_ADJUSTMENT_SETTINGS.autoBatchNo),
   };
 }

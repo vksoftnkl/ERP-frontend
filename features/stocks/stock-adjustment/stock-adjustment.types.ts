@@ -51,6 +51,13 @@ export type PickStockRow = {
   avgCostRate: number;
   stockValue: number;
   firstInDate: string | null;
+  /**
+   * Textile batch detail (stock_batch_detail, server notes 151 #8): what the
+   * batch IS. Null on a batch that has none; absent from an older server.
+   */
+  sizeName?: string | null;
+  colourName?: string | null;
+  model?: string | null;
 };
 
 export type PickStockQuery = {
@@ -61,6 +68,12 @@ export type PickStockQuery = {
   bucket?: string;
   itemId?: string;
   search?: string;
+  /**
+   * EXACTLY this batch (notes 151 #9) — a scanned batch label. The server folds
+   * it as the lot key does (trimmed, upper-cased); `search` stays the loose
+   * name / code / batch match.
+   */
+  batchNo?: string;
   limit?: number;
 };
 
@@ -110,7 +123,10 @@ export type ItemPickerRow = {
   item_id: string;
   /** An iuc_id, never a unit_id. */
   item_uom_id: string;
-  item_name_en: string;
+  /** What grid 71 names the item. */
+  item_name_en?: string | null;
+  /** The generic popups' name — read only when `item_name_en` is not there. */
+  item_name?: string | null;
   unit_name: string;
 };
 
@@ -141,8 +157,15 @@ export type StockAdjustmentHeaderPayload = {
   totalValue: number;
   totalValueWot: number;
   postedOn: string | null;
+  /** The user id that posted it, and that user's display name. */
+  postedBy?: string | null;
+  postedByName?: string | null;
   cancelledOn: string | null;
   cancelReason: string | null;
+  /** When it was raised, and by whom — the id (or an import job's name) and the display name. */
+  createdOn?: string | null;
+  createdBy?: string | null;
+  createdByName?: string | null;
   rateSource: string | null;
   reasonId: string | null;
   reasonName: string | null;
@@ -187,6 +210,10 @@ export type StockAdjustmentLinePayload = {
   direction: number | null;
   remarks: string | null;
   trackSignature: string;
+  /** Textile batch detail of the line's batch (notes 150 #9); null when it has none. */
+  sizeName?: string | null;
+  colourName?: string | null;
+  model?: string | null;
 };
 
 /** `GET /stock/adjustment` — the shared payload plus what the Type selector shows. */
@@ -369,6 +396,19 @@ export type AdjustmentLine = {
 
 export type FormMode = "entry" | "browse";
 
+/**
+ * The header's audit halves, as the GET (and the save) carry them — Qt
+ * `showAudit()`. Blank = not there.
+ */
+export type AuditStamps = {
+  createdOn: string;
+  /** The display name when the server has one, else what was stored (never a bare user id). */
+  createdBy: string;
+  postedOn: string;
+  postedBy: string;
+  cancelledOn: string;
+};
+
 export type DraftScope = {
   companyId: string;
   branchId: string;
@@ -405,6 +445,13 @@ export type AdjustmentDraft = DraftScope & {
   sentKeys: string[];
   /** The grey hint line under the grid (lblHint). */
   hint: string;
+  /** Who created / posted / cancelled it — null on a document never saved. */
+  stamps: AuditStamps | null;
+  /**
+   * The notice line under the audit (`m_auditNotice`): "This is the newest
+   * document." Cleared by a load and by a fresh document.
+   */
+  notice: string;
   dirty: boolean;
 };
 

@@ -3,10 +3,11 @@
  * joined the way NexTable::loadLayout joins them: by COLUMN NUMBER
  * (`ui_tbl_clm_no`), never by name. Ordered by `ui_tbl_clm_column_position`,
  * shown per `ui_tbl_clm_column_visibility`, sized as a percentage of the grid
- * (the Qt layout's own unit), with `ui_tbl_clm_column_focus` naming where
- * Enter stops.
+ * (the Qt layout's own unit). Where Enter stops is the screen's own rule
+ * (`isEntryStop`), not the layout's focus flags.
  */
 import type { UiTableColumnRow } from "@/features/sales/quotation/quotation.types";
+import { batchDetailItemText } from "@/features/stocks/shared/batch-detail";
 import {
   BLIND_HIDDEN_COLUMNS,
   PHYSICAL_STOCK_COLUMN_COUNT,
@@ -16,6 +17,7 @@ import {
   displayDate,
   formatCurrencyCell,
   formatNumberCell,
+  g13,
 } from "./physical-stock.format";
 import type { CountLine } from "./physical-stock.types";
 
@@ -78,7 +80,8 @@ function meta(
  * Every column, in enum order, with the format `PhysicalStockCols::formats()`
  * gives it. Counted Qty is TEXT, not Number, on purpose: a Number cell paints 0
  * as blank, and 0 ("walked, found nothing") must never look like blank ("not
- * walked yet").
+ * walked yet"). Book Qty is Text for the same reason (Qt 74b755c): a book of 0
+ * is a figure the counter must see — not a gap.
  */
 export const COUNT_COLUMN_META: readonly CountColumnMeta[] = [
   meta(Cols.Id, "Id", "text"),
@@ -92,7 +95,7 @@ export const COUNT_COLUMN_META: readonly CountColumnMeta[] = [
   meta(Cols.SerialNo, "Serial", "text"),
   meta(Cols.SupplierName, "Supplier", "text"),
   meta(Cols.Bucket, "Bucket", "text"),
-  meta(Cols.BookQty, "Book Qty", "number"),
+  meta(Cols.BookQty, "Book Qty", "text"),
   meta(Cols.CountedQty, "Counted Qty", "text", "counted"),
   meta(Cols.DiffQty, "Difference", "number"),
   meta(Cols.AvgCostRate, "Avg Cost", "number"),
@@ -224,59 +227,92 @@ export function visibleCountColumns(layout: readonly CountColumn[], blind: boole
   );
 }
 
-/**
- * Where Enter may land, in the order the header reads: the focus-flagged
- * visible columns, or every visible column on a layout that flags none
- * (NexTable::focusStops).
- */
-export function focusStops(visible: readonly CountColumn[]): number[] {
-  const flagged = visible.filter((column) => column.focus).map((column) => column.no);
-  return flagged.length > 0 ? flagged : visible.map((column) => column.no);
-}
-
 export type CellAddress = { row: number; col: number };
 
 /**
+ * The cells Enter stops on — Qt `setFocusStops({ Barcode, Description,
+ * CountedQty })` (2026-10-24, as on Opening Stock). It replaces the layout's
+ * focus flags: which of the three a row stops on is the ROW's business
+ * (`isEntryStop`), not the column's.
+ */
+export const ENTRY_STOP_COLUMNS: readonly number[] = [
+  Cols.Barcode,
+  Cols.Description,
+  Cols.CountedQty,
+];
+
+/**
+ * `setFocusCellFilter` — a blank row stops at Barcode, then Item (Enter there
+ * opens the list); a holding at Counted Qty only, the one number a count is
+ * made of, and on to the next line's. Reason and Remarks stay editable by
+ * click; they are never a stop.
+ */
+export function isEntryStop(no: number, line: CountLine): boolean {
+  switch (no) {
+    case Cols.Barcode:
+    case Cols.Description:
+      return !hasHolding(line);
+    case Cols.CountedQty:
+      return hasHolding(line);
+    default:
+      return false;
+  }
+}
+
+/** One row's stops, in the order the header reads — hidden columns are not stops. */
+export function rowStops(visible: readonly CountColumn[], line: CountLine | undefined): number[] {
+  if (!line) {
+    return [];
+  }
+  return visible.map((column) => column.no).filter((no) => isEntryStop(no, line));
+}
+
+/**
  * NexTable::focusNextEditableCell — the first stop to the RIGHT of the cursor
- * on this row, else the first stop of the next row. Null past the last row:
- * focus leaves the grid.
+ * on this row, else the first stop of the next row that has one. Null past
+ * the last row: focus leaves the grid.
  */
 export function nextStop(
   visible: readonly CountColumn[],
+  lines: readonly CountLine[],
   from: CellAddress,
-  rowCount: number,
 ): CellAddress | null {
-  const stops = focusStops(visible);
-  if (stops.length === 0) {
-    return null;
-  }
   const order = visible.map((column) => column.no);
   const current = order.indexOf(from.col);
-  for (const stop of stops) {
-    if (order.indexOf(stop) > current) {
-      return { row: from.row, col: stop };
+  const right = rowStops(visible, lines[from.row]).find((no) => order.indexOf(no) > current);
+  if (right !== undefined) {
+    return { row: from.row, col: right };
+  }
+  for (let row = from.row + 1; row < lines.length; row += 1) {
+    const stops = rowStops(visible, lines[row]);
+    if (stops.length > 0) {
+      return { row, col: stops[0] };
     }
   }
-  return from.row < rowCount - 1 ? { row: from.row + 1, col: stops[0] } : null;
+  return null;
 }
 
 /** NexTable::focusPreviousEditableCell — the mirror of `nextStop`. */
 export function previousStop(
   visible: readonly CountColumn[],
+  lines: readonly CountLine[],
   from: CellAddress,
 ): CellAddress | null {
-  const stops = focusStops(visible);
-  if (stops.length === 0) {
-    return null;
-  }
   const order = visible.map((column) => column.no);
   const current = order.indexOf(from.col);
-  for (let index = stops.length - 1; index >= 0; index -= 1) {
-    if (order.indexOf(stops[index]) < current && order.indexOf(stops[index]) >= 0) {
-      return { row: from.row, col: stops[index] };
+  const left = rowStops(visible, lines[from.row])
+    .filter((no) => order.indexOf(no) < current)
+    .pop();
+  if (left !== undefined) {
+    return { row: from.row, col: left };
+  }
+  for (let row = from.row - 1; row >= 0; row -= 1) {
+    const stops = rowStops(visible, lines[row]);
+    if (stops.length > 0) {
+      return { row, col: stops[stops.length - 1] };
     }
   }
-  return from.row > 0 ? { row: from.row - 1, col: stops[stops.length - 1] } : null;
+  return null;
 }
 
 /** What one cell paints. */
@@ -289,7 +325,8 @@ export function cellText(line: CountLine, no: number): string {
     case Cols.ItemCode:
       return line.itemCode;
     case Cols.Description:
-      return line.itemName;
+      // A textile batch's size, colour and model ride after the name.
+      return batchDetailItemText(line);
     case Cols.UomName:
       return line.unitName;
     case Cols.BatchNo:
@@ -305,7 +342,10 @@ export function cellText(line: CountLine, no: number): string {
     case Cols.Bucket:
       return line.bucket;
     case Cols.BookQty:
-      return formatNumberCell(line.bookQty);
+      // Text, not a Number cell: a book of 0 paints "0", never blank.
+      return line.bookQty === null || !Number.isFinite(line.bookQty)
+        ? ""
+        : String(g13(line.bookQty));
     case Cols.CountedQty:
       return line.countedText;
     case Cols.DiffQty:

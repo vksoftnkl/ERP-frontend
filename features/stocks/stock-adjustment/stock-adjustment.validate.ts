@@ -55,10 +55,10 @@ export function clientProblems(draft: AdjustmentDraft): Map<string, string> {
       say(row, line.key, `${reason.name} needs remarks.`);
     }
     if ((kind === "Move" || kind === "Expiry") && !picked) {
-      say(row, line.key, `${name} names no lot — pick it from stock (F2).`);
+      say(row, line.key, `${name} names no lot — pick it from stock (F12).`);
     }
     if (kind === "Relot" && reason.code === RELOT_OUT_CODE && !picked) {
-      say(row, line.key, "the OUT half of a re-lot must name the lot it leaves (F2).");
+      say(row, line.key, "the OUT half of a re-lot must name the lot it leaves (F12).");
     }
     if (kind === "Move") {
       const to = line.toBucket.trim();
@@ -254,7 +254,7 @@ export function checkBeforeSave(draft: AdjustmentDraft, post: boolean): SaveRefu
   return null;
 }
 
-/** The Save (F5) question: posting freezes the document. */
+/** The Save & Post (Ctrl+Enter) question: posting freezes the document. */
 export function postConfirmMessage(draft: AdjustmentDraft, outText: string, inText: string): string {
   const what =
     draft.kind === "Move" || draft.kind === "Relot"
@@ -338,6 +338,16 @@ export function apiErrorText(error: unknown): string {
     }
   }
   return lines.join("\n") || "An unexpected error occurred.";
+}
+
+/**
+ * The HTTP status of a refused request, as the base query leaves it — 0 when
+ * there is none (a network failure). 404 from the barcode lookup is "not an
+ * item's barcode", which on a textile company may still be a batch label.
+ */
+export function httpStatusOf(error: unknown): number {
+  const status = (error as { status?: unknown } | null)?.status;
+  return typeof status === "number" ? status : 0;
 }
 
 /**

@@ -15,14 +15,18 @@
  * ── Outward lines are the engine's to value ────────────────────────────
  * An outward line is stamped at the branch average whatever is typed, so its
  * Cost cell shows that average and does not open. It names its holding with
- * Pick from stock (F2), or leaves the lot blank and the engine picks by the
+ * Pick from stock (F12), or leaves the lot blank and the engine picks by the
  * item's issue strategy (FEFO / FIFO). A move and an expiry write-off MUST
  * pick: the lot is what names the supplier / expiry.
  */
+import { dateTime12Of } from "@/lib/time-format";
+import { batchDetailItemText } from "@/features/stocks/shared/batch-detail";
 import {
   COL,
   defaultToBucket,
+  ENTER_STOPS,
   kindHint,
+  LIST_CELL_PLACEHOLDER,
   RELOT_IN_CODE,
   RELOT_OUT_CODE,
   rateSourceLabel,
@@ -40,8 +44,10 @@ import {
 import type {
   AdjustmentDraft,
   AdjustmentLine,
+  AuditStamps,
   DraftEffect,
   DraftScope,
+  ItemPickerRow,
   PickStockRow,
   Reason,
   StockItemLookup,
@@ -184,6 +190,8 @@ export function createDraft(scope: DraftScope, docDate: string, kind: Kind = "Ad
       serverProblems: {},
       sentKeys: [],
       hint: "",
+      stamps: null,
+      notice: "",
       dirty: false,
     },
     kind,
@@ -264,6 +272,163 @@ export function rateSourceEditable(draft: AdjustmentDraft): boolean {
 export function titleLine(draft: AdjustmentDraft): string {
   const doc = draft.refno || "New document";
   return `${doc} · ${draft.status} · ${kindHint(draft.kind)}`;
+}
+
+/** lblScope — "{godown} · {year}" once a godown is chosen, the year alone before. */
+export function scopeLabel(draft: Pick<AdjustmentDraft, "godownName" | "accYear">): string {
+  return draft.godownName ? `${draft.godownName} · ${draft.accYear}` : draft.accYear;
+}
+
+function auditLine(verb: string, on: string, by: string): string {
+  const when = dateTime12Of(on);
+  const who = by.trim();
+  if (!when && !who) {
+    return "";
+  }
+  return [verb, when, who ? `by ${who}` : ""].filter(Boolean).join(" ");
+}
+
+/**
+ * The lines under the title (Qt `showAudit()` / `refreshAuditLabel()`): who
+ * created the document and when, then who posted or cancelled it — "New — not
+ * saved yet" on a document never saved. Times are the house 12-hour format
+ * (dd-MM-yyyy hh:mm AM). The notice line is separate (`draft.notice`).
+ */
+export function auditLines(draft: Pick<AdjustmentDraft, "svhId" | "stamps">): string[] {
+  const stamps = draft.stamps ?? null;
+  if (!draft.svhId) {
+    return ["New — not saved yet"];
+  }
+  if (!stamps) {
+    return [];
+  }
+  return [
+    auditLine("Created", stamps.createdOn, stamps.createdBy),
+    auditLine("Posted", stamps.postedOn, stamps.postedBy),
+    auditLine("Cancelled", stamps.cancelledOn, ""),
+  ].filter(Boolean);
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The header's audit halves. The creator's display name when the server has
+ * one; the stored `createdBy` only when it is a name (an import job), never a
+ * bare user id.
+ */
+export function stampsFromHeader(header: {
+  createdOn?: string | null;
+  createdBy?: string | null;
+  createdByName?: string | null;
+  postedOn?: string | null;
+  postedByName?: string | null;
+  cancelledOn?: string | null;
+}): AuditStamps {
+  const createdBy = (header.createdBy ?? "").trim();
+  return {
+    createdOn: (header.createdOn ?? "").trim(),
+    createdBy: (header.createdByName ?? "").trim() || (UUID.test(createdBy) ? "" : createdBy),
+    postedOn: (header.postedOn ?? "").trim(),
+    postedBy: (header.postedByName ?? "").trim(),
+    cancelledOn: (header.cancelledOn ?? "").trim(),
+  };
+}
+
+/** Where the cursor goes when keying starts — see `entryStartTarget`. */
+export type EntryStart = { target: "grid" } | { target: "godown" } | { target: "cell"; key: string; column: number };
+
+/**
+ * focusEntryStart — where keying starts: the godown while there is none, else
+ * the first line still without an item (the trailing blank when every line
+ * has one) on its Barcode, or on its Item on a move, which has no Barcode. A
+ * document that cannot be keyed takes the grid.
+ */
+export function entryStartTarget(draft: AdjustmentDraft): EntryStart {
+  if (!isEditable(draft)) {
+    return { target: "grid" };
+  }
+  if (!draft.godownId) {
+    return { target: "godown" };
+  }
+  const line = draft.lines.find((candidate) => !rowHasItem(candidate)) ?? draft.lines[draft.lines.length - 1];
+  if (!line) {
+    return { target: "grid" };
+  }
+  return { target: "cell", key: line.key, column: draft.kind === "Move" ? COL.Description : COL.Barcode };
+}
+
+/**
+ * The cell a blank line is keyed through — its Barcode, or its Item on a move.
+ * A click anywhere else on a blank line lands here.
+ */
+export function blankLineEntryColumn(kind: Kind): number {
+  return kind === "Move" ? COL.Description : COL.Barcode;
+}
+
+/**
+ * Does Enter stop on this cell? (Qt `setFocusCellFilter`.) Barcode and Item
+ * only on a line without an item; the other stops only on a line WITH one, and
+ * only where the line can take a value.
+ */
+export function isEnterStop(draft: AdjustmentDraft, line: AdjustmentLine, column: number): boolean {
+  if (!ENTER_STOPS.has(column)) {
+    return false;
+  }
+  const hasItem = rowHasItem(line);
+  if (column === COL.Barcode || column === COL.Description) {
+    return !hasItem;
+  }
+  return hasItem && whyNotEditable(draft, line, column) === "";
+}
+
+/**
+ * Does this cell draw the list ▾ (Qt delegate `listCell`)? Reason, Bucket and
+ * To, on a line with its item, on a document being keyed, where the line can
+ * take a value — never on a locked cell: the arrow would promise a list that
+ * refuses to open.
+ */
+export function showsListArrow(draft: AdjustmentDraft, line: AdjustmentLine, column: number): boolean {
+  if (!(column in LIST_CELL_PLACEHOLDER) || !isEditable(draft) || !rowHasItem(line)) {
+    return false;
+  }
+  return whyNotEditable(draft, line, column) === "";
+}
+
+/** A blank list cell's muted placeholder: "Select reason", "Select". */
+export function listCellPlaceholder(column: number): string {
+  return LIST_CELL_PLACEHOLDER[column] ?? "";
+}
+
+/**
+ * A scanned batch label's pick-stock read (Qt `resolveBatchLabel`): which
+ * bucket to look in — an expiry write-off keeps the line's own; every other
+ * kind looks in every bucket of the godown ("" = all).
+ */
+export function batchLabelBucket(kind: Kind, line: Pick<AdjustmentLine, "bucket">): string {
+  return kind === "Expiry" ? line.bucket.trim() : "";
+}
+
+/**
+ * …and what its answer means: ONE holding is taken straight away (as if picked
+ * from the dialog); several — the batch in more than one bucket — open Pick
+ * from stock searched for it; none is "not found".
+ */
+export function batchLabelOutcome(rows: readonly unknown[]): "take" | "choose" | "none" {
+  return rows.length === 1 ? "take" : rows.length > 1 ? "choose" : "none";
+}
+
+/** The warning when a scan is neither an item barcode nor a batch held in the godown. */
+export function batchLabelNotFound(code: string, godownName: string): string {
+  return `“${code}” is neither an item barcode nor a batch with stock in ${godownName.trim() || "this godown"}.`;
+}
+
+/**
+ * The item a grid-71 row names. Grid 71 calls it `item_name_en`; reading
+ * `item_name` alone left the Item cell blank after a pick (the bug Opening
+ * Stock had, 2026-10-23), so it is read first and `item_name` only after.
+ */
+export function pickedItemName(row: Pick<ItemPickerRow, "item_name_en" | "item_name">): string {
+  return String(row.item_name_en ?? row.item_name ?? "");
 }
 
 // ---------------------------------------------------------------------------
@@ -483,7 +648,7 @@ export function whyNotEditable(draft: AdjustmentDraft, line: AdjustmentLine, col
     return hasItem ? "This line already has its item." : "";
   }
   if (!hasItem) {
-    return "Pick the item first — type in the Item cell, scan a barcode, or F2 to pick from stock.";
+    return "Pick the item first — type in the Item cell, scan a barcode, or F12 to pick from stock.";
   }
   const inward = isInward(draft.kind, line);
   const picked = line.lotId.trim() !== "";
@@ -503,7 +668,7 @@ export function whyNotEditable(draft: AdjustmentDraft, line: AdjustmentLine, col
     case COL.Mrp: {
       if (!inward) {
         return (
-          "An outward line takes its batch from the holding — press Enter on the batch cell or F2 " +
+          "An outward line takes its batch from the holding — press Enter on the batch cell or F12 " +
           "to pick it, or leave it blank for the engine to pick."
         );
       }
@@ -516,10 +681,10 @@ export function whyNotEditable(draft: AdjustmentDraft, line: AdjustmentLine, col
     }
     case COL.Bucket:
       if (picked) {
-        return "The bucket is the picked holding's — pick another holding (F2) to change it.";
+        return "The bucket is the picked holding's — pick another holding (F12) to change it.";
       }
       if (draft.kind === "Move" || draft.kind === "Expiry") {
-        return "Pick the lot first (F2) — its bucket comes with it.";
+        return "Pick the lot first (F12) — its bucket comes with it.";
       }
       return "";
     case COL.ToBucket:
@@ -715,7 +880,8 @@ export function applyPickedHolding(draft: AdjustmentDraft, key: string, holding:
     ...current,
     itemId: holding.itemId,
     itemCode: holding.itemCode ?? "",
-    itemName: holding.itemName ?? "",
+    // A textile batch's size, colour and model ride after the name.
+    itemName: batchDetailItemText(holding),
     lotId: inward ? "" : holding.lotId ?? "",
     batchNo: holding.batchNo ?? "",
     expiryDate: dateFromWire(holding.expiryDate),
@@ -1127,7 +1293,7 @@ export function relotBalance(draft: AdjustmentDraft): { lines: string[]; good: b
     perItem.set(line.itemId, pair);
   }
   if (perItem.size === 0) {
-    return { lines: ["Pick the wrong lot (F2) — its pair is added below it."], good: false };
+    return { lines: ["Pick the wrong lot (F12) — its pair is added below it."], good: false };
   }
   let good = true;
   const lines: string[] = [];

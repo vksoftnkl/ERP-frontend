@@ -1,20 +1,28 @@
 import { describe, expect, it } from "vitest";
 import {
   blankLine,
+  choiceNames,
   computeTotals,
   dateFromWire,
   dateToWire,
   isUnparsableDate,
+  isLockedBatchDetail,
   isUntrackedIdentityField,
   lineNumbersOf,
   normalizeGridDate,
+  normalizeModel,
   normalizeSignature,
   parseGridNumber,
   ratePrecision,
   recalcLine,
+  resolveChoice,
+  takesBatchDetail,
   trackedBy,
   tracks,
+  withBatchNoEdited,
+  withFetchedModels,
   withTrailingBlank,
+  withTypedModel,
 } from "./opening-stock.lines";
 import type { OpeningStockLine } from "./opening-stock.types";
 
@@ -201,5 +209,110 @@ describe("dates", () => {
     expect(normalizeGridDate("31.03.2027")).toBe("31-03-2027");
     expect(normalizeGridDate("31-13-2027")).toBe("31-13-2027");
     expect(normalizeGridDate("  ")).toBe("");
+  });
+});
+
+describe("textile — size / colour / model (Qt 74b755c)", () => {
+  const batch = line({ trackSignature: "BE" });
+
+  it("a line takes them only when the company numbers its batches AND the item tracks batch", () => {
+    expect(takesBatchDetail(true, "BE")).toBe(true);
+    expect(takesBatchDetail(false, "BE")).toBe(false);
+    expect(takesBatchDetail(true, "ME")).toBe(false);
+    expect(takesBatchDetail(true, "")).toBe(false);
+  });
+
+  it("locks the three on a typed batch number, and on any line that does not take them", () => {
+    expect(isLockedBatchDetail(batch, true)).toBe(false);
+    expect(isLockedBatchDetail({ ...batch, batchTyped: true }, true)).toBe(true);
+    expect(isLockedBatchDetail(batch, false)).toBe(true);
+    expect(isLockedBatchDetail(line({ trackSignature: "N" }), true)).toBe(true);
+    // The same answer greys the cell and refuses its editor.
+    expect(isUntrackedIdentityField(batch, "sizeName", true)).toBe(false);
+    expect(isUntrackedIdentityField({ ...batch, batchTyped: true }, "model", true)).toBe(true);
+    expect(isUntrackedIdentityField(batch, "colourName")).toBe(true);
+  });
+
+  it("a fresh row carries none of them, and no typed batch", () => {
+    const blank = blankLine();
+    expect([blank.sizeId, blank.sizeName, blank.colourId, blank.colourName, blank.model]).toEqual(["", "", "", "", ""]);
+    expect(blank.batchTyped).toBe(false);
+  });
+
+  describe("a batch number committed — onBatchNoEdited()", () => {
+    const keyed = { ...batch, sizeId: "isz-1", sizeName: "XL", colourId: "icl-1", colourName: "Red", model: "Slim" };
+
+    it("typed: marks it, clears the five and says so when there was something to clear", () => {
+      const { line: edited, cleared } = withBatchNoEdited(keyed, "ZT-1", true);
+      expect(edited.batchNo).toBe("ZT-1");
+      expect(edited.batchTyped).toBe(true);
+      expect([edited.sizeId, edited.sizeName, edited.colourId, edited.colourName, edited.model]).toEqual([
+        "",
+        "",
+        "",
+        "",
+        "",
+      ]);
+      expect(cleared).toBe(true);
+      // Nothing to clear, nothing to say.
+      expect(withBatchNoEdited(batch, "ZT-1", true).cleared).toBe(false);
+      // A model alone is enough to be worth a word.
+      expect(withBatchNoEdited({ ...batch, model: "Slim" }, "ZT-1", true).cleared).toBe(true);
+    });
+
+    it("blank: not typed — the server gives one", () => {
+      const { line: edited, cleared } = withBatchNoEdited({ ...keyed, batchTyped: true }, "  ", true);
+      expect(edited.batchTyped).toBe(false);
+      expect(edited.sizeId).toBe("isz-1");
+      expect(cleared).toBe(false);
+    });
+
+    it("with the setting off, still marks it typed but clears nothing", () => {
+      const { line: edited, cleared } = withBatchNoEdited(keyed, "B1", false);
+      expect(edited.batchTyped).toBe(true);
+      expect(edited.sizeName).toBe("XL");
+      expect(cleared).toBe(false);
+    });
+  });
+
+  describe("a Size / Colour name committed", () => {
+    const sizes = [
+      { id: "isz-xl", name: "XL" },
+      { id: "isz-xl-own", name: "xl" },
+      { id: "isz-free", name: "Free Size" },
+    ];
+
+    it("a name equal to a row, ignoring case, takes that row's id and spelling — the first one", () => {
+      expect(resolveChoice(sizes, "Xl")).toEqual({ id: "isz-xl", name: "XL" });
+      expect(resolveChoice(sizes, "  free   size ")).toEqual({ id: "isz-free", name: "Free Size" });
+    });
+
+    it("any other name keeps the id blank (the screen offers to add it); blank is none", () => {
+      expect(resolveChoice(sizes, "XXL")).toEqual({ id: "", name: "XXL" });
+      expect(resolveChoice(sizes, "fr")).toEqual({ id: "", name: "fr" });
+      expect(resolveChoice(sizes, "   ")).toEqual({ id: "", name: "" });
+      expect(resolveChoice([], "XL")).toEqual({ id: "", name: "XL" });
+    });
+
+    it("offers a name shared by two rows once, in list order", () => {
+      expect(choiceNames(sizes)).toEqual(["XL", "Free Size"]);
+    });
+  });
+
+  describe("the Model cell", () => {
+    it("collapses whitespace and holds sbd_model's 100", () => {
+      expect(normalizeModel("  ZT  Slim fit ")).toBe("ZT Slim fit");
+      expect(normalizeModel("x".repeat(120))).toHaveLength(100);
+    });
+
+    it("puts a typed model in front of the item's suggestions unless it is there (ignoring case)", () => {
+      expect(withTypedModel(["Regular"], "Slim fit")).toEqual(["Slim fit", "Regular"]);
+      expect(withTypedModel(["Slim Fit", "Regular"], "slim fit")).toEqual(["Slim Fit", "Regular"]);
+      expect(withTypedModel(["Regular"], "")).toEqual(["Regular"]);
+    });
+
+    it("keeps models typed meanwhile in front of the server's", () => {
+      expect(withFetchedModels(["Typed"], ["Older", "typed", " ", "Oldest"])).toEqual(["Typed", "Older", "Oldest"]);
+    });
   });
 });

@@ -1,7 +1,8 @@
 /**
  * Physical Stock Update — what this screen adds to the quotation shell it wears
- * (`features/sales/quotation/page.module.scss`): the Sheet frame's three-pair
- * grid, the status tones, the variance tints, the totals bar and the list's
+ * (`features/sales/quotation/page.module.scss`): the top band (title block and
+ * the sheet's details with its godown box — Opening Stock's, Qt 74b755c), the
+ * status tones, the variance tints, the hint-and-totals bar and the list's
  * pills. Lengths follow the shell's fluid unit (`--erp-q-u`, set on `:root`).
  */
 @function u($n) {
@@ -15,20 +16,141 @@
   min-height: 0;
 }
 
-.entryTitle {
-  margin: 0 0 0 u(0.4);
+/* ------------------------------------------------------------- top band */
+/*
+ * The Qt .ui's top band (2026-10-24, as on Opening Stock): the title block on
+ * the left, the sheet's details on the right at three times its width — the
+ * title column never narrower than the Qt 340px.
+ */
+.topBand {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: minmax(u(15), 1fr) minmax(0, 3fr);
+  gap: u(0.9);
+  align-items: start;
+  padding-bottom: u(0.35);
+  border-bottom: 3px solid var(--primary, #7b1515);
 }
 
-.titleRight {
+.titleBlock {
   display: flex;
-  gap: u(0.9);
+  flex-direction: column;
+  gap: u(0.25);
+  min-width: 0;
+}
+
+.titleLine {
+  display: flex;
+  gap: u(0.5);
   align-items: baseline;
 }
 
 .scope {
   color: var(--text-muted, #666666);
-  font-size: u(0.78);
+  font-size: u(0.72);
+  white-space: nowrap;
+}
+
+.statusLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.5);
+  align-items: center;
+  font-size: u(0.72);
+}
+
+/* Who created / posted / cancelled it — one line each — and the notice under them. */
+.audit {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.1);
+  color: var(--text-muted, #666666);
+  font-size: u(0.7);
+  white-space: pre-line;
+}
+
+/* The latest notice, under the audit lines (Qt `setNotice`). */
+.auditNotice {
+  color: #a15c00;
   font-weight: 600;
+}
+
+/* --------------------------------------------------------- sheet details */
+/*
+ * Label | field, three pairs a row, and the godown box at the right end
+ * across the first two rows: Sheet No · Count Date · Rate Source; Reason ·
+ * Your Ref No · Remarks; Freeze · Freeze From · Freeze To · Blind count. DOM
+ * order is the reading order Enter and Tab follow.
+ */
+.fieldsCard {
+  display: grid;
+  grid-template-columns:
+    auto minmax(0, 2fr)
+    auto minmax(0, 2fr)
+    auto minmax(0, 2fr)
+    minmax(u(13), 3fr);
+  gap: u(0.45) u(0.5);
+  align-items: center;
+  padding: u(0.55) u(0.75);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: var(--card-bg, #ffffff);
+}
+
+/* The godown in its own box: required, and nothing is counted before it. */
+.godownBox {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.25);
+  grid-row: 1 / span 2;
+  grid-column: 7;
+  align-self: stretch;
+  justify-content: center;
+  padding: u(0.35) u(0.6) u(0.5);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+}
+
+.godownMissing {
+  border-color: var(--danger, #b3261e);
+  background: #fdecec;
+}
+
+.godownMissing > label {
+  color: var(--danger, #b3261e);
+}
+
+.godownSet {
+  border-color: var(--success-text, #1c6b2e);
+  background: #eef7f0;
+}
+
+/* The third row's two boxes: Freeze under Sheet No's pair, Blind under the godown. */
+.freezeCheck {
+  grid-column: 1 / span 2;
+}
+
+.blindCheck {
+  grid-column: 7;
+}
+
+@container erp-txn-page (max-width: 1100px) {
+  .topBand {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container erp-txn-page (max-width: 760px) {
+  .fieldsCard {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .godownBox,
+  .freezeCheck,
+  .blindCheck {
+    grid-row: auto;
+    grid-column: 1 / -1;
+  }
 }
 
 .statusTone {
@@ -52,28 +174,6 @@
 .toneCancelled {
   background: #fee2e2;
   color: #991b1b;
-}
-
-/* The Sheet frame: label | field, three pairs a row — the .ui's QGridLayout. */
-.sheetGrid {
-  display: grid;
-  grid-template-columns:
-    minmax(u(5.5), auto) minmax(0, 1fr) minmax(u(5.5), auto) minmax(0, 1fr)
-    minmax(u(5.5), auto) minmax(0, 1fr);
-  gap: u(0.3) u(0.6);
-  align-items: center;
-}
-
-.sheetChecks {
-  display: flex;
-  flex-wrap: wrap;
-  gap: u(0.2) u(2.2);
-  grid-column: 1 / -1;
-  margin-top: u(0.1);
-}
-
-.sheetFrame {
-  flex: 0 0 auto;
 }
 
 /* ---------------------------------------------------------------- the grid */
@@ -123,25 +223,43 @@
   background: #e8f5ea;
 }
 
-/* ------------------------------------------------------------ totals bar */
+/* ------------------------------------------------- hint and totals bar */
 
+/* Under the grid: the hint on the left, the totals on the right. */
 .totalsBar {
   display: flex;
   flex: 0 0 auto;
   flex-wrap: wrap;
   gap: u(0.3) u(1.1);
   align-items: baseline;
+  justify-content: space-between;
   padding: u(0.2) u(0.3);
 }
 
-.audit {
-  flex: 1 1 auto;
+.gridHint {
+  flex: 1 1 u(20);
   min-width: 0;
-  overflow: hidden;
   color: var(--text-muted, #666666);
-  font-size: u(0.74);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: u(0.68);
+  white-space: pre-wrap;
+}
+
+.totals {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  gap: u(0.3) u(1.1);
+  align-items: baseline;
+  justify-content: flex-end;
+}
+
+/* The button bar's left end: where the keys are listed. */
+.footerHint {
+  margin-right: auto;
+  align-self: center;
+  color: var(--text-muted, #666666);
+  font-size: u(0.7);
+  font-weight: 600;
 }
 
 .totalCaption {

@@ -31,10 +31,16 @@
   --hdr-ctl-icon-pad: clamp(2px, calc(2px + 2 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 4px);
   --hdr-ctl-icon-size: clamp(16px, calc(16px + 2 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 18px);
   --hdr-select-gap: clamp(4px, calc(4px + 2 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 6px);
-  --hdr-select-company: clamp(112px, calc(112px + 60 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 172px);
-  --hdr-select-branch: clamp(112px, calc(112px + 60 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 172px);
+  /* Company and branch carry a leading icon, hence the extra width over the year. */
+  --hdr-select-company: clamp(124px, calc(124px + 64 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 188px);
+  --hdr-select-branch: clamp(120px, calc(120px + 56 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 176px);
   --hdr-select-fy: clamp(80px, calc(80px + 52 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 132px);
   --hdr-go-min: clamp(32px, calc(32px + 16 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 48px);
+  /* The right-hand controls stand as tall as a top-level menu item. */
+  --hdr-ctl-h: var(--hdr-menu-min-h);
+  /* The user menu's avatar and open ring — fixed, not a theme colour: it has
+     to read on every `menu.bg` a company may choose. */
+  --hdr-accent: #d4a838;
 
   /* The company theme's menu.bg / menu.fg (lib/app-theme.ts); the fallbacks
      are the compiled maroon. */
@@ -359,19 +365,89 @@ li.menuItem[data-menu-suppressed="true"] .submenuList {
   font-weight: 800;
 }
 
-.contextSelect {
-  height: 24px;
+/* A header select (`header-select.tsx`): a white tile holding an optional
+   leading icon, the native select, and a drawn chevron in place of the
+   browser's own. */
+.contextField {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: var(--hdr-ctl-h);
   width: var(--hdr-select-branch);
   min-width: 0;
   max-width: var(--hdr-select-branch);
   /* Shrinkable so an unusually wide menu squeezes the selects instead of
      pushing the header onto a second line. */
   flex: 0 1 var(--hdr-select-branch);
-  border: 1px solid #4f4f4f;
+  border-radius: 6px;
   background: #fff;
-  color: #111;
+  color: #1d1d1d;
+  box-shadow: 0 1px 2px rgba(40, 0, 0, 0.25);
+}
+
+.contextSelect {
+  /* The global control rule pins `border-radius` with !important; the
+     variable is the way in. */
+  --erp-radius: 6px;
+  appearance: none;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
   font-size: var(--hdr-ctl-font);
-  padding: 0 4px;
+  padding: 0 20px 0 8px;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.contextSelect option {
+  color: #111;
+  font-weight: 400;
+}
+
+.contextSelect:focus-visible {
+  outline: 2px solid var(--hdr-accent);
+  outline-offset: 1px;
+}
+
+.contextSelect:disabled {
+  cursor: default;
+}
+
+.contextSelectWithIcon {
+  padding-left: 25px;
+}
+
+.contextSelectStrong {
+  font-weight: 700;
+}
+
+.contextFieldIcon {
+  position: absolute;
+  left: 7px;
+  display: flex;
+  color: var(--erp-header-bar-top, #8b1d1d);
+  pointer-events: none;
+}
+
+.contextFieldIcon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.contextFieldChevron {
+  position: absolute;
+  right: 5px;
+  width: 12px;
+  height: 12px;
+  stroke-width: 2.6;
+  pointer-events: none;
+}
+
+.contextSelect:disabled ~ .contextFieldChevron {
+  opacity: 0.3;
 }
 
 .companyContextGroup {
@@ -498,15 +574,28 @@ li.menuItem[data-menu-suppressed="true"] .submenuList {
 .cartButton,
 .goButton,
 .logoutButton {
-  height: 24px;
-  border: 1px solid #4f4f4f;
+  --erp-radius: 6px;
+  height: var(--hdr-ctl-h);
+  border: 0;
   cursor: pointer;
   font-size: var(--hdr-ctl-font);
   font-weight: 700;
   background: #fff;
-  color: var(--erp-header-bar-bottom, #6e0c0c);
+  color: var(--erp-header-bar-top, #8b1d1d);
+  box-shadow: 0 1px 2px rgba(40, 0, 0, 0.25);
   flex: 0 0 auto;
-  padding: 0 4px;
+  padding: 0 7px;
+}
+
+.cartButton:hover,
+.goButton:hover {
+  background: #fbf3f3;
+}
+
+.cartButton:focus-visible,
+.goButton:focus-visible {
+  outline: 2px solid var(--hdr-accent);
+  outline-offset: 1px;
 }
 
 .cartButton {
@@ -559,53 +648,237 @@ li.menuItem[data-menu-suppressed="true"] .submenuList {
   text-align: center;
   background: #f8f8f8;
 }
-/* User menu dropdown */
-.userMenuDropdown {
+/* ── User menu (`user-menu.tsx`) ─────────────────────────────────────────── */
+.userMenu {
   position: relative;
+  flex: 0 0 auto;
 }
 
-.userIconButton {
+.userMenuTrigger {
+  --erp-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: var(--hdr-ctl-h);
+  padding: 0 6px 0 3px;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.12);
+  color: inherit;
+  font-size: var(--hdr-ctl-font);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.userMenuTrigger:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.userMenuTrigger:focus-visible {
+  outline: 2px solid var(--hdr-accent);
+  outline-offset: 2px;
+}
+
+.userMenuTriggerOpen {
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 0 0 2px var(--hdr-accent);
+}
+
+.userMenuAvatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: calc(var(--hdr-ctl-h) - 6px);
+  height: calc(var(--hdr-ctl-h) - 6px);
+  border-radius: 50%;
+  background: var(--hdr-accent);
+  color: #4d1408;
+  font-size: calc(var(--hdr-ctl-font) - 2px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.userMenuAvatar svg {
+  width: 60%;
+  height: 60%;
+}
+
+.userMenuName {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.userMenuChevron {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.6;
+  transition: transform 0.15s ease;
+}
+
+.userMenuTriggerOpen .userMenuChevron {
+  transform: rotate(180deg);
+}
+
+.userMenuPanel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 100;
+  width: 300px;
+  max-width: calc(calc(100vw / var(--erp-ui-scale)) - 16px);
+  overflow: hidden;
+  border: 1px solid #e7e1d8;
+  border-radius: 12px;
+  background: #fff;
+  color: #1d1d1d;
+  box-shadow: 0 14px 36px rgba(30, 10, 10, 0.2);
+  text-align: left;
+}
+
+.userMenuIdentity {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 12px;
+  padding: 16px 16px 14px;
+}
+
+.userMenuPanelAvatar {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--erp-header-bar-top, #8b1d1d);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.userMenuPanelAvatar svg {
+  width: 22px;
+  height: 22px;
+}
+
+.userMenuIdentityText {
+  min-width: 0;
+}
+
+.userMenuIdentityName {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.userMenuIdentityMeta {
+  margin-top: 2px;
+  overflow: hidden;
+  color: #6b6560;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.userMenuLastLogin {
+  grid-column: 1 / -1;
+  margin-top: 12px;
+  color: #6b6560;
+  font-size: 12.5px;
+}
+
+.userMenuSection {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border-top: 1px solid #ece7df;
+}
+
+.userMenuItem {
+  --erp-radius: 8px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 4px;
-  border-radius: var(--erp-radius);
-  color: inherit; /* or your icon color */
-}
-
-.userIconButton:hover {
-  background-color: rgba(255, 255, 255, 0.15);
-}
-
-.userMenuPopover {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: var(--erp-radius);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  min-width: 120px;
-  z-index: 100;
-}
-
-.userMenuLogoutButton {
+  gap: 12px;
   width: 100%;
-  padding: 8px 16px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 0;
   background: none;
-  border: none;
+  color: #1d1d1d;
+  font-size: 14px;
   text-align: left;
   cursor: pointer;
-  font-size: inherit;
-  color: #1a2941;
 }
 
-.userMenuLogoutButton:hover {
-  background-color: #f5f5f5;
-  color: var(--erp-header-bar-bottom, #6e0c0c);
+.userMenuItem:hover,
+.userMenuItem:focus-visible {
+  background: #f5f2ec;
+  outline: none;
+}
+
+.userMenuItemIcon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: #4a4541;
+}
+
+.userMenuItemLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.userMenuItemKey {
+  min-width: 22px;
+  padding: 1px 6px;
+  border: 1px solid #d6d0c6;
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: #fff;
+  color: #4a4541;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.userMenuLogout {
+  color: var(--erp-header-bar-top, #8b1d1d);
+  font-weight: 700;
+}
+
+.userMenuLogout .userMenuItemIcon {
+  color: inherit;
+}
+
+.userMenuLogout:hover,
+.userMenuLogout:focus-visible {
+  background: #fbf0f0;
+}
+
+.userMenuFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid #ece7df;
+  background: #f6f4f0;
+  color: #6b6560;
+  font-size: 12px;
+}
+
+.userMenuVersion {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 /* Calendar icon button */
 .calendarIconButton {
@@ -805,19 +1078,25 @@ li.menuItem[data-menu-suppressed="true"] .submenuList {
   }
 
   /* Never let the shrink safety collapse a select to an unusable sliver. */
-  .contextSelect {
+  .contextField {
     min-width: 64px;
   }
 
+  /* The year and the size are short and fixed — "2026-2027", "Size: Auto" —
+     and a clipped one reads as nothing, so they keep their text and the
+     company and branch tiles (whose tooltip names them in full) give way. */
+  .fiscalYearContextSelect,
+  .uiScaleSelect {
+    min-width: calc(var(--hdr-ctl-font) * 5 + 28px);
+  }
+
   .calendarPickerShell,
-  .recentPagesDropdown,
-  .userMenuDropdown {
+  .recentPagesDropdown {
     flex: 0 0 auto;
   }
 
   .calendarIconButton,
-  .recentPagesIconButton,
-  .userIconButton {
+  .recentPagesIconButton {
     padding: var(--hdr-ctl-icon-pad);
   }
 
@@ -826,10 +1105,15 @@ li.menuItem[data-menu-suppressed="true"] .submenuList {
     width: var(--hdr-ctl-icon-size);
     height: var(--hdr-ctl-icon-size);
   }
+}
 
-  .userIconButton svg {
-    width: calc(var(--hdr-ctl-icon-size) + 2px);
-    height: calc(var(--hdr-ctl-icon-size) + 2px);
+/* The user's name in the menu pill is the first thing to give way: below
+   1800px of header room (in the header's own zoomed pixels — see the menu-icon
+   rule below for why this is a container query) the menu and the selects need
+   the line, and the avatar alone names the button. */
+@container erp-header (max-width: 1799px) {
+  .userMenuName {
+    display: none;
   }
 }
 
@@ -908,7 +1192,7 @@ li.menuItem[data-menu-suppressed="true"] .submenuList {
     width: 100%;
   }
 
-  .contextSelect {
+  .contextField {
     flex: 1 1 100%;
     width: 100%;
     min-width: 0;
@@ -960,10 +1244,13 @@ li.menuItem[data-menu-suppressed="true"] .submenuList {
     font-size: 13px;
   }
 
-  .contextSelect {
+  .contextField {
     width: 100%;
     min-width: 132px;
     max-width: none;
+  }
+
+  .contextSelect {
     font-size: 12px;
   }
 

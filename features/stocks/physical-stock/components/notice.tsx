@@ -5,7 +5,7 @@
  * (`@/lib/notify`), and a Yes/No question through `@/lib/confirm`. The Qt
  * screen speaks in title + paragraphs; the popup keeps the line breaks.
  */
-import { toast } from "@/lib/notify";
+import { getMessages, subscribeToMessages, toast } from "@/lib/notify";
 import { confirm } from "@/lib/confirm";
 import styles from "../page.module.scss";
 
@@ -18,13 +18,40 @@ function Notice({ title, message }: { title: string; message: string }) {
   );
 }
 
+/** Each returns the message's id, for `afterMessage`. */
 export const say = {
-  info: (title: string, message: string) => toast.info(<Notice title={title} message={message} />),
-  warn: (title: string, message: string) => toast.warn(<Notice title={title} message={message} />),
-  error: (message: string) => toast.error(<p className={styles.noticeBody}>{message}</p>),
-  success: (title: string, message: string) =>
+  info: (title: string, message: string): string =>
+    toast.info(<Notice title={title} message={message} />),
+  warn: (title: string, message: string): string =>
+    toast.warn(<Notice title={title} message={message} />),
+  error: (message: string): string =>
+    toast.error(<p className={styles.noticeBody}>{message}</p>),
+  success: (title: string, message: string): string =>
     toast.success(<Notice title={title} message={message} />),
 };
+
+/**
+ * Runs `then` once the message `id` has been answered. Qt's AppMessage is
+ * modal and returns only when it closes — "the message box has just closed;
+ * the keyboard goes back to this window" — so a screen moves the cursor AFTER
+ * it. The web popup takes the focus while it is up (its OK button) and hands
+ * it to nobody when it goes, so a focus moved before it closes is lost.
+ */
+export function afterMessage(id: string, then: () => void): void {
+  let done = false;
+  let unsubscribe: () => void = () => undefined;
+  const check = () => {
+    if (done || getMessages().some((message) => message.id === id)) {
+      return;
+    }
+    done = true;
+    unsubscribe();
+    // One tick on: the popup is unmounted by then, its button with it.
+    window.setTimeout(then, 0);
+  };
+  unsubscribe = subscribeToMessages(check);
+  check();
+}
 
 /**
  * AppMessage::showConfirm. The first paragraph is the question; anything after

@@ -39,8 +39,11 @@ import {
   selectAuthUserId,
   selectRecentPages,
 } from "@/store/slices/authSlice";
+import { LuBuilding2, LuMapPin } from "react-icons/lu";
 import { MenuTree } from "./erp-header-menu";
+import HeaderSelect from "./header-select";
 import UiScaleControl from "./ui-scale-control";
+import UserMenu from "./user-menu";
 export type { ErpHeaderItem, ErpHeaderProps } from "./types";
 // ─── Utility functions ────────────────────────────────────────────────────────
 function formatDateLabel(date: Date): string {
@@ -358,71 +361,6 @@ function RecentPagesDropdown({
     </div>
   );
 }
-// ─── UserMenuDropdown component ───────────────────────────────────────────────
-function UserMenuDropdown({
-  logoutLabel,
-  onLogout,
-}: {
-  logoutLabel: string;
-  onLogout: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const shellRef = useRef<HTMLDivElement | null>(null);
-  const close = useCallback(() => setOpen(false), []);
-  const handleToggle = useCallback(() => setOpen((v) => !v), []);
-  const handleLogoutClick = useCallback(() => { close(); onLogout(); }, [close, onLogout]);
-  useEffect(() => {
-    if (!open) return;
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!(event.target instanceof Node)) return;
-      if (shellRef.current?.contains(event.target)) return;
-      close();
-    };
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [close, open]);
-  const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>) => {
-      if (event.key === "Escape") { event.stopPropagation(); close(); }
-    },
-    [close],
-  );
-  return (
-    <div ref={shellRef} className={styles.userMenuDropdown} onKeyDown={handleKeyDown}>
-      <button
-        type="button"
-        className={styles.userIconButton}
-        onClick={handleToggle}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label="User menu"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          fill="currentColor"
-          aria-hidden="true"
-          width="20"
-          height="20"
-        >
-          <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
-        </svg>
-      </button>
-      {open && (
-        <div className={styles.userMenuPopover} role="menu">
-          <button
-            type="button"
-            className={styles.userMenuLogoutButton}
-            role="menuitem"
-            onClick={handleLogoutClick}
-          >
-            {logoutLabel}
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
 // ─── HeaderRight component ────────────────────────────────────────────────────
 function HeaderRight({
   searchMenuCount,
@@ -450,6 +388,9 @@ function HeaderRight({
   selectedDate,
   onDateChange,
 }: HeaderRightProps) {
+  // The tiles truncate a long name, so the full one rides along as a tooltip.
+  const selectedCompanyLabel = companyOptions.find((opt) => opt.value === selectedCompany)?.label;
+  const selectedBranchLabel = branchOptions.find((opt) => opt.value === selectedBranch)?.label;
   return (
     <div className={styles.headerRight}>
       {searchMenuCount > 0 && (
@@ -463,34 +404,38 @@ function HeaderRight({
         ariaLabel="Recent pages"
       />
       <div className={styles.companyContextGroup}>
-        <select
-          className={cx(styles.contextSelect, styles.companyContextSelect)}
+        <HeaderSelect
+          className={styles.companyContextSelect}
+          icon={<LuBuilding2 />}
+          strong
           value={selectedCompany}
           onChange={(e) => onCompanyChange?.(e.target.value)}
           disabled={companyDisabled}
           aria-label="Company"
+          title={selectedCompanyLabel}
         >
           {companyOptions.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
             </option>
           ))}
-        </select>
-        <select
-          className={styles.contextSelect}
+        </HeaderSelect>
+        <HeaderSelect
+          icon={<LuMapPin />}
           value={selectedBranch}
           onChange={(e) => onBranchChange?.(e.target.value)}
           disabled={branchDisabled}
           aria-label="Branch"
+          title={selectedBranchLabel}
         >
           {branchOptions.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
             </option>
           ))}
-        </select>
-        <select
-          className={cx(styles.contextSelect, styles.fiscalYearContextSelect)}
+        </HeaderSelect>
+        <HeaderSelect
+          className={styles.fiscalYearContextSelect}
           value={selectedFiscalYear}
           onChange={(e) => onFiscalYearChange?.(e.target.value)}
           disabled={fiscalYearDisabled}
@@ -501,7 +446,7 @@ function HeaderRight({
               {opt.label}
             </option>
           ))}
-        </select>
+        </HeaderSelect>
       </div>
       {onCartClick && (
         <button
@@ -521,7 +466,7 @@ function HeaderRight({
         {goLabel}
       </button>
       <UiScaleControl />
-      <UserMenuDropdown logoutLabel={logoutLabel} onLogout={onLogout} />
+      <UserMenu logoutLabel={logoutLabel} onLogout={onLogout} />
     </div>
   );
 }

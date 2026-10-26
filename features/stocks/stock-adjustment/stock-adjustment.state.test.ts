@@ -201,7 +201,7 @@ describe("what opens", () => {
     expect(whyNotEditable(adjustment, itemLine({ lotId: "lot-1" }), COL.Bucket)).toMatch(/picked holding's/);
     expect(whyNotEditable(adjustment, itemLine(), COL.Bucket)).toBe("");
     expect(whyNotEditable(draftOf("Expiry"), itemLine(), COL.Bucket)).toBe(
-      "Pick the lot first (F2) — its bucket comes with it.",
+      "Pick the lot first (F12) — its bucket comes with it.",
     );
     expect(whyNotEditable(adjustment, itemLine(), COL.ToBucket)).toBe("Only Move stock has a To bucket.");
     expect(whyNotEditable(draftOf("Move"), itemLine(), COL.ToBucket)).toBe("");
@@ -485,7 +485,7 @@ describe("what the screen works out", () => {
     });
     const short = withLines(draftOf("Relot"), [out, itemLine({ qty: "2", direction: "IN" })]);
     expect(relotBalance(short)?.good).toBe(false);
-    expect(relotBalance(draftOf("Relot"))?.lines[0]).toBe("Pick the wrong lot (F2) — its pair is added below it.");
+    expect(relotBalance(draftOf("Relot"))?.lines[0]).toBe("Pick the wrong lot (F12) — its pair is added below it.");
     expect(relotBalance(draftOf("Adjustment"))).toBeNull();
   });
 });

@@ -20,6 +20,8 @@ export const OPENING_STOCK_CANCEL_ENDPOINT = "/stock/opening/cancel";
 export const OPENING_STOCK_ITEM_LOOKUP_ENDPOINT = "/stock/opening/item-lookup";
 /** A scanned EAN → item + the unit it was registered against (an iuc_id). */
 export const ITEM_BY_BARCODE_ENDPOINT = "/master-lookups/item-by-barcode";
+/** The configured dropdowns' rows — the Size and Colour lists. */
+export const DROPDOWN_RUN_ENDPOINT = "/dropdown-details/run";
 export const CONFIGURED_GRID_RUN_ENDPOINT = "/configured-grid-sql/run";
 
 /** `MAIN LIST - OPENING STOCK` — grid 99, the list menu 44 opens on. */
@@ -32,6 +34,16 @@ export const SUPPLIER_PICKER_GRID_KEY = "supplierPickerPopup" as const;
 export const OPENING_STOCK_LINES_UI_TABLE_KEY = "openingStockLines" as const;
 /** `GODOWNS` — dropdown 26, the header godown (the same one Branch Master's default godown uses). */
 export const GODOWN_DROPDOWN_KEY = "godown" as const;
+/** `ITEM SIZES` / `ITEM COLOURS` — dropdowns 70 / 71, the Size and Colour cells' lists. */
+export const SIZE_DROPDOWN_KEY = "itemSize" as const;
+export const COLOUR_DROPDOWN_KEY = "itemColour" as const;
+/** `/dropdown-details/run` caps `limit` at 100, so a long list is read page by page. */
+export const CHOICE_PAGE_SIZE = 100;
+/**
+ * A stop for the page walk: a server that ignored `page` would hand back the
+ * same full page for ever (Qt has no stop). 50 pages is 5 000 sizes.
+ */
+export const CHOICE_MAX_PAGES = 50;
 
 /** The grid name the Enter walker (`grid-focus.ts`) knows the line grid by. */
 export const OPENING_STOCK_GRID_NAME = "openingStockLines";
@@ -84,9 +96,34 @@ export const OS_COL = {
   TrackSignature: 36,
   SupplierName: 37,
   CostRate: 38,
+  // ── Textile: what the batch IS (Qt 74b755c, plan-textile-auto-batch-2 E2) ──
+  // Appended for the same reason SupplierName was. Shown only while the
+  // company numbers its own batches (`stock.auto_batch_no`); ui table 27 puts
+  // them straight after Batch No.
+  SizeName: 39,
+  /**
+   * The Qt grid keeps the id beside its name as a hidden cell; here it is the
+   * line's `sizeId` field and never a column. The number stays reserved, as
+   * ColourId and BatchTyped do: a layout row keyed 40 must not land on
+   * something else one day.
+   */
+  SizeId: 40,
+  ColourName: 41,
+  ColourId: 42,
+  Model: 43,
+  /** "1" once the operator TYPED the batch number — the line's `batchTyped`. */
+  BatchTyped: 44,
 } as const;
 
-export const OS_COLUMN_COUNT = 39;
+/** Qt `OpeningStockCols::ColumnCount`. */
+export const OS_COLUMN_COUNT = 45;
+
+/**
+ * The slots the Qt grid holds as hidden cells and this screen holds as line
+ * fields (`sizeId`, `colourId`, `batchTyped`) — the only numbers below
+ * `OS_COLUMN_COUNT` with no column meaning.
+ */
+export const OS_LINE_FIELD_SLOTS: readonly number[] = [OS_COL.SizeId, OS_COL.ColourId, OS_COL.BatchTyped];
 
 // ── Tracking signature letters ────────────────────────────────────────────
 /**
@@ -159,6 +196,8 @@ export const REMARKS_MAX_LENGTH = 250;
 export const LINE_IDENTITY_MAX_LENGTH = 100;
 /** `svi_remarks` — `@NullableStringStrict(250)`. */
 export const LINE_REMARKS_MAX_LENGTH = 250;
+/** `sbd_model` varchar(100) — the Qt editor's `setMaxLength(100)`. */
+export const LINE_MODEL_MAX_LENGTH = 100;
 
 /** What the date cells are keyed and shown in — NexDateEdit's mask. */
 export const GRID_DATE_PLACEHOLDER = "dd-mm-yyyy";

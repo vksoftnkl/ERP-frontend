@@ -3,6 +3,7 @@
  * on its grid and header, as a pure function. The hook
  * (`use-physical-stock-draft.ts`) owns the network and feeds the answers in.
  */
+import { dateTime12Of } from "@/lib/time-format";
 import {
   DEFAULT_FREEZE_HOURS,
   DEFAULT_RATE_SOURCE,
@@ -22,6 +23,7 @@ import type {
   CountLine,
   CountSheetRow,
   CountTotals,
+  PhysicalStockAuditStamps,
   PhysicalStockDocument,
   PhysicalStockDraft,
   PhysicalStockMode,
@@ -68,6 +70,9 @@ export function blankLine(key: string): CountLine {
     reasonName: "",
     remarks: "",
     barcode: "",
+    sizeName: "",
+    colourName: "",
+    model: "",
   };
 }
 
@@ -109,6 +114,9 @@ export function lineFromSheet(row: CountSheetRow, key: string): CountLine {
     bookQty: toNumberOrNull(row.bookQty),
     avgCostRate: toNumberOrNull(row.avgCostRate),
     stockValue: toNumberOrNull(row.stockValue),
+    sizeName: text(row.sizeName),
+    colourName: text(row.colourName),
+    model: text(row.model),
   };
 }
 
@@ -166,6 +174,9 @@ export function lineFromWire(
     avgCostRate,
     diffValue:
       known && countedText !== "" ? round2((diffQty ?? 0) * (avgCostRate ?? 0)) : null,
+    sizeName: text(wire.sizeName),
+    colourName: text(wire.colourName),
+    model: text(wire.model),
   };
 }
 
@@ -275,6 +286,11 @@ export type HoldingInsert = {
  * several rows: a batch-tracked item is several holdings). A holding already on
  * the sheet is skipped — counted twice is wrong twice. The scanned symbol stays
  * on the first row it landed on.
+ *
+ * The row is found by KEY, so lines added above it while a lookup was out do
+ * not move the answer onto the wrong line; and a row that has become a holding
+ * meanwhile is not overwritten — the holdings go in above it, as Qt
+ * `addHoldingsForLots()` inserts rather than overwrite.
  */
 export function insertHoldings(
   lines: readonly CountLine[],
@@ -304,12 +320,13 @@ export function insertHoldings(
     cursor = next;
     added.push(lineFromSheet(holding, key));
   }
-  if (added.length > 0 && target.barcode) {
+  const replace = !target.lotId;
+  if (added.length > 0 && replace && target.barcode) {
     added[0] = { ...added[0], barcode: target.barcode };
   }
   const merged =
     added.length > 0
-      ? [...lines.slice(0, index), ...added, ...lines.slice(index + 1)]
+      ? [...lines.slice(0, index), ...added, ...lines.slice(replace ? index + 1 : index)]
       : [...lines];
   const trailing = ensureTrailingBlank(merged, cursor);
   return { lines: trailing.lines, seq: trailing.seq, added: added.length, already, index };
@@ -331,6 +348,76 @@ export function refillAverageCosts(
     }
     return recalcLine({ ...line, avgCostRate: avg.get(key) ?? null });
   });
+}
+
+/**
+ * The notice a pick, a scan or a batch label leaves (Qt `setNotice`): "MILK —
+ * 2 holding(s) added." / "Batch CBE26-00002 — 1 holding(s) added, 1 already
+ * on the sheet."
+ */
+export function holdingsNotice(subject: string, added: number, already: number): string {
+  return already > 0
+    ? `${subject} — ${added} holding(s) added, ${already} already on the sheet.`
+    : `${subject} — ${added} holding(s) added.`;
+}
+
+// ---------------------------------------------------------------------------
+// The audit lines under the title
+// ---------------------------------------------------------------------------
+
+/** What a never-saved sheet says under its title (Qt `resetScreenState`). */
+export const NEW_SHEET_AUDIT = "New — not saved yet";
+
+/**
+ * A header's audit stamps. The creator is the resolved NAME whenever the header
+ * carries that key at all — null when the stored id names no user — and the
+ * stored `createdBy` only from a server that sends no name (Qt
+ * `header.contains("createdByName")`).
+ */
+export function auditStampsOf(
+  header: PhysicalStockWireHeader | null | undefined,
+): PhysicalStockAuditStamps | null {
+  if (!header) {
+    return null;
+  }
+  return {
+    createdOn: text(header.createdOn),
+    createdBy: text(header.createdByName !== undefined ? header.createdByName : header.createdBy),
+    postedOn: text(header.postedOn),
+    postedBy: text(header.postedByName),
+    cancelledOn: text(header.cancelledOn),
+  };
+}
+
+/** "Created 24-10-2026 02:05 PM by Ravi" — blank when neither half is known. */
+function auditLine(verb: string, on: string, by: string): string {
+  const when = dateTime12Of(on);
+  const who = by.trim();
+  if (!when && !who) {
+    return "";
+  }
+  return [verb, when, who ? `by ${who}` : ""].filter(Boolean).join(" ");
+}
+
+/**
+ * The lines under the title (Qt `showAudit()`), one each and only those
+ * present: who created the sheet and when, who posted it, when it was
+ * cancelled — the house 12-hour time. A sheet never saved says so. The notice
+ * goes under these, separately (`draft.notice`).
+ */
+export function auditLinesOf(draft: Pick<PhysicalStockDraft, "svhId" | "stamps">): string[] {
+  if (!draft.svhId) {
+    return [NEW_SHEET_AUDIT];
+  }
+  const stamps = draft.stamps ?? null;
+  if (!stamps) {
+    return [];
+  }
+  return [
+    auditLine("Created", stamps.createdOn, stamps.createdBy),
+    auditLine("Posted", stamps.postedOn, stamps.postedBy),
+    auditLine("Cancelled", stamps.cancelledOn, ""),
+  ].filter(Boolean);
 }
 
 // ---------------------------------------------------------------------------
@@ -372,7 +459,8 @@ export function createDraft(seed: DraftSeed): PhysicalStockDraft {
     freezeTo: addHoursLocal(seed.now, DEFAULT_FREEZE_HOURS),
     blind: seed.blind ?? false,
     lines: [blankLine("row-0")],
-    audit: "",
+    stamps: null,
+    notice: "",
     scope: seed.scope.accYear,
     seq: 1,
   };
@@ -417,6 +505,13 @@ export type PhysicalStockAction =
   | { type: "blindSet"; blind: boolean }
   | { type: "sheetApplied"; rows: readonly CountSheetRow[]; godownName: string }
   | { type: "holdingsAdded"; rowKey: string; holdings: readonly CountSheetRow[]; itemName: string }
+  | {
+      type: "batchHoldingsAdded";
+      rowKey: string;
+      holdings: readonly CountSheetRow[];
+      /** The label as scanned, upper-cased. */
+      label: string;
+    }
   | { type: "blankRowCleared"; rowKey: string }
   | { type: "countedSet"; rowKey: string; text: string }
   | { type: "remarksSet"; rowKey: string; text: string }
@@ -433,7 +528,17 @@ export type PhysicalStockAction =
   | { type: "averageCostsRefilled"; rows: readonly CountSheetRow[] }
   | { type: "statusApplied"; status: string }
   | { type: "modeSet"; mode: PhysicalStockMode }
-  | { type: "auditSet"; text: string };
+  | { type: "noticeSet"; text: string };
+
+/**
+ * A fresh sheet whose row keys carry on from the old one's: a scan or a pick
+ * still in flight is followed by its row KEY, and must not land on the new
+ * sheet's blank row because both happened to be "row-0".
+ */
+function continuingKeys(fresh: PhysicalStockDraft, seq: number): PhysicalStockDraft {
+  const [key, next] = nextKey(seq);
+  return { ...fresh, lines: [blankLine(key)], seq: next };
+}
 
 function updateLine(
   draft: PhysicalStockDraft,
@@ -479,6 +584,9 @@ function headerApplied(
     freezeFrom: freeze ? fromWireInstant(header.freezeFrom) || draft.freezeFrom : draft.freezeFrom,
     freezeTo: freeze ? fromWireInstant(header.freezeTo) || draft.freezeTo : draft.freezeTo,
     scope: scopeLabel(godownName, accYear),
+    // showAudit(): the document's own lines, and the old notice goes with it.
+    stamps: auditStampsOf(header),
+    notice: "",
   };
 }
 
@@ -488,12 +596,12 @@ export function physicalStockReducer(
 ): PhysicalStockDraft {
   switch (action.type) {
     case "reset":
-      return createDraft({ ...action.seed, blind: draft.blind });
+      return continuingKeys(createDraft({ ...action.seed, blind: draft.blind }), draft.seq);
 
     case "startNext": {
       // The godown, date and rate source describe the RUN — a stocktake walks
       // several godowns in one session — so the next sheet keeps them.
-      const fresh = createDraft({ ...action.seed, blind: draft.blind });
+      const fresh = continuingKeys(createDraft({ ...action.seed, blind: draft.blind }), draft.seq);
       return {
         ...fresh,
         godownId: draft.godownId,
@@ -534,7 +642,7 @@ export function physicalStockReducer(
         ...next,
         lines: [blankLine(key)],
         seq,
-        audit: `Godown changed to ${action.name} — load the count sheet again.`,
+        notice: `Godown changed to ${action.name} — load the count sheet again.`,
       };
     }
 
@@ -551,7 +659,7 @@ export function physicalStockReducer(
       return {
         ...draft,
         blind: action.blind,
-        audit: action.blind
+        notice: action.blind
           ? "Blind count — the book figure is hidden until you turn this off."
           : "",
       };
@@ -570,7 +678,7 @@ export function physicalStockReducer(
         lines: [...lines, blankLine(blank)],
         seq,
         dirty: true,
-        audit: `${action.rows.length} holdings to count in ${action.godownName}.`,
+        notice: `${action.rows.length} holdings to count in ${action.godownName}.`,
       };
     }
 
@@ -584,10 +692,30 @@ export function physicalStockReducer(
         lines: result.lines,
         seq: result.seq,
         dirty: true,
-        audit:
-          result.already > 0
-            ? `${action.itemName} — ${result.added} holding(s) added, ${result.already} already on the sheet.`
-            : `${action.itemName} — ${result.added} holding(s) added.`,
+        notice: holdingsNotice(action.itemName, result.added, result.already),
+      };
+    }
+
+    case "batchHoldingsAdded": {
+      // addHoldingsForLots — a scanned batch label's holdings in this godown.
+      const result = insertHoldings(draft.lines, action.rowKey, action.holdings, draft.seq);
+      if (result.index < 0) {
+        return draft;
+      }
+      // Every one already on the sheet: nothing landed, and the cell is
+      // emptied for the next scan.
+      const lines =
+        result.added > 0
+          ? result.lines
+          : result.lines.map((line) =>
+              line.key === action.rowKey && !line.lotId ? { ...line, barcode: "" } : line,
+            );
+      return {
+        ...draft,
+        lines,
+        seq: result.seq,
+        dirty: draft.dirty || result.added > 0,
+        notice: holdingsNotice(`Batch ${action.label}`, result.added, result.already),
       };
     }
 
@@ -648,6 +776,7 @@ export function physicalStockReducer(
         svhId: text(header?.svhId) || draft.svhId,
         refno: text(header?.refno) || draft.refno,
         status: (header?.status ?? "").trim() || STATUS_DRAFT,
+        stamps: auditStampsOf(header) ?? draft.stamps,
         dirty: false,
         lines: repainted.lines,
         seq: repainted.seq,
@@ -676,8 +805,8 @@ export function physicalStockReducer(
     case "modeSet":
       return { ...draft, mode: action.mode };
 
-    case "auditSet":
-      return { ...draft, audit: action.text };
+    case "noticeSet":
+      return { ...draft, notice: action.text };
 
     default:
       return draft;

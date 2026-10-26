@@ -37,7 +37,7 @@ function setting(asdKey: string, value: string | null): EffectiveSetting {
 describe("settings", () => {
   it("defaults to list-first and no grace", () => {
     expect(parseStockAdjustmentSettings(undefined)).toEqual(DEFAULT_STOCK_ADJUSTMENT_SETTINGS);
-    expect(parseStockAdjustmentSettings([])).toEqual({ txnEntryFirst: false, expiryGraceDays: 0 });
+    expect(parseStockAdjustmentSettings([])).toEqual({ txnEntryFirst: false, expiryGraceDays: 0, autoBatchNo: false });
   });
 
   it("reads system.txn_entry_first and stock.expiry_writeoff_grace_days", () => {
@@ -46,8 +46,16 @@ describe("settings", () => {
         setting("system.txn_entry_first", "Y"),
         setting("stock.expiry_writeoff_grace_days", "7"),
       ]),
-    ).toEqual({ txnEntryFirst: true, expiryGraceDays: 7 });
+    ).toEqual({ txnEntryFirst: true, expiryGraceDays: 7, autoBatchNo: false });
     expect(parseStockAdjustmentSettings([setting("stock.expiry_writeoff_grace_days", "-3")]).expiryGraceDays).toBe(0);
+  });
+
+  it("reads stock.auto_batch_no — the textile batch-label scan — off unless set", () => {
+    expect(parseStockAdjustmentSettings([setting("stock.auto_batch_no", "true")]).autoBatchNo).toBe(true);
+    expect(parseStockAdjustmentSettings([setting("stock.auto_batch_no", "1")]).autoBatchNo).toBe(true);
+    expect(parseStockAdjustmentSettings([setting("stock.auto_batch_no", "false")]).autoBatchNo).toBe(false);
+    expect(parseStockAdjustmentSettings([setting("stock.auto_batch_no", null)]).autoBatchNo).toBe(false);
+    expect(parseStockAdjustmentSettings([setting("stock.auto_batch_no", "maybe")]).autoBatchNo).toBe(false);
   });
 });
 
@@ -90,6 +98,15 @@ describe("the line grid's columns", () => {
     expect(Math.round(columns.reduce((sum, column) => sum + column.widthPct, 0))).toBe(100);
   });
 
+  it("Barcode leads the keyed kinds, as on Opening Stock — not Move stock, which starts from the lot", () => {
+    for (const kind of ["Adjustment", "Issue", "Damage", "Expiry", "Relot"] as const) {
+      const numbers = resolveLineColumns(undefined, kind).map((column) => column.no);
+      expect(numbers).toContain(COL.Barcode);
+      expect(numbers.indexOf(COL.Barcode)).toBeLessThan(numbers.indexOf(COL.Description));
+    }
+    expect(resolveLineColumns(undefined, "Move").map((column) => column.no)).not.toContain(COL.Barcode);
+  });
+
   it("Move stock reads From → To, with the arrow between them", () => {
     const columns = resolveLineColumns(layout, "Move");
     const numbers = columns.map((column) => column.no);
@@ -104,6 +121,7 @@ describe("the line grid's columns", () => {
     const columns = resolveLineColumns(undefined, "Relot");
     expect(columns.map((column) => column.no)).toEqual([
       COL.LineNo,
+      COL.Barcode,
       COL.Description,
       COL.BatchNo,
       COL.ExpiryDate,

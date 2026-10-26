@@ -7,7 +7,7 @@
  * Which one the menu lands on is `system.txn_entry_first` — the Qt
  * `TxnMainView::openForMenu` switch: false (the default) is LIST FIRST, back-
  * office work where you are usually looking for an existing document; true is
- * ENTRY FIRST, with the list behind F8.
+ * ENTRY FIRST, with the list behind Ctrl+O.
  *
  * A document left unsaved when the operator went to another screen is kept in
  * screen memory (lib/screen-memory), and the route then reopens ON it instead
@@ -93,6 +93,7 @@ export default function StockAdjustmentPage() {
       initialDocument={view.document}
       initialMode={view.mode}
       expiryGraceDays={settings.expiryGraceDays}
+      autoBatchNo={settings.autoBatchNo}
       onBackToList={onBackToList}
       memory={memory}
     />

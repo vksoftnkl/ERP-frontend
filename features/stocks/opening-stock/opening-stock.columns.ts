@@ -13,10 +13,16 @@
  * sale price / serial / supplier open only when the row's tracking signature
  * carries the letter, nothing opens on a row without an item, and the derived
  * figures (value, base quantities, the per-base-unit cost) never open at all.
+ *
+ * ── Textile: Size, Colour, Model (Qt 74b755c) ─────────────────────────────
+ * Shown only while the company numbers its own batches (`stock.auto_batch_no`,
+ * re-applied over whatever the layout says — `withBatchDetailColumns`), and
+ * open only on an item tracked by batch whose batch number was not typed by
+ * hand (`isLockedBatchDetail`).
  */
 import type { UiTableColumnRow } from "@/features/sales/quotation/quotation.types";
 import { OS_COL, TRACK, type TrackFacet } from "./opening-stock.constants";
-import { hasItem, isUntrackedIdentityField, tracks } from "./opening-stock.lines";
+import { hasItem, isLockedBatchDetail, isUntrackedIdentityField, tracks } from "./opening-stock.lines";
 import type { OpeningStockLine, OpeningStockLineField } from "./opening-stock.types";
 
 export type OpeningStockColumnKind =
@@ -38,7 +44,11 @@ export type OpeningStockColumnKind =
   /** The item picker cell (Description). */
   | "itemLookup"
   /** The supplier picker cell. */
-  | "supplierLookup";
+  | "supplierLookup"
+  /** Size / Colour: a name from the list, or one not on it yet (the screen offers to add it). */
+  | "choice"
+  /** Model: free text, the item's earlier models offered. */
+  | "model";
 
 export type ColumnAlign = "left" | "center" | "right";
 
@@ -125,7 +135,34 @@ export const OPENING_STOCK_COLUMNS: readonly OpeningStockColumnMeaning[] = [
   { number: OS_COL.TrackSignature, key: "trackSignature", fallbackHeader: "Signature", kind: "label", align: LEFT, read: "trackSignature", fallbackVisible: false },
   { number: OS_COL.SupplierName, key: "supplierName", fallbackHeader: "Supplier", kind: "supplierLookup", align: LEFT, read: "supplierName", fallbackVisible: true },
   { number: OS_COL.CostRate, key: "costRate", fallbackHeader: "Cost Rate / base unit", kind: "rate", align: RIGHT, read: "costRate", fallbackVisible: true, decimals: 6 },
+  // Textile. Hidden unless the company numbers its own batches — that is
+  // decided by `withBatchDetailColumns`, not by these fallbacks.
+  { number: OS_COL.SizeName, key: "sizeName", fallbackHeader: "Size", kind: "choice", align: LEFT, read: "sizeName", write: "sizeName", fallbackVisible: false },
+  { number: OS_COL.ColourName, key: "colourName", fallbackHeader: "Colour", kind: "choice", align: LEFT, read: "colourName", write: "colourName", fallbackVisible: false },
+  { number: OS_COL.Model, key: "model", fallbackHeader: "Model", kind: "model", align: LEFT, read: "model", write: "model", fallbackVisible: false },
 ];
+
+/** Size, Colour, Model — in the order they sit after Batch No. */
+const BATCH_DETAIL_NUMBERS: readonly number[] = [OS_COL.SizeName, OS_COL.ColourName, OS_COL.Model];
+
+function isBatchDetailColumn(number: number): boolean {
+  return BATCH_DETAIL_NUMBERS.includes(number);
+}
+
+/**
+ * The meanings in the order a grid with no layout shows them: `OpeningStockCols`
+ * order, except that Size / Colour / Model sit straight after Batch No — where
+ * ui table 27 puts them.
+ */
+const FALLBACK_ORDER: readonly OpeningStockColumnMeaning[] = OPENING_STOCK_COLUMNS.flatMap((meaning) => {
+  if (isBatchDetailColumn(meaning.number)) {
+    return [];
+  }
+  if (meaning.number !== OS_COL.BatchNo) {
+    return [meaning];
+  }
+  return [meaning, ...OPENING_STOCK_COLUMNS.filter((candidate) => isBatchDetailColumn(candidate.number))];
+});
 
 const BY_NUMBER = new Map(OPENING_STOCK_COLUMNS.map((meaning) => [meaning.number, meaning]));
 
@@ -164,7 +201,7 @@ export function resolveOpeningStockColumns(
   rows: readonly UiTableColumnRow[] | undefined,
 ): ResolvedOpeningStockColumn[] {
   if (!rows || rows.length === 0) {
-    return OPENING_STOCK_COLUMNS.map((meaning, index) => ({
+    return FALLBACK_ORDER.map((meaning, index) => ({
       ...meaning,
       header: meaning.fallbackHeader,
       widthPx: DEFAULT_COLUMN_PX,
@@ -201,14 +238,64 @@ export function resolveOpeningStockColumns(
 }
 
 /**
+ * Size / Colour / Model shown exactly while the company numbers its own
+ * batches, whatever the layout says — Qt `applyBatchDetailColumns()`, re-run
+ * after every layout load. A layout that has no row for one of them (a
+ * deployment whose ui table 27 predates the textile columns) gets it straight
+ * after Batch No, with the .ui's heading, rather than not at all: the join
+ * would otherwise drop it and the line could never take a size.
+ */
+export function withBatchDetailColumns(
+  columns: readonly ResolvedOpeningStockColumn[],
+  autoBatchNo: boolean,
+): ResolvedOpeningStockColumn[] {
+  const out = columns.map((column) =>
+    isBatchDetailColumn(column.number) ? { ...column, visible: autoBatchNo } : column,
+  );
+  if (!autoBatchNo) {
+    return out;
+  }
+  const missing = BATCH_DETAIL_NUMBERS.filter((number) => !out.some((column) => column.number === number));
+  if (missing.length === 0) {
+    return out;
+  }
+  const batchAt = out.findIndex((column) => column.number === OS_COL.BatchNo);
+  const position = batchAt >= 0 ? out[batchAt].position : Number.MAX_SAFE_INTEGER;
+  const added = missing.flatMap((number): ResolvedOpeningStockColumn[] => {
+    const meaning = BY_NUMBER.get(number);
+    return meaning
+      ? [
+          {
+            ...meaning,
+            header: meaning.fallbackHeader,
+            widthPx: DEFAULT_COLUMN_PX,
+            visible: true,
+            focus: false,
+            necessity: false,
+            // Beside Batch No; the grid settings' sort is stable, so they stay after it.
+            position,
+            columnNumber: number,
+            // No layout row: nothing to save a width or a position against.
+            columnId: null,
+          },
+        ]
+      : [];
+  });
+  out.splice(batchAt >= 0 ? batchAt + 1 : out.length, 0, ...added);
+  return out;
+}
+
+/**
  * Whether a cell's editor opens — the delegate's `createEditor()` refusals, in
  * its order. `documentEditable` is the screen's own gate: a POSTED or CANCELLED
- * voucher, or a draft opened read-only, opens nothing.
+ * voucher, or a draft opened read-only, opens nothing. `autoBatchNo` is
+ * `stock.auto_batch_no`, which Size / Colour / Model open under.
  */
 export function isCellEditable(
   column: Pick<OpeningStockColumnMeaning, "kind" | "write" | "read" | "number">,
   line: OpeningStockLine,
   documentEditable: boolean,
+  autoBatchNo = false,
 ): boolean {
   if (!documentEditable) {
     return false;
@@ -228,7 +315,7 @@ export function isCellEditable(
   }
   // The item decides these, not the screen.
   if (column.read !== "trackedBy" && column.read !== "computedLineNo"
-    && isUntrackedIdentityField(line, column.read)) {
+    && isUntrackedIdentityField(line, column.read, autoBatchNo)) {
     return false;
   }
   if (column.kind === "supplierLookup") {
@@ -244,11 +331,12 @@ export function isCellEditable(
 export function isCellGreyed(
   column: Pick<OpeningStockColumnMeaning, "read">,
   line: OpeningStockLine,
+  autoBatchNo = false,
 ): boolean {
   if (!hasItem(line) || column.read === "trackedBy" || column.read === "computedLineNo") {
     return false;
   }
-  return isUntrackedIdentityField(line, column.read);
+  return isUntrackedIdentityField(line, column.read, autoBatchNo);
 }
 
 /**
@@ -274,17 +362,24 @@ const TRACKED_STOP: Partial<Record<number, TrackFacet>> = {
  * with an item: Qty, the identity cells its item is TRACKED by, then Cost /
  * Unit — and on to the next row's Barcode. A greyed cell is never a stop, so
  * Enter does not land where nothing can be typed; every other cell (Free, Tax,
- * Bucket …) stays editable by click.
+ * Bucket …) stays editable by click. Size, Colour and Model are stops right
+ * after Batch No under the same rule that opens them.
  */
 export function isEnterStop(
   column: Pick<OpeningStockColumnMeaning, "number">,
-  line: Pick<OpeningStockLine, "itemId" | "trackSignature">,
+  line: Pick<OpeningStockLine, "itemId" | "trackSignature" | "batchTyped">,
+  autoBatchNo = false,
 ): boolean {
   const itemOnRow = hasItem(line);
   switch (column.number) {
     case OS_COL.Barcode:
     case OS_COL.Description:
       return !itemOnRow;
+    // Textile: the line's size, colour and model, when it takes them.
+    case OS_COL.SizeName:
+    case OS_COL.ColourName:
+    case OS_COL.Model:
+      return itemOnRow && !isLockedBatchDetail(line, autoBatchNo);
     case OS_COL.Qty:
     case OS_COL.CostPerUnit:
       return itemOnRow;

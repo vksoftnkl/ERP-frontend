@@ -23,11 +23,17 @@
  * on the Item or Supplier cell opens its picker with the key; Tab leaves the
  * grid. The document keys (Ctrl+Enter, Ctrl+S …) are the screen's shared set —
  * this grid only lets them through.
+ *
+ * Textile (Qt 74b755c): Size, Colour and Model are `BatchDetailCell`s over
+ * `<datalist>`s — the two lists, and one list of earlier models per item on
+ * screen. They open (and are Enter stops) only while the company numbers its
+ * own batches, on an item tracked by batch whose batch number was not typed.
  */
 import { useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { cx } from "@/components/design-system/cx";
+import { NAME_MAX_LENGTH } from "@/features/masters/inventory/item-attribute/item-attribute";
 import { GridCell } from "@/features/sales/quotation/components/grid-cell";
-import { focusCell, moveCellFocus } from "@/features/sales/quotation/components/grid-focus";
+import { focusCell, focusNextStopFrom, moveCellFocus } from "@/features/sales/quotation/components/grid-focus";
 import type { GridCellKind } from "@/features/sales/quotation/quotation.constants";
 import {
   GRID_FIELD_ATTR,
@@ -44,15 +50,23 @@ import {
   type OpeningStockColumnKind,
   type ResolvedOpeningStockColumn,
 } from "../opening-stock.columns";
-import { GRID_DATE_PLACEHOLDER, OPENING_STOCK_GRID_NAME, STOCK_BUCKETS } from "../opening-stock.constants";
 import {
+  GRID_DATE_PLACEHOLDER,
+  LINE_MODEL_MAX_LENGTH,
+  OPENING_STOCK_GRID_NAME,
+  STOCK_BUCKETS,
+} from "../opening-stock.constants";
+import {
+  choiceNames,
   hasItem,
   lineNumbersOf,
   qtyDecimals,
   ratePrecision,
+  takesBatchDetail,
   trackedBy,
 } from "../opening-stock.lines";
-import type { OpeningStockLine, OpeningStockLineField } from "../opening-stock.types";
+import type { BatchDetailChoices, OpeningStockLine, OpeningStockLineField } from "../opening-stock.types";
+import { BatchDetailCell } from "./batch-detail-cell";
 import styles from "../page.module.scss";
 
 const ROW_ACTION_PX = 30;
@@ -67,6 +81,31 @@ const BLANK_ROW_FIELDS = new Set(["barcode", "itemName"]);
 
 /** The td attribute naming its column — what a click on a blank row reads. */
 const CELL_COLUMN_ATTR = "data-os-column";
+
+/** The `<datalist>` ids the textile cells complete from. */
+const SIZE_LIST_ID = "opening-stock-sizes";
+const COLOUR_LIST_ID = "opening-stock-colours";
+function modelListId(itemId: string): string {
+  return `opening-stock-models-${itemId}`;
+}
+
+/**
+ * Why a greyed cell is shut, for its hover text. Size / Colour / Model are shut
+ * by the batch number, not only by the item.
+ */
+function greyedTitle(
+  column: Pick<ResolvedOpeningStockColumn, "kind">,
+  line: OpeningStockLine,
+  autoBatchNo: boolean,
+): string {
+  if (column.kind === "choice" || column.kind === "model") {
+    if (takesBatchDetail(autoBatchNo, line.trackSignature) && line.batchTyped) {
+      return "This line's batch number was typed — size, colour and model go only with a batch number the system gives. Empty the batch cell to key them.";
+    }
+    return `Not tracked by batch — size, colour and model go only with a batch, and this item's tracking policy is ${trackedBy(line.trackSignature)}`;
+  }
+  return `Not tracked — this item's tracking policy is ${trackedBy(line.trackSignature)}`;
+}
 
 const TABBABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -211,7 +250,13 @@ export type OpeningStockGridProps = {
   /** A heading dragged to a new width — saved from the right-click menu. */
   resizingKey?: string | null;
   onColumnResizeStart?: (event: ReactMouseEvent<HTMLElement>, columnKey: string) => void;
+  /** `stock.auto_batch_no` — Size / Colour / Model open only under it. */
+  autoBatchNo?: boolean;
+  /** The Size and Colour lists and each item's earlier models. */
+  batchDetail?: BatchDetailChoices;
 };
+
+const NO_BATCH_DETAIL: BatchDetailChoices = { sizes: [], colours: [], modelsByItem: {} };
 
 export function OpeningStockGrid(props: OpeningStockGridProps) {
   const {
@@ -232,6 +277,8 @@ export function OpeningStockGrid(props: OpeningStockGridProps) {
     onContextMenu,
     resizingKey = null,
     onColumnResizeStart,
+    autoBatchNo = false,
+    batchDetail = NO_BATCH_DETAIL,
   } = props;
 
   const visible = useMemo(() => columns.filter((column) => column.visible), [columns]);
@@ -240,6 +287,16 @@ export function OpeningStockGrid(props: OpeningStockGridProps) {
     [visible],
   );
   const lineNumbers = useMemo(() => lineNumbersOf(lines), [lines]);
+  const sizeNames = useMemo(() => choiceNames(batchDetail.sizes), [batchDetail.sizes]);
+  const colourNames = useMemo(() => choiceNames(batchDetail.colours), [batchDetail.colours]);
+  /** A datalist per item on screen that has earlier models — a Model cell offers its own item's. */
+  const modelLists = useMemo(() => {
+    const ids = new Set(lines.filter(hasItem).map((line) => line.itemId));
+    return [...ids].flatMap((itemId) => {
+      const models = batchDetail.modelsByItem[itemId] ?? [];
+      return models.length ? [{ itemId, models }] : [];
+    });
+  }, [batchDetail.modelsByItem, lines]);
   const tableWidth = useMemo(
     () => visible.reduce((total, column) => total + column.widthPx, ROW_ACTION_PX),
     [visible],
@@ -366,6 +423,27 @@ export function OpeningStockGrid(props: OpeningStockGridProps) {
 
   return (
     <div className={quotationStyles.gridViewport} data-erp-table-viewport="true" onContextMenu={onContextMenu}>
+      {autoBatchNo ? (
+        <>
+          <datalist id={SIZE_LIST_ID}>
+            {sizeNames.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
+          <datalist id={COLOUR_LIST_ID}>
+            {colourNames.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
+          {modelLists.map(({ itemId, models }) => (
+            <datalist key={itemId} id={modelListId(itemId)}>
+              {models.map((model) => (
+                <option key={model} value={model} />
+              ))}
+            </datalist>
+          ))}
+        </>
+      ) : null}
       <table className={quotationStyles.grid} style={{ width: scaledWidth(tableWidth) }}>
         <colgroup>
           {visible.map((column) => (
@@ -446,8 +524,8 @@ export function OpeningStockGrid(props: OpeningStockGridProps) {
                 }}
               >
                 {visible.map((column, columnIndex) => {
-                  const cellEditable = isCellEditable(column, line, editable);
-                  const greyed = isCellGreyed(column, line);
+                  const cellEditable = isCellEditable(column, line, editable, autoBatchNo);
+                  const greyed = isCellGreyed(column, line, autoBatchNo);
                   const raw =
                     column.read === "trackedBy"
                       ? hasItem(line)
@@ -480,72 +558,119 @@ export function OpeningStockGrid(props: OpeningStockGridProps) {
                       key={column.key}
                       {...{ [CELL_COLUMN_ATTR]: column.key }}
                       className={cx(greyed && styles.untrackedCell)}
-                      title={
-                        greyed
-                          ? `Not tracked — this item's tracking policy is ${trackedBy(line.trackSignature)}`
-                          : undefined
-                      }
+                      title={greyed ? greyedTitle(column, line, autoBatchNo) : undefined}
                     >
-                      <GridCell
-                        kind={cellKindOf(column.kind)}
-                        value={column.kind === "bucket" ? String(raw ?? "") : value}
-                        align={column.align}
-                        precision={precision}
-                        editable={cellEditable}
-                        invalid={invalid}
-                        options={column.kind === "bucket" ? BUCKET_OPTIONS : undefined}
-                        placeholder={
-                          column.kind === "date" && cellEditable
-                            ? GRID_DATE_PLACEHOLDER
-                            : column.kind === "itemLookup"
-                              ? isTrailing && editable
-                                ? "Press Enter to pick…"
-                                : ""
-                              : column.key === "barcode" && isTrailing && editable
-                                ? "Scan, or type + ↓"
-                                : undefined
-                        }
-                        gridName={OPENING_STOCK_GRID_NAME}
-                        rowKey={line.key}
-                        fieldKey={column.key}
-                        columnIndex={columnIndex}
-                        focusStop={isEnterStop(column, line)}
-                        dropBufferOnKeys={column.key === "barcode" ? BARCODE_SEARCH_KEYS : undefined}
-                        onOpenPicker={() => openPicker(column.kind, line, "")}
-                        onCommit={(text) => {
-                          if (column.write) {
-                            onSetField(line.key, column.write, text);
+                      {column.kind === "choice" || column.kind === "model" ? (
+                        <BatchDetailCell
+                          value={String(raw ?? "")}
+                          editable={cellEditable}
+                          invalid={invalid}
+                          listId={
+                            column.kind === "model"
+                              ? modelListId(line.itemId)
+                              : column.key === "sizeName"
+                                ? SIZE_LIST_ID
+                                : COLOUR_LIST_ID
                           }
-                        }}
-                        onKeyDown={(event) => {
-                          if (column.key !== "barcode") {
-                            return;
+                          // The masters' name limit (both are 50); the model is sbd_model's 100.
+                          maxLength={column.kind === "model" ? LINE_MODEL_MAX_LENGTH : NAME_MAX_LENGTH}
+                          title={
+                            column.kind === "choice" && cellEditable && !String(raw ?? "")
+                              ? `Pick a ${column.key === "sizeName" ? "size" : "colour"}, or type one that is not on the list yet`
+                              : undefined
                           }
-                          const input = event.target as HTMLInputElement;
-                          const modified = event.ctrlKey || event.metaKey || event.altKey;
-                          if (event.key === "Enter" && !modified) {
-                            // Enter is the BARCODE check and nothing else: the
-                            // cell has committed the scan, and the commit
-                            // resolves it. The walk does not move on from here
-                            // — a resolved scan lands on the row's Qty itself.
-                            event.preventDefault();
-                            event.stopPropagation();
-                            if (!input.value.trim()) {
-                              moveCellFocus(OPENING_STOCK_GRID_NAME, input, 1);
+                          gridName={OPENING_STOCK_GRID_NAME}
+                          rowKey={line.key}
+                          fieldKey={column.key}
+                          columnIndex={columnIndex}
+                          focusStop={isEnterStop(column, line, autoBatchNo)}
+                          onCommit={(text) => {
+                            if (column.write) {
+                              onSetField(line.key, column.write, text);
                             }
-                            return;
+                          }}
+                        />
+                      ) : (
+                        <GridCell
+                          kind={cellKindOf(column.kind)}
+                          value={column.kind === "bucket" ? String(raw ?? "") : value}
+                          align={column.align}
+                          precision={precision}
+                          editable={cellEditable}
+                          invalid={invalid}
+                          options={column.kind === "bucket" ? BUCKET_OPTIONS : undefined}
+                          placeholder={
+                            column.kind === "date" && cellEditable
+                              ? GRID_DATE_PLACEHOLDER
+                              : column.kind === "itemLookup"
+                                ? isTrailing && editable
+                                  ? "Press Enter to pick…"
+                                  : ""
+                                : column.key === "barcode" && isTrailing && editable
+                                  ? "Scan, or type + ↓"
+                                  : undefined
                           }
-                          if (event.key === "ArrowDown" && !modified && !event.shiftKey) {
-                            // The cell is the item SEARCH too: what was typed
-                            // goes to the list. The cell has dropped it
-                            // (`dropBufferOnKeys`), so nothing is committed as
-                            // a code — the input still shows it here.
-                            event.preventDefault();
-                            event.stopPropagation();
-                            onSearchItems(line.key, input.value);
-                          }
-                        }}
-                      />
+                          gridName={OPENING_STOCK_GRID_NAME}
+                          rowKey={line.key}
+                          fieldKey={column.key}
+                          columnIndex={columnIndex}
+                          focusStop={isEnterStop(column, line, autoBatchNo)}
+                          dropBufferOnKeys={column.key === "barcode" ? BARCODE_SEARCH_KEYS : undefined}
+                          onOpenPicker={() => openPicker(column.kind, line, "")}
+                          onCommit={(text) => {
+                            if (column.write) {
+                              onSetField(line.key, column.write, text);
+                            }
+                          }}
+                          onKeyDown={(event) => {
+                            const modified = event.ctrlKey || event.metaKey || event.altKey;
+                            if (
+                              column.key === "batchNo" &&
+                              autoBatchNo &&
+                              event.key === "Enter" &&
+                              !modified &&
+                              !event.shiftKey
+                            ) {
+                              // The commit just made may have opened or shut
+                              // Size / Colour / Model (a typed number locks
+                              // them, a blank one opens them), so the walk waits
+                              // for the render and steps on from there — Qt's
+                              // focus filter reads the line after the commit too.
+                              event.preventDefault();
+                              event.stopPropagation();
+                              window.requestAnimationFrame(() =>
+                                focusNextStopFrom(OPENING_STOCK_GRID_NAME, line.key, "batchNo"),
+                              );
+                              return;
+                            }
+                            if (column.key !== "barcode") {
+                              return;
+                            }
+                            const input = event.target as HTMLInputElement;
+                            if (event.key === "Enter" && !modified) {
+                              // Enter is the BARCODE check and nothing else: the
+                              // cell has committed the scan, and the commit
+                              // resolves it. The walk does not move on from here
+                              // — a resolved scan lands on the row's Qty itself.
+                              event.preventDefault();
+                              event.stopPropagation();
+                              if (!input.value.trim()) {
+                                moveCellFocus(OPENING_STOCK_GRID_NAME, input, 1);
+                              }
+                              return;
+                            }
+                            if (event.key === "ArrowDown" && !modified && !event.shiftKey) {
+                              // The cell is the item SEARCH too: what was typed
+                              // goes to the list. The cell has dropped it
+                              // (`dropBufferOnKeys`), so nothing is committed as
+                              // a code — the input still shows it here.
+                              event.preventDefault();
+                              event.stopPropagation();
+                              onSearchItems(line.key, input.value);
+                            }
+                          }}
+                        />
+                      )}
                     </td>
                   );
                 })}

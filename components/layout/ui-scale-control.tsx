@@ -20,6 +20,7 @@ import {
   type UiScalePreference,
 } from "@/lib/ui-scale";
 
+import HeaderSelect from "./header-select";
 import styles from "./erp-header.module.css";
 
 const AUTO_VALUE = "auto";
@@ -50,8 +51,8 @@ export default function UiScaleControl() {
   }, []);
 
   return (
-    <select
-      className={`${styles.contextSelect} ${styles.uiScaleSelect}`}
+    <HeaderSelect
+      className={styles.uiScaleSelect}
       value={preference === AUTO_VALUE ? AUTO_VALUE : String(preference)}
       onChange={handleChange}
       aria-label="Interface size"
@@ -63,6 +64,6 @@ export default function UiScaleControl() {
           {Math.round(scale * 100)}%
         </option>
       ))}
-    </select>
+    </HeaderSelect>
   );
 }

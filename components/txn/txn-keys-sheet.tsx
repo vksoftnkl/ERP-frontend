@@ -18,7 +18,8 @@ export type TxnKeysSheetProps = {
   lines?: readonly TxnKeyRow[];
 };
 
-function Section({ heading, rows }: { heading: string; rows: readonly TxnKeyRow[] }) {
+/** One headed block of rows — also the app-wide key sheet's building block. */
+export function TxnKeysSheetSection({ heading, rows }: { heading: string; rows: readonly TxnKeyRow[] }) {
   if (rows.length === 0) {
     return null;
   }
@@ -51,8 +52,8 @@ export function TxnKeysSheet({ open, onClose, document, lines = [] }: TxnKeysShe
       }
     >
       <div className={styles.sheet}>
-        <Section heading="Document" rows={document} />
-        <Section heading="Lines" rows={lines} />
+        <TxnKeysSheetSection heading="Document" rows={document} />
+        <TxnKeysSheetSection heading="Lines" rows={lines} />
       </div>
     </ModalShell>
   );

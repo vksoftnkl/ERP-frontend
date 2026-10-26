@@ -2,6 +2,7 @@
  * Stock Adjustment — the draft to the wire and back: buildLines / buildPayload,
  * and applyFetchedVoucher (applyHeader + applyLines) of the Qt screen. Pure.
  */
+import { batchDetailItemText } from "@/features/stocks/shared/batch-detail";
 import { kindFromCode, RATE_SOURCES, saveType } from "./stock-adjustment.constants";
 import { cellNumber, dateFromWire, dateToWire, qtyCell } from "./stock-adjustment.format";
 import {
@@ -11,6 +12,7 @@ import {
   isInward,
   lineFactor,
   rowHasItem,
+  stampsFromHeader,
   tracks,
 } from "./stock-adjustment.state";
 import type {
@@ -187,7 +189,8 @@ export function lineFromPayload(payload: StockAdjustmentLinePayload): Adjustment
     id: payload.sviId || null,
     itemId: payload.itemId ?? "",
     itemCode: payload.itemCode ?? "",
-    itemName: payload.itemName ?? "",
+    // A textile batch's size, colour and model ride after the name.
+    itemName: batchDetailItemText(payload),
     uomId: payload.uomId ?? "",
     uomName: payload.unitName ?? "",
     baseUomId: payload.baseUomId ?? "",
@@ -260,13 +263,17 @@ export function draftFromPayload(
     status,
     mode: openForEdit && status === "DRAFT" ? "entry" : "browse",
     lines,
+    stamps: stampsFromHeader(header),
+    notice: "",
     dirty: false,
   };
 }
 
 /**
  * The save's answer. The server owns the line ids; the screen keeps its own
- * lines (with their availability and averages) and takes just the ids back.
+ * lines (with their availability and averages) and takes just the ids back —
+ * and the header's audit, so a draft saved just now already says who
+ * created it.
  */
 export function applySaveResult(
   draft: AdjustmentDraft,
@@ -288,6 +295,7 @@ export function applySaveResult(
     status,
     mode: status === "DRAFT" ? draft.mode : "browse",
     lines: draft.lines.map((line) => (ids.has(line.key) ? { ...line, id: ids.get(line.key) ?? null } : line)),
+    stamps: result.header?.createdOn ? stampsFromHeader(result.header) : draft.stamps,
     serverProblems: {},
     sentKeys: [...sentKeys],
     dirty: false,

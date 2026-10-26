@@ -115,8 +115,11 @@ export function validateBeforeSave(draft: OpeningStockDraft): OpeningStockViolat
  * accepts is how a warning gets ignored.
  *
  * A NOTICE, never a refusal: a draft is allowed to be incomplete.
+ *
+ * `autoBatchNo` — `stock.auto_batch_no`: a blank batch is then the server's to
+ * fill at save, not something missing (Qt 74b755c).
  */
-export function missingIdentityLines(lines: readonly OpeningStockLine[]): string[] {
+export function missingIdentityLines(lines: readonly OpeningStockLine[], autoBatchNo = false): string[] {
   const out: string[] = [];
   lines.forEach((line, index) => {
     if (!hasItem(line)) {
@@ -124,7 +127,7 @@ export function missingIdentityLines(lines: readonly OpeningStockLine[]): string
     }
     const signature = line.trackSignature;
     const missing: string[] = [];
-    if (tracks(signature, TRACK.Batch) && !line.batchNo.trim()) missing.push("batch");
+    if (tracks(signature, TRACK.Batch) && !line.batchNo.trim() && !autoBatchNo) missing.push("batch");
     if (tracks(signature, TRACK.Expiry) && !line.expiryDate.trim()) missing.push("expiry");
     if (tracks(signature, TRACK.Mrp) && line.mrp <= 0) missing.push("MRP");
     if (tracks(signature, TRACK.Serial) && !line.serialNo.trim()) missing.push("serial no");

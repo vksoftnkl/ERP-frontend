@@ -4,14 +4,22 @@
  * Panel 12 — the DAMAGED bucket of this godown grouped by the lot's supplier:
  * what goes back to whom. Inline under a Move stock document. On a Move draft,
  * Enter / double-click on a row keys a line that moves that stock back.
+ *
+ * As tall as its rows (one blank row when nothing is held), at most four — the
+ * rest scroll. Uncapped it pushed the line grid's cards off the screen (user,
+ * 2026-10-24). Measured off the rendered rows, as the Qt panel sums its row
+ * heights; offsetHeight is already in layout pixels under the app's zoom.
  */
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { formatCurrency } from "@/domain/pricing";
 import quotationStyles from "@/features/sales/quotation/page.module.scss";
 import { dateFromWire, qtyCell } from "../stock-adjustment.format";
 import { damagedPanelRows, damagedPanelTitle } from "../stock-adjustment.pick";
 import type { PickStockRow } from "../stock-adjustment.types";
 import styles from "../page.module.scss";
+
+/** Rows the panel shows before it scrolls (Qt `qBound(1, rows, 4)`). */
+const DAMAGED_PANEL_MAX_ROWS = 4;
 
 export function DamagedPanel({
   rows,
@@ -31,11 +39,31 @@ export function DamagedPanel({
 }) {
   const [active, setActive] = useState(-1);
   const sorted = damagedPanelRows(hasGodown ? rows : []);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const shown = Math.min(Math.max(sorted.length, 1), DAMAGED_PANEL_MAX_ROWS);
+
+  // Written straight onto the viewport: a measurement of the DOM, not state.
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      return;
+    }
+    const head = viewport.querySelector("thead")?.offsetHeight ?? 0;
+    const body = Array.from(viewport.querySelectorAll<HTMLTableRowElement>("tbody > tr"))
+      .slice(0, shown)
+      .reduce((sum, row) => sum + row.offsetHeight, 0);
+    // The viewport's own border (and a sideways scrollbar), top and bottom.
+    const frame = viewport.offsetHeight - viewport.clientHeight;
+    if (head + body > 0) {
+      viewport.style.maxHeight = `${head + body + frame}px`;
+    }
+  }, [loading, shown]);
 
   return (
     <section className={styles.damagedPanel}>
       <h3 className={styles.cardTitle}>{damagedPanelTitle(sorted.length, godownName, hasGodown)}</h3>
       <div
+        ref={viewportRef}
         className={styles.damagedViewport}
         tabIndex={-1}
         title="Enter / double-click a row to move that stock back (a Move stock line from Damaged)."

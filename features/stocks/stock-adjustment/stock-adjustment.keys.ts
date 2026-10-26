@@ -1,38 +1,39 @@
 /**
- * The voucher's keyboard — which window key runs which action, decided here so
- * the entry view only wires the answer to its handlers.
+ * The voucher's keyboard. The document keys are the shared transaction set
+ * (`lib/txn-keys.ts`, Qt `TxnKeys`), bound in the entry view with
+ * `useTxnKeys` exactly as Opening Stock binds them: Alt+N New, Ctrl+S Save
+ * Draft, Ctrl+Enter Save & Post (it still asks), F2 Edit, Alt+X Cancel,
+ * Ctrl+H History, Ctrl+O the list, Esc Close, Alt+PgUp / Alt+PgDn the
+ * document before / after, F1 the sheet of them (user, 2026-10-24).
  *
- * The function keys follow the house screens: F5 Save (and post), F7 New, F8
- * the list, F2 Edit on a saved draft (and, while keying, pick from stock — the
- * grid's own F2), F3 Cancel (the list's F3), F1 the panel walk, Esc leaves.
- * The Save draft / Validate buttons get the two free keys, F4 and F9. F6 and
- * Ctrl+Enter belong to Save & Print, which waits for stock-document printing.
+ * What is left here is the screen's OWN: Pick from stock moved from F2 to F12
+ * — NexTable's key for it — because F2 is Edit on every screen; the F1 sheet's
+ * rows; and the Type row's arrows.
  *
- * A key is "swallowed" (`preventDefault`) whenever it is one of the screen's
- * own, even when it does nothing right now — a held or refused F5 must never
- * fall through to the browser's reload and take the unsaved document with it.
- *
- * Each key obeys its button's gate — the document rights ANDed with the status
- * (Qt's `applyStatus()`). Save is save-AND-post, so F5 is the Post right.
+ * F12 under a dialog is left alone: there it is only DevTools. Everywhere else
+ * on the voucher it is swallowed, picking only while a DRAFT is being keyed.
+ * Bare F5 — Save until this rework — is swallowed always, so a habit press
+ * cannot reload the page and take the unsaved document with it.
  */
-import type { DocumentRights } from "@/lib/permissions/document-rights";
-import type { FormMode } from "./stock-adjustment.types";
+import { keySheetRows, type TxnKeyRow } from "@/lib/txn-keys";
 
-export type EntryAction =
-  | "save"
-  | "saveDraft"
-  | "validate"
-  | "print"
-  | "new"
-  | "list"
-  | "close"
-  | "edit"
-  | "pick"
-  | "cancel"
-  | "panelNext"
-  | "panelPrev";
+/** F1 — the grid's own keys, under "Lines" (Qt `installHelp()`). */
+export const LINE_KEYS: readonly TxnKeyRow[] = [
+  { label: "Pick from stock (the line's lot)", keyText: "F12" },
+  { label: "Item list (type a name in Barcode)", keyText: "↓" },
+  { label: "Add a line", keyText: "+" },
+  { label: "Remove a line", keyText: "−" },
+  { label: "Next cell", keyText: "Enter" },
+  { label: "Leave the grid", keyText: "Tab" },
+];
 
-export type EntryKeyEvent = {
+/** The document keys this screen binds, in the Qt `bind()` order, then its line keys. */
+export const KEY_SHEET = keySheetRows(
+  ["new", "saveDraft", "post", "edit", "cancelDoc", "history", "open", "close", "previous", "next"],
+  LINE_KEYS,
+);
+
+export type ScreenKeyEvent = {
   key: string;
   ctrlKey: boolean;
   altKey: boolean;
@@ -42,83 +43,37 @@ export type EntryKeyEvent = {
   defaultPrevented: boolean;
 };
 
-export type EntryKeyState = {
+export type ScreenKeyState = {
   /** Something sits over the voucher (a dialog, the grid's settings menu): it owns the keyboard. */
   overlayOpen: boolean;
-  mode: FormMode;
-  status: string;
-  saved: boolean;
-  busy: boolean;
-  /** The menu's rights as document rights; the status is ANDed in here. */
-  rights: DocumentRights;
+  /** A DRAFT open for keying — the only state a pick may change a line in. */
+  editable: boolean;
 };
 
-export type EntryKeyResult = { action: EntryAction | null; swallow: boolean };
+export type ScreenKeyResult = { action: "pick" | null; swallow: boolean };
 
-/** The function keys this screen binds — never handed to the browser. */
-const SCREEN_KEYS = new Set(["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F12"]);
+const NOTHING: ScreenKeyResult = { action: null, swallow: false };
 
-const NOTHING: EntryKeyResult = { action: null, swallow: false };
-
-export function entryKeyAction(event: EntryKeyEvent, state: EntryKeyState): EntryKeyResult {
-  const own = SCREEN_KEYS.has(event.key);
-  // Under a dialog, and on auto-repeat (one held F5 would post a dozen times),
-  // nothing runs — but the screen's keys still stay away from the browser.
-  // F12 is left alone under a dialog: there it is only DevTools.
-  if (state.overlayOpen) {
-    return { action: null, swallow: own && event.key !== "F12" };
-  }
-  if (event.repeat) {
-    return { action: null, swallow: own };
-  }
-  // An open dropdown, a half-keyed cell or the grid's own F2 claimed it first.
-  if (event.defaultPrevented || event.altKey) {
+/**
+ * The window keys this screen keeps for itself, beyond the shared set. The
+ * grid's own F12 (on the line it is pressed on) claims the key first; this
+ * one is for F12 pressed anywhere else — the line last worked on picks.
+ */
+export function screenKeyAction(event: ScreenKeyEvent, state: ScreenKeyState): ScreenKeyResult {
+  if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
     return NOTHING;
   }
-  const draft = state.status === "DRAFT";
-  const posted = state.status === "POSTED";
-  const editable = state.mode === "entry" && draft;
-  const { rights } = state;
-  const act = (action: EntryAction | null): EntryKeyResult => ({ action, swallow: true });
-
-  if (event.ctrlKey || event.metaKey) {
-    // Both Enter keys arrive as "Enter".
-    return event.key === "Enter" && !event.shiftKey ? act("print") : NOTHING;
+  if (event.key === "F5") {
+    return { action: null, swallow: true };
   }
-  if (event.shiftKey) {
-    return event.key === "F1" ? act("panelPrev") : NOTHING;
+  if (event.key !== "F12" || state.overlayOpen) {
+    return NOTHING;
   }
-  switch (event.key) {
-    case "F1":
-      return act("panelNext");
-    case "F2":
-      if (editable) {
-        return act("pick");
-      }
-      return act(draft && state.saved && state.mode === "browse" && rights.mayEdit && !state.busy ? "edit" : null);
-    case "F3":
-      return act(
-        state.saved && (draft || posted) && rights.mayCancelDocument(posted) && !state.busy ? "cancel" : null,
-      );
-    case "F4":
-      return act(draft && rights.maySaveDraft(state.saved) && !state.busy ? "saveDraft" : null);
-    case "F5":
-      return act(draft && rights.mayPost && !state.busy ? "save" : null);
-    case "F6":
-      return act("print");
-    case "F7":
-      return act(rights.mayStartNew && !state.busy ? "new" : null);
-    case "F8":
-      return act(state.busy ? null : "list");
-    case "F9":
-      return act(draft && !state.busy ? "validate" : null);
-    case "F12":
-      return act(editable ? "pick" : null);
-    case "Escape":
-      return act(state.busy ? null : "close");
-    default:
-      return NOTHING;
+  // Held down, one F12 would open the dialog under itself again and again.
+  if (event.repeat || event.defaultPrevented) {
+    return { action: null, swallow: true };
   }
+  return { action: state.editable ? "pick" : null, swallow: true };
 }
 
 /**

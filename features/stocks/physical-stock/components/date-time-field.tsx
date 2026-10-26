@@ -49,6 +49,8 @@ export function DateTimeField({ id, label, value, disabled, title, onChange }: D
           inputMode="numeric"
           autoComplete="off"
           disabled={disabled}
+          // A stop on the header's Enter / Tab walk, like every other field.
+          data-quotation-focus={id}
           onChange={(event) => {
             setTyping(event.target.value);
             const parsed = fromDisplayDateTime(event.target.value);

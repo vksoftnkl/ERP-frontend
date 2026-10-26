@@ -7,24 +7,55 @@
  *
  * The sheet is GENERATED, not keyed: every line is a holding off
  * `/stock/physical/count-sheet` — drawn whole by Load Sheet (F9), or resolved
- * one item at a time from the Item picker or a scanned barcode on the blank
- * row. The operator types ONE number per line, what was found; only the
- * difference posts.
+ * one item at a time from the Item picker, a scanned barcode or a textile
+ * batch label on the blank row. The operator types ONE number per line, what
+ * was found; only the difference posts.
+ *
+ * ── Layout (Qt 74b755c, "same behaviour as Opening Stock", 2026-10-24) ─────
+ * The title block on the left — name, scope, status pill, who created / posted
+ * it and the latest notice — and the sheet's details on the right in a card:
+ * Sheet No, Count Date, Rate Source and the godown in its own highlighted box
+ * at the right end (red until chosen: nothing can be counted before it is);
+ * Reason, Your Ref No, Remarks; the freeze window and Blind count. Enter and
+ * Tab follow the reading order — Date, Rate Source, Godown, Reason, Ref No,
+ * Remarks, Freeze, Freeze From, Freeze To, Blind — then the grid.
+ *
+ * ── Keys: the shared transaction set (`lib/txn-keys`) ─────────────────────
+ * Alt+N New, Ctrl+S Save Draft, Ctrl+Enter Save & Post (it still asks), F2
+ * Edit, Alt+X Cancel, Ctrl+O Show List, Ctrl+H History, Esc Close, Alt+PgUp /
+ * Alt+PgDn the sheet before / after, F1 the key sheet. F9 stays this screen's
+ * own: drawing the sheet has no counterpart on the other documents. A key runs
+ * only what its button may. Plain Enter belongs to the grid — on a 300-line
+ * sheet it is the key pressed most. Bare F5 — Save Draft until this rework —
+ * is swallowed so a habit press cannot reload the page and lose the count.
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import { cx } from "@/components/design-system/cx";
+import { TxnHistoryDialog, type TxnHistoryTarget } from "@/components/txn/txn-history-dialog";
+import { TxnKeysSheet } from "@/components/txn/txn-keys-sheet";
+import { useTxnKeys } from "@/components/txn/use-txn-keys";
 import { useDropdownId } from "@/lib/configured-dropdowns";
+import { keySheetRows, withKey, type TxnKeyRow } from "@/lib/txn-keys";
 import type { ScreenMemoryOption } from "@/lib/use-screen-memory";
 import {
   CheckField,
   DateField,
   DropdownCombo,
-  GroupBox,
   ReadOnlyInput,
   SelectField,
   TextField,
 } from "@/features/sales/quotation/components/fields";
+import { moveHeaderFocus } from "@/features/sales/quotation/components/header-focus";
 import quotationStyles from "@/features/sales/quotation/page.module.scss";
+import { rowStops } from "../physical-stock.columns";
 import {
   CANCEL_REASON_PRESETS,
   GODOWN_DROPDOWN_KEY,
@@ -38,6 +69,7 @@ import {
   STOCK_REASON_POPUP_GRID_KEY,
 } from "../physical-stock.constants";
 import { formatNetQty, formatNetValue } from "../physical-stock.format";
+import { auditLinesOf } from "../physical-stock.state";
 import type { PhysicalStockDocKey } from "../physical-stock.types";
 import { HEADER_FIELD_IDS, usePhysicalStockDraft } from "../use-physical-stock-draft";
 import { AskTextModal } from "./ask-text-modal";
@@ -66,6 +98,8 @@ export type PhysicalStockEntryViewProps = {
    * screen — rather than on an explicit Create / Open.
    */
   memory?: ScreenMemoryOption;
+  /** `stock.auto_batch_no` — a scanned code may be a textile batch label. */
+  autoBatchNo?: boolean;
 };
 
 const RATE_SOURCE_OPTIONS = RATE_SOURCES.map((code) => ({ value: code, label: code }));
@@ -80,6 +114,24 @@ const REASON_PICKER_COLUMNS: readonly PickerColumn[] = [
   { field: "srm_code", header: "Code" },
   { field: "srm_direction", header: "Effect" },
 ];
+
+/** F1 — this screen's own keys, under "Lines" (Qt `installHelp()`). */
+const SCREEN_KEYS: readonly TxnKeyRow[] = [
+  { label: "Load the godown's holdings", keyText: "F9" },
+  { label: "Item list (type a name in Barcode)", keyText: "↓" },
+  { label: "Next cell", keyText: "Enter" },
+  { label: "Leave the grid", keyText: "Tab" },
+];
+
+/** The keys this screen binds, in the Qt `bind()` order. */
+const KEY_SHEET = keySheetRows(
+  ["new", "saveDraft", "post", "edit", "cancelDoc", "history", "open", "close", "previous", "next"],
+  SCREEN_KEYS,
+);
+
+/** Under the grid, on the left (Qt lblGridHint). */
+const GRID_HINT =
+  "F9 loads the godown's holdings  ·  Barcode: scan, or type a name and press ↓ for the item list  ·  type what is on the shelf in Counted Qty — 0 means empty, blank means not counted yet";
 
 function toneClass(status: string): string {
   if (status === STATUS_POSTED) {
@@ -98,8 +150,9 @@ export function PhysicalStockEntryView({
   onShowList,
   onClose,
   memory,
+  autoBatchNo = false,
 }: PhysicalStockEntryViewProps) {
-  const api = usePhysicalStockDraft({ memory });
+  const api = usePhysicalStockDraft({ memory, autoBatchNo });
   const { draft, totals, editable, busy, columns, rights } = api;
   const godownDropdownId = useDropdownId(GODOWN_DROPDOWN_KEY);
   const reasonDropdownId = useDropdownId(STOCK_REASON_DROPDOWN_KEY);
@@ -108,6 +161,9 @@ export function PhysicalStockEntryView({
     rowKey: string;
     initialQuery: string;
   } | null>(null);
+  const [keysOpen, setKeysOpen] = useState(false);
+  /** Held, not derived: the trail dialog refetches whenever its target object changes. */
+  const [historyTarget, setHistoryTarget] = useState<TxnHistoryTarget | null>(null);
   const working = busy !== "idle";
   const isDraft = draft.status === STATUS_DRAFT;
   const isPosted = draft.status === STATUS_POSTED;
@@ -115,10 +171,13 @@ export function PhysicalStockEntryView({
   // Document rights ANDed with the status, as Qt's `applyStatus()` does: Create
   // saves a new draft and Edit a saved one; Post gates Save & Post; Cancel
   // reverses a posted sheet and Delete drops a draft; New needs Create or Post.
+  // Load Sheet only on a draft open for entry. Each key obeys its button's gate.
   const canSaveDraft = isDraft && rights.maySaveDraft(saved);
   const canPost = isDraft && rights.mayPost;
   const canCancel = saved && (isDraft || isPosted) && rights.mayCancelDocument(isPosted);
   const canEdit = isDraft && rights.mayEdit;
+  const canLoadSheet = editable;
+  const godownChosen = Boolean(draft.godownId);
 
   // Scoped to this document's company and branch, so the picker cannot offer
   // an item that has no holding here anyway.
@@ -141,7 +200,7 @@ export function PhysicalStockEntryView({
   // Reopened on the count the operator left here (screen memory): it is already
   // on screen, so all that is left is to say so — once.
   const announceResume = useRef(Boolean(memory?.resume && api.resumed));
-  const { finishResume } = api;
+  const { finishResume, focusEntryStart } = api;
   useEffect(() => {
     if (!announceResume.current) {
       return;
@@ -149,6 +208,20 @@ export function PhysicalStockEntryView({
     announceResume.current = false;
     void finishResume();
   }, [finishResume]);
+
+  // The first show: the cursor goes where keying starts, not wherever the
+  // browser left it (Qt `showEvent()`) — unless a sheet is on its way from the
+  // list, whose load places it.
+  const shownRef = useRef(false);
+  useEffect(() => {
+    if (shownRef.current) {
+      return;
+    }
+    shownRef.current = true;
+    if (!pendingLoad) {
+      focusEntryStart();
+    }
+  }, [focusEntryStart, pendingLoad]);
 
   const showList = () =>
     api.guardDirty(
@@ -168,55 +241,103 @@ export function PhysicalStockEntryView({
       },
     );
 
-  // F9 draws the sheet, F8 shows the list, F5 saves a draft and Ctrl+Enter
-  // posts (one call, it still asks first) — a chord because Enter alone
-  // belongs to the grid, and on a 300-line sheet it is the key pressed most.
-  // Each key obeys its button's gate.
-  const keysRef = useRef({ api, editable, canSaveDraft, canPost, showList, picker });
+  /**
+   * Commit whatever is being typed into a cell before acting on the document,
+   * as the old F5 did: the save reads the draft.
+   */
+  const commitActiveCell = useCallback(() => {
+    const element = document.activeElement as HTMLElement | null;
+    if (element && element !== document.body && typeof element.blur === "function") {
+      element.blur();
+    }
+  }, []);
+
+  const runSave = (post: boolean) => {
+    // The keys land here too: a key runs only what its button may.
+    if (working || !(post ? canPost : canSaveDraft)) {
+      return;
+    }
+    commitActiveCell();
+    if (post) {
+      api.postDocument();
+    } else {
+      api.saveDraft();
+    }
+  };
+
+  const openHistory = () => {
+    if (!draft.svhId) {
+      return;
+    }
+    setHistoryTarget({
+      docId: draft.svhId,
+      companyId: draft.companyId,
+      accYear: draft.accYear,
+      refNo: draft.refno,
+    });
+  };
+
+  // ── Window keys — the shared transaction set ──────────────────────────
+  // A handler left null is not intercepted at all: its button is off. Quiet
+  // while the list is up over this screen, and under any dialog.
+  useTxnKeys(
+    {
+      new: !working && rights.mayStartNew ? api.newDocument : null,
+      saveDraft: !working && canSaveDraft ? () => runSave(false) : null,
+      post: !working && canPost ? () => runSave(true) : null,
+      // In browse mode only: on a draft already open for entry Edit would only
+      // move the cursor.
+      edit: !working && canEdit && draft.mode === "browse" ? api.edit : null,
+      cancelDoc: !working && canCancel ? api.cancelVoucher : null,
+      open: !working ? showList : null,
+      close: !working ? close : null,
+      history: saved ? openHistory : null,
+      previous: !working ? () => api.stepDocument(true) : null,
+      next: !working ? () => api.stepDocument(false) : null,
+    },
+    { enabled: active, onHelp: () => setKeysOpen(true) },
+  );
+
+  // F9 draws the sheet — this screen's own key, on the button's gate.
+  const loadSheetRef = useRef({ api, canLoadSheet, working, picker });
   useLayoutEffect(() => {
-    keysRef.current = { api, editable, canSaveDraft, canPost, showList, picker };
+    loadSheetRef.current = { api, canLoadSheet, working, picker };
   });
   useEffect(() => {
     if (!active) {
       return undefined;
     }
     const onKeyDown = (event: KeyboardEvent) => {
-      const current = keysRef.current;
+      if (event.key !== "F9" || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
+        return;
+      }
+      const current = loadSheetRef.current;
       if (current.picker || anyDialogOpen() || event.repeat) {
         return;
       }
-      if (event.key === "F9" && !event.ctrlKey && !event.altKey && !event.metaKey) {
-        event.preventDefault();
+      event.preventDefault();
+      if (current.canLoadSheet && !current.working) {
         current.api.loadCountSheet();
-        return;
-      }
-      if (event.key === "F8" && !event.ctrlKey && !event.altKey && !event.metaKey) {
-        event.preventDefault();
-        current.showList();
-        return;
-      }
-      if (event.key === "F5" && !event.ctrlKey && !event.altKey && !event.metaKey) {
-        // Never the browser's reload, whether or not a draft may be saved.
-        event.preventDefault();
-        if (!current.editable || !current.canSaveDraft) {
-          return;
-        }
-        // Close any open cell editor first.
-        (document.activeElement as HTMLElement | null)?.blur();
-        current.api.saveDraft();
-        return;
-      }
-      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-        if (!current.editable || !current.canPost) {
-          return; // not a draft open for entry, or no right to post it
-        }
-        event.preventDefault();
-        (document.activeElement as HTMLElement | null)?.blur();
-        current.api.postDocument();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
+  }, [active]);
+
+  // F5 was Save Draft until the Qt rework moved it to Ctrl+S. A habit press
+  // must not reload the page and take the unsaved count with it — swallowed,
+  // under a dialog too (capture), and nothing else.
+  useEffect(() => {
+    if (!active) {
+      return undefined;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "F5" && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
+        event.preventDefault();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [active]);
 
   useEffect(() => {
@@ -231,6 +352,41 @@ export function PhysicalStockEntryView({
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [draft.dirty]);
 
+  /**
+   * Enter and Tab walk the header in reading order — Date, Rate Source,
+   * Godown, Reason, Your Ref No, Remarks, Freeze, Freeze From, Freeze To, Blind
+   * (Qt `setTabOrder`) — and the last field hands over to the grid: the first
+   * line's stop. Tab is taken here rather than left to the browser so it
+   * cannot step into a dropdown's open option list.
+   */
+  const onHeaderKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const isTab = event.key === "Tab";
+    if (
+      (event.key !== "Enter" && !isTab) ||
+      event.defaultPrevented ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.altKey
+    ) {
+      return;
+    }
+    const target = event.target as HTMLElement | null;
+    if (!isTab && target?.getAttribute("aria-expanded") === "true") {
+      return; // Enter picks from the open list
+    }
+    if (moveHeaderFocus(event.currentTarget, event.target, event.shiftKey ? -1 : 1)) {
+      event.preventDefault();
+      return;
+    }
+    if (!event.shiftKey) {
+      const stop = rowStops(columns, draft.lines[0])[0];
+      if (stop !== undefined) {
+        event.preventDefault();
+        focusGridCell(0, stop);
+      }
+    }
+  };
+
   const pickerRowKey = picker?.rowKey ?? "";
 
   /** A popup closed without a pick: the cursor goes back to the cell that opened it. */
@@ -242,54 +398,100 @@ export function PhysicalStockEntryView({
     setPicker(null);
   };
 
+  const auditLines = auditLinesOf(draft);
+
   return (
     <div className={quotationStyles.page}>
-      <header className={quotationStyles.titleBar}>
-        <span className={quotationStyles.gridHeadActions}>
-          <button type="button" className={quotationStyles.button} onClick={close}>
-            ‹ Physical Stock Counts
-          </button>
-          <h1 className={cx(quotationStyles.title, styles.entryTitle)}>Physical Stock Count</h1>
-        </span>
-        <div className={cx(quotationStyles.titleMeta, styles.titleRight)}>
-          {draft.mode === "browse" || !isDraft ? (
-            <span className={quotationStyles.readOnlyBadge}>Read only</span>
-          ) : null}
-          {draft.dirty ? <span className={quotationStyles.dirtyDot}>● unsaved</span> : null}
-          {working ? <span>{busy === "sheet" ? "drawing the sheet…" : "working…"}</span> : null}
-          <span className={styles.scope}>{draft.scope}</span>
-          <span className={cx(styles.statusTone, toneClass(draft.status))}>{draft.status}</span>
+      <div className={styles.topBand}>
+        {/* ── the title block ─────────────────────────────────────────── */}
+        <div className={styles.titleBlock}>
+          <div className={styles.titleLine}>
+            <button type="button" className={quotationStyles.button} onClick={close}>
+              ‹ Physical Stock Counts
+            </button>
+            <h1 className={quotationStyles.title}>Physical Stock Count</h1>
+          </div>
+          <span
+            className={styles.scope}
+            title="The godown and accounting year this sheet belongs to."
+          >
+            {draft.scope}
+          </span>
+          <div className={styles.statusLine}>
+            <span
+              className={cx(styles.statusTone, toneClass(draft.status))}
+              title="DRAFT, POSTED or CANCELLED."
+            >
+              {draft.status}
+            </span>
+            {draft.mode === "browse" || !isDraft ? (
+              <span className={quotationStyles.readOnlyBadge}>Read only</span>
+            ) : null}
+            {draft.dirty ? <span className={quotationStyles.dirtyDot}>● unsaved</span> : null}
+            {working ? (
+              <span className={styles.scope}>
+                {busy === "sheet" ? "drawing the sheet…" : busy === "loading" ? "loading…" : "working…"}
+              </span>
+            ) : null}
+          </div>
+          <div
+            className={styles.audit}
+            title="Who created this sheet and when — and, once posted, who posted it"
+          >
+            {auditLines.map((line) => (
+              <span key={line}>{line}</span>
+            ))}
+            {draft.notice ? (
+              <span className={styles.auditNotice} role="status">
+                {draft.notice}
+              </span>
+            ) : null}
+          </div>
         </div>
-      </header>
 
-      <GroupBox title="Sheet" className={styles.sheetFrame}>
-        <div className={styles.sheetGrid}>
+        {/* ── the sheet's details: the godown box at the right end ──────── */}
+        <div className={styles.fieldsCard} onKeyDown={onHeaderKeyDown}>
           <ReadOnlyInput
             id="physical-stock-sheet-no"
             label="Sheet No"
             value={draft.refno}
-            placeholder="assigned at save"
+            placeholder="given on save"
           />
           <DateField
             id={HEADER_FIELD_IDS.docDate}
-            label="Count Date *"
+            label="Count Date"
             value={draft.docDate}
             disabled={!editable}
             onChange={(value) => api.setHeader("docDate", value)}
           />
-          <DropdownCombo
-            id={HEADER_FIELD_IDS.godown}
-            label="Godown *"
-            dropdownId={godownDropdownId}
-            valueKey="gdl_id"
-            labelKey="gdl_name"
-            metaKey="gdl_short"
-            value={draft.godownId}
-            selectedLabel={draft.godownName}
+          <SelectField
+            id="physical-stock-rate-source"
+            label="Rate Source"
+            value={draft.rateSource}
+            options={RATE_SOURCE_OPTIONS}
             disabled={!editable}
-            placeholder="The godown being counted"
-            onSelect={(id, name) => api.selectGodown(id, name)}
+            title="What an OVERAGE is valued at. AVG_COST by default. A SHORTAGE ignores this and is valued by the item's valuation policy."
+            onChange={(value) => api.setHeader("rateSource", value)}
           />
+          <div
+            className={cx(styles.godownBox, godownChosen ? styles.godownSet : styles.godownMissing)}
+            data-tone={godownChosen ? "set" : "missing"}
+            title="The godown being counted. Required: every line is a holding in this godown, and changing it clears the sheet."
+          >
+            <DropdownCombo
+              id={HEADER_FIELD_IDS.godown}
+              label="Godown *  — the one being counted"
+              dropdownId={godownDropdownId}
+              valueKey="gdl_id"
+              labelKey="gdl_name"
+              metaKey="gdl_short"
+              value={draft.godownId}
+              selectedLabel={draft.godownName}
+              disabled={!editable}
+              placeholder="Choose the godown"
+              onSelect={(id, name) => api.selectGodown(id, name)}
+            />
+          </div>
           <DropdownCombo
             id="physical-stock-reason"
             label="Reason"
@@ -303,22 +505,13 @@ export function PhysicalStockEntryView({
             placeholder="Why the variance is accepted"
             onSelect={(id, name) => api.selectReason(id, name)}
           />
-          <SelectField
-            id="physical-stock-rate-source"
-            label="Rate Source"
-            value={draft.rateSource}
-            options={RATE_SOURCE_OPTIONS}
-            disabled={!editable}
-            title="What an OVERAGE is valued at. AVG_COST by default. A SHORTAGE ignores this and is valued by the item's valuation policy."
-            onChange={(value) => api.setHeader("rateSource", value)}
-          />
           <TextField
             id="physical-stock-usr-refno"
             label="Your Ref No"
             value={draft.usrRefno}
             maxLength={100}
             disabled={!editable}
-            title="svh_usr_refno - free text; nothing reads it."
+            title="The shop's own reference."
             onChange={(value) => api.setHeader("usrRefno", value)}
           />
           <TextField
@@ -327,9 +520,21 @@ export function PhysicalStockEntryView({
             value={draft.remarks}
             maxLength={250}
             disabled={!editable}
-            title="svh_remarks - describes the count."
+            title="Describes the count. NOT the cancellation reason: cancelling asks for its own."
             onChange={(value) => api.setHeader("remarks", value)}
           />
+          <span
+            className={styles.freezeCheck}
+            title="Refuses any movement touching this godown while the sheet is DRAFT and the WALL CLOCK is inside the window. Other godowns keep trading; posting or cancelling lifts it."
+          >
+            <CheckField
+              id="physical-stock-freeze"
+              label="Freeze this godown while counting"
+              checked={draft.freezeStock}
+              disabled={!editable}
+              onChange={(checked) => api.toggleFreeze(checked)}
+            />
+          </span>
           <DateTimeField
             id="physical-stock-freeze-from"
             label="Freeze From"
@@ -346,35 +551,24 @@ export function PhysicalStockEntryView({
             title="Wall-clock end of the freeze window."
             onChange={(value) => api.setFreezeWindow("freezeTo", value)}
           />
-          <div className={styles.sheetChecks}>
-            <span title="Refuses any movement touching this godown while the sheet is DRAFT and the WALL CLOCK is inside the window above. Other godowns keep trading; posting or cancelling lifts it.">
-              <CheckField
-                id="physical-stock-freeze"
-                label="Freeze this godown while counting"
-                checked={draft.freezeStock}
-                disabled={!editable}
-                onChange={(checked) => api.toggleFreeze(checked)}
-              />
-            </span>
-            <span title="Hides Book Qty, Difference and the variance tint while counting, so the counter records what is on the shelf rather than what the system expected.">
-              <CheckField
-                id="physical-stock-blind"
-                label="Blind count"
-                checked={draft.blind}
-                onChange={(checked) => api.setBlind(checked)}
-              />
-            </span>
-          </div>
+          <span
+            className={styles.blindCheck}
+            title="Hides Book Qty, Difference and the variance tint while counting, so the counter records what is on the shelf rather than what the system expected."
+          >
+            <CheckField
+              id="physical-stock-blind"
+              label="Blind count"
+              checked={draft.blind}
+              onChange={(checked) => api.setBlind(checked)}
+            />
+          </span>
         </div>
-      </GroupBox>
+      </div>
 
       <section className={cx(quotationStyles.gridShell, styles.countGridShell)}>
         <div className={quotationStyles.gridHead}>
           <span className={quotationStyles.gridHeadTitle}>Holdings</span>
-          <span className={quotationStyles.modalNote}>
-            Enter next line · type on Item or Reason to search · scan on the blank row · F9 load
-            sheet · F5 save draft · Ctrl+Enter post
-          </span>
+          <span className={quotationStyles.modalNote}>F1 lists the keys</span>
         </div>
         <CountGrid
           columns={columns}
@@ -386,52 +580,60 @@ export function PhysicalStockEntryView({
           onRemarksChange={api.setRemarks}
           onBarcodeChange={api.typeBarcode}
           onBarcodeCommit={api.commitBarcode}
+          onSearchItems={(rowKey, typed) => {
+            if (api.openItemList(rowKey)) {
+              setPicker({ kind: "item", rowKey, initialQuery: typed.replace(/\s+/g, " ").trim() });
+            }
+          }}
           onOpenPicker={(kind, rowKey, initialQuery) => setPicker({ kind, rowKey, initialQuery })}
         />
       </section>
 
+      {/* ── under the grid: the hint on the left, the totals on the right ── */}
       <div className={styles.totalsBar}>
-        <span className={styles.audit} title={draft.audit || undefined}>
-          {draft.audit}
-        </span>
-        <span>
-          <span className={styles.totalCaption}>Lines</span>
-          <span className={styles.totalValue}>{totals.lines}</span>
-        </span>
-        <span>
-          <span className={styles.totalCaption}>Counted</span>
-          <span className={styles.totalValue}>
-            {totals.counted} / {totals.lines}
+        <span className={styles.gridHint}>{GRID_HINT}</span>
+        <span className={styles.totals}>
+          <span>
+            <span className={styles.totalCaption}>Lines</span>
+            <span className={styles.totalValue}>{totals.lines}</span>
           </span>
-        </span>
-        <span>
-          <span className={styles.totalCaption}>Variance Lines</span>
-          <span className={styles.totalValue}>{totals.varianceLines}</span>
-        </span>
-        <span>
-          <span className={styles.totalCaption}>Net Variance Qty</span>
-          <span className={cx(styles.totalValue, totals.netQty < 0 && styles.totalNegative)}>
-            {formatNetQty(totals.netQty)}
+          <span>
+            <span className={styles.totalCaption}>Counted</span>
+            <span className={styles.totalValue}>
+              {totals.counted} / {totals.lines}
+            </span>
           </span>
-        </span>
-        <span title="An ESTIMATE — the difference at each holding's average cost. The engine values a shortage by the item's valuation policy and an overage by the rate source, so the posted figure can differ.">
-          <span className={styles.totalCaption}>Net Variance Value</span>
-          <span className={cx(styles.totalValue, totals.netValue < 0 && styles.totalNegative)}>
-            {formatNetValue(totals.netValue)}
+          <span>
+            <span className={styles.totalCaption}>Variance Lines</span>
+            <span className={styles.totalValue}>{totals.varianceLines}</span>
+          </span>
+          <span>
+            <span className={styles.totalCaption}>Net Variance Qty</span>
+            <span className={cx(styles.totalValue, totals.netQty < 0 && styles.totalNegative)}>
+              {formatNetQty(totals.netQty)}
+            </span>
+          </span>
+          <span title="An ESTIMATE — the difference at each holding's average cost. The engine values a shortage by the item's valuation policy and an overage by the rate source, so the posted figure can differ.">
+            <span className={styles.totalCaption}>Net Variance Value</span>
+            <span className={cx(styles.totalValue, totals.netValue < 0 && styles.totalNegative)}>
+              {formatNetValue(totals.netValue)}
+            </span>
           </span>
         </span>
       </div>
 
       <div className={quotationStyles.buttonBar}>
+        <span className={styles.footerHint}>
+          F1 · keys on this screen · Alt+PgUp / Alt+PgDn previous / next sheet
+        </span>
         <button
           type="button"
           className={quotationStyles.button}
-          disabled={working || !editable}
+          disabled={working || !canLoadSheet}
           title="Draw every holding of the chosen godown onto the sheet — one line per lot and bucket."
           onClick={api.loadCountSheet}
         >
-          {busy === "sheet" ? "Loading…" : "Load Sheet"}{" "}
-          <span className={quotationStyles.buttonHint}>F9</span>
+          {busy === "sheet" ? "Loading…" : "Load Sheet · F9"}
         </button>
         <button
           type="button"
@@ -439,35 +641,34 @@ export function PhysicalStockEntryView({
           disabled={working || !rights.mayStartNew}
           onClick={api.newDocument}
         >
-          New
+          {withKey("New", "new")}
         </button>
         <button
           type="button"
           className={quotationStyles.button}
           disabled={working || !canSaveDraft}
-          title="Writes the sheet and nothing else. No stock moves."
-          onClick={api.saveDraft}
+          title="Writes the counted lines and nothing else. No stock moves."
+          onClick={() => runSave(false)}
         >
-          {busy === "saving" ? "Saving…" : "Save Draft"}{" "}
-          <span className={quotationStyles.buttonHint}>F5</span>
+          {busy === "saving" ? "Saving…" : withKey("Save Draft", "saveDraft")}
         </button>
         <button
           type="button"
           className={cx(quotationStyles.button, quotationStyles.buttonPrimary)}
           disabled={working || !canPost}
-          title="Saves, checks and posts the variance in one step. A posted count is frozen and can only be cancelled."
-          onClick={api.postDocument}
+          title="Saves and posts in one step: the lines that disagree with the book write their variance. If any line is refused, nothing is saved."
+          onClick={() => runSave(true)}
         >
-          {busy === "posting" ? "Posting…" : "Save & Post"}{" "}
-          <span className={quotationStyles.buttonHint}>Ctrl+Enter</span>
+          {busy === "posting" ? "Posting…" : withKey("Save & Post", "post")}
         </button>
         <button
           type="button"
           className={quotationStyles.button}
           disabled={working || !canCancel}
+          title="Writes one reversing row per posted variance row. Never a delete — and it can fail if the stock has since been sold."
           onClick={api.cancelVoucher}
         >
-          {busy === "cancelling" ? "Cancelling…" : "Cancel Sheet"}
+          {busy === "cancelling" ? "Cancelling…" : withKey("Cancel", "cancelDoc")}
         </button>
         <button
           type="button"
@@ -475,13 +676,22 @@ export function PhysicalStockEntryView({
           disabled={working || !canEdit}
           onClick={api.edit}
         >
-          Edit
+          {withKey("Edit", "edit")}
+        </button>
+        <button
+          type="button"
+          className={quotationStyles.button}
+          disabled={!saved}
+          title="Every step of this sheet — who saved, posted or cancelled it, when, and why."
+          onClick={openHistory}
+        >
+          {withKey("History", "history")}
         </button>
         <button type="button" className={quotationStyles.button} disabled={working} onClick={showList}>
-          Show List <span className={quotationStyles.buttonHint}>F8</span>
+          {withKey("Show List", "open")}
         </button>
         <button type="button" className={quotationStyles.button} onClick={close}>
-          Close
+          {withKey("Close", "close")}
         </button>
       </div>
 
@@ -521,6 +731,17 @@ export function PhysicalStockEntryView({
         required
         onCancel={api.dismissCancel}
         onConfirm={api.confirmCancel}
+      />
+      <TxnKeysSheet
+        open={keysOpen}
+        onClose={() => setKeysOpen(false)}
+        document={KEY_SHEET.document}
+        lines={KEY_SHEET.lines}
+      />
+      <TxnHistoryDialog
+        target={historyTarget}
+        docLabel="Physical Stock"
+        onClose={() => setHistoryTarget(null)}
       />
     </div>
   );

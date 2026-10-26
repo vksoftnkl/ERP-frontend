@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  NEW_SHEET_AUDIT,
   applyWireLines,
+  auditLinesOf,
+  auditStampsOf,
   blankLine,
   computeTotals,
   createDraft,
   ensureTrailingBlank,
+  holdingsNotice,
   insertHoldings,
   isCountWorthRemembering,
   isEditable,
@@ -219,6 +223,32 @@ describe("insertHoldings — a pick adds every holding of the item", () => {
     expect(result.added).toBe(0);
     expect(result.lines).toHaveLength(2);
   });
+
+  it("finds the row by key, and never overwrites one that became a holding meanwhile", () => {
+    // The scanned row ("s") was picked into while its label was being looked up.
+    const lines = [holding(1, 1, "s", "lot-picked"), blankLine("blank")];
+    const result = insertHoldings(lines, "s", [sheetRow({ lotId: "lot-scanned" })], 5);
+    expect(result.index).toBe(0);
+    expect(result.lines.map((line) => line.lotId)).toEqual(["lot-scanned", "lot-picked", ""]);
+  });
+
+  it("a gone row adds nothing", () => {
+    const result = insertHoldings([blankLine("blank")], "gone", [sheetRow()], 3);
+    expect(result.index).toBe(-1);
+    expect(result.added).toBe(0);
+  });
+});
+
+describe("lineFromSheet / lineFromWire — a textile batch's detail", () => {
+  it("keeps the size, colour and model the sheet and /get carry", () => {
+    const fromSheet = lineFromSheet(
+      sheetRow({ sizeName: "XL", colourName: "Maroon", model: "Slim fit" }),
+      "k",
+    );
+    expect([fromSheet.sizeName, fromSheet.colourName, fromSheet.model]).toEqual(["XL", "Maroon", "Slim fit"]);
+    const [fromWire] = applyWireLines([wireLine({ sizeName: "M", colourName: null })], [], 1).lines;
+    expect([fromWire.sizeName, fromWire.colourName, fromWire.model]).toEqual(["M", "", ""]);
+  });
 });
 
 describe("applyWireLines — a saved document onto the grid", () => {
@@ -279,7 +309,7 @@ describe("physicalStockReducer", () => {
     });
     expect(draft.lines).toHaveLength(3);
     expect(draft.dirty).toBe(true);
-    expect(draft.audit).toBe("2 holdings to count in Coimbatore.");
+    expect(draft.notice).toBe("2 holdings to count in Coimbatore.");
   });
 
   it("changing the godown clears the sheet and says so", () => {
@@ -288,7 +318,7 @@ describe("physicalStockReducer", () => {
     draft = physicalStockReducer(draft, { type: "godownSelected", id: "g2", name: "Erode" });
     expect(draft.lines).toHaveLength(1);
     expect(draft.lines[0].lotId).toBe("");
-    expect(draft.audit).toBe("Godown changed to Erode — load the count sheet again.");
+    expect(draft.notice).toBe("Godown changed to Erode — load the count sheet again.");
   });
 
   it("re-choosing the same godown keeps the sheet", () => {
@@ -319,9 +349,19 @@ describe("physicalStockReducer", () => {
 
   it("a blind count hides the book and says so; New keeps it on", () => {
     let draft = physicalStockReducer(fresh(), { type: "blindSet", blind: true });
-    expect(draft.audit).toBe("Blind count — the book figure is hidden until you turn this off.");
+    expect(draft.notice).toBe("Blind count — the book figure is hidden until you turn this off.");
     draft = physicalStockReducer(draft, { type: "reset", seed: SEED });
     expect(draft.blind).toBe(true);
+    expect(draft.notice).toBe("");
+  });
+
+  it("New and the next sheet never reuse a row key — a late scan reply cannot land on them", () => {
+    const first = fresh();
+    const next = physicalStockReducer(first, { type: "startNext", seed: SEED });
+    const reset = physicalStockReducer(next, { type: "reset", seed: SEED });
+    expect(next.lines).toHaveLength(1);
+    expect(next.lines[0].key).not.toBe(first.lines[0].key);
+    expect(reset.lines[0].key).not.toBe(next.lines[0].key);
   });
 
   it("a save takes the server's number and status and repaints from its lines", () => {
@@ -390,6 +430,130 @@ describe("physicalStockReducer", () => {
   it("a status other than DRAFT makes the sheet read-only", () => {
     const posted = physicalStockReducer(fresh(), { type: "statusApplied", status: "POSTED" });
     expect(isEditable(posted)).toBe(false);
+  });
+
+  it("a pick says what it added, and what was already on the sheet", () => {
+    let draft = physicalStockReducer(fresh(), { type: "sheetApplied", rows: [sheetRow()], godownName: "G" });
+    const blank = draft.lines[draft.lines.length - 1].key;
+    draft = physicalStockReducer(draft, {
+      type: "holdingsAdded",
+      rowKey: blank,
+      holdings: [sheetRow(), sheetRow({ lotId: "lot-2" })],
+      itemName: "MILK 500ML",
+    });
+    expect(draft.notice).toBe("MILK 500ML — 1 holding(s) added, 1 already on the sheet.");
+    expect(draft.lines.map((line) => line.lotId)).toEqual(["lot-1", "lot-2", ""]);
+  });
+
+  it("a batch label adds its lots' holdings at the scanned row and names the batch", () => {
+    let draft = physicalStockReducer(fresh(), { type: "barcodeTyped", rowKey: "row-0", text: "cbe26-00002" });
+    draft = physicalStockReducer(draft, {
+      type: "batchHoldingsAdded",
+      rowKey: "row-0",
+      holdings: [sheetRow({ lotId: "lot-9", bucket: "QUARANTINE" }), sheetRow({ lotId: "lot-9" })],
+      label: "CBE26-00002",
+    });
+    expect(draft.lines.map((line) => `${line.lotId}|${line.bucket}`)).toEqual([
+      "lot-9|QUARANTINE",
+      "lot-9|SALEABLE",
+      "|",
+    ]);
+    expect(draft.lines[0].barcode).toBe("cbe26-00002");
+    expect(draft.dirty).toBe(true);
+    expect(draft.notice).toBe("Batch CBE26-00002 — 2 holding(s) added.");
+  });
+
+  it("a batch label already on the sheet adds nothing, empties the cell, and stays clean", () => {
+    let draft = physicalStockReducer(fresh(), { type: "sheetApplied", rows: [sheetRow()], godownName: "G" });
+    draft = { ...draft, dirty: false };
+    const blank = draft.lines[1].key;
+    draft = physicalStockReducer(draft, { type: "barcodeTyped", rowKey: blank, text: "CBE26-00001" });
+    draft = physicalStockReducer(draft, {
+      type: "batchHoldingsAdded",
+      rowKey: blank,
+      holdings: [sheetRow()],
+      label: "CBE26-00001",
+    });
+    expect(draft.lines).toHaveLength(2);
+    expect(draft.lines[1].barcode).toBe("");
+    expect(draft.dirty).toBe(false);
+    expect(draft.notice).toBe("Batch CBE26-00001 — 0 holding(s) added, 1 already on the sheet.");
+  });
+
+  it("a loaded sheet shows its own audit lines and drops the old notice", () => {
+    const blind = physicalStockReducer(fresh(), { type: "blindSet", blind: true });
+    const document = documentOf([wireLine()], "POSTED");
+    document.header = {
+      ...document.header,
+      createdOn: "2026-10-24T08:35:00.000Z",
+      createdBy: "019c-user-id",
+      createdByName: "Ravi",
+      postedOn: "2026-10-24T09:05:00.000Z",
+      postedByName: "Meena",
+      cancelledOn: null,
+    };
+    const loaded = physicalStockReducer(blind, {
+      type: "documentLoaded",
+      document,
+      scope: { companyId: "c1", branchId: "b1", accYear: "2026-2027" },
+      openForEdit: false,
+    });
+    expect(loaded.notice).toBe("");
+    expect(loaded.stamps).toEqual({
+      createdOn: "2026-10-24T08:35:00.000Z",
+      createdBy: "Ravi",
+      postedOn: "2026-10-24T09:05:00.000Z",
+      postedBy: "Meena",
+      cancelledOn: "",
+    });
+  });
+
+  it("Previous / Next at either end leaves a notice", () => {
+    const draft = physicalStockReducer(fresh(), { type: "noticeSet", text: "This is the oldest count sheet." });
+    expect(draft.notice).toBe("This is the oldest count sheet.");
+  });
+});
+
+describe("the audit lines under the title (Qt showAudit)", () => {
+  // Local wall-clock instants, so the 12-hour text does not depend on the zone the tests run in.
+  const at = (hh: number, mm: number) => new Date(2026, 9, 24, hh, mm).toISOString();
+
+  it("a sheet never saved says so", () => {
+    expect(auditLinesOf({ svhId: "", stamps: null })).toEqual([NEW_SHEET_AUDIT]);
+    expect(NEW_SHEET_AUDIT).toBe("New — not saved yet");
+  });
+
+  it("one line each for created, posted and cancelled — only those present", () => {
+    expect(
+      auditLinesOf({
+        svhId: "svh-1",
+        stamps: {
+          createdOn: at(8, 5),
+          createdBy: "Ravi",
+          postedOn: at(14, 30),
+          postedBy: "Meena",
+          cancelledOn: "",
+        },
+      }),
+    ).toEqual(["Created 24-10-2026 08:05 AM by Ravi", "Posted 24-10-2026 02:30 PM by Meena"]);
+    expect(
+      auditLinesOf({
+        svhId: "svh-1",
+        stamps: { createdOn: at(9, 0), createdBy: "", postedOn: "", postedBy: "", cancelledOn: at(12, 0) },
+      }),
+    ).toEqual(["Created 24-10-2026 09:00 AM", "Cancelled 24-10-2026 12:00 PM"]);
+  });
+
+  it("names the creator by createdByName whenever the header carries it — the stored id only without it", () => {
+    const header = documentOf([]).header;
+    expect(auditStampsOf({ ...header, createdBy: "u-1", createdByName: "Ravi" })?.createdBy).toBe("Ravi");
+    expect(auditStampsOf({ ...header, createdBy: "u-1", createdByName: null })?.createdBy).toBe("");
+    expect(auditStampsOf({ ...header, createdBy: "u-1" })?.createdBy).toBe("u-1");
+  });
+
+  it("words a pick's notice the Qt way", () => {
+    expect(holdingsNotice("MILK", 2, 0)).toBe("MILK — 2 holding(s) added.");
+    expect(holdingsNotice("Batch X", 1, 3)).toBe("Batch X — 1 holding(s) added, 3 already on the sheet.");
   });
 });
 

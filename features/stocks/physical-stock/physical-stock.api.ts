@@ -1,6 +1,6 @@
 /**
- * `/stock/physical/*` and the two lookups the count grid needs, injected into
- * the shared `baseApi`. Paths are relative to the base query's `/api/v1`.
+ * `/stock/physical/*` and the lookups the count grid needs, injected into the
+ * shared `baseApi`. Paths are relative to the base query's `/api/v1`.
  *
  * NOTHING HERE IS CACHED for longer than the call: a cached count sheet is a
  * book figure from before the last sale (the server sets no TTL either), and a
@@ -8,6 +8,12 @@
  */
 import { baseApi } from "@/store/api/baseApi";
 import type { ApiSuccessResponse } from "@/utils/types";
+import {
+  LOTS_BY_BATCH_ENDPOINT,
+  lotsByBatchParams,
+  type LotByBatchRow,
+  type LotsByBatchQuery,
+} from "@/features/stocks/shared/batch-detail";
 import { PHYSICAL_STOCK_ENDPOINTS } from "./physical-stock.constants";
 import { sheetRowsOf } from "./physical-stock.payload";
 import type {
@@ -153,6 +159,22 @@ export const physicalStockApi = baseApi.injectEndpoints({
         params: { barcode, ...(companyId ? { company_id: companyId } : {}) },
       }),
       transformResponse: (payload: ApiSuccessResponse<BarcodeLookup | null>) => payload?.data ?? null,
+      keepUnusedDataFor: 0,
+    }),
+
+    /**
+     * The scan's second hop on a textile company (`stock.auto_batch_no`): a
+     * code that is no item's barcode may be a batch LABEL, which names the
+     * holding itself. The lots carrying it — asked with `bucket=ALL` (a count
+     * reaches the QUARANTINE and DAMAGED holdings of a batch too, notes 150
+     * #10), the godown being counted, and `includeEmpty` (a holding the book
+     * says is empty can still be on the shelf). 404 STOCK_BATCH_NOT_FOUND when
+     * no lot carries it. Never cached: the scan must see the last bill's stock.
+     */
+    physicalStockLotsByBatch: builder.query<LotByBatchRow[], LotsByBatchQuery>({
+      query: (query) => ({ url: LOTS_BY_BATCH_ENDPOINT, params: lotsByBatchParams(query) }),
+      transformResponse: (payload: ApiSuccessResponse<LotByBatchRow[]>) =>
+        Array.isArray(payload?.data) ? payload.data : [],
       keepUnusedDataFor: 0,
     }),
   }),

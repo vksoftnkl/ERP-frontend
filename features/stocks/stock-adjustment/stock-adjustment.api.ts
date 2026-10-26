@@ -78,7 +78,7 @@ export const stockAdjustmentApi = baseApi.injectEndpoints({
     }),
     /**
      * POST post — the engine, the accounts voucher and the trail for a saved
-     * DRAFT. The screen posts through the save (Save F5 sends status POSTED, as
+     * DRAFT. The screen posts through the save (Save & Post sends status POSTED, as
      * the Qt screen does, so the posted document is exactly what is on screen);
      * this is the route for a draft posted as it stands.
      */
@@ -98,9 +98,12 @@ export const stockAdjustmentApi = baseApi.injectEndpoints({
     }),
 
     // -- the pickers ---------------------------------------------------------
-    /** The holdings an outward line is picked from, available > 0. No bucket = every bucket. */
+    /**
+     * The holdings an outward line is picked from, available > 0. No bucket =
+     * every bucket. A row carries its batch's size / colour / model (textile).
+     */
     stockAdjustmentPickStock: builder.query<PickStockRow[], PickStockQuery>({
-      query: ({ companyId, branchId, godownId, bucket, itemId, search, limit }) => ({
+      query: ({ companyId, branchId, godownId, bucket, itemId, search, batchNo, limit }) => ({
         url: STOCK_ADJUSTMENT_PICK_STOCK_ENDPOINT,
         params: {
           companyId,
@@ -109,6 +112,8 @@ export const stockAdjustmentApi = baseApi.injectEndpoints({
           ...(bucket ? { bucket } : {}),
           ...(itemId ? { itemId } : {}),
           ...(search?.trim() ? { search: search.trim() } : {}),
+          // A scanned batch label: exactly this batch (the server folds the case).
+          ...(batchNo?.trim() ? { batchNo: batchNo.trim() } : {}),
           limit: limit ?? 200,
         },
       }),

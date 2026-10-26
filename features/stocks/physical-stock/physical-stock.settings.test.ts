@@ -30,7 +30,7 @@ function setting(asdKey: string, value: string | null, asdDefaultValue: string |
 describe("parsePhysicalStockSettings", () => {
   it("defaults to list-first", () => {
     expect(parsePhysicalStockSettings(undefined)).toEqual(DEFAULT_PHYSICAL_STOCK_SETTINGS);
-    expect(parsePhysicalStockSettings([])).toEqual({ txnEntryFirst: false });
+    expect(parsePhysicalStockSettings([])).toEqual({ txnEntryFirst: false, autoBatchNo: false });
   });
 
   it("reads system.txn_entry_first the way AppSession's settingBool does", () => {
@@ -40,6 +40,17 @@ describe("parsePhysicalStockSettings", () => {
     for (const falsy of ["false", "0", "no", "maybe"]) {
       expect(parsePhysicalStockSettings([setting("system.txn_entry_first", falsy)]).txnEntryFirst).toBe(false);
     }
+  });
+
+  it("reads stock.auto_batch_no — the textile batch-label scan — off by default", () => {
+    expect(parsePhysicalStockSettings([setting("system.txn_entry_first", "true")]).autoBatchNo).toBe(false);
+    for (const truthy of ["true", "1", "Y"]) {
+      expect(parsePhysicalStockSettings([setting("stock.auto_batch_no", truthy)]).autoBatchNo).toBe(true);
+    }
+    expect(parsePhysicalStockSettings([setting("stock.auto_batch_no", "false")]).autoBatchNo).toBe(false);
+    expect(
+      parsePhysicalStockSettings([setting("stock.auto_batch_no", null, "true")]).autoBatchNo,
+    ).toBe(true);
   });
 
   it("falls back to the catalog default when the value is unset", () => {

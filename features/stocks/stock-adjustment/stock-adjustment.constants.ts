@@ -167,7 +167,7 @@ export function kindHint(kind: Kind): string {
     case "Damage":
       return "Damaged stock written off. To hold it for a supplier return, use Move stock.";
     case "Expiry":
-      return "An EXPIRED lot written off — pick the lot (F2).";
+      return "An EXPIRED lot written off — pick the lot (F12).";
     case "Relot":
       return "Out of the wrong lot, into the right one — balanced per item, no accounts voucher.";
     case "Move":
@@ -365,8 +365,9 @@ export const FALLBACK_COLUMN_LAYOUT: Record<number, { width: number; position: n
 /**
  * Which columns each kind shows — applyKindColumns. The Type selector does not
  * change the columns, only which of them open; the layout supplies titles,
- * widths and order. Barcode is never on the mockup: a scan is typed into the
- * Item cell's search like any other code.
+ * widths and order. Barcode leads the keyed kinds, as on Opening Stock (user,
+ * 2026-10-24): scan, or type a name and press ↓ for the item list. A move
+ * starts from the lot, so it has none.
  */
 export function kindColumns(kind: Kind): ReadonlySet<number> {
   switch (kind) {
@@ -388,6 +389,7 @@ export function kindColumns(kind: Kind): ReadonlySet<number> {
     case "Relot":
       return new Set([
         COL.LineNo,
+        COL.Barcode,
         COL.Description,
         COL.BatchNo,
         COL.ExpiryDate,
@@ -401,6 +403,7 @@ export function kindColumns(kind: Kind): ReadonlySet<number> {
     default:
       return new Set([
         COL.LineNo,
+        COL.Barcode,
         COL.Description,
         COL.BatchNo,
         COL.ExpiryDate,
@@ -418,6 +421,47 @@ export function kindColumns(kind: Kind): ReadonlySet<number> {
       ]);
   }
 }
+
+/**
+ * Where Enter stops on a line (Qt `setFocusStops`, as on Opening Stock) — the
+ * screen's own chain, not the layout's focus flags. A blank line stops at
+ * Barcode and Item; a line with its item at the cells IT can take (an inward
+ * line's identity, a move's To bucket, a MANUAL cost) and Qty. Reason and
+ * Remarks stay editable by click: a new line already carries the default
+ * reason. `isEnterStop` (stock-adjustment.state.ts) applies the per-line rule.
+ */
+export const ENTER_STOPS: ReadonlySet<number> = new Set([
+  COL.Barcode,
+  COL.Description,
+  COL.BatchNo,
+  COL.ExpiryDate,
+  COL.Mrp,
+  COL.ToBucket,
+  COL.Qty,
+  COL.CostRate,
+]);
+
+/**
+ * The cells that open a list — Reason, Bucket and To. An editable one shows a
+ * ▾ at its right edge and, while blank, a muted placeholder (the price grid's
+ * Unit cell look, Qt `DelegatePaint::dropDownCell`).
+ */
+export const LIST_CELL_PLACEHOLDER: Readonly<Record<number, string>> = {
+  [COL.ReasonName]: "Select reason",
+  [COL.Bucket]: "Select",
+  [COL.ToBucket]: "Select",
+};
+
+/** What Previous / Next says when it has nowhere to go (Qt `stepDocument`). */
+export const STEP_NOTICES = {
+  newHasNoNext: "A new document is the newest — nothing comes after it.",
+  none: "There are no adjustments yet.",
+  oldest: "This is the oldest document.",
+  newest: "This is the newest document.",
+} as const;
+
+/** A scanned batch label's pick-stock read: one holding is taken, a few open the picker. */
+export const BATCH_LABEL_PICK_LIMIT = 50;
 
 /** The list's Type filter, as grid 122's kind_code — the same six as the selector. */
 export const LIST_KIND_OPTIONS: readonly { value: string; label: string }[] = [

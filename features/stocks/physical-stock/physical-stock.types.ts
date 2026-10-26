@@ -34,6 +34,14 @@ export type CountSheetRow = {
   avgCostRate: WireNumber;
   stockValue: WireNumber;
   countedQty: null;
+  /**
+   * The batch's size, colour and model off `stock_batch_detail` (server notes
+   * 150 #9) — set only on a textile company's auto-numbered batches. They ride
+   * after the item name in the Item cell (`batchDetailItemText`).
+   */
+  sizeName?: string | null;
+  colourName?: string | null;
+  model?: string | null;
 };
 
 /** One saved line, as `/get`, `/create`, `/post` and `/cancel` answer it. */
@@ -65,6 +73,17 @@ export type PhysicalStockWireLine = {
   reasonName: string | null;
   lotId: string | null;
   remarks: string | null;
+  /** The batch's size, colour and model, as on the count sheet's rows. */
+  sizeName?: string | null;
+  colourName?: string | null;
+  model?: string | null;
+  /**
+   * SAVE answer only (server notes 150 #4): this save replaced the line's stored
+   * book figure with a different one — stock moved since the sheet was drawn —
+   * and what it held before. Absent on `/get`.
+   */
+  bookChanged?: boolean;
+  previousBookQty?: WireNumber;
 };
 
 export type PhysicalStockWireHeader = {
@@ -89,6 +108,15 @@ export type PhysicalStockWireHeader = {
   totalValue: WireNumber;
   rateSource: string | null;
   remarks: string | null;
+  /** Who did what, and when — the audit lines under the title (Qt `showAudit`). */
+  createdOn?: string | null;
+  /** `svh_created_by` as stored — free text, usually a user id. */
+  createdBy?: string | null;
+  /** The createdBy user's name; null when createdBy names no user. */
+  createdByName?: string | null;
+  postedOn?: string | null;
+  postedByName?: string | null;
+  cancelledOn?: string | null;
 };
 
 export type PhysicalStockDocument = {
@@ -142,6 +170,12 @@ export type PhysicalStockDocKey = PhysicalStockScope & { svhId: string };
 
 /** A count line is four required fields and one typed number. */
 export type SavePhysicalStockLine = {
+  /**
+   * A SAVED line's id: the server updates that row rather than inserting a new
+   * one — and can then say its book figure moved since (notes 150 #4). Never
+   * sent on a new sheet, which has no lines yet.
+   */
+  sviId?: string;
   lineNo: number;
   splitNo: number;
   itemId: string;
@@ -241,9 +275,26 @@ export type CountLine = {
   remarks: string;
   /** What the scanner read; only a blank row takes one. */
   barcode: string;
+  /** A textile batch's size, colour and model — painted after the item name. */
+  sizeName: string;
+  colourName: string;
+  model: string;
 };
 
 export type PhysicalStockMode = "entry" | "browse";
+
+/**
+ * Who created, posted and cancelled the sheet, and when — read off the header
+ * of a loaded document (Qt `showAudit`). `createdBy` is already the name when
+ * the server could resolve one.
+ */
+export type PhysicalStockAuditStamps = {
+  createdOn: string;
+  createdBy: string;
+  postedOn: string;
+  postedBy: string;
+  cancelledOn: string;
+};
 
 export type PhysicalStockDraft = {
   companyId: string;
@@ -272,8 +323,13 @@ export type PhysicalStockDraft = {
   /** Survives New and the next sheet — it is the counter's choice, not the document's. */
   blind: boolean;
   lines: CountLine[];
-  /** The status line under the grid (Qt's lblAudit). */
-  audit: string;
+  /** The loaded document's audit stamps; null on a sheet never saved. */
+  stamps: PhysicalStockAuditStamps | null;
+  /**
+   * The latest notice — "12 holdings added …" — shown under the audit lines
+   * beside the title (Qt `setNotice()`, the second half of lblAudit).
+   */
+  notice: string;
   /** The title bar's "godown · year" (Qt's lblScope). */
   scope: string;
   /** Hands out row keys. */

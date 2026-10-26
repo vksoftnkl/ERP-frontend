@@ -175,6 +175,35 @@ describe("picking an item", () => {
     expect(row(draft, "r1").costRate).toBe(240);
   });
 
+  it("a RE-pick drops the old batch's size, colour and model, and whether its batch was typed (Qt 74b755c)", () => {
+    let draft = pickedDraft();
+    draft = openingStockReducer(draft, {
+      type: "batchDetailChoiceSet",
+      rowKey: "r1",
+      field: "sizeName",
+      id: "isz-xl",
+      name: "XL",
+    });
+    draft = openingStockReducer(draft, {
+      type: "batchDetailChoiceSet",
+      rowKey: "r1",
+      field: "colourName",
+      id: "icl-red",
+      name: "Red",
+    });
+    draft = openingStockReducer(draft, { type: "lineFieldSet", rowKey: "r1", field: "model", value: "Slim" });
+    // Typed with the setting off, so nothing is cleared — but the flag is set.
+    draft = openingStockReducer(draft, { type: "batchNoSet", rowKey: "r1", value: "B1", autoBatchNo: false });
+    expect(row(draft, "r1").batchTyped).toBe(true);
+    expect(row(draft, "r1").sizeId).toBe("isz-xl");
+    draft = openingStockReducer(draft, { type: "itemPicked", rowKey: "r1", itemId: "item-2", itemName: "Other" });
+    const repicked = row(draft, "r1");
+    for (const field of ["sizeId", "sizeName", "colourId", "colourName", "model"] as const) {
+      expect(repicked[field]).toBe("");
+    }
+    expect(repicked.batchTyped).toBe(false);
+  });
+
   it("keeps the scanned symbol over the item's own barcode", () => {
     let draft = withGodown(createDraft(SCOPE, TODAY));
     const key = draft.lines[0].key;
@@ -310,6 +339,140 @@ describe("editing a cell — onGridCellEdited", () => {
   it("stores text cells without recalculating", () => {
     const line = applyLineEdit(row(pickedDraft(), "r1"), "batchNo", "B-77");
     expect(line.batchNo).toBe("B-77");
+  });
+});
+
+describe("textile — the batch number and the size / colour / model (Qt 74b755c)", () => {
+  function withDetail(): OpeningStockDraft {
+    let draft = pickedDraft();
+    draft = openingStockReducer(draft, {
+      type: "batchDetailChoiceSet",
+      rowKey: "r1",
+      field: "sizeName",
+      id: "isz-xl",
+      name: "XL",
+    });
+    return openingStockReducer(draft, { type: "lineFieldSet", rowKey: "r1", field: "model", value: "Slim" });
+  }
+
+  it("puts a Size / Colour name in the cell and its id beside it; a new name has no id yet", () => {
+    let draft = withDetail();
+    expect(row(draft, "r1").sizeName).toBe("XL");
+    expect(row(draft, "r1").sizeId).toBe("isz-xl");
+    draft = openingStockReducer(draft, {
+      type: "batchDetailChoiceSet",
+      rowKey: "r1",
+      field: "colourName",
+      id: "",
+      name: "Peacock",
+    });
+    expect(row(draft, "r1").colourName).toBe("Peacock");
+    expect(row(draft, "r1").colourId).toBe("");
+    expect(draft.dirty).toBe(true);
+  });
+
+  it("a TYPED batch number clears and locks them while the company numbers its batches", () => {
+    const draft = openingStockReducer(withDetail(), {
+      type: "batchNoSet",
+      rowKey: "r1",
+      value: "ZT-TYPED-1",
+      autoBatchNo: true,
+    });
+    const line = row(draft, "r1");
+    expect(line.batchNo).toBe("ZT-TYPED-1");
+    expect(line.batchTyped).toBe(true);
+    expect([line.sizeId, line.sizeName, line.colourId, line.colourName, line.model]).toEqual(["", "", "", "", ""]);
+  });
+
+  it("emptying the batch hands the number back to the server, and the cells open again", () => {
+    let draft = openingStockReducer(withDetail(), {
+      type: "batchNoSet",
+      rowKey: "r1",
+      value: "ZT-TYPED-1",
+      autoBatchNo: true,
+    });
+    draft = openingStockReducer(draft, { type: "batchNoSet", rowKey: "r1", value: "  ", autoBatchNo: true });
+    expect(row(draft, "r1").batchTyped).toBe(false);
+  });
+
+  it("loads a batch as GIVEN, with what its batch detail row carries", () => {
+    const draft = openingStockReducer(createDraft(SCOPE, TODAY), {
+      type: "documentLoaded",
+      document: {
+        header: {
+          svhId: "svh-1",
+          accYear: "2026-2027",
+          companyId: "company-1",
+          branchId: "branch-1",
+          deviceId: "device-1",
+          refno: "OPN0001",
+          usrRefno: null,
+          docDate: "2026-10-26",
+          godownId: "gdl-1",
+          godownName: "Main",
+          status: "DRAFT",
+          lineCount: 1,
+          totalQty: 1,
+          totalValue: 10,
+          totalValueWot: 10,
+          rateSource: "MANUAL",
+          remarks: null,
+        },
+        lines: [
+          {
+            sviId: "svi-1",
+            lineNo: 1,
+            splitNo: 1,
+            itemId: "item-1",
+            itemCode: null,
+            itemName: "Shirt",
+            unitName: "PCS",
+            uomId: "iuc-1",
+            baseUomId: "iuc-1",
+            toBaseFactor: 1,
+            godownId: "gdl-1",
+            godownName: "Main",
+            bucket: "SALEABLE",
+            barcode: null,
+            batchNo: "CBE26-00001",
+            mfgDate: null,
+            expiryDate: null,
+            mrp: null,
+            salePrice: null,
+            serialNo: null,
+            supplierId: null,
+            supplierName: null,
+            qty: 1,
+            baseQty: 1,
+            freeQty: 0,
+            freeBaseQty: 0,
+            weightQty: 0,
+            costRate: 10,
+            costRateWot: 10,
+            landedRate: 0,
+            taxPerc: 0,
+            value: 10,
+            valueWot: 10,
+            lotId: null,
+            remarks: null,
+            trackSignature: "B",
+            sizeId: "isz-xl",
+            sizeName: "XL",
+            colourId: null,
+            colourName: null,
+            model: "Slim fit",
+          },
+        ],
+      },
+      scope: { companyId: "company-1", branchId: "branch-1", accYear: "2026-2027" },
+      openForEdit: true,
+    });
+    const line = draft.lines[0];
+    expect(line.sizeName).toBe("XL");
+    expect(line.sizeId).toBe("isz-xl");
+    expect(line.colourName).toBe("");
+    expect(line.model).toBe("Slim fit");
+    expect(line.batchTyped).toBe(false);
   });
 });
 

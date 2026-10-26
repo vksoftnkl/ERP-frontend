@@ -110,6 +110,15 @@ describe("missingIdentityLines", () => {
     ]);
     expect(notices).toEqual(["Line 1  A — batch, expiry, MRP", "Line 3  C — serial no"]);
   });
+
+  it("with auto batch numbers, a blank batch is the server's to fill — not missing (Qt 74b755c)", () => {
+    const lines = [
+      line({ itemName: "Shirt", trackSignature: "B" }),
+      line({ itemName: "Tonic", trackSignature: "BE" }),
+    ];
+    expect(missingIdentityLines(lines, true)).toEqual(["Line 2  Tonic — expiry"]);
+    expect(missingIdentityLines(lines)).toEqual(["Line 1  Shirt — batch", "Line 2  Tonic — batch, expiry"]);
+  });
 });
 
 describe("notADraftMessage", () => {

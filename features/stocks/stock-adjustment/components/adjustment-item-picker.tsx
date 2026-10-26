@@ -6,14 +6,16 @@
  * as the Qt popup scopes it (`iitem_company_id` / `iitem_branch_id`).
  *
  * A row is an item × unit, so a pick settles the unit the line is keyed in
- * (`item_uom_id` is an iuc_id). A scan typed into the search matches no name;
- * Enter then resolves it as a barcode — the Qt `resolveBarcode` path, since the
- * Barcode column is never on this screen.
+ * (`item_uom_id` is an iuc_id); the name is grid 71's `item_name_en`
+ * (`pickedItemName`). A scan typed into the search matches no name; Enter then
+ * resolves it as a barcode — the `resolveBarcode` path the Barcode cell takes,
+ * kept here for Move stock, which has no Barcode column.
  */
 import { useEffect, useMemo, useState } from "react";
 import { ModalShell } from "@/features/sales/quotation/components/modal-shell";
 import quotationStyles from "@/features/sales/quotation/page.module.scss";
 import { useStockAdjustmentItemSearchQuery } from "../stock-adjustment.api";
+import { pickedItemName } from "../stock-adjustment.state";
 import type { ItemPickerRow } from "../stock-adjustment.types";
 
 const PAGE_SIZE = 20;
@@ -66,7 +68,7 @@ export function AdjustmentItemPicker(props: AdjustmentItemPickerProps) {
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const choose = (row: ItemPickerRow) =>
-    onPick({ itemId: row.item_id, itemName: row.item_name_en, unitId: row.item_uom_id });
+    onPick({ itemId: row.item_id, itemName: pickedItemName(row), unitId: row.item_uom_id });
 
   const tryBarcode = async () => {
     const code = search.trim();
@@ -157,7 +159,7 @@ export function AdjustmentItemPicker(props: AdjustmentItemPickerProps) {
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => choose(row)}
               >
-                <td>{row.item_name_en}</td>
+                <td>{pickedItemName(row)}</td>
                 <td>{row.unit_name}</td>
               </tr>
             ))}

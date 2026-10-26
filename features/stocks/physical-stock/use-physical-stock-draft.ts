@@ -3,9 +3,10 @@
 /**
  * Physical Stock Update — the count sheet's network half. The draft is a
  * local reducer (`physical-stock.state.ts`, pure); this hook does what the Qt
- * `PhysicalStockEntry` does over the wire — draw the sheet, resolve a pick or a
- * scan into holdings, save, post, cancel, load — and speaks to the
- * operator in the Qt screen's own words.
+ * `PhysicalStockEntry` does over the wire — draw the sheet, resolve a pick, a
+ * scan or a textile batch label into holdings, save, post, cancel, load, step
+ * to the sheet before / after — and speaks to the operator in the Qt screen's
+ * own words.
  */
 import {
   useCallback,
@@ -17,6 +18,7 @@ import {
   useState,
 } from "react";
 import { useBusinessContext } from "@/components/layout/business-context";
+import { useGetTxnAdjacentMutation } from "@/components/txn/txn-adjacent";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { getUserInfo } from "@/lib/auth/session";
 import { toast } from "@/lib/notify";
@@ -32,7 +34,7 @@ import {
 import { useGetQuotationGridLayoutQuery } from "@/store/api/quotationApi";
 import { useAppDispatch } from "@/store/hooks";
 import { accountingYearOf, todayIso } from "@/features/sales/quotation/quotation.utils";
-import { askYesNo, say } from "./components/notice";
+import { afterMessage, askYesNo, say } from "./components/notice";
 import {
   physicalStockApi,
   usePhysicalStockCancelMutation,
@@ -54,13 +56,19 @@ import {
 } from "./physical-stock.constants";
 import { toLocalDateTime } from "./physical-stock.format";
 import {
+  CANCEL_DRAFT_CONFIRM,
+  CANCEL_POSTED_CONFIRM,
   apiErrorText,
+  bookBeforeSave,
+  bookMovedLines,
+  bookMovedText,
   buildPayload,
   buildPostPayload,
   lineProblemsMessage,
   postConfirmMessage,
   postedMessage,
   refusalLineProblems,
+  savedDraftMessage,
 } from "./physical-stock.payload";
 import {
   computeTotals,
@@ -94,11 +102,35 @@ export const HEADER_FIELD_IDS: Record<SaveRefusalFocus, string> = {
   freezeTo: "physical-stock-freeze-to",
 };
 
-function focusHeader(field: SaveRefusalFocus | undefined): void {
+/**
+ * The cursor onto a header control — AFTER the message that sent it there is
+ * answered, when there is one: the popup holds the focus while it is up and
+ * drops it when it goes (`afterMessage`).
+ */
+function focusHeader(field: SaveRefusalFocus | undefined, afterMessageId?: string): void {
   if (!field || typeof window === "undefined") {
     return;
   }
-  window.requestAnimationFrame(() => document.getElementById(HEADER_FIELD_IDS[field])?.focus());
+  const focus = () => document.getElementById(HEADER_FIELD_IDS[field])?.focus();
+  if (afterMessageId) {
+    afterMessage(afterMessageId, focus);
+    return;
+  }
+  window.requestAnimationFrame(focus);
+}
+
+/** What Qt says when Previous / Next has nowhere to go (`stepDocument()`). */
+export const STEP_NOTICES = {
+  newHasNoNext: "A new sheet is the newest — nothing comes after it.",
+  none: "There are no count sheets yet.",
+  oldest: "This is the oldest count sheet.",
+  newest: "This is the newest count sheet.",
+} as const;
+
+/** The HTTP status a failed RTK call carries, if any. */
+function statusOf(error: unknown): number | undefined {
+  const status = (error as { status?: unknown } | null)?.status;
+  return typeof status === "number" ? status : undefined;
 }
 
 function useSessionScope(): SessionScope {
@@ -155,6 +187,11 @@ export type PhysicalStockDraftApi = {
   setRemarks: (rowKey: string, text: string) => void;
   typeBarcode: (rowKey: string, text: string) => void;
   commitBarcode: (rowKey: string, text: string) => void;
+  /**
+   * ↓ in a blank row's Barcode cell: whether the item list may open for it —
+   * a draft open for entry, with a godown. Empties the cell when it may.
+   */
+  openItemList: (rowKey: string) => boolean;
   pickItem: (rowKey: string, itemId: string, itemName: string) => void;
   pickReason: (rowKey: string, id: string, name: string) => void;
   loadCountSheet: () => void;
@@ -168,6 +205,10 @@ export type PhysicalStockDraftApi = {
   dismissCancel: () => void;
   edit: () => void;
   load: (key: PhysicalStockDocKey, openForEdit: boolean) => void;
+  /** Alt+PgUp / Alt+PgDn — the sheet before / after this one (`GET /txn/adjacent`). */
+  stepDocument: (previous: boolean) => void;
+  /** Where keying starts — the godown while blank, else the first line. */
+  focusEntryStart: () => void;
   /** Runs `then` unless the operator declines to throw unsaved work away. */
   guardDirty: (title: string, message: string, then: () => void) => void;
   // ----- screen memory: the count outlives a trip to another screen -----
@@ -180,9 +221,13 @@ export type PhysicalStockDraftApi = {
 };
 
 export function usePhysicalStockDraft(
-  opts: { memory?: ScreenMemoryOption } = {},
+  opts: {
+    memory?: ScreenMemoryOption;
+    /** `stock.auto_batch_no` — a scanned code may be a textile batch label. */
+    autoBatchNo?: boolean;
+  } = {},
 ): PhysicalStockDraftApi {
-  const { memory } = opts;
+  const { memory, autoBatchNo = false } = opts;
   const session = useSessionScope();
   const sessionRef = useRef(session);
   const appDispatch = useAppDispatch();
@@ -196,12 +241,22 @@ export function usePhysicalStockDraft(
     session,
     (scope) => recalled ?? createDraft(seedOf(scope)),
   );
-  // The latest of both, for the async flows below to read after an await.
+  // The latest of each, for the async flows below to read after an await.
   const draftRef = useRef(draft);
+  const autoBatchNoRef = useRef(autoBatchNo);
   useLayoutEffect(() => {
     sessionRef.current = session;
     draftRef.current = draft;
+    autoBatchNoRef.current = autoBatchNo;
   });
+  // A cursor move queued for after a render must not land on a screen that has gone.
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
   const [busy, setBusyState] = useState<PhysicalStockBusy>("idle");
   const busyRef = useRef<PhysicalStockBusy>("idle");
   const setBusy = useCallback((value: PhysicalStockBusy) => {
@@ -212,6 +267,7 @@ export function usePhysicalStockDraft(
   const [cancelPrompt, setCancelPrompt] = useState<{ title: string } | null>(null);
   const [saveDocument] = usePhysicalStockSaveMutation();
   const [cancelDocument] = usePhysicalStockCancelMutation();
+  const [adjacentDocument] = useGetTxnAdjacentMutation();
   const { permissions } = usePagePermissions();
   const rights = useMemo(() => documentRights(permissions), [permissions]);
 
@@ -264,6 +320,53 @@ export function usePhysicalStockDraft(
 
   const requestFocus = useCallback((row: number, col: number) => {
     setFocusRequest({ row, col, nonce: Date.now() + Math.random() });
+  }, []);
+
+  /** A line's place on screen NOW — lines may have been added above it meanwhile. */
+  const indexOfRow = useCallback(
+    (rowKey: string) => draftRef.current.lines.findIndex((line) => line.key === rowKey),
+    [],
+  );
+
+  /**
+   * Where the cursor starts (Qt `focusEntryStart()`): the godown while it is
+   * blank — it is required, and nothing can be picked or loaded before it;
+   * then the first line's Counted Qty, or the blank row's Barcode while the
+   * sheet is still empty (Qt says Item; Barcode is the scan field AND the item
+   * search, as on Opening Stock). A read-only sheet: just the grid. After the
+   * render the caller's change causes.
+   */
+  const focusEntryStart = useCallback(() => {
+    window.requestAnimationFrame(() =>
+      window.setTimeout(() => {
+        if (!aliveRef.current) {
+          return;
+        }
+        const current = draftRef.current;
+        if (isEditable(current) && !current.godownId) {
+          focusHeader("godown");
+          return;
+        }
+        requestFocus(0, current.lines[0]?.lotId ? Cols.CountedQty : Cols.Barcode);
+      }, 0),
+    );
+  }, [requestFocus]);
+
+  /**
+   * A count line is a holding in ONE godown, so nothing is picked or scanned
+   * before it is chosen (Qt `requireHeaderGodown()`): says so, and puts the
+   * cursor on the godown once the message is answered.
+   */
+  const requireHeaderGodown = useCallback((): boolean => {
+    if (draftRef.current.godownId) {
+      return true;
+    }
+    const id = say.warn(
+      "Godown first",
+      "A count line is a holding in one godown. Choose which godown is being counted first.",
+    );
+    focusHeader("godown", id);
+    return false;
   }, []);
 
   // A business context that arrives after the screen re-seeds a clean sheet.
@@ -331,7 +434,8 @@ export function usePhysicalStockDraft(
   const startNext = useCallback(() => {
     sheetCacheRef.current = null;
     dispatch({ type: "startNext", seed: seedOf(sessionRef.current) });
-  }, []);
+    focusEntryStart();
+  }, [focusEntryStart]);
 
   const loadCountSheet = useCallback(() => {
     void (async () => {
@@ -340,11 +444,11 @@ export function usePhysicalStockDraft(
         return;
       }
       if (!current.godownId) {
-        say.warn(
+        const id = say.warn(
           "Godown first",
           "A count sheet is the holdings of one godown. Choose which one is being counted.",
         );
-        focusHeader("godown");
+        focusHeader("godown", id);
         return;
       }
       // There is always one blank row, so "any rows" is not "any lines": ask
@@ -419,71 +523,198 @@ export function usePhysicalStockDraft(
 
   const pickItem = useCallback(
     (rowKey: string, itemId: string, itemName: string) => {
-      if (!draftRef.current.godownId) {
-        say.warn(
-          "Godown first",
-          "A count line is a holding in one godown. Choose which godown is being counted " +
-            "before picking items.",
-        );
+      // A posted, cancelled or browsed sheet takes no pick.
+      if (!isEditable(draftRef.current)) {
+        return;
+      }
+      if (!requireHeaderGodown()) {
         dispatch({ type: "blankRowCleared", rowKey });
-        focusHeader("godown");
         return;
       }
       void addHoldingsForItem(rowKey, itemId, itemName);
     },
-    [addHoldingsForItem],
+    [addHoldingsForItem, requireHeaderGodown],
   );
 
-  /** The scan: symbol → item, then the same holdings resolution the picker uses. */
+  const openItemList = useCallback(
+    (rowKey: string): boolean => {
+      const current = draftRef.current;
+      const line = current.lines.find((candidate) => candidate.key === rowKey);
+      if (!isEditable(current) || !line || line.lotId) {
+        return false;
+      }
+      if (!requireHeaderGodown()) {
+        return false;
+      }
+      // The typed text went to the list as its search — it is not a barcode.
+      dispatch({ type: "blankRowCleared", rowKey });
+      return true;
+    },
+    [requireHeaderGodown],
+  );
+
+  /**
+   * A scan that resolved to nothing: the cell is emptied, so the next scan
+   * lands in a clean one rather than appending to a code that resolved to
+   * nothing, and the cursor goes back to it once the error is read.
+   */
+  const scanFailed = useCallback(
+    (rowKey: string, error: unknown) => {
+      dispatch({ type: "blankRowCleared", rowKey });
+      const id = say.error(apiErrorText(error));
+      afterMessage(id, () => {
+        const index = indexOfRow(rowKey);
+        if (aliveRef.current && index >= 0) {
+          requestFocus(index, Cols.Barcode);
+        }
+      });
+    },
+    [indexOfRow, requestFocus],
+  );
+
+  /**
+   * The holdings of a scanned batch's lot(s) in this godown — one per bucket it
+   * sits in — out of the SAME cached sheet the item picker reads (Qt
+   * `addHoldingsForLots()`), so a label and a pick cannot fill a line
+   * differently. Inserted at the scanned row; one already on the sheet is
+   * skipped.
+   */
+  const addHoldingsForLots = useCallback(
+    async (rowKey: string, lotIds: readonly string[], label: string) => {
+      const current = draftRef.current;
+      const rows = await ensureSheetCache(scopeOfDraft(current), current.godownId);
+      if (!rows) {
+        return;
+      }
+      const wanted = new Set(lotIds);
+      const holdings = rows.filter((row) => wanted.has(row.lotId));
+      const latest = draftRef.current;
+      const preview = insertHoldings(latest.lines, rowKey, holdings, latest.seq);
+      if (preview.index < 0) {
+        return; // the row has gone
+      }
+      if (preview.added === 0 && preview.already === 0) {
+        dispatch({ type: "blankRowCleared", rowKey });
+        say.info(
+          "Nothing to count",
+          `Batch ${label} has no holding in this godown, so it has no book quantity and cannot ` +
+            "have a variance.\n\nStock found on the shelf with no holding behind it is an " +
+            "adjustment, not a count.",
+        );
+        return;
+      }
+      dispatch({ type: "batchHoldingsAdded", rowKey, holdings, label });
+      if (preview.added > 0) {
+        requestFocus(preview.index, Cols.CountedQty);
+      }
+    },
+    [ensureSheetCache, requestFocus],
+  );
+
+  /**
+   * Textile: a code that is no item's barcode may be a batch LABEL
+   * (CBE26-00002), which names the holding itself — `/stock/lots/by-batch`
+   * names its lot(s), and the sheet's holdings of those lots go on (Qt
+   * `resolveBatchLabel()`). Neither a barcode nor a batch: the BARCODE's answer
+   * is the one the operator needs ("not found").
+   */
+  const resolveBatchLabel = useCallback(
+    async (rowKey: string, code: string, barcodeError: unknown) => {
+      const current = draftRef.current;
+      let lotIds: string[];
+      try {
+        const lots = await appDispatch(
+          physicalStockApi.endpoints.physicalStockLotsByBatch.initiate(
+            {
+              companyId: current.companyId,
+              branchId: current.branchId,
+              batchNo: code,
+              includeEmpty: true,
+              bucket: "ALL",
+              godownId: current.godownId,
+            },
+            { subscribe: false, forceRefetch: true },
+          ),
+        ).unwrap();
+        lotIds = lots.map((lot) => lot.lotId).filter(Boolean);
+      } catch {
+        if (indexOfRow(rowKey) >= 0) {
+          scanFailed(rowKey, barcodeError);
+        }
+        return;
+      }
+      if (indexOfRow(rowKey) < 0) {
+        return;
+      }
+      dispatch({ type: "barcodeTyped", rowKey, text: code });
+      await addHoldingsForLots(rowKey, lotIds, code.toUpperCase());
+    },
+    [addHoldingsForLots, appDispatch, indexOfRow, scanFailed],
+  );
+
+  /**
+   * The scan: symbol → item, then the same holdings resolution the picker uses
+   * (Qt `resolveBarcode()`). The row is followed by KEY: lines may be added
+   * above it while the lookup is out, and a reply for a row that has gone is
+   * dropped.
+   */
+  const resolveBarcode = useCallback(
+    async (rowKey: string, typed: string) => {
+      const code = typed.trim();
+      if (!code) {
+        return;
+      }
+      const current = draftRef.current;
+      const line = current.lines.find((candidate) => candidate.key === rowKey);
+      if (!line || line.lotId) {
+        return; // a row that already has a holding is not re-resolved
+      }
+      dispatch({ type: "barcodeCommitted", rowKey });
+      if (!requireHeaderGodown()) {
+        dispatch({ type: "blankRowCleared", rowKey });
+        return;
+      }
+      let found: { itemId: string; itemName: string } | null;
+      try {
+        found = await appDispatch(
+          physicalStockApi.endpoints.physicalStockItemByBarcode.initiate(
+            { barcode: code, companyId: current.companyId },
+            { subscribe: false, forceRefetch: true },
+          ),
+        ).unwrap();
+      } catch (error) {
+        if (indexOfRow(rowKey) < 0) {
+          return;
+        }
+        // Not an item's barcode — on a textile company it may be a batch label.
+        if (autoBatchNoRef.current && statusOf(error) === 404) {
+          await resolveBatchLabel(rowKey, code, error);
+          return;
+        }
+        scanFailed(rowKey, error);
+        return;
+      }
+      if (!found?.itemId || indexOfRow(rowKey) < 0) {
+        return;
+      }
+      // Keep the symbol that was actually read on the row it landed on.
+      dispatch({ type: "barcodeTyped", rowKey, text: code });
+      await addHoldingsForItem(rowKey, found.itemId, found.itemName ?? "");
+    },
+    [addHoldingsForItem, appDispatch, indexOfRow, requireHeaderGodown, resolveBatchLabel, scanFailed],
+  );
+
+  /**
+   * The cell's commit (Enter, or leaving it). Queued, as Qt queues it: this
+   * runs inside the cell's own key or blur handler, and the resolution can
+   * raise "Godown first" and rewrite this very cell — done mid-commit that
+   * crashed Opening Stock (2026-10-23).
+   */
   const commitBarcode = useCallback(
     (rowKey: string, typed: string) => {
-      void (async () => {
-        const code = typed.trim();
-        if (!code) {
-          return;
-        }
-        const current = draftRef.current;
-        const index = current.lines.findIndex((line) => line.key === rowKey);
-        const line = current.lines[index];
-        if (!line || line.lotId) {
-          return; // a row that already has a holding is not re-resolved
-        }
-        dispatch({ type: "barcodeCommitted", rowKey });
-        if (!current.godownId) {
-          say.warn(
-            "Godown first",
-            "A count line is a holding in one godown. Choose which godown is being counted " +
-              "before scanning.",
-          );
-          dispatch({ type: "blankRowCleared", rowKey });
-          focusHeader("godown");
-          return;
-        }
-        let found: { itemId: string; itemName: string } | null;
-        try {
-          found = await appDispatch(
-            physicalStockApi.endpoints.physicalStockItemByBarcode.initiate(
-              { barcode: code, companyId: current.companyId },
-              { subscribe: false, forceRefetch: true },
-            ),
-          ).unwrap();
-        } catch (error) {
-          // Cleared, so the next scan lands in an empty cell rather than
-          // appending to a code that resolved to nothing.
-          dispatch({ type: "blankRowCleared", rowKey });
-          requestFocus(index, Cols.Barcode);
-          say.error(apiErrorText(error));
-          return;
-        }
-        if (!found?.itemId) {
-          return;
-        }
-        // Keep the symbol that was actually read on the row it landed on.
-        dispatch({ type: "barcodeTyped", rowKey, text: code });
-        await addHoldingsForItem(rowKey, found.itemId, found.itemName ?? "");
-      })();
+      window.setTimeout(() => void resolveBarcode(rowKey, typed), 0);
     },
-    [addHoldingsForItem, appDispatch, requestFocus],
+    [resolveBarcode],
   );
 
   const pickReason = useCallback(
@@ -513,15 +744,15 @@ export function usePhysicalStockDraft(
       }
       const refusal = validateBeforeSave(current);
       if (refusal) {
-        say.warn(refusal.title, refusal.message);
-        focusHeader(refusal.focus);
+        focusHeader(refusal.focus, say.warn(refusal.title, refusal.message));
         return;
       }
-      // Both taken NOW: the repaint from the answer holds only the saved
-      // (counted) lines.
+      // All taken NOW: the repaint from the answer holds only the saved
+      // (counted) lines, at the book figures the save re-read.
       const before = computeTotals(current.lines);
       const unwalked = before.lines - before.counted;
       const onScreen = before.lines;
+      const bookBefore = bookBeforeSave(current.lines);
       setBusy("saving");
       let saved;
       try {
@@ -536,12 +767,7 @@ export function usePhysicalStockDraft(
       const refno = saved?.header?.refno || current.refno;
       say.info(
         "Saved",
-        unwalked > 0
-          ? `${refno} saved as a draft. No stock has moved.\n\n${unwalked} of ${onScreen} ` +
-              "holdings on screen have not been counted yet, so they are NOT on the saved " +
-              "document — count them and save again to add them. A blank is not the same as " +
-              "counting zero."
-          : `${refno} saved as a draft. No stock has moved.`,
+        savedDraftMessage(refno, unwalked, onScreen, bookMovedLines(saved?.lines ?? [], bookBefore)),
       );
       startNext();
     })();
@@ -566,13 +792,13 @@ export function usePhysicalStockDraft(
       }
       const refusal = validateBeforeSave(current);
       if (refusal) {
-        say.warn(refusal.title, refusal.message);
-        focusHeader(refusal.focus);
+        focusHeader(refusal.focus, say.warn(refusal.title, refusal.message));
         return;
       }
       // Asked BEFORE the call now — once it is sent the sheet is posted or it
       // does not exist.
       const totals = computeTotals(current.lines);
+      const bookBefore = bookBeforeSave(current.lines);
       const confirmed = await askYesNo(
         `Post ${current.refno || "this count"}?`,
         postConfirmMessage(totals),
@@ -601,7 +827,14 @@ export function usePhysicalStockDraft(
       setBusy("idle");
       dispatch({ type: "documentSaved", document: posted });
       dispatch({ type: "statusApplied", status: posted?.header?.status || STATUS_POSTED });
-      say.info("Posted", postedMessage(posted?.header?.refno || current.refno, posted?.rowsPosted));
+      // The book moved since the lines were drawn: the save re-read it, so the
+      // variance that POSTED is not the one the question above showed. Qt says
+      // this on the draft save only; a post has more reason to.
+      say.info(
+        "Posted",
+        postedMessage(posted?.header?.refno || current.refno, posted?.rowsPosted) +
+          bookMovedText(bookMovedLines(posted?.lines ?? [], bookBefore)),
+      );
       startNext();
     })();
   }, [saveDocument, setBusy, startNext]);
@@ -633,12 +866,7 @@ export function usePhysicalStockDraft(
         const wasPosted = current.status === STATUS_POSTED;
         const confirmed = await askYesNo(
           `Cancel ${current.refno}?`,
-          wasPosted
-            ? "This writes one reversing ledger row for every variance row the count posted. " +
-                "Nothing is deleted — the sheet stays in the list as CANCELLED.\n\nIt will be " +
-                "refused if the stock has since been sold."
-            : "This draft has posted no variance, so there is nothing to reverse. Nothing is " +
-                "deleted — the sheet stays in the list as CANCELLED, with the reason against it.",
+          wasPosted ? CANCEL_POSTED_CONFIRM : CANCEL_DRAFT_CONFIRM,
           { destructive: true },
         );
         if (!confirmed) {
@@ -718,6 +946,8 @@ export function usePhysicalStockDraft(
         // This document may be another godown's.
         sheetCacheRef.current = null;
         dispatch({ type: "documentLoaded", document, scope, openForEdit });
+        // On the first line's count (Qt `applyFetchedVoucher()`).
+        requestFocus(0, Cols.CountedQty);
         // A loaded sheet's lines carry no average cost, so its variance would
         // show no value and a re-save would send a total value of 0. The
         // godown's count sheet has the average per holding.
@@ -734,7 +964,78 @@ export function usePhysicalStockDraft(
         }
       })();
     },
-    [appDispatch, ensureSheetCache, setBusy],
+    [appDispatch, ensureSheetCache, requestFocus, setBusy],
+  );
+
+  /**
+   * Previous / Next (Alt+PgUp / Alt+PgDn) — the sheet entered just before /
+   * after this one in its company, branch and year, in the list's own order,
+   * through the one server walk every document type shares (`GET
+   * /txn/adjacent`, Qt `stepDocument()`). On a new sheet, Previous opens the
+   * newest. A found sheet opens READ-ONLY (F2 to edit a draft); at either end
+   * the notice says so and the screen stays.
+   */
+  const stepDocument = useCallback(
+    (previous: boolean) => {
+      void (async () => {
+        if (busyRef.current !== "idle") {
+          return;
+        }
+        const current = draftRef.current;
+        if (!current.svhId && !previous) {
+          dispatch({ type: "noticeSet", text: STEP_NOTICES.newHasNoNext });
+          return;
+        }
+        if (
+          current.dirty &&
+          !(await askYesNo(
+            "Open another count",
+            "This count has unsaved changes. Discard it and open another?",
+          ))
+        ) {
+          return;
+        }
+        setBusy("loading");
+        let found: PhysicalStockDocKey | null = null;
+        try {
+          const answer = await adjacentDocument({
+            docType: "PHYSICAL_STOCK",
+            companyId: current.companyId,
+            branchId: current.branchId,
+            accYear: current.accYear,
+            ...(current.svhId ? { docId: current.svhId } : {}),
+            direction: previous ? "prev" : "next",
+          }).unwrap();
+          const doc = answer.doc;
+          if (!doc) {
+            dispatch({
+              type: "noticeSet",
+              text: !current.svhId
+                ? STEP_NOTICES.none
+                : previous
+                  ? STEP_NOTICES.oldest
+                  : STEP_NOTICES.newest,
+            });
+            return;
+          }
+          found = {
+            svhId: doc.docId,
+            companyId: doc.companyId,
+            branchId: doc.branchId,
+            accYear: doc.accYear,
+          };
+        } catch (error) {
+          say.error(apiErrorText(error));
+          return;
+        } finally {
+          setBusy("idle");
+        }
+        if (found) {
+          load(found, false);
+        }
+      })();
+    },
+    [adjacentDocument, load, setBusy],
   );
 
   // -------------------------------------------------------------------------
@@ -754,9 +1055,12 @@ export function usePhysicalStockDraft(
     guardDirty(
       "Discard count",
       "This count sheet has unsaved changes. Start a new one anyway?",
-      reset,
+      () => {
+        reset();
+        focusEntryStart();
+      },
     );
-  }, [guardDirty, reset]);
+  }, [focusEntryStart, guardDirty, reset]);
 
   const edit = useCallback(() => {
     const current = draftRef.current;
@@ -769,7 +1073,8 @@ export function usePhysicalStockDraft(
       return;
     }
     dispatch({ type: "modeSet", mode: "entry" });
-  }, []);
+    focusEntryStart();
+  }, [focusEntryStart]);
 
   const selectGodown = useCallback((id: string, name: string) => {
     if (id !== draftRef.current.godownId) {
@@ -798,6 +1103,7 @@ export function usePhysicalStockDraft(
     setRemarks: (rowKey, text) => dispatch({ type: "remarksSet", rowKey, text }),
     typeBarcode: (rowKey, text) => dispatch({ type: "barcodeTyped", rowKey, text }),
     commitBarcode,
+    openItemList,
     pickItem,
     pickReason,
     loadCountSheet,
@@ -809,6 +1115,8 @@ export function usePhysicalStockDraft(
     dismissCancel,
     edit,
     load,
+    stepDocument,
+    focusEntryStart,
     guardDirty,
     resumed,
     finishResume,

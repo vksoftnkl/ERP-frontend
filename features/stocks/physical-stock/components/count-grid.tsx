@@ -8,9 +8,16 @@
  * are picker cells: Enter on an empty one, or any printable key, opens the
  * popup with that key as the search.
  *
- * Enter walks the layout's focus chain (ui table 28 flags Counted Qty alone,
- * so it runs straight down the column); ↑↓ change row; ←→ and Backspace move
- * between read-only cells. Ctrl+Enter is left to bubble — it posts.
+ * The Barcode cell is the item SEARCH too (Qt 74b755c, as on Opening Stock):
+ * ↓ there opens the item list searched for what was typed, and the typed text
+ * is never resolved as a code.
+ *
+ * Enter walks the screen's stops (`isEntryStop`, Qt `setFocusStops`): a blank
+ * row Barcode then Item; a holding Counted Qty only, then the next line's —
+ * Reason and Remarks stay editable by click. A click on a blank row's other
+ * cells lands on its Barcode. ↑↓ change row; ←→ and Backspace move between
+ * read-only cells; Tab leaves the grid. Ctrl+Enter is left to bubble — it
+ * posts.
  */
 import {
   useEffect,
@@ -24,10 +31,11 @@ import quotationStyles from "@/features/sales/quotation/page.module.scss";
 import {
   canOpenPicker,
   cellText,
-  focusStops,
+  hasHolding,
   isCellEditable,
   nextStop,
   previousStop,
+  rowStops,
   varianceTone,
   type CountColumn,
 } from "../physical-stock.columns";
@@ -49,11 +57,50 @@ export type CountGridProps = {
   onRemarksChange: (rowKey: string, text: string) => void;
   onBarcodeChange: (rowKey: string, text: string) => void;
   onBarcodeCommit: (rowKey: string, text: string) => void;
+  /** ↓ in a blank row's Barcode — the item list, searched for what was typed there. */
+  onSearchItems: (rowKey: string, typed: string) => void;
   onOpenPicker: (kind: PickerKind, rowKey: string, initialQuery: string) => void;
 };
 
 /** Each cell's address, `row:column-number` — how focus finds its way back. */
 export const CELL_ATTR = "data-physical-stock-cell";
+
+/** The td attribute naming its column number — what a click on a blank row reads. */
+const COLUMN_ATTR = "data-physical-stock-column";
+
+/** The two cells a blank row is keyed through: a scan, or an item pick. */
+const BLANK_ROW_COLUMNS = new Set<number>([Cols.Barcode, Cols.Description]);
+
+const TABBABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Tab — leave the grid (Qt "Leave the grid — Tab"): the next focusable thing
+ * after the grid, or the last one before it on Shift+Tab, rather than the next
+ * of its own cells. As Opening Stock's grid does.
+ */
+function leaveGrid(viewport: HTMLElement, forward: boolean): boolean {
+  const candidates = Array.from(document.querySelectorAll<HTMLElement>(TABBABLE)).filter(
+    (element) =>
+      element.tabIndex >= 0 && !viewport.contains(element) && element.getClientRects().length > 0,
+  );
+  const target = forward
+    ? candidates.find(
+        (element) =>
+          (viewport.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+      )
+    : [...candidates]
+        .reverse()
+        .find(
+          (element) =>
+            (viewport.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_PRECEDING) !== 0,
+        );
+  if (!target) {
+    return false;
+  }
+  target.focus();
+  return true;
+}
 
 /** Puts the cursor back on a cell after a popup that did not move it closes. */
 export function focusGridCell(row: number, col: number): void {
@@ -94,6 +141,7 @@ export function CountGrid(props: CountGridProps) {
     onRemarksChange,
     onBarcodeChange,
     onBarcodeCommit,
+    onSearchItems,
     onOpenPicker,
   } = props;
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -118,14 +166,15 @@ export function CountGrid(props: CountGridProps) {
 
   // Somewhere for the cursor to go after a sheet is drawn, a pick lands, or a
   // reason is chosen — the row asked for, at the column asked for, or the
-  // row's first stop when that column is not on screen.
+  // row's first stop when that cell is not there (a blank row has no Counted
+  // Qty to take, a layout may hide Barcode).
   useEffect(() => {
     if (!focusRequest) {
       return;
     }
     const frame = window.requestAnimationFrame(() => {
       if (!focusCell(focusRequest.row, focusRequest.col)) {
-        const stops = focusStops(columns);
+        const stops = rowStops(columns, lines[focusRequest.row]);
         if (stops.length > 0) {
           focusCell(focusRequest.row, stops[0]);
         }
@@ -137,9 +186,16 @@ export function CountGrid(props: CountGridProps) {
   }, [focusRequest]);
 
   const moveNext = (row: number, col: number) => {
-    const target = nextStop(columns, { row, col }, lines.length);
+    const target = nextStop(columns, lines, { row, col });
     if (target) {
       focusCell(target.row, target.col);
+    }
+  };
+
+  /** A blank row's entry cell: its Barcode, or its Item on a layout that hides Barcode. */
+  const focusEntryCell = (row: number) => {
+    if (!focusCell(row, Cols.Barcode)) {
+      focusCell(row, Cols.Description);
     }
   };
 
@@ -173,6 +229,12 @@ export function CountGrid(props: CountGridProps) {
         }
         if (column.kind === "barcode" && isInput) {
           const value = (event.currentTarget as HTMLInputElement).value;
+          // Enter is the scan's check and nothing else: a resolved scan puts
+          // the cursor on the line's count itself. An empty cell steps on to Item.
+          if (!value.trim()) {
+            moveNext(rowIndex, column.no);
+            return;
+          }
           committedRef.current.set(line.key, value.trim());
           onBarcodeCommit(line.key, value);
           return;
@@ -182,6 +244,23 @@ export function CountGrid(props: CountGridProps) {
       }
       case "ArrowDown":
         event.preventDefault();
+        if (
+          column.kind === "barcode" &&
+          isInput &&
+          !hasHolding(line) &&
+          !event.ctrlKey &&
+          !event.metaKey &&
+          !event.altKey &&
+          !event.shiftKey
+        ) {
+          // The cell is the item SEARCH too: what was typed goes to the list,
+          // and is never committed as a code — the blur that follows the list
+          // opening must not resolve it after all.
+          const value = (event.currentTarget as HTMLInputElement).value;
+          committedRef.current.set(line.key, value.trim());
+          onSearchItems(line.key, value);
+          return;
+        }
         if (rowIndex < lines.length - 1) {
           focusCell(rowIndex + 1, column.no);
         }
@@ -202,10 +281,21 @@ export function CountGrid(props: CountGridProps) {
       case "Backspace":
         if (!isInput) {
           event.preventDefault();
-          const target = previousStop(columns, { row: rowIndex, col: column.no });
+          const target = previousStop(columns, lines, { row: rowIndex, col: column.no });
           if (target) {
             focusCell(target.row, target.col);
           }
+        }
+        return;
+      case "Tab":
+        if (
+          !event.ctrlKey &&
+          !event.altKey &&
+          !event.metaKey &&
+          viewportRef.current &&
+          leaveGrid(viewportRef.current, !event.shiftKey)
+        ) {
+          event.preventDefault();
         }
         return;
       default:
@@ -263,9 +353,16 @@ export function CountGrid(props: CountGridProps) {
       return (
         <input
           {...common}
+          onFocus={(event: ReactFocusEvent<HTMLInputElement>) => {
+            // A fresh visit: whatever was committed (or sent to the item list)
+            // before is no reason to skip what is typed now.
+            committedRef.current.delete(line.key);
+            common.onFocus(event);
+          }}
           value={line.barcode}
           maxLength={100}
-          aria-label="Scan a barcode"
+          placeholder={rowIndex === lines.length - 1 ? "Scan, or type + ↓" : undefined}
+          aria-label="Scan a barcode, or type a name and press ↓ for the item list"
           onChange={(event) => onBarcodeChange(line.key, event.target.value)}
           onBlur={(event) => {
             const value = event.target.value.trim();
@@ -333,10 +430,26 @@ export function CountGrid(props: CountGridProps) {
                   !tone && (rowIndex % 2 === 0 ? quotationStyles.rowOdd : quotationStyles.rowEven),
                   !tone && isActiveRow && quotationStyles.rowActive,
                 )}
+                onMouseDown={(event) => {
+                  // A blank row takes nothing but a scan or an item pick: a
+                  // click (or double-click) anywhere else on it goes to its
+                  // Barcode (Qt eventFilter, as on Opening Stock).
+                  if (!editable || hasHolding(line) || event.button !== 0) {
+                    return;
+                  }
+                  const cell = (event.target as HTMLElement).closest<HTMLElement>(`[${COLUMN_ATTR}]`);
+                  const no = Number(cell?.getAttribute(COLUMN_ATTR) ?? Number.NaN);
+                  if (!Number.isInteger(no) || BLANK_ROW_COLUMNS.has(no)) {
+                    return;
+                  }
+                  event.preventDefault();
+                  focusEntryCell(rowIndex);
+                }}
               >
                 {columns.map((column) => (
                   <td
                     key={column.no}
+                    {...{ [COLUMN_ATTR]: column.no }}
                     className={cx(
                       isActiveRow && active?.col === column.no && styles.cellActive,
                       column.no === Cols.CountedQty && quotationStyles.alignCenter,

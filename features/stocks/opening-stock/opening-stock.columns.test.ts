@@ -6,8 +6,9 @@ import {
   isCellGreyed,
   isEnterStop,
   resolveOpeningStockColumns,
+  withBatchDetailColumns,
 } from "./opening-stock.columns";
-import { OS_COLUMN_COUNT, OS_COL } from "./opening-stock.constants";
+import { OS_COLUMN_COUNT, OS_COL, OS_LINE_FIELD_SLOTS } from "./opening-stock.constants";
 import { blankLine } from "./opening-stock.lines";
 
 function layoutRow(no: number, name: string, overrides: Partial<UiTableColumnRow> = {}): UiTableColumnRow {
@@ -33,9 +34,13 @@ function column(number: number) {
 }
 
 describe("the column meanings", () => {
-  it("cover all 39 OpeningStockCols, once each", () => {
-    expect(OPENING_STOCK_COLUMNS).toHaveLength(OS_COLUMN_COUNT);
-    expect(new Set(OPENING_STOCK_COLUMNS.map((meaning) => meaning.number)).size).toBe(OS_COLUMN_COUNT);
+  it("cover all 45 OpeningStockCols once each, but the three the line holds as fields", () => {
+    const columns = OS_COLUMN_COUNT - OS_LINE_FIELD_SLOTS.length;
+    expect(OPENING_STOCK_COLUMNS).toHaveLength(columns);
+    expect(new Set(OPENING_STOCK_COLUMNS.map((meaning) => meaning.number)).size).toBe(columns);
+    for (const slot of OS_LINE_FIELD_SLOTS) {
+      expect(OPENING_STOCK_COLUMNS.some((meaning) => meaning.number === slot)).toBe(false);
+    }
   });
 
   it("align money right and counts centred, by meaning", () => {
@@ -76,7 +81,11 @@ describe("resolveOpeningStockColumns", () => {
 
   it("falls back to the .ui's headings with the reference ids hidden", () => {
     const fallback = resolveOpeningStockColumns(undefined);
-    expect(fallback).toHaveLength(OS_COLUMN_COUNT);
+    expect(fallback).toHaveLength(OS_COLUMN_COUNT - OS_LINE_FIELD_SLOTS.length);
+    // Size / Colour / Model sit straight after Batch No, as ui table 27 has them.
+    const keys = fallback.map((entry) => entry.key);
+    const batchAt = keys.indexOf("batchNo");
+    expect(keys.slice(batchAt, batchAt + 4)).toEqual(["batchNo", "sizeName", "colourName", "model"]);
     expect(fallback.find((entry) => entry.number === OS_COL.Description)?.header).toBe("Item");
     expect(fallback.find((entry) => entry.number === OS_COL.ItemId)?.visible).toBe(false);
   });
@@ -151,5 +160,73 @@ describe("where Enter stops — Qt setFocusCellFilter, per row", () => {
     for (const number of [OS_COL.FreeQty, OS_COL.TaxPerc, OS_COL.Bucket, OS_COL.Barcode, OS_COL.Description]) {
       expect(isEnterStop(column(number), line)).toBe(false);
     }
+  });
+});
+
+describe("textile — Size, Colour, Model (Qt 74b755c)", () => {
+  const BATCH_DETAIL = [OS_COL.SizeName, OS_COL.ColourName, OS_COL.Model];
+  const shirt = { ...blankLine(), itemId: "shirt", trackSignature: "B" };
+
+  it("shows them exactly while the company numbers its own batches, whatever the layout says", () => {
+    const layout = resolveOpeningStockColumns([
+      layoutRow(OS_COL.BatchNo, "Batch No"),
+      layoutRow(OS_COL.SizeName, "Size", { uiTblClmColumnVisibility: false, uiTblClmColumnPosition: 9.1 }),
+      layoutRow(OS_COL.ColourName, "Colour", { uiTblClmColumnPosition: 9.2 }),
+      layoutRow(OS_COL.Model, "Model", { uiTblClmColumnPosition: 9.3 }),
+      layoutRow(OS_COL.MfgDate, "Mfg Date"),
+    ]);
+    const visibleOf = (autoBatchNo: boolean) =>
+      withBatchDetailColumns(layout, autoBatchNo)
+        .filter((entry) => entry.visible)
+        .map((entry) => entry.key);
+    expect(visibleOf(false)).toEqual(["batchNo", "mfgDate"]);
+    expect(visibleOf(true)).toEqual(["batchNo", "sizeName", "colourName", "model", "mfgDate"]);
+    // The layout's own heading stands.
+    expect(withBatchDetailColumns(layout, true).find((entry) => entry.key === "sizeName")?.header).toBe("Size");
+  });
+
+  it("puts one the layout has no row for straight after Batch No (a deployment that predates them)", () => {
+    const layout = resolveOpeningStockColumns([
+      layoutRow(OS_COL.Qty, "Qty"),
+      layoutRow(OS_COL.BatchNo, "Batch No"),
+      layoutRow(OS_COL.Model, "Model No", { uiTblClmColumnPosition: 40 }),
+      layoutRow(OS_COL.MfgDate, "Mfg Date"),
+    ]);
+    const shown = withBatchDetailColumns(layout, true);
+    expect(shown.map((entry) => entry.key)).toEqual(["qty", "batchNo", "sizeName", "colourName", "mfgDate", "model"]);
+    const added = shown.find((entry) => entry.key === "colourName");
+    expect(added?.header).toBe("Colour");
+    expect(added?.visible).toBe(true);
+    expect(added?.columnId).toBeNull();
+    // Off, nothing is added (and the one the layout has is hidden).
+    const off = withBatchDetailColumns(layout, false);
+    expect(off.map((entry) => entry.key)).toEqual(["qty", "batchNo", "mfgDate", "model"]);
+    expect(off.find((entry) => entry.key === "model")?.visible).toBe(false);
+  });
+
+  it("open only on an item tracked by batch, under the setting, with a batch not typed by hand", () => {
+    for (const number of BATCH_DETAIL) {
+      expect(isCellEditable(column(number), shirt, true, true)).toBe(true);
+      expect(isCellGreyed(column(number), shirt, true)).toBe(false);
+      // The setting off.
+      expect(isCellEditable(column(number), shirt, true, false)).toBe(false);
+      // A typed batch number.
+      expect(isCellEditable(column(number), { ...shirt, batchTyped: true }, true, true)).toBe(false);
+      expect(isCellGreyed(column(number), { ...shirt, batchTyped: true }, true)).toBe(true);
+      // An item not tracked by batch.
+      expect(isCellEditable(column(number), { ...shirt, trackSignature: "ME" }, true, true)).toBe(false);
+      // No item, or a frozen document.
+      expect(isCellEditable(column(number), blankLine(), true, true)).toBe(false);
+      expect(isCellEditable(column(number), shirt, false, true)).toBe(false);
+    }
+  });
+
+  it("are Enter stops right after Batch No under the same rule", () => {
+    const stopsOf = (line: typeof shirt, autoBatchNo: boolean) =>
+      OPENING_STOCK_COLUMNS.filter((meaning) => isEnterStop(meaning, line, autoBatchNo)).map((meaning) => meaning.key);
+    expect(stopsOf(shirt, true)).toEqual(["qty", "batchNo", "costPerUnit", "sizeName", "colourName", "model"]);
+    expect(stopsOf(shirt, false)).toEqual(["qty", "batchNo", "costPerUnit"]);
+    expect(stopsOf({ ...shirt, batchTyped: true }, true)).toEqual(["qty", "batchNo", "costPerUnit"]);
+    expect(stopsOf({ ...shirt, trackSignature: "N" }, true)).toEqual(["qty", "costPerUnit"]);
   });
 });

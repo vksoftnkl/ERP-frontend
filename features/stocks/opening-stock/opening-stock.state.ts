@@ -16,6 +16,9 @@
  *   barcodeResolved   resolveBarcode() ok
  *   supplierPicked    applyPickedSupplier()
  *   lineFieldSet      onGridCellEdited()     — the recalc rules per column
+ *   batchNoSet        onBatchNoEdited()      — typed, or left to the server to give
+ *   batchDetailChoiceSet                     — Size / Colour: a list row, a new name,
+ *                                              or a quick-add landing (Qt 74b755c)
  *   lineInserted      addLineRow()           — a blank row ABOVE the current one
  *   lineRemoved       removeLineRow()
  *   lineSplit         splitCurrentLine()
@@ -41,6 +44,7 @@ import {
   newLineKey,
   normalizeSignature,
   recalcLine,
+  withBatchNoEdited,
   withTrailingBlank,
 } from "./opening-stock.lines";
 import {
@@ -95,6 +99,21 @@ export type OpeningStockAction =
   | { type: "supplierPicked"; rowKey: string; supplierId: string; supplierName: string }
   | { type: "supplierCleared"; rowKey: string }
   | { type: "lineFieldSet"; rowKey: string; field: OpeningStockLineField; value: string | number }
+  | {
+      type: "batchNoSet";
+      rowKey: string;
+      value: string;
+      /** `stock.auto_batch_no` — a typed number then clears the size, colour and model. */
+      autoBatchNo: boolean;
+    }
+  | {
+      type: "batchDetailChoiceSet";
+      rowKey: string;
+      field: "sizeName" | "colourName";
+      /** Blank for a name not on the list (yet). */
+      id: string;
+      name: string;
+    }
   | { type: "lineInserted"; beforeRowKey: string; newKey?: string }
   | { type: "lineRemoved"; rowKey: string }
   | { type: "lineSplit"; rowKey: string; newKey?: string }
@@ -287,9 +306,10 @@ export function splitCopyOf(line: OpeningStockLine, key: string = newLineKey()):
 /**
  * A RE-pick on a line that had an item: everything the OLD item brought goes —
  * its barcode, code, unit, base unit, factor, tax, a cost without tax, the
- * identity cells, supplier, lot, decimals — so none of it is saved against the
- * new one. The quantity and the cost typed per unit stay: the operator keyed
- * those.
+ * identity cells, supplier, lot, decimals, and the batch's size / colour /
+ * model with whether its batch was typed (Qt 74b755c `applyPickedItem()`) — so
+ * none of it is saved against the new one. The quantity and the cost typed per
+ * unit stay: the operator keyed those.
  */
 export function clearedForRepick(line: OpeningStockLine): OpeningStockLine {
   return {
@@ -312,6 +332,12 @@ export function clearedForRepick(line: OpeningStockLine): OpeningStockLine {
     supplierName: "",
     lotId: "",
     decimalCount: 0,
+    sizeId: "",
+    sizeName: "",
+    colourId: "",
+    colourName: "",
+    model: "",
+    batchTyped: false,
   };
 }
 
@@ -527,6 +553,29 @@ export function openingStockReducer(
         draft,
         mapLine(draft, action.rowKey, (line) => applyLineEdit(line, action.field, action.value)),
       );
+
+    case "batchNoSet":
+      return withLines(
+        draft,
+        mapLine(draft, action.rowKey, (line) => ({
+          ...withBatchNoEdited(line, action.value, action.autoBatchNo).line,
+          problem: "",
+        })),
+      );
+
+    case "batchDetailChoiceSet": {
+      // Name in the cell, id beside it (Qt "name column + 1").
+      const idField = action.field === "sizeName" ? "sizeId" : "colourId";
+      return withLines(
+        draft,
+        mapLine(draft, action.rowKey, (line) => ({
+          ...line,
+          [action.field]: action.name,
+          [idField]: action.id,
+          problem: "",
+        })),
+      );
+    }
 
     case "lineInserted": {
       const index = draft.lines.findIndex((line) => line.key === action.beforeRowKey);

@@ -55,7 +55,7 @@ import type { ScreenMemoryOption } from "@/lib/use-screen-memory";
 import { useGetQuotationGridLayoutQuery } from "@/store/api/quotationApi";
 import { useGridSettings } from "@/features/sales/quotation/components/grid-settings";
 import { useColumnResize } from "@/features/sales/quotation/components/use-column-resize";
-import { resolveOpeningStockColumns } from "../opening-stock.columns";
+import { resolveOpeningStockColumns, withBatchDetailColumns } from "../opening-stock.columns";
 import {
   GODOWN_DROPDOWN_KEY,
   ITEM_PICKER_GRID_KEY,
@@ -145,7 +145,7 @@ export function OpeningStockEntryView({
   memory,
 }: OpeningStockEntryViewProps) {
   const api = useOpeningStockDraft({ initialDocument, initialMode, onLeave: onBackToList, memory });
-  const { draft, totals, busy } = api;
+  const { draft, totals, busy, autoBatchNo } = api;
 
   // Reopened on the document the operator left here (screen memory): it is
   // already on screen, so all that is left is to say so — once.
@@ -168,7 +168,13 @@ export function OpeningStockEntryView({
 
   const uiTableId = useUiTableId(OPENING_STOCK_LINES_UI_TABLE_KEY);
   const { data: layoutRows } = useGetQuotationGridLayoutQuery({ uiTableId }, { skip: !uiTableId });
-  const configuredColumns = useMemo(() => resolveOpeningStockColumns(layoutRows), [layoutRows]);
+  // Size / Colour / Model shown exactly while the company numbers its own
+  // batches — re-applied over whatever the layout says (Qt
+  // `applyBatchDetailColumns()` after every layout load).
+  const configuredColumns = useMemo(
+    () => withBatchDetailColumns(resolveOpeningStockColumns(layoutRows), autoBatchNo),
+    [autoBatchNo, layoutRows],
+  );
   // Right-click on the lines: "save column width" for a dragged heading and
   // "Admin settings" (visibility, order, focus) — the shared layout.
   const columnResize = useColumnResize(configuredColumns, uiTableId);
@@ -468,6 +474,8 @@ export function OpeningStockEntryView({
             onRemoveLine={(rowKey) => void api.removeLine(rowKey)}
             onSwitchUnit={(rowKey) => void api.switchUnit(rowKey)}
             onPostKey={postKey}
+            autoBatchNo={autoBatchNo}
+            batchDetail={api.batchDetail}
           />
         </section>
       </div>

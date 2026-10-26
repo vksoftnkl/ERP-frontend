@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { blankLine } from "./opening-stock.lines";
 import {
+  autoBatchLineIndexes,
   buildLines,
   buildPayload,
   describeError,
   fieldErrorsOf,
+  givenBatchesText,
   headerFromPayload,
   lineFromPayload,
   lineProblemsOf,
@@ -166,6 +168,82 @@ describe("buildPayload", () => {
   });
 });
 
+describe("textile — size / colour / model on the wire (Qt 74b755c)", () => {
+  const keyed = line({
+    trackSignature: "B",
+    sizeId: " isz-xl ",
+    sizeName: "XL",
+    colourId: "icl-red",
+    colourName: "Red",
+    model: "  Slim fit ",
+  });
+
+  it("sends them, trimmed, on a batch line whose batch is the server's to give", () => {
+    const [dto] = buildLines([keyed], { autoBatchNo: true });
+    expect(dto.sizeId).toBe("isz-xl");
+    expect(dto.colourId).toBe("icl-red");
+    expect(dto.model).toBe("Slim fit");
+    expect(dto.batchNo).toBeUndefined();
+    // Names never travel — only the ids.
+    expect(dto).not.toHaveProperty("sizeName");
+    expect(dto).not.toHaveProperty("colourName");
+  });
+
+  it("only when non-blank: a name not on the list has no id and goes nowhere", () => {
+    const [dto] = buildLines([{ ...keyed, sizeId: "", colourId: "  ", model: "" }], { autoBatchNo: true });
+    expect(dto).not.toHaveProperty("sizeId");
+    expect(dto).not.toHaveProperty("colourId");
+    expect(dto).not.toHaveProperty("model");
+  });
+
+  it("never with a TYPED batch (STOCK_BATCH_DETAIL_NEEDS_AUTO_BATCH), the setting off, or an item not tracked by batch", () => {
+    const typed = buildLines([{ ...keyed, batchNo: "ZT-1", batchTyped: true }], { autoBatchNo: true })[0];
+    expect(typed.batchNo).toBe("ZT-1");
+    expect(typed).not.toHaveProperty("sizeId");
+    expect(buildLines([keyed])[0]).not.toHaveProperty("sizeId");
+    expect(buildLines([{ ...keyed, trackSignature: "E" }], { autoBatchNo: true })[0]).not.toHaveProperty("model");
+  });
+
+  it("a server-given batch handed back on a re-save still carries them", () => {
+    const [dto] = buildLines([{ ...keyed, batchNo: "CBE26-00001", batchTyped: false }], { autoBatchNo: true });
+    expect(dto.batchNo).toBe("CBE26-00001");
+    expect(dto.sizeId).toBe("isz-xl");
+  });
+
+  it("buildPayload passes the setting through", () => {
+    const payload = buildPayload(draftWith([keyed]), { autoBatchNo: true });
+    expect(payload.lines[0].model).toBe("Slim fit");
+    expect(buildPayload(draftWith([keyed])).lines[0]).not.toHaveProperty("model");
+  });
+
+  it("knows, before the save, which SENT lines the server is to number", () => {
+    const lines = [
+      line({ trackSignature: "B" }),
+      { ...line({ trackSignature: "B" }), itemId: "" }, // a row with no item is not sent
+      line({ trackSignature: "B", batchNo: "TYPED" }),
+      line({ trackSignature: "N" }),
+      line({ trackSignature: "BE", batchNo: "  " }),
+    ];
+    expect(autoBatchLineIndexes(lines, true)).toEqual([0, 3]);
+    expect(autoBatchLineIndexes(lines, false)).toEqual([]);
+  });
+
+  it("names, after it, what each was given — off the reply's lines, by the same index", () => {
+    const reply = [
+      { itemName: "Shirt", batchNo: "CBE26-00001" },
+      { itemName: "Saree", batchNo: "TYPED" },
+      { itemName: "Kurta", batchNo: null },
+      { itemName: "Dhoti", batchNo: " CBE26-00002 " },
+    ] as unknown as OpeningStockLinePayload[];
+    expect(givenBatchesText([0, 2, 3], reply)).toBe(
+      "\n\nBatch numbers given:\nLine 1  Shirt — CBE26-00001\nLine 4  Dhoti — CBE26-00002",
+    );
+    expect(givenBatchesText([], reply)).toBe("");
+    expect(givenBatchesText([2, 9], reply)).toBe("");
+    expect(givenBatchesText([0], undefined)).toBe("");
+  });
+});
+
 describe("reading the stored document", () => {
   const stored: OpeningStockLinePayload = {
     sviId: "svi-1",
@@ -214,6 +292,34 @@ describe("reading the stored document", () => {
     expect(row.expiryDate).toBe("31-03-2027");
     expect(row.trackSignature).toBe("N");
     expect(row.splitNo).toBe(1);
+  });
+
+  it("reads the batch's size / colour / model, and counts a loaded batch as given, not typed", () => {
+    const row = lineFromPayload({
+      ...stored,
+      sizeId: "isz-xl",
+      sizeName: "XL",
+      colourId: "icl-red",
+      colourName: "Red",
+      model: "Slim fit",
+    });
+    expect([row.sizeId, row.sizeName, row.colourId, row.colourName, row.model]).toEqual([
+      "isz-xl",
+      "XL",
+      "icl-red",
+      "Red",
+      "Slim fit",
+    ]);
+    expect(row.batchTyped).toBe(false);
+    // A server that predates them leaves them out: blank, never undefined.
+    const older = lineFromPayload(stored);
+    expect([older.sizeId, older.sizeName, older.colourId, older.colourName, older.model]).toEqual([
+      "",
+      "",
+      "",
+      "",
+      "",
+    ]);
   });
 
   it("reads the header and falls back on unknown values", () => {

@@ -10,13 +10,16 @@
  * strategy.
  *
  * Enter in the search box drops to the list; Enter on a row picks it. No
- * default button.
+ * default button. A scanned batch label that several holdings share opens it
+ * already searched for that batch (`initialSearch`). The Item column carries a
+ * textile batch's size, colour and model after the name.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { skipToken } from "@reduxjs/toolkit/query";
 import { cx } from "@/components/design-system/cx";
 import { formatCurrency } from "@/domain/pricing";
 import { ModalShell } from "@/features/sales/quotation/components/modal-shell";
+import { batchDetailItemText } from "@/features/stocks/shared/batch-detail";
 import quotationStyles from "@/features/sales/quotation/page.module.scss";
 import { useStockAdjustmentPickStockQuery } from "../stock-adjustment.api";
 import { bucketLabel } from "../stock-adjustment.constants";
@@ -38,13 +41,26 @@ export type StockPickDialogProps = {
   groupBySupplier: boolean;
   /** Expiry write-off: offer only lots expired by this day (ISO). */
   expiredBy: string | null;
+  /** Start with this in the search box — a scanned batch label (Qt `setSearch`). */
+  initialSearch?: string;
   onClose: () => void;
   onPick: (row: PickStockRow) => void;
 };
 
 export function StockPickDialog(props: StockPickDialogProps) {
-  const { isOpen, companyId, branchId, godownId, godownName, item, groupBySupplier, expiredBy, onClose, onPick } =
-    props;
+  const {
+    isOpen,
+    companyId,
+    branchId,
+    godownId,
+    godownName,
+    item,
+    groupBySupplier,
+    expiredBy,
+    initialSearch = "",
+    onClose,
+    onPick,
+  } = props;
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [showAll, setShowAll] = useState(false);
@@ -54,12 +70,13 @@ export function StockPickDialog(props: StockPickDialogProps) {
 
   useEffect(() => {
     if (isOpen) {
-      setSearch("");
-      setDebounced("");
+      const start = initialSearch.trim();
+      setSearch(start);
+      setDebounced(start);
       setShowAll(false);
       setActive(-1);
     }
-  }, [isOpen]);
+  }, [initialSearch, isOpen]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebounced(search), 300);
@@ -136,7 +153,7 @@ export function StockPickDialog(props: StockPickDialogProps) {
         onClick={() => accept(index)}
       >
         {groupBySupplier ? <td /> : null}
-        <td>{row.itemName}</td>
+        <td>{batchDetailItemText(row)}</td>
         <td>{row.batchNo ?? ""}</td>
         <td className={quotationStyles.alignCenter}>{dateFromWire(row.expiryDate)}</td>
         <td className={quotationStyles.alignRight}>{mrp > 0 ? formatCurrency(mrp, 2, true) : ""}</td>

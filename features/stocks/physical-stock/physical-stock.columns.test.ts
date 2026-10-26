@@ -4,11 +4,12 @@ import {
   FALLBACK_COUNT_LAYOUT,
   canOpenPicker,
   cellText,
-  focusStops,
   isCellEditable,
+  isEntryStop,
   nextStop,
   previousStop,
   resolveCountLayout,
+  rowStops,
   varianceTone,
   visibleCountColumns,
 } from "./physical-stock.columns";
@@ -90,25 +91,42 @@ describe("resolveCountLayout — joined by column NUMBER, ordered by position", 
   });
 });
 
-describe("the focus chain", () => {
+describe("the Enter walk — Qt setFocusStops + setFocusCellFilter", () => {
   const visible = visibleCountColumns(resolveCountLayout(undefined), false);
+  const blank = blankLine("blank");
+  const second = { ...holding, key: "h2", lotId: "lot-2" };
 
-  it("stops only on the flagged column — Counted Qty runs down the sheet", () => {
-    expect(focusStops(visible)).toEqual([Cols.CountedQty]);
-    expect(nextStop(visible, { row: 0, col: Cols.CountedQty }, 3)).toEqual({ row: 1, col: Cols.CountedQty });
-    expect(nextStop(visible, { row: 0, col: Cols.Description }, 3)).toEqual({ row: 0, col: Cols.CountedQty });
-    expect(nextStop(visible, { row: 2, col: Cols.CountedQty }, 3)).toBeNull();
+  it("a blank row stops at Barcode then Item; a holding at Counted Qty only", () => {
+    expect(rowStops(visible, blank)).toEqual([Cols.Barcode, Cols.Description]);
+    expect(rowStops(visible, holding)).toEqual([Cols.CountedQty]);
+    // Reason and Remarks stay editable by click, but are never a stop.
+    expect(isEntryStop(Cols.ReasonName, holding)).toBe(false);
+    expect(isEntryStop(Cols.Remarks, holding)).toBe(false);
   });
 
-  it("walks every visible column when none is flagged", () => {
-    const unflagged = visibleCountColumns(
+  it("runs down Counted Qty, then into the blank row's Barcode", () => {
+    const lines = [holding, second, blank];
+    expect(nextStop(visible, lines, { row: 0, col: Cols.CountedQty })).toEqual({ row: 1, col: Cols.CountedQty });
+    expect(nextStop(visible, lines, { row: 1, col: Cols.CountedQty })).toEqual({ row: 2, col: Cols.Barcode });
+    expect(nextStop(visible, lines, { row: 2, col: Cols.Barcode })).toEqual({ row: 2, col: Cols.Description });
+    expect(nextStop(visible, lines, { row: 2, col: Cols.Description })).toBeNull();
+    // From a Reason cell (clicked into): on to the next line's count, never Remarks.
+    expect(nextStop(visible, lines, { row: 0, col: Cols.ReasonName })).toEqual({ row: 1, col: Cols.CountedQty });
+  });
+
+  it("walks back the same way", () => {
+    const lines = [holding, blank];
+    expect(previousStop(visible, lines, { row: 1, col: Cols.Description })).toEqual({ row: 1, col: Cols.Barcode });
+    expect(previousStop(visible, lines, { row: 1, col: Cols.Barcode })).toEqual({ row: 0, col: Cols.CountedQty });
+    expect(previousStop(visible, lines, { row: 0, col: Cols.CountedQty })).toBeNull();
+  });
+
+  it("a hidden column is not a stop", () => {
+    const noBarcode = visibleCountColumns(
       resolveCountLayout([row(Cols.Description), row(Cols.CountedQty), row(Cols.Remarks)]),
       false,
     );
-    expect(focusStops(unflagged)).toEqual([Cols.Description, Cols.CountedQty, Cols.Remarks]);
-    expect(nextStop(unflagged, { row: 0, col: Cols.CountedQty }, 2)).toEqual({ row: 0, col: Cols.Remarks });
-    expect(previousStop(unflagged, { row: 1, col: Cols.Description })).toEqual({ row: 0, col: Cols.Remarks });
-    expect(previousStop(unflagged, { row: 0, col: Cols.Description })).toBeNull();
+    expect(rowStops(noBarcode, blank)).toEqual([Cols.Description]);
   });
 });
 
@@ -129,6 +147,19 @@ describe("cellText", () => {
     expect(cellText(exact, Cols.DiffQty)).toBe("");
     const empty = recalcLine({ ...holding, countedText: "0" });
     expect(cellText(empty, Cols.CountedQty)).toBe("0");
+  });
+
+  it("Book Qty paints a book of 0 as 0 — a figure, not a gap; a blank row stays blank", () => {
+    expect(cellText({ ...holding, bookQty: 0 }, Cols.BookQty)).toBe("0");
+    expect(cellText({ ...holding, bookQty: 2.5 }, Cols.BookQty)).toBe("2.5");
+    expect(cellText(blankLine("b"), Cols.BookQty)).toBe("");
+  });
+
+  it("Item carries a textile batch's size, colour and model after the name", () => {
+    expect(
+      cellText({ ...holding, itemName: "Shirt", sizeName: "XL", colourName: "Maroon", model: "Slim fit" }, Cols.Description),
+    ).toBe("Shirt · XL · Maroon · Slim fit");
+    expect(cellText({ ...holding, sizeName: "", colourName: "", model: "" }, Cols.Description)).toBe("MILK");
   });
 });
 
