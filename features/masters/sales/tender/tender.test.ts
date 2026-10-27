@@ -460,6 +460,23 @@ describe("tender form to save payload", () => {
     });
   });
 
+  it("sends a blank conversion rate as 1, never 0", () => {
+    for (const tndConversionRate of ["", "   "]) {
+      const payload = buildTenderRequestPayload({
+        values: { ...values, tndConversionRate },
+        shouldUpdate: false,
+        editingItemId: null,
+      });
+      expect(payload.tndConversionRate).toBe(1);
+    }
+    const typed = buildTenderRequestPayload({
+      values: { ...values, tndConversionRate: " 1.25 " },
+      shouldUpdate: false,
+      editingItemId: null,
+    });
+    expect(typed.tndConversionRate).toBe(1.25);
+  });
+
   it("sends dates as typed and inactive when the status is false", () => {
     const payload = buildTenderRequestPayload({
       values: { ...values, tndEffectiveFrom: " 2026-01-01 ", tndIsActive: "false" },

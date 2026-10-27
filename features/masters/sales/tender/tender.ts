@@ -727,7 +727,8 @@ export function buildTenderRequestPayload({
       tndUpiQrPayload: toNullableString(values.tndUpiQrPayload ?? ""),
       tndMerchantId: toNullableString(values.tndMerchantId ?? ""),
       tndTerminalId: toNullableString(values.tndTerminalId ?? ""),
-      tndConversionRate: toNonNegativeNumber(values.tndConversionRate ?? "1", 1),
+      // Blank passes validation; Number("") is 0, which the DB check (> 0) rejects.
+      tndConversionRate: toNonNegativeNumber(values.tndConversionRate?.trim() || "1", 1),
       // null on these three = inherit the tender type's flag.
       tndNeedsRef: toNullableBoolean(values.tndNeedsRef ?? ""),
       tndAllowChange: toNullableBoolean(values.tndAllowChange ?? ""),
