@@ -931,7 +931,7 @@ export function useOpeningStockDraft({
    * the line or moved to another document meanwhile.
    */
   const quickAddChoice = useCallback(
-    async (ticket: LineTicket, field: ChoiceField, name: string) => {
+    async (ticket: LineTicket, field: ChoiceField, name: string, askFirst = true) => {
       const idField = field === "sizeName" ? "sizeId" : "colourId";
       const stillWaiting = (): boolean => {
         const row = ticketRow(ticket);
@@ -946,12 +946,15 @@ export function useOpeningStockDraft({
           apply({ type: "batchDetailChoiceSet", rowKey: ticket.rowKey, field, id: "", name: "" });
         }
       };
-      const yes = await confirm({
-        title: word === "size" ? "New size" : "New colour",
-        message: `"${name}" is not in the ${word} list. Add it?`,
-        confirmLabel: "Add",
-        cancelLabel: "No",
-      });
+      // "+ Add new …" has asked for the name already (Qt 091bf5b `confirm=false`).
+      const yes =
+        !askFirst ||
+        (await confirm({
+          title: word === "size" ? "New size" : "New colour",
+          message: `"${name}" is not in the ${word} list. Add it?`,
+          confirmLabel: "Add",
+          cancelLabel: "No",
+        }));
       if (!yes) {
         clearCell();
         return;
@@ -975,6 +978,68 @@ export function useOpeningStockDraft({
       }
     },
     [apply, editableNow, quickAddMutation, setChoiceList, tell, ticketRow],
+  );
+
+  // ── Size / Colour pick-lists (Qt 091bf5b ItemUnitPicker) ──────────────
+  /** The "+ Add new size…/colour…" question — which cell it is for. */
+  const [newChoice, setNewChoice] = useState<{ rowKey: string; field: ChoiceField } | null>(null);
+
+  /** A row picked from the list (or the cell emptied: id and name blank). */
+  const pickBatchChoice = useCallback(
+    (rowKey: string, field: ChoiceField, id: string, name: string) => {
+      if (!editableNow()) {
+        return;
+      }
+      apply({ type: "batchDetailChoiceSet", rowKey, field, id, name });
+    },
+    [apply, editableNow],
+  );
+
+  const requestNewChoice = useCallback(
+    (rowKey: string, field: ChoiceField) => {
+      if (editableNow()) {
+        setNewChoice({ rowKey, field });
+      }
+    },
+    [editableNow],
+  );
+
+  /** Back to the cell that asked, once the dialog has gone (the portal unmounts a commit late). */
+  const refocusChoiceCell = useCallback((target: { rowKey: string; field: ChoiceField } | null) => {
+    if (!target) {
+      return;
+    }
+    window.setTimeout(() => focusCell(OPENING_STOCK_GRID_NAME, target.rowKey, target.field), 0);
+  }, []);
+
+  const dismissNewChoice = useCallback(() => {
+    refocusChoiceCell(newChoice);
+    setNewChoice(null);
+  }, [newChoice, refocusChoiceCell]);
+
+  /**
+   * The name asked for. Already on the list (by name, ignoring case): take
+   * that row. Otherwise it lands on the cell without an id and goes to the
+   * master at once — no second "Add it?".
+   */
+  const submitNewChoice = useCallback(
+    (raw: string) => {
+      const target = newChoice;
+      setNewChoice(null);
+      refocusChoiceCell(target);
+      if (!target || !editableNow()) {
+        return;
+      }
+      const choice = resolveChoice(choiceListsRef.current[target.field], raw);
+      if (!choice.name) {
+        return;
+      }
+      apply({ type: "batchDetailChoiceSet", rowKey: target.rowKey, field: target.field, id: choice.id, name: choice.name });
+      if (!choice.id) {
+        void quickAddChoice(lineTicket(target.rowKey), target.field, choice.name, false);
+      }
+    },
+    [apply, editableNow, lineTicket, newChoice, quickAddChoice, refocusChoiceCell],
   );
 
   // ── Cells ─────────────────────────────────────────────────────────────
@@ -1553,6 +1618,11 @@ export function useOpeningStockDraft({
     totals,
     autoBatchNo,
     batchDetail,
+    newChoice,
+    pickBatchChoice,
+    requestNewChoice,
+    dismissNewChoice,
+    submitNewChoice,
     busy,
     flagged,
     picker,

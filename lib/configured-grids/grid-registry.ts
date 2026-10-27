@@ -59,7 +59,13 @@ export const CONFIGURED_GRIDS = {
   supplierGroupList: { name: "MAIN LIST - SUPPLIER GROUPS", fallbackId: "61", deletedParam: "ispg_is_deleted" },
   companyList: { name: "MAIN LIST - COMPANYS", fallbackId: "52", deletedParam: "icomp_is_deleted" },
   branchList: { name: "MAIN LIST - BRANCHES", fallbackId: "56", deletedParam: "ibr_is_deleted" },
-  employeeList: { name: "MAIN LIST - EMPLOYEES", fallbackId: "77", deletedParam: "iemp_is_deleted" },
+  /**
+   * Grid 187 (Qt 091bf5b) replaced grid 77 but was authored under the SAME name, so
+   * two live Desktop rows answer to it. `newestWins`: of the same-named rows the
+   * highest id is the replacement. Only this entry opts in — every other name is
+   * unique today, and for them the lowest id stays the tie-break.
+   */
+  employeeList: { name: "MAIN LIST - EMPLOYEES", fallbackId: "187", deletedParam: "iemp_is_deleted", newestWins: true },
   employeeDepartmentList: { name: "MAIN LIST - EMP DEPARTMENTS", fallbackId: "73", deletedParam: "iedpt_is_deleted" },
   employeeDesignationList: { name: "MAIN LIST - EMP DESIGNATIONS", fallbackId: "75", deletedParam: "ied_is_deleted" },
   accountGroupList: { name: "MAIN LIST - ACCOUNT GROUP", fallbackId: "53", deletedParam: null },
@@ -95,6 +101,28 @@ export const CONFIGURED_GRIDS = {
   physicalStockList: { name: "MAIN LIST - PHYSICAL STOCK", fallbackId: "101", deletedParam: null },
   /** Stock Adjustment (menu 264) — every kind's list. */
   stockAdjustmentList: { name: "TXN MAIN LIST - STOCK ADJUSTMENT", fallbackId: "122", deletedParam: null },
+  /**
+   * Godown Transfer (menu 41; Qt NexERP 62d1d87) — same-branch TRANSFER_OUT.
+   * Binds QUOTED `'icompany_id'`, `'ibranch_id'`, `'iacc_year'`, `'ifrom_date'`,
+   * `'ito_date'`, `'istatus'` — every one sent, "" for no bound.
+   */
+  godownTransferList: { name: "MAIN LIST - GODOWN TRANSFER", fallbackId: "183", deletedParam: null },
+  /** Branch Outward (menu 192) — despatches to another branch. Grid 183's six tokens. */
+  branchOutwardList: { name: "MAIN LIST - BRANCH OUTWARD", fallbackId: "184", deletedParam: null },
+  /** Branch Inward (menu 193) — this branch's receipts. Grid 183's six tokens. */
+  branchInwardList: { name: "MAIN LIST - BRANCH INWARD", fallbackId: "185", deletedParam: null },
+  /** Branch Inward — the worklist of despatches in transit to this branch. Binds `'icompany_id'`, `'ibranch_id'`. */
+  branchInwardInTransit: { name: "BRANCH INWARD - IN TRANSIT", fallbackId: "186", deletedParam: null },
+  /**
+   * Stock Reasons (menu 293; Qt 97a8e59) — shared reasons plus the company's own.
+   * Binds QUOTED `'icompany_id'` and `'iinactive'`, both always sent.
+   */
+  stockReasonList: { name: "MAIN LIST - STOCK REASONS", fallbackId: "188", deletedParam: null },
+  /**
+   * Tracking Presets (menu 249; Qt d27045b) — shared presets plus the company's own, a company
+   * row hiding the shared one of the same code. Binds `ispt_company_id` and `ispt_is_deleted`, both always sent.
+   */
+  stockTrackPresetList: { name: "MAIN LIST - TRACKING PRESETS", fallbackId: "98", deletedParam: "ispt_is_deleted" },
   /** Opening Stock's line supplier picker. */
   supplierPickerPopup: { name: "POPUP - SUPPLIERS", fallbackId: "100", deletedParam: null },
   /** Physical Stock's line reason picker. */
@@ -403,7 +431,21 @@ export function findGridIdByName(
   if (candidates.length === 0) {
     return null;
   }
-  return [...candidates].sort(compareCandidates)[0].gridId;
+  const sorted = [...candidates].sort(compareCandidates);
+  if (!prefersNewest(wanted)) {
+    return sorted[0].gridId;
+  }
+  // Newest wins: the highest id among the rows that are live (a disabled grid
+  // still loses to a live one, as everywhere).
+  const live = sorted.filter((row) => row.isActive === sorted[0].isActive);
+  return live[live.length - 1].gridId;
+}
+/** Whether a registry entry with this name opted in to "the highest id wins a tie". */
+function prefersNewest(wantedLowerName: string): boolean {
+  return Object.values(CONFIGURED_GRIDS).some(
+    (entry) =>
+      "newestWins" in entry && entry.newestWins === true && entry.name.toLowerCase() === wantedLowerName,
+  );
 }
 /**
  * Remembers what Grid Master's list says, so code that cannot hold a React hook

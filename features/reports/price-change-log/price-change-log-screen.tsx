@@ -9,8 +9,9 @@
  * which branch, which device, which screen, from what to what. Read only; the
  * server writes the log in the same transaction as each price write.
  *
- *    filters   From / To (◀ ▶ move the range), Branch (dd 61), Item (dd 42),
- *              Show (prices / slabs), Source, Action, User (dd 68), Search
+ *    filters   the bar: From / To (◀ ▶ move the range), Search, Show; the popup
+ *              (F4): Branch (dd 61), Item (dd 42), Show (prices / slabs),
+ *              Screen, Change, User (dd 68), with a summary line under the bar
  *    day strip one chip per day (/days); click = jump there
  *    grid      day header rows, change chips, source chips
  *    Enter     the detail — every field Before | After | Change
@@ -37,7 +38,8 @@ import { useGetPriceLogGapsMutation } from "./api/price-log-api";
 import { DayStrip } from "./components/day-strip";
 import {
   ACTION_CHOICES,
-  FilterCard,
+  FilterBar,
+  FiltersDialog,
   SOURCE_CHOICES,
   TABLE_CHOICES,
   type ScreenFilters,
@@ -65,7 +67,7 @@ import {
 } from "./view/report";
 import { PRICE_CHANGE_LOG_HREF, type PriceLogFilters, type PriceLogRow } from "./wire/types";
 
-const HINT = "↑↓ move · Enter details · F3 item history · Ctrl+F search · Ctrl+P print · F1 keys";
+const HINT = "↑↓ move · Enter details · F3 item history · F4 filters · Ctrl+F search · Ctrl+P print · F1 keys";
 const SCOPE = "Every change to an item's prices and qty slabs — who, when, where, from what to what";
 
 const KEY_SHEET = keySheetRows(
@@ -73,6 +75,7 @@ const KEY_SHEET = keySheetRows(
   [
     { label: "Details of the change", keyText: "Enter" },
     { label: "Item history", keyText: "F3" },
+    { label: "Filters (branch, item, user…)", keyText: "F4" },
     { label: "One day earlier / later", keyText: "◀ ▶" },
     { label: "Move", keyText: "↑ ↓" },
   ],
@@ -205,6 +208,7 @@ export default function PriceChangeLogScreen() {
   const [detail, setDetail] = useState<{ ipclId: string; others: number } | null>(null);
   const [history, setHistory] = useState<{ itemId: string; itemName: string } | null>(null);
   const [keysOpen, setKeysOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const refocusGrid = useCallback(() => window.setTimeout(() => gridRef.current?.focus(), 0), []);
 
   const openDetail = useCallback(
@@ -227,6 +231,14 @@ export default function PriceChangeLogScreen() {
     }
     setHistory(item);
   }, [currentRow, filters.item]);
+  const closeFilters = useCallback(() => {
+    setFiltersOpen(false);
+    refocusGrid();
+  }, [refocusGrid]);
+  /** Qt btnClearFilters: branch, item, user and the three lists back to "any", and the report runs. */
+  const clearFilters = useCallback(() => {
+    onChange({ branch: null, item: null, user: null, table: "BOTH", source: "", action: "" });
+  }, [onChange]);
   const closeDetail = useCallback(() => {
     setDetail(null);
     refocusGrid();
@@ -306,12 +318,15 @@ export default function PriceChangeLogScreen() {
   });
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "F3" || event.defaultPrevented) return;
+      if ((event.key !== "F3" && event.key !== "F4") || event.defaultPrevented) return;
       if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
       // A dialog over the screen owns the keyboard.
       if (document.querySelector('[aria-modal="true"]')) return;
       event.preventDefault();
-      if (!event.repeat) f3.current();
+      if (event.repeat) return;
+      // F4 — the filters popup (Qt QShortcut on the window).
+      if (event.key === "F4") setFiltersOpen(true);
+      else f3.current();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -342,8 +357,7 @@ export default function PriceChangeLogScreen() {
         ) : null}
       </header>
 
-      <FilterCard
-        companyId={companyId}
+      <FilterBar
         filters={filters}
         onChange={onChange}
         onStep={onStep}
@@ -353,6 +367,7 @@ export default function PriceChangeLogScreen() {
           setSearch(text);
         }}
         onShow={onShow}
+        onOpenFilters={() => setFiltersOpen(true)}
         searchRef={searchRef}
       />
 
@@ -437,6 +452,14 @@ export default function PriceChangeLogScreen() {
           onClose={closeHistory}
         />
       ) : null}
+      <FiltersDialog
+        isOpen={filtersOpen}
+        companyId={companyId}
+        filters={filters}
+        onChange={onChange}
+        onClear={clearFilters}
+        onClose={closeFilters}
+      />
       <TxnKeysSheet
         open={keysOpen}
         onClose={() => {

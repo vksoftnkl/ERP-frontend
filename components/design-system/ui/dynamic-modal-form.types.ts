@@ -122,6 +122,8 @@ export type ERPDynamicModalField = {
   required?: boolean;
   requiredWhen?: (values: Record<string, string>) => boolean;
   disabled?: boolean;
+  /** Hover text for the whole field — why it is locked, for instance. */
+  title?: string;
   /** Disable the control from the live form values — for a field another field
    *  switches off. `disabled: true` still wins outright. */
   disabledWhen?: (values: Record<string, string>) => boolean;

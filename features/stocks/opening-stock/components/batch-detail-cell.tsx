@@ -1,24 +1,19 @@
 "use client";
 
 /**
- * The Size, Colour and Model cells — the editors Qt 74b755c's
- * `OpeningStockDelegate` creates for the textile columns: an editable combo for
- * Size / Colour (pick from the list, or type a name that is not on it yet) and
- * a line edit with the item's earlier models as its completer for Model.
+ * The Model cell — a line edit with the item's earlier models as its
+ * completer (Qt 74b755c `OpeningStockDelegate`). Size and Colour are
+ * pick-lists now (`ChoicePickerCell`, Qt 091bf5b).
  *
- * On the web both are one text input with a `<datalist>`: the browser's own
- * completer, which matches anywhere in the name and ignores case, as the Qt
- * completers were set to (`MatchContains`, `CaseInsensitive`). What a typed
- * name MEANS — a list row, or a new name to offer for adding — is decided on
- * commit by the screen (`resolveChoice`), not here.
+ * On the web it is a text input with a `<datalist>`: the browser's own
+ * completer, which matches anywhere and ignores case, as the Qt completer was
+ * set to (`MatchContains`, `CaseInsensitive`).
  *
  * Like `GridCell`, the cell keeps a local buffer while it has focus and commits
  * on blur or Enter, only when the text changed; Escape drops the edit. The
  * `data-quotation-*` attributes are what `grid-focus`'s Enter walk reads.
  *
- * The app-wide capitalisation is left ON (no `data-uppercase="off"`): the Size
- * and Colour masters let it rewrite names, so a size quick-added here is spelt
- * the way the master would have spelt it, and the list match ignores case.
+ * The app-wide capitalisation is left ON (no `data-uppercase="off"`).
  */
 import { useRef, useState, type KeyboardEvent } from "react";
 import { cx } from "@/components/design-system/cx";

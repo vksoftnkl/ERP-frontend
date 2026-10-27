@@ -10,6 +10,8 @@ import type {
   ERPDynamicModalField,
   ERPDynamicSelectOption,
 } from "@/components/design-system/ui/dynamic-modal-form";
+import type { MasterTableRow } from "@/components/master/crud-master-page.types";
+import { toDisplayDate } from "@/features/sales/quotation/quotation.utils";
 import styles from "@/app/master/state-master/page.module.scss";
 import {
   buildLookupOptions,
@@ -34,6 +36,51 @@ import type { ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
  * for both the rows and the configured columns.
  */
 const LIST_GRID_KEY = "employeeList" satisfies ConfiguredGridKey;
+/**
+ * Grid 187's Status and Active as pills (Qt 091bf5b: Status a badge — Working
+ * green, On Leave amber, Resigned neutral — and Active the grid's own pill).
+ * Keyed by the grid's SQL aliases; sorting and search still read the raw value.
+ */
+const PILL_BASE: CSSProperties = {
+  display: "inline-block",
+  padding: "0.05rem 0.55rem",
+  borderRadius: "999px",
+  fontSize: "0.72rem",
+  fontWeight: 600,
+  lineHeight: 1.5,
+  whiteSpace: "nowrap",
+};
+const STATUS_PILL: Record<string, CSSProperties> = {
+  WORKING: { background: "#e3f4e8", color: "#1d6a3a" },
+  "ON LEAVE": { background: "#fdf0d5", color: "#8a5a00" },
+  RESIGNED: { background: "#ececec", color: "#6a6a6a" },
+};
+function sourceText(row: MasterTableRow, key: string): string {
+  const value = (row.__source as Record<string, unknown> | undefined)?.[key];
+  return value === null || value === undefined ? "" : String(value);
+}
+const EMPLOYEE_COLUMN_RENDER_OVERRIDES = {
+  emp_status: (row: MasterTableRow) => {
+    const status = sourceText(row, "emp_status").trim();
+    if (!status) {
+      return "";
+    }
+    return (
+      <span style={{ ...PILL_BASE, ...(STATUS_PILL[status.toUpperCase()] ?? STATUS_PILL.RESIGNED) }}>
+        {status}
+      </span>
+    );
+  },
+  emp_is_active: (row: MasterTableRow) => {
+    const active = ["true", "1"].includes(sourceText(row, "emp_is_active").trim().toLowerCase());
+    return (
+      <span style={{ ...PILL_BASE, ...(active ? STATUS_PILL.WORKING : STATUS_PILL.RESIGNED) }}>
+        {active ? "Active" : "Inactive"}
+      </span>
+    );
+  },
+  emp_joined_on: (row: MasterTableRow) => toDisplayDate(sourceText(row, "emp_joined_on").slice(0, 10)),
+};
 const API_ENDPOINTS = {
   getById: "/employee-masters/get",
   create: "/employee-masters/create",
@@ -631,6 +678,11 @@ function buildEmployeeFormFields(
       name: "empLoanLedgerId",
       label: "Staff Advance Ledger",
       type: "select",
+      // The server's: created "<name> - Staff Advance" on save and kept with the
+      // employee. Shown and still submitted as loaded, never picked here
+      // (Qt 091bf5b, user 2026-10-26).
+      disabled: true,
+      title: "Created by the system on save and kept with the employee — it cannot be changed here.",
       searchable: true,
       serverSearch: true,
       options: staffLedgerOptions,
@@ -887,6 +939,7 @@ export default function EmployeeMasterPage() {
       }
       gridTableName={GRID_TABLE_NAME}
       lookupKeys={LOOKUP_KEYS}
+      columnRenderOverrides={EMPLOYEE_COLUMN_RENDER_OVERRIDES}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}
       listTitle="Employee List"

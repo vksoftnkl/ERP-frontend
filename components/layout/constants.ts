@@ -13,7 +13,7 @@ import type {
   ErpHeaderIconKey,
   ErpHeaderItem,
   ErpMenuPermissionFlags,
-  ERPMenuObject,
+  MenuRoute,
 } from "./types";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 export const ERP_HEADER_ICON_COMPONENTS: Record<ErpHeaderIconKey, IconType> = {
@@ -26,423 +26,166 @@ export const ERP_HEADER_ICON_COMPONENTS: Record<ErpHeaderIconKey, IconType> = {
   settings: FiSettings,
   transport: FiTruck,
 };
-export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
-  {
-    label: "Sales",
-    iconKey: "sales",
-    children: [
-      { label: "Customers", href: "/master/customer"},
-      { label: "Promotion Loyalty Points", href: "/sales/promotion-loyalty-points" },
-      { label: "Quotation", href: "/sales/quotation" },
-      // The live menu tree (fixed.menu_master) names this "Sales Order" —
-      // singular, a direct child of Sales (menu 11) — and hrefs are attached
-      // to the server-driven menu by normalized-label match against THIS
-      // list, so the label must match the DB's menu_name exactly.
-      { label: "Sales Order", href: "/sales/sale-order" },
-      // Menu 12, "Sales Entry" (Ctrl+S) — the sale bill. The label has to
-      // match `fixed.menu_master.menu_name` exactly: hrefs are attached to the
-      // server-driven menu by normalized-label match against THIS list.
-      { label: "Sales Entry", href: "/sales/sale-bill" },
-      { label: "Sales Return" },
-      // Menu 226 "Bill Delivery Update" (grid 113) and menu 257 "Temp Credits"
-      // (grid 114) — the two registers the sale bill owns
-      // (plan-react-sale-bill §24). Exact DB labels, for the same reason as
-      // "Sales Entry" above.
-      { label: "Bill Delivery Update", href: "/sales/bill-delivery" },
-      { label: "Temp Credits", href: "/sales/temp-credits" },
-      // Menu 271 "Till" (Qt NexERP d5c3637). Exact DB labels, for the same
-      // reason as above. 283 "Till Masters" is a group since the masters split
-      // into one screen each; the keyed cockpit
-      // /sales/till/sessions/:company/:branch/:year/:id inherits 273 by prefix.
-      {
-        label: "Till",
-        children: [
-          { label: "Open Till", href: "/sales/till/open" },
-          { label: "Till Sessions", href: "/sales/till/sessions" },
-          // Menu 288 (notes 133, Qt 1d3e203): read-only variance / exceptions /
-          // approvers / safe book.
-          { label: "Till Reports", href: "/sales/till/reports" },
-          // Menu 289 (notes 134, Qt 3b5069d): head office's every-store page
-          // and its HO reviews.
-          { label: "Cash Position", href: "/sales/till/cash-position" },
-          { label: "Business Day", href: "/sales/till/business-day" },
-          // Menu 287 (notes 118): the safe — balance, count, remittance. The
-          // retired 286 has the same name but is inactive, so this label is 287's.
-          { label: "Cash Office", href: "/sales/till/cash-office" },
-          {
-            label: "Till Masters",
-            children: [
-              { label: "Till Counters", href: "/sales/till/counters" },
-              { label: "Till Safes", href: "/sales/till/safes" },
-              { label: "Till Reasons", href: "/sales/till/reasons" },
-              { label: "Denominations", href: "/sales/till/denominations" },
-            ],
-          },
-          { label: "Till Approval Rules", href: "/sales/till/approval-rules" },
-          { label: "Till Approval Authority", href: "/sales/till/approval-authority" },
-        ],
-      },
-      {
-        label: "Master",
-        children: [
-          { label: "State Master", href: "/master/state-master" },
-          { label: "City Master", href: "/master/city-master" },
-          { label: "Area Master", href: "/master/area-master" },
-          { label: "Customer Type master", href: "/master/customer-groups"},
-          { label: "Vehicle Freight Charges", href: "/master/freight-charges-master" },
-          { label: "Loading Charges", href: "/master/loading-charges-master" },
-        ],
-      },
-      {
-        label: "SO Management",
-        children: [
-          { label: "Sales Orders", href: "/sales/sale-order" },
-          { label: "Order Approvals" },
-          { label: "Dispatch Planning" },
+/**
+ * Where each `fixed.menu_master` row leads, keyed by `menu_id`. Everything the
+ * header SHOWS comes from the DB — names, order, nesting, visibility — so
+ * nothing here carries a label: renaming or moving a menu in the DB changes the
+ * header and keeps the route. A DB row with no entry here shows as a plain
+ * label. Top-level rows map to their icon.
+ *
+ * Binding an href also makes the route GOVERNED: the permission gate refuses it
+ * to anyone whose usermenu lacks that menu (lib/permissions/menu-permissions.ts).
+ * So bind an href only once its menu row is seeded and granted.
+ */
+export const MENU_ROUTES: Readonly<Record<number, MenuRoute>> = {
+  // Sales
+  1: { iconKey: "sales" },
+  10: { href: "/master/customer" },
+  14: { href: "/sales/quotation" },
+  11: { href: "/sales/sale-order" },
+  // The sale bill (Ctrl+S).
+  12: { href: "/sales/sale-bill" },
+  // The two registers the sale bill owns (plan-react-sale-bill §24): grid 113
+  // and grid 114.
+  226: { href: "/sales/bill-delivery" },
+  257: { href: "/sales/temp-credits" },
+  67: { href: "/sales/promotion-loyalty-points" },
+  18: { href: "/master/state-master" },
+  19: { href: "/master/city-master" },
+  20: { href: "/master/area-master" },
+  21: { href: "/master/customer-groups" },
+  95: { href: "/master/tender-master" },
+  130: { href: "/master/freight-charges-master" },
+  177: { href: "/master/loading-charges-master" },
+  // Till (Qt NexERP d5c3637). The keyed cockpit
+  // /sales/till/sessions/:company/:branch/:year/:id inherits 273 by prefix.
+  272: { href: "/sales/till/open" },
+  273: { href: "/sales/till/sessions" },
+  // Notes 133, Qt 1d3e203: read-only variance / exceptions / approvers / safe book.
+  288: { href: "/sales/till/reports" },
+  // Notes 134, Qt 3b5069d: head office's every-store page and its HO reviews.
+  289: { href: "/sales/till/cash-position" },
+  274: { href: "/sales/till/business-day" },
+  // Notes 118: the safe — balance, count, remittance. Not the retired 286.
+  287: { href: "/sales/till/cash-office" },
+  275: { href: "/sales/till/counters" },
+  280: { href: "/sales/till/safes" },
+  281: { href: "/sales/till/reasons" },
+  282: { href: "/sales/till/denominations" },
+  276: { href: "/sales/till/approval-rules" },
+  285: { href: "/sales/till/approval-authority" },
 
-        ],
-      },
-      {
-        label:"Loyalty schemes",
-        children:[{label:"Loyalty Programs",href:"/sales/promotion-loyalty-points"}]
-      },
-      { label: "Cashier Screen" },
-    ],
-  },
-  {
-    label: "Purchase",
-    iconKey: "purchase",
-    children: [
-      {
-        label: "Suppliers",
-        href: "/master/suppliers",
-      },
-      { label: "Purchase Entry" },
-      { label: "Purchase Return" },
-      { label: "Vendor Ledger" },
-      {
-        label: "Master",
-        children: [
-          { label: "supplier groups", href: "/master/supplier-groups" }        
-        ],
-      }
-    ],
-  },
- {
-  label: "Inventory",
-  iconKey: "inventory",
-  children: [
-    { label: "Item Master", href: "/master/item-master" },
-    { label: "Change Selling", href: "/stock/change-selling-price" },
-    { label: "Change Selling (Purchase)" },
-    { label: "Item Qty Wise Price", href: "/master/item-qty-price-master" },
-    { label: "Item Group wise Discount" },
-    { label: "Sticker Printing" },
-    { label: "Product Kits" },
-    { label: "Reorder" },
-    { label: "Cost Price - Bulk Change" },
-    {
-      label: "Master",
-      children: [
-        { label: "Item Group Master", href: "/master/item-group-master" },
-        { label: "Item Category Master", href: "/master/item-category-master" },
-        { label: "Item Brand Master", href: "/master/item-brand-master" },
-        { label: "Item Section Master", href: "/master/item-section-master" },
-        { label: "Unit Master", href: "/master/unit-master" },
-        // Menus 291 / 292 (textile, server notes 147).
-        { label: "Item Size Master", href: "/master/item-size-master" },
-        { label: "Item Colour Master", href: "/master/item-colour-master" },
-        { label: "Godown Master", href: "/master/godown-master" },
-        { label: "Tax Master", href: "/master/tax-master" },
+  // Purchase
+  2: { iconKey: "purchase" },
+  22: { href: "/master/suppliers" },
+  27: { href: "/master/supplier-groups" },
 
-      ],
-    },
-    { label: "Allow to Change Master Price" },
-  ],
-  },
-  {
-    label: "Stock",
-    iconKey: "stock",
-    children: [
-      { label: "Opening Stock", href: "/stock/opening-stock" },
-      { label: "Physical Stock Update", href: "/stock/physical-stock" },
-      { label: "Stock Adjustment", href: "/stock/stock-adjustment" },
-    ],
-  },
-  {
-    label: "Accounts",
-    iconKey: "accounts",
-    children: [
-      {
-        label: " Ledger Groups",
-        href: "/master/account-ledger-groups-master",
-      },
-      { label: "Ledgers", href: "/master/account-ledger-master" },
-      // Menu 55. The label has to match `fixed.menu_master.menu_name` exactly:
-      // hrefs are attached to the server-driven menu by normalized-label match
-      // against THIS list, and an unmatched route is also an ungoverned one —
-      // menu permissions fail open until the href appears here.
-      { label: "Opening Balances", href: "/accounts/opening-balance" },
-      // Menu 99. Same rule as above: the label must match
-      // `fixed.menu_master.menu_name` exactly, or the route is ungoverned and
-      // menu permissions fail open on it.
-      { label: "Bill-wise Receipt", href: "/accounts/receipt" },
-      // Menu 100. Same rule: must match `fixed.menu_master.menu_name` exactly.
-      { label: "Bill-wise Payment", href: "/accounts/payment" },
-      // Menu 51. Same rule: must match `fixed.menu_master.menu_name` exactly.
-      { label: "Received Cheques", href: "/accounts/received-cheques" },
-      // Menu 52. Same rule: must match `fixed.menu_master.menu_name` exactly.
-      { label: "Issued Cheques", href: "/accounts/issued-cheques" },
-      // Menu 263. Same rule.
-      { label: "Cheque Books", href: "/accounts/cheque-books" },
-      // Menu 104. Same rule: must match `fixed.menu_master.menu_name` exactly.
-      { label: "Contra", href: "/accounts/contra" },
-      // Menu 260. Same rule: must match `fixed.menu_master.menu_name` exactly.
-      { label: "Receipt Voucher", href: "/accounts/receipt-voucher" },
-      // Menu 261. Same rule.
-      { label: "Payment Voucher", href: "/accounts/payment-voucher" },
-      // Menu 103. Same rule.
-      { label: "Journal", href: "/accounts/journal" },
-      // Menu 259. Same rule — the parentheses are part of the menu name.
-      { label: "Sales (Accounting)", href: "/accounts/sales-accounting" },
-      // Menu 163. Same rule.
-      { label: "Purchase (Accounting)", href: "/accounts/purchase-accounting" },
-      // Menu 277 (Qt NexERP d5c3637). Same rule; the keyed voucher route
-      // /accounts/expense-voucher/:company/:branch/:year/:id inherits it.
-      { label: "Expense Voucher", href: "/accounts/expense-voucher" },
-      // Menu 278. Same rule.
-      { label: "Settlement Reconciliation", href: "/accounts/settlement-reconciliation" },
-      // Menu 101. Same rule.
-      { label: "Debit Note", href: "/accounts/debit-note" },
-      // Menu 102. Same rule.
-      { label: "Credit Note", href: "/accounts/credit-note" },
-      // Menu 262. Same rule.
-      { label: "Voucher Register", href: "/accounts/voucher-register" },
-           {
-        label:"GSP Service Master",href:"/master/gsp-service-master"
-      },{
-        label:"GSP Provider Master",href:"/master/gsp-provider-master"
-      },{
-        label:"Ledger Bank Account",href:"/master/ledger-bank-account-master"
-      },
-      {
-        label:"Ledger Shipping Address",href:"/master/ledger-shipping-address-master"
-      },
-      {
-        label:"Tender Master",href:"/master/tender-master"
-      }
-    ],
-  },
-  {
-    label: "Reports",
-    iconKey: "reports",
-    children: [
-      { label: "Day Book" },
-      { label: "Sales Register" },
-      // Menu 279, straight under Reports (server seed + the
-      // party_outstanding_menu_reports migration). Grant it in User Administration.
-      { label: "Party Outstanding", href: "/reports/party-outstanding" },
-      // Menu 290, straight under Reports (server notes 144). Its VIEW right is
-      // the report's access: every /item-price-log route 403s without it.
-      { label: "Price Change Log", href: "/reports/price-change-log" },
-      {
-        label: "Financial Statements",
-        children: [
-          // Menu 258, seeded by the server's Menu_Master.sql + the
-          // ledger_statement_prereqs migration (which also un-hides 137).
-          { label: "Ledger Statement", href: "/reports/ledger-statement" },
-          // Menu 284 (the server's day-summary plan seeds it; not in the DB
-          // yet). Menu 181, hidden, opens the same screen on the Vouchers tab;
-          // the guard strips the query, so either grant opens the route.
-          { label: "Account Day Summary", href: "/reports/day-summary" },
-          { label: "Day Book Detail", href: "/reports/day-summary?tab=vouchers" },
-        ],
-      },
-      {
-        label: "Profit Reports",
-        children: [
-          { label: "Daily Profit & Loss" },
-          { label: "Monthly Profit & Loss" },
-          { label: "Yearly Summary" },
-        ],
-      },
-    ],
-  },
-  { label: "Settings",
-    iconKey: "settings",
-    children:[
-      {label:"Company Master",href:"/master/companies"},
-      {label:"Branch Master",href:"/master/branches-master"},
-      {label:"Employee Master",href:"/master/employee-master"},        
-      {
-        label:"GSP Company Service",href:"/master/gsp-company-service"
-      },
-      {
-        label:"Grid Settings",href:"/master/grid-master"
-      },
-      {
-        label:"Grid Designer",href:"/master/grid-designer"
-      },
-      {
-        label:"Widget Master",href:"/master/widget-master"
-      },
-      {
-        label:"Dropdown Settings",href:"/master/dropdown-master"
-      },
-      {
-        label:"Dropdown Designer",href:"/master/dropdown-designer"
-      },
-      {
-        label:"UI Table Master",href:"/master/ui-table-master"
-      },
-      {
-        label:"UI Table Designer",href:"/master/ui-table-designer"
-      },
-      {
-        label:"Audit Logs",href:"/master/audit-logs"
-      },
-      {
-        label:"master",
-        children:[
-           {
-        label:"Department Master",href:"/master/employee-department-master"
-      },
-      {
-        label:"Designation Master",href:"/master/employee-designation-master"
-      },
-          {label:"Device list master",href:"/master/device-list-master"}
-        ]
-      },
-      {
-        label:"Templates",
-        children:[
-          {label:"Customer Template",href:"/master/customer-template"},
-          {label:"Item Template",href:"/master/item-template"}
-        ]
-      },
-      {
-        label:"Configuration",
-        children:[
-          // The DB menu (fixed.menu_master 62) carries the label; this is where
-          // it picks up its route — see applyMenuMasterLabels below.
-          //
-          // It used to point at /settings/print-templates, the print-designer's
-          // own list. That screen is a `/reports/*` client and the server has no
-          // reporting module at all, so every one of its calls answered 404 —
-          // the list, the designer it opened, and that designer's Preview
-          // (`POST /reports/preview`). It now points at the 17_printing engine,
-          // which is the same job over tables that exist.
-          //
-          // REPOINTING rather than adding a row is what keeps the permission
-          // gate happy: menu 62 is already seeded and already granted, so the
-          // route stays governed by a grant users have. A NEW label here would
-          // need a fixed.menu_master row first — see features/printing/routes.ts.
-          {label:"Printing Configuration",href:"/settings/printing/templates"},
-          {label:"Printing Assignments",href:"/settings/printing/assignments"},
-          // fixed.menu_master 246 ("app settings", under Configuration) carries
-          // the label; this is where it picks up its route.
-          {label:"App Settings",href:"/settings/app-settings"},
-          // fixed.menu_master 266 ("App Themes", under Configuration) — seeded by
-          // the server's 20260930190000_app_theme_tokens migration, so the row
-          // exists wherever the theme tables do.
-          {label:"App Themes",href:"/settings/app-themes"},
-          {label:"Price Level Configuration",href:"/master/price-level-configuration"},
-          {label:"Charge Master",href:"/master/charge-master"},
-          // fixed.menu_master 250 ("Ledger mapping") — the Posting Ledger Map.
-          // The row is seeded and granted, so binding the href is safe.
-          {label:"Ledger mapping",href:"/settings/ledger-map"},
-          // fixed.menu_master 269 / 270, seeded under Configuration by the
-          // server's 20261002150000_gst_menus migration — safe to bind.
-          {label:"GST Providers",href:"/settings/gst-providers"},
-          {label:"GST Credentials",href:"/settings/gst-credentials"},
-          // /settings/printing/assignments is DELIBERATELY still unbound.
-          // Binding an href makes the route GOVERNED — the permission gate then
-          // denies anyone whose usermenu lacks it — and fixed.menu_master has no
-          // row for it, so binding it today would lock every user, admins
-          // included, out of a screen that otherwise works. It is reached from a
-          // design's "used by" chip until a row is seeded; see
-          // features/printing/routes.ts for the row and the line to add.
-        ]
-      },
-      {label:"User Administration",href:"/master/user-administration"},
-      {label:"Module Administration",href:"/master/module-administration"},
-      {label:"Permissions",href:"/master/permissions"},
-  
-    ]
-  },
-  { label: "Transport", iconKey: "transport" },
-];
-export const DEFAULT_QUICK_TABS: ErpHeaderItem[] = [
-  { label: "Sales Entry" },
-  { label: "Sales Return" },
-  {
-    label: "SO Management",
-    children: [
-      { label: "SO Create" },
-      { label: "SO Amend" },
-      { label: "SO Dispatch" },
-    ],
-  },
-  { label: "Cashier Screen" },
-  {
-    label: "Import Invoices",
-    children: [
-      { label: "Upload Excel" },
-      { label: "Upload JSON" },
-      { label: "Import History" },
-    ],
-  },
-  { label: "Gate Inward Entry" },
-  { label: "SO Stock Position" },
-  {
-    label: "Profit & Loss",
-    children: [
-      { label: "Daily Report" },
-      { label: "Monthly Report" },
-      { label: "Consolidated Report" },
-    ],
-  },
-];
-export const ERP_MENU_OBJECT: ERPMenuObject = {
-  Sales: {
-    Customers: null,
-    "Promotion Loyalty Points": null,
-    Quotation: null,
-    "Sales Entry": null,
-    "Sales Return": null,
-  },
-  Accounts: {
-    "Account Ledger Groups Master": null,
-    "Account Ledger Master": null,
-  },
-  Stock: {
-    "Opening Stock": null,
-    "Physical Stock Update": null,
-    "Stock Adjustment": null,
-  },
-  Inventory: {
-    "Item Master": "Ctrl+I",
-    "Change Selling": "Ctrl+G",
-    "Change Selling (Purchase)": null,
-    "Item Qty Wise Price": null,
-    "Item Group wise Discount": null,
-    "Sticker Printing": null,
-    "Product Kits": null,
-    Reorder: null,
-    "Cost Price - Bulk Change": null,
-    Master: {
-      "Item Group Master": null,
-      "Item Category Master": null,
-      "Item Brand Master": null,
-      "Item Section Master": null,
-      "Unit Master": null,
-      "Item Size Master": null,
-      "Item Colour Master": null,
-      "Godown Master": null,
-      "Tax Master": null,
-    },
-    "Allow to Change Master Price": null,
-  },
+  // Inventory
+  3: { iconKey: "inventory" },
+  29: { href: "/master/item-master" },
+  30: { href: "/stock/change-selling-price" },
+  244: { href: "/master/item-qty-price-master" },
+  35: { href: "/master/item-group-master" },
+  240: { href: "/master/item-category-master" },
+  36: { href: "/master/item-brand-master" },
+  37: { href: "/master/item-section-master" },
+  38: { href: "/master/unit-master" },
+  // Textile, server notes 147.
+  291: { href: "/master/item-size-master" },
+  292: { href: "/master/item-colour-master" },
+  39: { href: "/master/godown-master" },
+  40: { href: "/master/tax-master" },
+  // Under Item Masters (34). Qt NexERP 97a8e59 / d27045b, server notes 159.
+  249: { href: "/master/tracking-presets" },
+  293: { href: "/master/stock-reasons" },
+  294: { href: "/master/ageing-slabs" },
+
+  // Stock
+  4: { iconKey: "stock" },
+  44: { href: "/stock/opening-stock" },
+  45: { href: "/stock/physical-stock" },
+  264: { href: "/stock/stock-adjustment" },
+  // Transfers (Qt NexERP 62d1d87, server notes 153–156 / 160).
+  41: { href: "/stock/godown-transfer" },
+  192: { href: "/stock/branch-outward" },
+  193: { href: "/stock/branch-inward" },
+
+  // Accounts
+  5: { iconKey: "accounts" },
+  54: { href: "/master/account-ledger-groups-master" },
+  53: { href: "/master/account-ledger-master" },
+  55: { href: "/accounts/opening-balance" },
+  99: { href: "/accounts/receipt" },
+  100: { href: "/accounts/payment" },
+  51: { href: "/accounts/received-cheques" },
+  52: { href: "/accounts/issued-cheques" },
+  263: { href: "/accounts/cheque-books" },
+  104: { href: "/accounts/contra" },
+  260: { href: "/accounts/receipt-voucher" },
+  261: { href: "/accounts/payment-voucher" },
+  103: { href: "/accounts/journal" },
+  259: { href: "/accounts/sales-accounting" },
+  163: { href: "/accounts/purchase-accounting" },
+  // Qt NexERP d5c3637; the keyed voucher route
+  // /accounts/expense-voucher/:company/:branch/:year/:id inherits it.
+  277: { href: "/accounts/expense-voucher" },
+  278: { href: "/accounts/settlement-reconciliation" },
+  101: { href: "/accounts/debit-note" },
+  102: { href: "/accounts/credit-note" },
+  262: { href: "/accounts/voucher-register" },
+
+  // Reports
+  6: { iconKey: "reports" },
+  // Grant it in User Administration.
+  279: { href: "/reports/party-outstanding" },
+  // Server notes 144. Its VIEW right is the report's access: every
+  // /item-price-log route 403s without it.
+  290: { href: "/reports/price-change-log" },
+  106: { href: "/master/audit-logs" },
+  258: { href: "/reports/ledger-statement" },
+  // 181, hidden, opens the same screen on the Vouchers tab; the guard strips
+  // the query, so either grant opens the route.
+  284: { href: "/reports/day-summary" },
+  181: { href: "/reports/day-summary?tab=vouchers" },
+
+  // Settings
+  7: { iconKey: "settings" },
+  56: { href: "/master/companies" },
+  191: { href: "/master/branches-master" },
+  57: { href: "/master/employee-master" },
+  58: { href: "/master/user-administration" },
+  59: { href: "/master/module-administration" },
+  73: { href: "/master/grid-master" },
+  77: { href: "/master/dropdown-master" },
+  242: { href: "/master/ui-table-master" },
+  70: { href: "/master/employee-department-master" },
+  71: { href: "/master/employee-designation-master" },
+  239: { href: "/master/device-list-master" },
+  160: { href: "/master/customer-template" },
+  161: { href: "/master/item-template" },
+  // It used to point at /settings/print-templates, the print-designer's own
+  // list. That screen is a `/reports/*` client and the server has no reporting
+  // module at all, so every one of its calls answered 404 — the list, the
+  // designer it opened, and that designer's Preview (`POST /reports/preview`).
+  // It now points at the 17_printing engine, which is the same job over tables
+  // that exist. Repointing kept the route governed by a grant users have.
+  62: { href: "/settings/printing/templates" },
+  248: { href: "/settings/printing/assignments" },
+  246: { href: "/settings/app-settings" },
+  // Seeded by the server's 20260930190000_app_theme_tokens migration, so the
+  // row exists wherever the theme tables do.
+  266: { href: "/settings/app-themes" },
+  174: { href: "/master/price-level-configuration" },
+  245: { href: "/master/charge-master" },
+  243: { href: "/master/widget-master" },
+  // The Posting Ledger Map.
+  250: { href: "/settings/ledger-map" },
+  // Seeded by the server's 20261002150000_gst_menus migration.
+  269: { href: "/settings/gst-providers" },
+  270: { href: "/settings/gst-credentials" },
+
+  // Transport
+  8: { iconKey: "transport" },
 };
 export const MENU_MASTERS_GET_ENDPOINT = "/menu-masters/get";
 export const MENU_MASTERS_USERMENU_ENDPOINT = "/menu-masters/usermenu";
@@ -583,93 +326,29 @@ export function extractMenuMasterItems(payload: unknown): MenuMasterItem[] {
     .map((row) => toMenuMasterItem(row))
     .filter((row): row is MenuMasterItem => row !== null);
 }
-function buildMenuLookup(items: MenuMasterItem[]): Map<string, MenuMasterItem[]> {
-  const lookup = new Map<string, MenuMasterItem[]>();
-  for (const item of items) {
-    const key = normalizeMenuLabel(item.menuName);
-    if (!key) {
-      continue;
-    }
-    const bucket = lookup.get(key);
-    if (bucket) {
-      bucket.push(item);
-      continue;
-    }
-    lookup.set(key, [item]);
-  }
-  return lookup;
-}
-type MenuPresentation = {
-  href?: string;
-  iconKey?: ErpHeaderIconKey;
-};
-type MenuPresentationLookup = {
-  byPath: Map<string, MenuPresentation>;
-  byLabel: Map<string, MenuPresentation>;
-};
-function buildMenuPresentationLookup(baseItems: ErpHeaderItem[]): MenuPresentationLookup {
-  const byPath = new Map<string, MenuPresentation>();
-  const byLabel = new Map<string, MenuPresentation>();
-  const visit = (items: ErpHeaderItem[], path: string[]) => {
-    for (const item of items) {
-      const normalized = normalizeMenuLabel(item.label);
-      if (!normalized) {
-        continue;
-      }
-      const nextPath = [...path, normalized];
-      const pathKey = nextPath.join(" > ");
-      if (item.href || item.iconKey) {
-        const presentation: MenuPresentation = {};
-        if (item.href) {
-          presentation.href = item.href;
-        }
-        if (item.iconKey) {
-          presentation.iconKey = item.iconKey;
-        }
-        byPath.set(pathKey, presentation);
-        if (!byLabel.has(normalized)) {
-          byLabel.set(normalized, presentation);
-        }
-      }
-      if (item.children?.length) {
-        visit(item.children, nextPath);
-      }
-    }
-  };
-  visit(baseItems, []);
-  return { byPath, byLabel };
-}
-function toHeaderItemsFromApi(
-  apiItems: MenuMasterItem[],
-  presentationLookup: MenuPresentationLookup,
-  path: string[] = [],
-): ErpHeaderItem[] {
+/**
+ * The header menu, straight from `/menu-masters/usermenu`: the DB's labels,
+ * order and nesting, with each row's route and icon looked up by menu id.
+ */
+export function buildPrimaryMenu(apiItems: MenuMasterItem[]): ErpHeaderItem[] {
   return apiItems
     .map((apiItem) => {
       const label = sanitizeMenuLabel(apiItem.menuName);
-      const normalized = normalizeMenuLabel(label);
-      if (!normalized) {
+      if (!normalizeMenuLabel(label)) {
         return null;
       }
       if (apiItem.permissions?.isVisible === false) {
         return null;
       }
-      const nextPath = [...path, normalized];
-      const pathKey = nextPath.join(" > ");
-      const presentation =
-        presentationLookup.byPath.get(pathKey) ??
-        presentationLookup.byLabel.get(normalized);
-      const children = toHeaderItemsFromApi(
-        apiItem.children ?? [],
-        presentationLookup,
-        nextPath,
-      );
+      const route =
+        typeof apiItem.menuId === "number" ? MENU_ROUTES[apiItem.menuId] : undefined;
+      const children = buildPrimaryMenu(apiItem.children ?? []);
       const nextItem: ErpHeaderItem = { label };
-      if (presentation?.href) {
-        nextItem.href = presentation.href;
+      if (route?.href) {
+        nextItem.href = route.href;
       }
-      if (presentation?.iconKey) {
-        nextItem.iconKey = presentation.iconKey;
+      if (route?.iconKey) {
+        nextItem.iconKey = route.iconKey;
       }
       if (apiItem.menuSeparator) {
         nextItem.menuSeparator = true;
@@ -686,20 +365,6 @@ function toHeaderItemsFromApi(
       return nextItem;
     })
     .filter((item): item is ErpHeaderItem => item !== null);
-}
-export function applyMenuMasterLabels(
-  baseMenu: ErpHeaderItem[],
-  menuMasterItems: MenuMasterItem[],
-): ErpHeaderItem[] {
-  if (menuMasterItems.length === 0) {
-    return [];
-  }
-  const labelLookup = buildMenuLookup(menuMasterItems);
-  if (labelLookup.size === 0) {
-    return [];
-  }
-  const presentationLookup = buildMenuPresentationLookup(baseMenu);
-  return toHeaderItemsFromApi(menuMasterItems, presentationLookup);
 }
 export const DEFAULT_BRANCH_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "", label: "Select Branch" },

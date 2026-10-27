@@ -54,6 +54,25 @@ describe("findGridIdByName", () => {
     expect(findGridIdByName("MAIN LIST", rows)).toBeNull();
   });
 
+  it("takes the lowest id of two same-named grids, except for an entry that opts in to the newest", () => {
+    const twins = [
+      { gridId: "187", gridName: "MAIN LIST - EMPLOYEES", deviceType: "Desktop", isActive: true },
+      { gridId: "77", gridName: "MAIN LIST - EMPLOYEES", deviceType: "Desktop", isActive: true },
+      { gridId: "190", gridName: "MAIN LIST - ITEMS", deviceType: "Desktop", isActive: true },
+      { gridId: "67", gridName: "MAIN LIST - ITEMS", deviceType: "Desktop", isActive: true },
+    ];
+    expect(findGridIdByName("MAIN LIST - EMPLOYEES", twins)).toBe("187");
+    expect(findGridIdByName("MAIN LIST - ITEMS", twins)).toBe("67");
+  });
+
+  it("a disabled newer twin still loses to a live older one", () => {
+    const twins = [
+      { gridId: "77", gridName: "MAIN LIST - EMPLOYEES", deviceType: "Desktop", isActive: true },
+      { gridId: "187", gridName: "MAIN LIST - EMPLOYEES", deviceType: "Desktop", isActive: false },
+    ];
+    expect(findGridIdByName("MAIN LIST - EMPLOYEES", twins)).toBe("77");
+  });
+
   it("ignores a same-named grid kept under another device type", () => {
     // The `web` copies are exactly this case: same list, invisible in Grid Master.
     const withWebTwin = [

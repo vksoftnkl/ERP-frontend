@@ -3,6 +3,7 @@ import {
   blankLine,
   choiceNames,
   computeTotals,
+  distinctChoices,
   dateFromWire,
   dateToWire,
   isUnparsableDate,
@@ -296,6 +297,11 @@ describe("textile — size / colour / model (Qt 74b755c)", () => {
 
     it("offers a name shared by two rows once, in list order", () => {
       expect(choiceNames(sizes)).toEqual(["XL", "Free Size"]);
+    });
+
+    it("the pick-list keeps the rows (ids), one per name, first wins", () => {
+      expect(distinctChoices(sizes).map((choice) => choice.name)).toEqual(["XL", "Free Size"]);
+      expect(distinctChoices(sizes)[0]).toEqual(sizes[0]);
     });
   });
 

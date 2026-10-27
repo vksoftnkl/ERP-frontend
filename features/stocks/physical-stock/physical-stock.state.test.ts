@@ -297,7 +297,7 @@ describe("physicalStockReducer", () => {
     expect(draft.rateSource).toBe("AVG_COST");
     expect(draft.freezeFrom).toBe("2026-10-02T10:15");
     expect(draft.freezeTo).toBe("2026-10-02T13:15");
-    expect(draft.scope).toBe("2026-2027");
+    expect(draft.scope).toBe("");
     expect(isEditable(draft)).toBe(true);
   });
 
@@ -388,7 +388,7 @@ describe("physicalStockReducer", () => {
     expect(asked.accYear).toBe("2026-2027");
     expect(asked.deviceId).toBe("dev-doc");
     expect(asked.rateSource).toBe("LAST_PURCHASE");
-    expect(asked.scope).toBe("Coimbatore · 2026-2027");
+    expect(asked.scope).toBe("Coimbatore");
     const viewed = physicalStockReducer(fresh(), {
       type: "documentLoaded",
       document: documentOf([wireLine()]),
@@ -417,7 +417,7 @@ describe("physicalStockReducer", () => {
     expect(draft.rateSource).toBe("MRP");
     expect(draft.remarks).toBe("");
     expect(draft.dirty).toBe(false);
-    expect(draft.scope).toBe("Coimbatore · 2026-2027");
+    expect(draft.scope).toBe("Coimbatore");
   });
 
   it("a late business context re-seeds only a clean, unsaved screen", () => {

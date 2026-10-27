@@ -1,0 +1,311 @@
+/**
+ * Branch Inward — the screen's own skin, on top of the quotation shell's page /
+ * title bar / fields / grid / buttons (imported where used). Lengths are `u(n)`
+ * off the same fluid unit the transaction screens share.
+ */
+@function u($n) {
+  @return calc(#{$n} * var(--erp-q-u, 1rem));
+}
+
+/* ------------------------------------------------------------- top band */
+.topBand {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: minmax(u(15), 1fr) minmax(0, 3fr);
+  gap: u(0.9);
+  align-items: start;
+  padding-bottom: u(0.35);
+  border-bottom: 3px solid var(--primary, #7b1515);
+}
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.25);
+  min-width: 0;
+}
+.titleLine {
+  display: flex;
+  gap: u(0.5);
+  align-items: baseline;
+}
+.kindHint,
+.scope {
+  color: var(--text-muted, #666666);
+  font-size: u(0.72);
+}
+.statusLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.5);
+  align-items: center;
+  font-size: u(0.72);
+}
+.audit {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.1);
+  color: var(--text-muted, #666666);
+  font-size: u(0.7);
+}
+.notice {
+  color: #a15c00;
+  font-weight: 600;
+}
+.statusPill {
+  padding: u(0.08) u(0.6);
+  border-radius: 999px;
+  font-size: u(0.7);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.statusDraft {
+  background: #fef3e2;
+  color: #b45309;
+}
+.statusPosted {
+  background: #e8f5ea;
+  color: #15803d;
+}
+
+/* ------------------------------------------------------ document details */
+/*
+ * Voucher No · Date · Against · From branch on the first row; To godown ·
+ * Remarks on the second (Qt 69b86a0). DOM order is the Enter walk: Date, Remarks.
+ */
+.fieldsCard {
+  display: grid;
+  grid-template-columns:
+    auto minmax(0, 2fr)
+    auto minmax(0, 2fr)
+    auto minmax(0, 2fr)
+    auto minmax(0, 2fr);
+  gap: u(0.45) u(0.5);
+  align-items: center;
+  padding: u(0.55) u(0.75);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: var(--card-bg, #ffffff);
+}
+.remarksInput {
+  grid-column: span 5;
+}
+@container erp-txn-page (max-width: 1100px) {
+  .topBand {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@container erp-txn-page (max-width: 760px) {
+  .fieldsCard {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .remarksInput {
+    grid-column: auto;
+  }
+}
+
+/* ------------------------------------------------------------ the worklist */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.35);
+  min-width: 0;
+  padding: u(0.45) u(0.7);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: var(--card-bg, #ffffff);
+}
+.cardTitle {
+  margin: 0;
+  color: var(--primary, #7b1515);
+  font-size: u(0.68);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.cardHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.6);
+  align-items: center;
+}
+.cardHint {
+  color: var(--text-muted, #666666);
+  font-size: u(0.72);
+}
+.grow {
+  flex: 1 1 auto;
+}
+.worklistViewport {
+  max-height: u(14);
+  overflow: auto;
+  border: 1px solid var(--border, #c9c9c9);
+}
+.worklistViewport:focus {
+  outline: 2px solid var(--primary, #7b1515);
+  outline-offset: -2px;
+}
+.worklist {
+  width: 100%;
+  min-width: u(60);
+  border-collapse: collapse;
+  table-layout: auto !important;
+  font-size: u(0.74);
+}
+.worklist th {
+  position: sticky;
+  top: 0;
+  padding: u(0.25) u(0.9);
+  text-align: left;
+  white-space: nowrap;
+}
+.worklist td {
+  padding: u(0.22) u(0.9);
+  white-space: nowrap;
+  cursor: default;
+}
+.worklistSelected > td {
+  background: #f6e3e3;
+  font-weight: 600;
+}
+.num {
+  text-align: right !important;
+}
+
+/* ------------------------------------------------------------ the grid */
+.gridShell {
+  flex: 0 0 auto;
+}
+.gridViewport {
+  min-height: u(10);
+  max-height: 50vh;
+}
+.lineGrid {
+  width: 100%;
+  min-width: u(52);
+}
+.rowNo {
+  color: var(--text-muted, #666666);
+  text-align: center;
+}
+.problemRow > td {
+  background: #fdf3d8;
+}
+.damagedRow > td {
+  background: #fff7ed;
+}
+.cellReadOnly {
+  cursor: default;
+}
+.cellMuted {
+  color: #9ca3af;
+}
+.noteCell {
+  color: #6b7280;
+  font-size: u(0.7);
+}
+.noteWarn {
+  color: #b45309;
+}
+.bucketSelect {
+  width: 100%;
+}
+
+/* ------------------------------------------------------ bottom cards */
+.bottomRow {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: u(0.75);
+  align-items: stretch;
+}
+@container erp-txn-page (max-width: 900px) {
+  .bottomRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.unloadGrid {
+  display: grid;
+  grid-template-columns: auto minmax(0, 3fr) auto minmax(0, 3fr);
+  gap: u(0.4) u(0.5);
+  align-items: center;
+}
+.unloadTitle {
+  display: flex;
+  gap: u(0.5);
+  align-items: center;
+  color: var(--primary, #7b1515);
+  font-size: u(0.74);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.chargeBox {
+  text-align: right;
+}
+.outcome {
+  border-left: 4px solid var(--border, #c9c9c9);
+}
+.toneGood {
+  border-left-color: #15803d;
+}
+.toneGood .outcomeTitle {
+  color: #15803d;
+}
+.toneWarn {
+  border-left-color: #b45309;
+}
+.toneWarn .outcomeTitle {
+  color: #b45309;
+}
+.outcomeTitle {
+  margin: 0;
+  font-size: u(0.84);
+  font-weight: 700;
+}
+.outcomeText {
+  margin: 0;
+  font-size: u(0.74);
+}
+
+/* ------------------------------------------------------- notes, buttons */
+.validation {
+  margin: 0;
+  padding: u(0.3) u(0.6);
+  border: 1px solid #e0b4b4;
+  background: #fdf3f3;
+  color: #b42318;
+  font-size: u(0.74);
+  font-weight: 600;
+}
+.hintLine {
+  min-height: u(1);
+  margin: 0;
+  color: var(--text-muted, #666666);
+  font-size: u(0.72);
+}
+.spacer {
+  flex: 1 1 auto;
+}
+.buttonBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.5);
+  align-items: center;
+  padding-top: u(0.4);
+  border-top: 1px solid var(--border, #c9c9c9);
+}
+.footerHint {
+  flex: 1 1 auto;
+  color: var(--text-muted, #666666);
+  font-size: u(0.7);
+}
+.prompt {
+  margin: 0;
+}
+
+/* ------------------------------------------------------------- the list */
+.listPill {
+  padding: u(0.05) u(0.5);
+  border-radius: 999px;
+  font-size: u(0.68);
+  font-weight: 800;
+}

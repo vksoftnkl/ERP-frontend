@@ -78,7 +78,7 @@ describe("a fresh document", () => {
     expect(draft.header.rateSource).toBe("MANUAL");
     expect(draft.lines).toHaveLength(1);
     expect(draft.dirty).toBe(false);
-    expect(scopeLabelOf(draft)).toBe("2026-2027");
+    expect(scopeLabelOf(draft)).toBe("");
   });
 });
 
@@ -491,7 +491,7 @@ describe("the header godown", () => {
     expect(row(draft, "a").godownId).toBe("gdl-1");
     expect(row(draft, "b").godownId).toBe("gdl-other");
     expect(row(draft, "c").godownId).toBe("");
-    expect(scopeLabelOf(draft)).toBe("Main · 2026-2027");
+    expect(scopeLabelOf(draft)).toBe("Main");
   });
 });
 

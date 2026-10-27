@@ -120,7 +120,7 @@ export function StockPickDialog(props: StockPickDialogProps) {
     }
   };
 
-  const step = (delta: 1 | -1) => {
+  const step = (delta: number) => {
     if (pickable.length === 0) {
       return;
     }
@@ -220,9 +220,14 @@ export function StockPickDialog(props: StockPickDialogProps) {
                 setActive(pickable[0]);
               }
             }
-            if (event.key === "ArrowDown") {
+            // Arrow / page keys in the search box walk the list (Qt 75c682b).
+            const jump =
+              event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : event.key === "PageDown" ? 10 : event.key === "PageUp" ? -10 : 0;
+            if (jump !== 0 && pickable.length > 0) {
               event.preventDefault();
+              setDebounced(search);
               listRef.current?.focus();
+              step(jump);
             }
           }}
         />

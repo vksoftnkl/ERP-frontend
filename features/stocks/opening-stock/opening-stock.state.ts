@@ -195,11 +195,12 @@ export function isOpeningWorthRemembering(
   return draft.dirty && draft.mode === "entry" && draft.status === "DRAFT";
 }
 
-/** lblScope — "{godown} · {year}" once a godown is chosen, the year alone before. */
-export function scopeLabelOf(draft: Pick<OpeningStockDraft, "header" | "accYear">): string {
-  return draft.header.godownName
-    ? `${draft.header.godownName} · ${draft.accYear}`
-    : draft.accYear;
+/**
+ * lblScope — the godown alone. No accounting year here: the voucher number
+ * carries it (Qt 091bf5b, user 2026-10-26).
+ */
+export function scopeLabelOf(draft: Pick<OpeningStockDraft, "header">): string {
+  return draft.header.godownName;
 }
 
 function mapLine(

@@ -1879,6 +1879,7 @@ export function ERPDynamicModalForm({
         key={field.name}
         data-erp-modal-field-name={field.name}
         data-erp-modal-field-type={inputType}
+        title={field.title}
         className={cx(
           styles.field,
           "erp-ms-modal-field",

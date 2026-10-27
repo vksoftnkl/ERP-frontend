@@ -11,6 +11,7 @@
  * caller only says which row fields it reads back.
  */
 import { useEffect, useMemo, useState } from "react";
+import { GridPopupHint, gridPopupTitle } from "@/components/grid-popup/grid-popup-bits";
 import { ModalShell } from "@/features/sales/quotation/components/modal-shell";
 import quotationStyles from "@/features/sales/quotation/page.module.scss";
 import { useGetGridColumnsQuery } from "@/store/api/metadataApi";
@@ -22,7 +23,10 @@ export type PickerFallbackColumn = { field: string; header: string };
 
 export type GridPickerModalProps = {
   isOpen: boolean;
-  title: string;
+  /** Qt `PopupConfig::title` — omitted, the popup reads "Select <column heading>". */
+  title?: string;
+  /** The heading of the cell the popup opened from (the default title's column). */
+  columnHeading?: string;
   /** The resolved `grid_id`. */
   gridId: string;
   /** The SELECT's named tokens. Pass a stable object. */
@@ -53,6 +57,7 @@ export function GridPickerModal(props: GridPickerModalProps) {
   const {
     isOpen,
     title,
+    columnHeading,
     gridId,
     params,
     initialQuery = "",
@@ -117,7 +122,7 @@ export function GridPickerModal(props: GridPickerModalProps) {
 
   return (
     <ModalShell
-      title={title}
+      title={gridPopupTitle(title, columnHeading ?? columns[0]?.header)}
       isOpen={isOpen}
       fixedHeight
       onClose={onClose}
@@ -147,6 +152,7 @@ export function GridPickerModal(props: GridPickerModalProps) {
         </>
       }
     >
+      <GridPopupHint className={quotationStyles.modalNote} />
       <input
         className={quotationStyles.input}
         value={search}

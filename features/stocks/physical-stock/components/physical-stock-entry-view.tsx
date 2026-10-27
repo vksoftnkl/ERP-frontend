@@ -73,6 +73,7 @@ import { auditLinesOf } from "../physical-stock.state";
 import type { PhysicalStockDocKey } from "../physical-stock.types";
 import { HEADER_FIELD_IDS, usePhysicalStockDraft } from "../use-physical-stock-draft";
 import { AskTextModal } from "./ask-text-modal";
+import { SheetFilterDialog } from "./sheet-filter-dialog";
 import { CountGrid, focusGridCell, type PickerKind } from "./count-grid";
 import { DateTimeField } from "./date-time-field";
 import { GridPickerModal, type PickerColumn } from "./grid-picker-modal";
@@ -413,7 +414,7 @@ export function PhysicalStockEntryView({
           </div>
           <span
             className={styles.scope}
-            title="The godown and accounting year this sheet belongs to."
+            title="The godown this sheet belongs to."
           >
             {draft.scope}
           </span>
@@ -721,6 +722,13 @@ export function PhysicalStockEntryView({
           setPicker(null);
           api.pickReason(pickerRowKey, textOf(row.srm_id), textOf(row.srm_name));
         }}
+      />
+      <SheetFilterDialog
+        isOpen={api.sheetDialog.open}
+        godownName={draft.godownName}
+        current={api.sheetDialog.filter}
+        onCancel={api.dismissSheetFilter}
+        onLoad={api.submitSheetFilter}
       />
       <AskTextModal
         isOpen={api.cancelPrompt !== null}

@@ -23,7 +23,6 @@ import {
   DEFAULT_COMPANY_OPTIONS,
   DEFAULT_DATE_FORMAT_OPTIONS,
   DEFAULT_FISCAL_YEAR_OPTIONS,
-  DEFAULT_PRIMARY_MENU,
 } from "./constants";
 import type {
   ErpHeaderItem,
@@ -470,9 +469,11 @@ function HeaderRight({
     </div>
   );
 }
+// Menu names come only from the DB, so the bar stays empty until it answers.
+const NO_MENU_ITEMS: ErpHeaderItem[] = [];
 // ─── Main ErpHeader component ─────────────────────────────────────────────────
 export default function ErpHeader({
-  primaryMenu = DEFAULT_PRIMARY_MENU,
+  primaryMenu,
   searchMenuCount = 0,
   dateText,
   companyOptions = DEFAULT_COMPANY_OPTIONS,
@@ -500,13 +501,8 @@ export default function ErpHeader({
   const router = useRouter();
   const primaryMenuRef = useRef<HTMLElement | null>(null);
   const userId = useAppSelector(selectAuthUserId);
-  const shouldUseMenuMasterLabels = primaryMenu === DEFAULT_PRIMARY_MENU;
-  const {
-    data: primaryMenuFromApi,
-    isLoading: isMenuLoading,
-    isUninitialized: isMenuUninitialized,
-  } = useGetPrimaryMenuQuery(userId ?? "", {
-    skip: !shouldUseMenuMasterLabels || !userId,
+  const { data: primaryMenuFromApi } = useGetPrimaryMenuQuery(userId ?? "", {
+    skip: primaryMenu !== undefined || !userId,
   });
   const [localCompany, setLocalCompany] = useState(
     selectedCompany ?? getDefaultCompanyValue(companyOptions)
@@ -555,11 +551,7 @@ export default function ErpHeader({
     () => dateText ?? formatDateLabel(pickedDate),
     [dateText, pickedDate],
   );
-  const resolvedPrimaryMenu = useMemo(() => {
-    if (!shouldUseMenuMasterLabels) return primaryMenu;
-    if (isMenuLoading || isMenuUninitialized) return primaryMenu;
-    return primaryMenuFromApi?.length ? primaryMenuFromApi : primaryMenu;
-  }, [primaryMenu, primaryMenuFromApi, isMenuLoading, isMenuUninitialized, shouldUseMenuMasterLabels]);
+  const resolvedPrimaryMenu = primaryMenu ?? primaryMenuFromApi ?? NO_MENU_ITEMS;
   const resolvedCompany = selectedCompany ?? localCompany;
   const resolvedBranch = selectedBranch ?? localBranch;
   const resolvedFiscalYear = selectedFiscalYear ?? localFiscalYear;

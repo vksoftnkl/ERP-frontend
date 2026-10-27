@@ -708,7 +708,7 @@ export function StockAdjustmentEntryView({
             <h1 className={quotationStyles.title}>Stock Adjustment</h1>
           </div>
           <span className={styles.kindHint}>{titleLine(draft)}</span>
-          <span className={styles.scope} title="The godown and accounting year this document belongs to.">
+          <span className={styles.scope} title="The godown this document belongs to.">
             {scopeLabel(draft)}
           </span>
           <div className={styles.statusLine}>

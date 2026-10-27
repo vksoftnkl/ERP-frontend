@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import masterStyles from "@/app/master/state-master/page.module.scss";
-import { ErpActionIcon } from "@/components/design-system/icons/erp-action-icons";
+import { LuCalendarClock, LuChartColumnIncreasing, LuTag } from "react-icons/lu";
 import type { MasterTableRow } from "@/components/master/crud-master-page.types";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { ScheduledPricesLauncher } from "@/features/stocks/selling-price/components/scheduled-prices-dialog";
@@ -13,6 +13,17 @@ import {
   itemQtyPriceHref,
 } from "@/features/masters/inventory/item-qty-price/item-qty-price.utils";
 import { itemListRowTarget } from "./item-card-rules";
+
+/**
+ * Qt 091bf5b (theme v39): the three price buttons each carry their own glyph and
+ * tint, the way Add / Edit / Delete carry theirs — qty_price.svg (teal),
+ * rate_tag.svg (indigo) and the scheduled clock (amber). The master shell
+ * flattens the toolbar chips, so the tint is on the glyph; a disabled button
+ * keeps the shell's grey.
+ */
+const QTY_PRICE_TINT = "#0f9488";
+const CHANGE_RATE_TINT = "#4f46e5";
+const SCHEDULED_TINT = "#b45309";
 
 /**
  * The Item Master list's own buttons (Qt item_list, 4ae6575):
@@ -97,7 +108,7 @@ export default function ItemListActions({ row }: { row: MasterTableRow | null })
       {canOpenQtyPrice ? (
         <button
           type="button"
-          className={`${masterStyles.iconBtn} ${masterStyles.iconBtnShipping} erp-ms-tbtn`}
+          className={`${masterStyles.iconBtn} erp-ms-tbtn`}
           title={
             target
               ? "Qty-wise prices of the selected item — buy more, pay less per unit (Ctrl+Q)"
@@ -107,31 +118,31 @@ export default function ItemListActions({ row }: { row: MasterTableRow | null })
           onClick={openQtyPrice}
         >
           <span className={`${masterStyles.iconBtnBox} erp-ms-tbtn-icon`}>
-            <ErpActionIcon name="excel" />
+            <LuChartColumnIncreasing style={target ? { color: QTY_PRICE_TINT } : undefined} />
           </span>
           <span>Qty price</span>
         </button>
       ) : null}
       <button
         type="button"
-        className={`${masterStyles.iconBtn} ${masterStyles.iconBtnHistory} erp-ms-tbtn`}
+        className={`${masterStyles.iconBtn} erp-ms-tbtn`}
         title="Scheduled prices — new prices set to start on a later day (F9)"
         onClick={() => setScheduledOpen(true)}
       >
         <span className={`${masterStyles.iconBtnBox} erp-ms-tbtn-icon`}>
-          <ErpActionIcon name="history" />
+          <LuCalendarClock style={{ color: SCHEDULED_TINT }} />
         </span>
         <span>Scheduled</span>
       </button>
       <button
         type="button"
-        className={`${masterStyles.iconBtn} ${masterStyles.iconBtnEdit} erp-ms-tbtn`}
+        className={`${masterStyles.iconBtn} erp-ms-tbtn`}
         title={target ? "Change the selected item's selling rates (Ctrl+R)" : "Highlight an item first."}
         disabled={!target}
         onClick={openChangeRate}
       >
         <span className={`${masterStyles.iconBtnBox} erp-ms-tbtn-icon`}>
-          <ErpActionIcon name="edit" />
+          <LuTag style={target ? { color: CHANGE_RATE_TINT } : undefined} />
         </span>
         <span>Change rate</span>
       </button>

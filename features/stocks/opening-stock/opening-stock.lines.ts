@@ -188,6 +188,22 @@ export function choiceNames(choices: readonly BatchDetailChoice[]): string[] {
   return names;
 }
 
+/**
+ * The rows a Size / Colour pick-list offers: list order, a name shared by two
+ * rows offered once (the first wins, as `resolveChoice` takes it).
+ */
+export function distinctChoices(choices: readonly BatchDetailChoice[]): BatchDetailChoice[] {
+  const seen = new Set<string>();
+  return choices.filter((choice) => {
+    const key = choice.name.trim().toLowerCase();
+    if (!key || seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
 /** A Model as committed: whitespace collapsed (the Qt cell's `simplified()`), held to `sbd_model`'s 100. */
 export function normalizeModel(raw: string): string {
   return simplified(raw).slice(0, LINE_MODEL_MAX_LENGTH).trim();

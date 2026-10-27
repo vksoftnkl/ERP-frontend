@@ -56,6 +56,14 @@ import {
 } from "./physical-stock.constants";
 import { toLocalDateTime } from "./physical-stock.format";
 import {
+  EMPTY_SHEET_FILTER,
+  applyNegativeOnly,
+  emptySheetMessage,
+  sheetFilterQuery,
+  sheetFilterSummary,
+  type SheetFilter,
+} from "./physical-stock.sheet-filter";
+import {
   CANCEL_DRAFT_CONFIRM,
   CANCEL_POSTED_CONFIRM,
   apiErrorText,
@@ -194,7 +202,11 @@ export type PhysicalStockDraftApi = {
   openItemList: (rowKey: string) => boolean;
   pickItem: (rowKey: string, itemId: string, itemName: string) => void;
   pickReason: (rowKey: string, id: string, name: string) => void;
+  /** F9 — opens the filter dialog (after the godown check). */
   loadCountSheet: () => void;
+  sheetDialog: { open: boolean; filter: SheetFilter };
+  submitSheetFilter: (filter: SheetFilter) => void;
+  dismissSheetFilter: () => void;
   newDocument: () => void;
   /** Save Draft — writes the sheet and nothing else. No stock moves. */
   saveDraft: () => void;
@@ -379,17 +391,23 @@ export function usePhysicalStockDraft(
   // -------------------------------------------------------------------------
 
   const fetchWholeSheet = useCallback(
-    async (scope: PhysicalStockScope, godownId: string): Promise<CountSheetRow[]> => {
+    async (
+      scope: PhysicalStockScope,
+      godownId: string,
+      filter?: SheetFilter,
+    ): Promise<CountSheetRow[]> => {
       const rows: CountSheetRow[] = [];
-      // includeZero is INCLUDED by default server-side, which is the right
-      // default — a holding the book says is empty is exactly where a count
-      // finds something — so nothing is passed for it.
+      // No filter (the scan / pick cache): includeZero is INCLUDED by default
+      // server-side, which is right there — a holding the book says is empty
+      // is exactly where a count finds something. Load Sheet's own filter
+      // always says it (see sheetFilterQuery).
       for (let page = 0; page < COUNT_SHEET_MAX_PAGES; page += 1) {
         const batch = await appDispatch(
           physicalStockApi.endpoints.physicalStockCountSheet.initiate(
             {
               ...scope,
               godownId,
+              ...(filter ? sheetFilterQuery(filter) : {}),
               limit: COUNT_SHEET_PAGE_SIZE,
               offset: page * COUNT_SHEET_PAGE_SIZE,
             },
@@ -437,56 +455,86 @@ export function usePhysicalStockDraft(
     focusEntryStart();
   }, [focusEntryStart]);
 
+  /** The Load Sheet filter dialog, and the filter it was last answered with (Qt `m_sheetFilter`). */
+  const [sheetDialogOpen, setSheetDialogOpen] = useState(false);
+  const [sheetFilter, setSheetFilter] = useState<SheetFilter>(EMPTY_SHEET_FILTER);
+
+  /** F9 / Load Sheet — asks what to draw first (Qt `loadCountSheet`). */
   const loadCountSheet = useCallback(() => {
-    void (async () => {
-      const current = draftRef.current;
-      if (!isEditable(current) || busyRef.current !== "idle") {
-        return;
-      }
-      if (!current.godownId) {
-        const id = say.warn(
-          "Godown first",
-          "A count sheet is the holdings of one godown. Choose which one is being counted.",
-        );
-        focusHeader("godown", id);
-        return;
-      }
-      // There is always one blank row, so "any rows" is not "any lines": ask
-      // only when a holding is on screen and would be thrown away.
-      if (
-        hasHoldings(current.lines) &&
-        !(await askYesNo(
-          "Reload count sheet",
-          "This replaces every line on screen, including any quantity already counted. Reload?",
-        ))
-      ) {
-        return;
-      }
-      setBusy("sheet");
-      let rows: CountSheetRow[];
-      try {
-        rows = await fetchWholeSheet(scopeOfDraft(current), current.godownId);
-      } catch (error) {
-        say.error(apiErrorText(error));
-        return;
-      } finally {
-        setBusy("idle");
-      }
-      if (draftRef.current.godownId !== current.godownId) {
-        return; // the godown moved while the sheet was being drawn
-      }
-      if (rows.length === 0) {
-        say.info(
-          "Nothing to count",
-          "This godown has no holdings at all — nothing has ever been received into it. Stock " +
-            "found on the shelf with no holding behind it is an adjustment, not a count.",
-        );
-        return;
-      }
-      dispatch({ type: "sheetApplied", rows, godownName: current.godownName });
-      requestFocus(0, Cols.CountedQty);
-    })();
-  }, [fetchWholeSheet, requestFocus, setBusy]);
+    const current = draftRef.current;
+    if (!isEditable(current) || busyRef.current !== "idle") {
+      return;
+    }
+    if (!current.godownId) {
+      const id = say.warn(
+        "Godown first",
+        "A count sheet is the holdings of one godown. Choose which one is being counted.",
+      );
+      focusHeader("godown", id);
+      return;
+    }
+    setSheetDialogOpen(true);
+  }, []);
+
+  const dismissSheetFilter = useCallback(() => {
+    setSheetDialogOpen(false);
+    requestFocus(0, Cols.CountedQty);
+  }, [requestFocus]);
+
+  /**
+   * The dialog answered. A sheet with nothing on it takes the holdings whole;
+   * one already under way keeps every line (and what was counted on it) and
+   * ADDS what is missing — group after group onto one sheet, and a reload can
+   * never wipe a count (Qt `loadCountSheet`).
+   */
+  const submitSheetFilter = useCallback(
+    (filter: SheetFilter) => {
+      setSheetDialogOpen(false);
+      setSheetFilter(filter);
+      void (async () => {
+        const current = draftRef.current;
+        if (!isEditable(current) || busyRef.current !== "idle" || !current.godownId) {
+          return;
+        }
+        setBusy("sheet");
+        let rows: CountSheetRow[];
+        try {
+          rows = applyNegativeOnly(
+            await fetchWholeSheet(scopeOfDraft(current), current.godownId, filter),
+            filter,
+          );
+        } catch (error) {
+          say.error(apiErrorText(error));
+          return;
+        } finally {
+          setBusy("idle");
+        }
+        if (draftRef.current.godownId !== current.godownId) {
+          return; // the godown moved while the sheet was being drawn
+        }
+        if (rows.length === 0) {
+          say.info("Nothing to count", emptySheetMessage(filter));
+          return;
+        }
+        const latest = draftRef.current;
+        if (hasHoldings(latest.lines)) {
+          const blank = latest.lines.find((line) => !line.lotId);
+          if (blank) {
+            dispatch({
+              type: "holdingsAdded",
+              rowKey: blank.key,
+              holdings: rows,
+              itemName: sheetFilterSummary(filter),
+            });
+            return;
+          }
+        }
+        dispatch({ type: "sheetApplied", rows, godownName: current.godownName });
+        requestFocus(0, Cols.CountedQty);
+      })();
+    },
+    [fetchWholeSheet, requestFocus, setBusy],
+  );
 
   /**
    * Every holding of one item in this godown, from the blank row on down.
@@ -1107,6 +1155,9 @@ export function usePhysicalStockDraft(
     pickItem,
     pickReason,
     loadCountSheet,
+    sheetDialog: { open: sheetDialogOpen, filter: sheetFilter },
+    submitSheetFilter,
+    dismissSheetFilter,
     newDocument,
     saveDraft,
     postDocument,

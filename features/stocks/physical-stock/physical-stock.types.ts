@@ -222,6 +222,12 @@ export type CountSheetQuery = PhysicalStockScope & {
   godownId: string;
   bucket?: string;
   itemGroupId?: string;
+  /** Notes 157 — sent only when chosen. */
+  itemBrandId?: string;
+  itemCategoryId?: string;
+  itemSectionId?: string;
+  /** Notes 157 — only holdings with a book quantity below zero. */
+  negativeOnly?: boolean;
   includeZero?: boolean;
   limit?: number;
   offset?: number;

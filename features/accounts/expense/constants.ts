@@ -3,9 +3,8 @@
  *
  * Menu 277 "Expense Voucher" under 5 "Accounts" (DB label "&5 Accounts"),
  * `fixed.menu_master` row from the server migration 20261008160000. The route
- * becomes menu-governed once `/accounts/expense-voucher` is bound to that
- * label in `DEFAULT_PRIMARY_MENU`; until then the page fails open and the
- * server's own menu-277 rights (`EXP_RIGHT_<VERB>`) are the gate.
+ * is bound to menu 277 in `MENU_ROUTES`, which makes it menu-governed; the
+ * server's own menu-277 rights (`EXP_RIGHT_<VERB>`) gate it as well.
  */
 import type { ExpenseKeys } from "./expense.types";
 

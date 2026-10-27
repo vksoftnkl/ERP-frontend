@@ -42,13 +42,22 @@ export type ErpMenuPermissionFlags = {
   isVisible: boolean;
 };
 
+/** What a `fixed.menu_master` row opens; its label always comes from the DB. */
+export type MenuRoute = {
+  href?: string;
+  iconKey?: ErpHeaderIconKey;
+};
+
 export type ErpHeaderItem = {
   label: string;
   href?: string;
   iconKey?: ErpHeaderIconKey;
   onClick?: () => void;
   menuSeparator?: boolean;
-  /** `fixed.menu_master.menu_id` — the key permissions are granted against. */
+  /**
+   * `fixed.menu_master.menu_id` — the key permissions are granted against, and
+   * the key `MENU_ROUTES` binds a DB row's route by.
+   */
   menuId?: number;
   permissions?: ErpMenuPermissionFlags;
   children?: ErpHeaderItem[];
@@ -139,8 +148,4 @@ export type TabStripProps = {
   onNavigate: (destination: string) => void;
   onMenuClose: () => void;
   quickTabsRef?: React.RefObject<HTMLDivElement | null>;
-};
-
-export type ERPMenuObject = {
-  [key: string]: string | null | ERPMenuObject;
 };

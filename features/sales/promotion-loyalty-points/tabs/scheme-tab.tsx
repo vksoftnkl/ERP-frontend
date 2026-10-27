@@ -25,30 +25,13 @@ import {
 } from "../promotion-loyalty-points.constant";
 import type { SchemeFormState } from "../promotion-loyalty-points.local-types";
 import {
+  formatDateEntry,
   formatDateForDisplay,
   isValidDateValue,
+  parseWeekdayValues,
   toDateInputValue,
 } from "../promotion-loyalty-points.utils";
 import { handleLinearKeyboardNav } from "./promotion-loyalty-keyboard-events";
-function parseWeekdayValues(value: string): string[] {
-  return value
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-}
-function formatDateEntry(value: string): string {
-  if (value.includes("-")) {
-    return value;
-  }
-  const digits = value.replace(/\D/g, "").slice(0, 8);
-  if (digits.length <= 2) {
-    return digits;
-  }
-  if (digits.length <= 4) {
-    return `${digits.slice(0, 2)}/${digits.slice(2)}`;
-  }
-  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
-}
 type SchemeTabProps = {
   schemeForm: SchemeFormState;
   setSchemeForm: Dispatch<SetStateAction<SchemeFormState>>;

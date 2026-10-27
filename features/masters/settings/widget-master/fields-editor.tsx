@@ -1,56 +1,7 @@
 "use client";
 import { useCallback, useMemo } from "react";
 import type { WidgetFieldDraft } from "./type";
-export function parseFieldDrafts(value: string | undefined): WidgetFieldDraft[] {
-  if (!value) {
-    return [];
-  }
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-    return parsed.map((entry) => normalizeDraft(entry));
-  } catch {
-    return [];
-  }
-}
-export function serializeFieldDrafts(drafts: WidgetFieldDraft[]): string {
-  return JSON.stringify(drafts);
-}
-function normalizeDraft(entry: unknown): WidgetFieldDraft {
-  const source = (entry ?? {}) as Record<string, unknown>;
-  const rawId = source.fieldId;
-  const fieldId =
-    typeof rawId === "number"
-      ? rawId
-      : typeof rawId === "string" && rawId.trim() !== "" && Number.isFinite(Number(rawId))
-        ? Number(rawId)
-        : undefined;
-  return {
-    ...(fieldId !== undefined ? { fieldId } : {}),
-    fieldName: toText(source.fieldName),
-    fieldGuiName: toText(source.fieldGuiName),
-    fieldSecondaryText: toText(source.fieldSecondaryText),
-    fieldPosition: toText(source.fieldPosition),
-    fieldVisibility: source.fieldVisibility !== false,
-  };
-}
-function toText(value: unknown): string {
-  if (value === null || value === undefined) {
-    return "";
-  }
-  return String(value);
-}
-function emptyDraft(position: number): WidgetFieldDraft {
-  return {
-    fieldName: "",
-    fieldGuiName: "",
-    fieldSecondaryText: "",
-    fieldPosition: String(position),
-    fieldVisibility: true,
-  };
-}
+import { emptyDraft, isDraftStarted, parseFieldDrafts, serializeFieldDrafts } from "./widget-master";
 type FieldsEditorProps = {
   value: string;
   onChange: (value: string) => void;
@@ -73,12 +24,6 @@ const invalidInputStyle: React.CSSProperties = {
   outlineColor: "#d92d20",
 };
 
-/** A row counts as started once any of its text columns has content. */
-function isDraftStarted(draft: WidgetFieldDraft): boolean {
-  return [draft.fieldName, draft.fieldGuiName, draft.fieldSecondaryText].some(
-    (column) => (column ?? "").trim().length > 0,
-  );
-}
 export default function FieldsEditor({ value, onChange, disabled = false }: FieldsEditorProps) {
   const drafts = useMemo(() => parseFieldDrafts(value), [value]);
   const commit = useCallback(

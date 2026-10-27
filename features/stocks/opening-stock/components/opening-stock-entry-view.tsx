@@ -75,6 +75,7 @@ import {
   useOpeningStockDraft,
 } from "../use-opening-stock-draft";
 import { CancelReasonDialog } from "./cancel-reason-dialog";
+import { NewChoiceDialog } from "./new-choice-dialog";
 import { GridPickerModal, type PickerFallbackColumn } from "./grid-picker-modal";
 import { focusEntryCellOfRow, OpeningStockGrid } from "./opening-stock-grid";
 import styles from "../page.module.scss";
@@ -349,7 +350,7 @@ export function OpeningStockEntryView({
           </div>
           <span
             className={styles.scope}
-            title="The godown and accounting year this document belongs to. A voucher is saved back to its own, never the session's."
+            title="The godown this document belongs to."
           >
             {scopeLabelOf(draft)}
           </span>
@@ -467,6 +468,8 @@ export function OpeningStockEntryView({
             flagged={api.flagged}
             onActiveRowChange={setActiveRowKey}
             onSetField={api.setLineField}
+            onPickChoice={api.pickBatchChoice}
+            onAddNewChoice={api.requestNewChoice}
             onOpenItemPicker={api.openItemPicker}
             onSearchItems={api.searchItemsFromBarcode}
             onOpenSupplierPicker={api.openSupplierPicker}
@@ -621,6 +624,12 @@ export function OpeningStockEntryView({
         rowKeyField="sup_id"
         onClose={api.closePicker}
         onPick={api.pickSupplier}
+      />
+      <NewChoiceDialog
+        word={api.newChoice?.field === "colourName" ? "colour" : "size"}
+        isOpen={api.newChoice !== null}
+        onCancel={api.dismissNewChoice}
+        onAccept={api.submitNewChoice}
       />
       <CancelReasonDialog
         isOpen={api.reasonOpen}

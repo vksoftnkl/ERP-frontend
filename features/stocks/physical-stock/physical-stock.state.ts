@@ -461,7 +461,7 @@ export function createDraft(seed: DraftSeed): PhysicalStockDraft {
     lines: [blankLine("row-0")],
     stamps: null,
     notice: "",
-    scope: seed.scope.accYear,
+    scope: "",
     seq: 1,
   };
 }
@@ -482,8 +482,9 @@ export function isCountWorthRemembering(
   return draft.dirty && isEditable(draft);
 }
 
-function scopeLabel(godownName: string, accYear: string): string {
-  return godownName ? `${godownName} · ${accYear}` : accYear;
+/** The godown alone; the voucher number carries the year (Qt 091bf5b). */
+function scopeLabel(godownName: string): string {
+  return godownName;
 }
 
 function rateSourceOf(value: string | null | undefined): string {
@@ -583,7 +584,7 @@ function headerApplied(
     freezeStock: freeze,
     freezeFrom: freeze ? fromWireInstant(header.freezeFrom) || draft.freezeFrom : draft.freezeFrom,
     freezeTo: freeze ? fromWireInstant(header.freezeTo) || draft.freezeTo : draft.freezeTo,
-    scope: scopeLabel(godownName, accYear),
+    scope: scopeLabel(godownName),
     // showAudit(): the document's own lines, and the old notice goes with it.
     stamps: auditStampsOf(header),
     notice: "",
@@ -608,7 +609,7 @@ export function physicalStockReducer(
         godownName: draft.godownName,
         docDate: draft.docDate || fresh.docDate,
         rateSource: rateSourceOf(draft.rateSource),
-        scope: scopeLabel(draft.godownId ? draft.godownName : "", fresh.accYear),
+        scope: scopeLabel(draft.godownId ? draft.godownName : ""),
       };
     }
 
@@ -623,7 +624,7 @@ export function physicalStockReducer(
         branchId: action.scope.branchId,
         accYear: action.scope.accYear,
         deviceId: action.scope.deviceId,
-        scope: scopeLabel(draft.godownId ? draft.godownName : "", action.scope.accYear),
+        scope: scopeLabel(draft.godownId ? draft.godownName : ""),
       };
 
     case "headerSet":

@@ -1,18 +1,14 @@
 /**
  * Sale Order — navigation wiring. The header menu is SERVER-driven
  * (`fixed.menu_master` via /menu-masters), and hrefs are attached to it by
- * normalized-label match against `DEFAULT_PRIMARY_MENU`. The live tree names
+ * menu id from `MENU_ROUTES`. The live tree names
  * the entry "Sales Order" — singular, a direct child of "&1 Sales" (menu 11) —
- * so this test feeds `applyMenuMasterLabels` a payload shaped exactly like the
- * DB and asserts the item comes out clickable. A rename in either place breaks
+ * so this test feeds `buildPrimaryMenu` a payload shaped exactly like the
+ * DB and asserts the item comes out clickable. A wrong id in either place breaks
  * the link silently in the UI; here it breaks a test.
  */
 import { describe, expect, it } from "vitest";
-import {
-  applyMenuMasterLabels,
-  DEFAULT_PRIMARY_MENU,
-  extractMenuMasterItems,
-} from "@/components/layout/constants";
+import { buildPrimaryMenu, extractMenuMasterItems } from "@/components/layout/constants";
 import type { ErpHeaderItem } from "@/components/layout/types";
 
 /** The live rows, as `fixed.menu_master` carries them (2026-08-12). */
@@ -45,20 +41,14 @@ function findByLabel(items: ErpHeaderItem[], label: string): ErpHeaderItem | nul
 
 describe("sale order menu wiring", () => {
   it("the DB's 'Sales Order' item resolves to /sales/sale-order", () => {
-    const menu = applyMenuMasterLabels(
-      DEFAULT_PRIMARY_MENU,
-      extractMenuMasterItems(DB_MENU_PAYLOAD),
-    );
+    const menu = buildPrimaryMenu(extractMenuMasterItems(DB_MENU_PAYLOAD));
     const saleOrder = findByLabel(menu, "Sales Order");
     expect(saleOrder).not.toBeNull();
     expect(saleOrder?.href).toBe("/sales/sale-order");
   });
 
   it("the quotation item still resolves, as a canary for the matching itself", () => {
-    const menu = applyMenuMasterLabels(
-      DEFAULT_PRIMARY_MENU,
-      extractMenuMasterItems(DB_MENU_PAYLOAD),
-    );
+    const menu = buildPrimaryMenu(extractMenuMasterItems(DB_MENU_PAYLOAD));
     expect(findByLabel(menu, "Quotation")?.href).toBe("/sales/quotation");
   });
 });

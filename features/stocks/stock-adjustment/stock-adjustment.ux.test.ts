@@ -280,9 +280,9 @@ describe("the title block", () => {
     expect(auditLines(saved)).toEqual(["Created 24-10-2026 09:05 AM by Ravi"]);
   });
 
-  it("the scope is the godown and the year once a godown is chosen", () => {
-    expect(scopeLabel({ godownName: "", accYear: "2026-2027" })).toBe("2026-2027");
-    expect(scopeLabel({ godownName: "Main", accYear: "2026-2027" })).toBe("Main · 2026-2027");
+  it("the scope line is the godown alone — the voucher number carries the year", () => {
+    expect(scopeLabel({ godownName: "" })).toBe("");
+    expect(scopeLabel({ godownName: "Main" })).toBe("Main");
   });
 });
 

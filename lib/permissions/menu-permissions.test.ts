@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  applyMenuMasterLabels,
-  extractMenuMasterItems,
-  DEFAULT_PRIMARY_MENU,
-} from "@/components/layout/constants";
+import { buildPrimaryMenu, extractMenuMasterItems } from "@/components/layout/constants";
 import type { MenuMasterItem } from "@/components/layout/constants";
 import {
   EMPTY_MENU_PERMISSION_INDEX,
@@ -40,7 +36,7 @@ function node(
 /** Runs the payload through the same path the header does. */
 function indexFrom(payload: unknown[]) {
   const items: MenuMasterItem[] = extractMenuMasterItems({ data: payload });
-  return buildMenuPermissionIndex(applyMenuMasterLabels(DEFAULT_PRIMARY_MENU, items));
+  return buildMenuPermissionIndex(buildPrimaryMenu(items));
 }
 
 describe("menu permission index", () => {
@@ -60,16 +56,19 @@ describe("menu permission index", () => {
   });
 
   it("unions the grants of a screen reachable from two menus", () => {
+    // 284 Account Day Summary and 181 Day Book Detail both open the day
+    // summary; 181 only adds a query, which route keys drop.
     const index = indexFrom([
-      node(1, "&1 Sales", {}, [
-        node(11, "Sales Order", { canCreate: true }),
-        node(75, "Loyalty Schemes", {}, [node(67, "Loyalty Programs", { canDelete: true })]),
-        node(76, "SO Management", {}, [node(77, "Sales Orders", { canDelete: true })]),
+      node(6, "&6 Reports", {}, [
+        node(137, "Financial Statements", {}, [
+          node(284, "Account Day Summary", { canCreate: true }),
+          node(181, "Day Book Detail", { canDelete: true }),
+        ]),
       ]),
     ]);
-    const order = index.byHref.get("/sales/sale-order");
-    expect(order?.canCreate).toBe(true);
-    expect(order?.canDelete).toBe(true);
+    const summary = index.byHref.get("/reports/day-summary");
+    expect(summary?.canCreate).toBe(true);
+    expect(summary?.canDelete).toBe(true);
   });
 
   it("drops a menu the server marks invisible", () => {

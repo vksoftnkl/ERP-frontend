@@ -24,14 +24,13 @@
  * grid. The document keys (Ctrl+Enter, Ctrl+S …) are the screen's shared set —
  * this grid only lets them through.
  *
- * Textile (Qt 74b755c): Size, Colour and Model are `BatchDetailCell`s over
- * `<datalist>`s — the two lists, and one list of earlier models per item on
- * screen. They open (and are Enter stops) only while the company numbers its
+ * Textile (Qt 74b755c / 091bf5b): Size and Colour are `ChoicePickerCell`
+ * pick-lists with "+ Add new …"; Model is a `BatchDetailCell` over a
+ * `<datalist>` of the item's earlier models. They open (and are Enter stops) only while the company numbers its
  * own batches, on an item tracked by batch whose batch number was not typed.
  */
 import { useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { cx } from "@/components/design-system/cx";
-import { NAME_MAX_LENGTH } from "@/features/masters/inventory/item-attribute/item-attribute";
 import { GridCell } from "@/features/sales/quotation/components/grid-cell";
 import { focusCell, focusNextStopFrom, moveCellFocus } from "@/features/sales/quotation/components/grid-focus";
 import type { GridCellKind } from "@/features/sales/quotation/quotation.constants";
@@ -57,7 +56,7 @@ import {
   STOCK_BUCKETS,
 } from "../opening-stock.constants";
 import {
-  choiceNames,
+  distinctChoices,
   hasItem,
   lineNumbersOf,
   qtyDecimals,
@@ -67,6 +66,7 @@ import {
 } from "../opening-stock.lines";
 import type { BatchDetailChoices, OpeningStockLine, OpeningStockLineField } from "../opening-stock.types";
 import { BatchDetailCell } from "./batch-detail-cell";
+import { ChoicePickerCell } from "./choice-picker-cell";
 import styles from "../page.module.scss";
 
 const ROW_ACTION_PX = 30;
@@ -82,9 +82,7 @@ const BLANK_ROW_FIELDS = new Set(["barcode", "itemName"]);
 /** The td attribute naming its column — what a click on a blank row reads. */
 const CELL_COLUMN_ATTR = "data-os-column";
 
-/** The `<datalist>` ids the textile cells complete from. */
-const SIZE_LIST_ID = "opening-stock-sizes";
-const COLOUR_LIST_ID = "opening-stock-colours";
+/** The `<datalist>` id the Model cells complete from (Size / Colour are pick-lists now). */
 function modelListId(itemId: string): string {
   return `opening-stock-models-${itemId}`;
 }
@@ -231,6 +229,10 @@ export type OpeningStockGridProps = {
   flagged: { rowKey: string; field: string } | null;
   onActiveRowChange: (rowKey: string) => void;
   onSetField: (rowKey: string, field: OpeningStockLineField, raw: string) => void;
+  /** Size / Colour: a row picked from the cell's list — or emptied (blank id and name). */
+  onPickChoice: (rowKey: string, field: "sizeName" | "colourName", id: string, name: string) => void;
+  /** Size / Colour: "+ Add new …" at the foot of the cell's list. */
+  onAddNewChoice: (rowKey: string, field: "sizeName" | "colourName") => void;
   onOpenItemPicker: (rowKey: string, typed: string) => void;
   /** ↓ in a blank row's Barcode — the item list, searched for what was typed there. */
   onSearchItems: (rowKey: string, typed: string) => void;
@@ -267,6 +269,8 @@ export function OpeningStockGrid(props: OpeningStockGridProps) {
     flagged,
     onActiveRowChange,
     onSetField,
+    onPickChoice,
+    onAddNewChoice,
     onOpenItemPicker,
     onSearchItems,
     onOpenSupplierPicker,
@@ -287,8 +291,8 @@ export function OpeningStockGrid(props: OpeningStockGridProps) {
     [visible],
   );
   const lineNumbers = useMemo(() => lineNumbersOf(lines), [lines]);
-  const sizeNames = useMemo(() => choiceNames(batchDetail.sizes), [batchDetail.sizes]);
-  const colourNames = useMemo(() => choiceNames(batchDetail.colours), [batchDetail.colours]);
+  const sizeChoices = useMemo(() => distinctChoices(batchDetail.sizes), [batchDetail.sizes]);
+  const colourChoices = useMemo(() => distinctChoices(batchDetail.colours), [batchDetail.colours]);
   /** A datalist per item on screen that has earlier models — a Model cell offers its own item's. */
   const modelLists = useMemo(() => {
     const ids = new Set(lines.filter(hasItem).map((line) => line.itemId));
@@ -425,16 +429,6 @@ export function OpeningStockGrid(props: OpeningStockGridProps) {
     <div className={quotationStyles.gridViewport} data-erp-table-viewport="true" onContextMenu={onContextMenu}>
       {autoBatchNo ? (
         <>
-          <datalist id={SIZE_LIST_ID}>
-            {sizeNames.map((name) => (
-              <option key={name} value={name} />
-            ))}
-          </datalist>
-          <datalist id={COLOUR_LIST_ID}>
-            {colourNames.map((name) => (
-              <option key={name} value={name} />
-            ))}
-          </datalist>
           {modelLists.map(({ itemId, models }) => (
             <datalist key={itemId} id={modelListId(itemId)}>
               {models.map((model) => (
@@ -560,25 +554,37 @@ export function OpeningStockGrid(props: OpeningStockGridProps) {
                       className={cx(greyed && styles.untrackedCell)}
                       title={greyed ? greyedTitle(column, line, autoBatchNo) : undefined}
                     >
-                      {column.kind === "choice" || column.kind === "model" ? (
+                      {column.kind === "choice" ? (
+                        <ChoicePickerCell
+                          word={column.key === "sizeName" ? "size" : "colour"}
+                          value={String(raw ?? "")}
+                          choices={column.key === "sizeName" ? sizeChoices : colourChoices}
+                          editable={cellEditable}
+                          invalid={invalid}
+                          gridName={OPENING_STOCK_GRID_NAME}
+                          rowKey={line.key}
+                          fieldKey={column.key}
+                          columnIndex={columnIndex}
+                          focusStop={isEnterStop(column, line, autoBatchNo)}
+                          onPick={(choice) => {
+                            if (column.write === "sizeName" || column.write === "colourName") {
+                              onPickChoice(line.key, column.write, choice.id, choice.name);
+                            }
+                          }}
+                          onAddNew={() => {
+                            if (column.write === "sizeName" || column.write === "colourName") {
+                              onAddNewChoice(line.key, column.write);
+                            }
+                          }}
+                        />
+                      ) : column.kind === "model" ? (
                         <BatchDetailCell
                           value={String(raw ?? "")}
                           editable={cellEditable}
                           invalid={invalid}
-                          listId={
-                            column.kind === "model"
-                              ? modelListId(line.itemId)
-                              : column.key === "sizeName"
-                                ? SIZE_LIST_ID
-                                : COLOUR_LIST_ID
-                          }
-                          // The masters' name limit (both are 50); the model is sbd_model's 100.
-                          maxLength={column.kind === "model" ? LINE_MODEL_MAX_LENGTH : NAME_MAX_LENGTH}
-                          title={
-                            column.kind === "choice" && cellEditable && !String(raw ?? "")
-                              ? `Pick a ${column.key === "sizeName" ? "size" : "colour"}, or type one that is not on the list yet`
-                              : undefined
-                          }
+                          listId={modelListId(line.itemId)}
+                          // sbd_model's limit.
+                          maxLength={LINE_MODEL_MAX_LENGTH}
                           gridName={OPENING_STOCK_GRID_NAME}
                           rowKey={line.key}
                           fieldKey={column.key}

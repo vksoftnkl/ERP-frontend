@@ -7,6 +7,7 @@
  * the company / branch the Qt PopupConfig passes) and grid 102 on Reason.
  */
 import { useEffect, useMemo, useState } from "react";
+import { GridPopupHint, gridPopupTitle } from "@/components/grid-popup/grid-popup-bits";
 import { cx } from "@/components/design-system/cx";
 import { useGridId, type ConfiguredGridKey } from "@/lib/configured-grids";
 import { useGetGridColumnsQuery } from "@/store/api/metadataApi";
@@ -20,7 +21,9 @@ export type PickerColumn = { field: string; header: string };
 
 export type GridPickerModalProps = {
   isOpen: boolean;
-  title: string;
+  /** Qt `PopupConfig::title` — omitted, the popup reads "Select <column heading>". */
+  title?: string;
+  columnHeading?: string;
   gridKey: ConfiguredGridKey;
   /** The grid SQL's bare tokens. Pass a stable object. */
   params?: Record<string, string>;
@@ -47,6 +50,7 @@ function OpenGridPicker(props: GridPickerModalProps) {
   const {
     isOpen,
     title,
+    columnHeading,
     gridKey,
     params,
     fallbackColumns,
@@ -103,7 +107,7 @@ function OpenGridPicker(props: GridPickerModalProps) {
 
   return (
     <ModalShell
-      title={title}
+      title={gridPopupTitle(title, columnHeading ?? columns[0]?.header)}
       isOpen={isOpen}
       fixedHeight
       onClose={onClose}
@@ -133,6 +137,7 @@ function OpenGridPicker(props: GridPickerModalProps) {
         </>
       }
     >
+      <GridPopupHint className={quotationStyles.modalNote} />
       <input
         className={quotationStyles.input}
         value={search}

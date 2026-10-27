@@ -1,0 +1,277 @@
+// Ageing Slabs — the ladder editor (Qt AgeingSlabEntry): header with the
+// scope pill, the ladder grid, the coverage bar, the buttons at the foot.
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.85rem 1rem 0;
+  height: 100%;
+  min-height: 0;
+  font-family: var(--erp-font-family, "Segoe UI", system-ui, Arial, sans-serif);
+  color: var(--text-main, #222222);
+  background: var(--surface, #ffffff);
+}
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--primary, #7b1515);
+}
+.subtitle {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted, #666666);
+}
+.pillOwn,
+.pillDefault {
+  flex: none;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+.pillOwn {
+  background: #e4f2e7;
+  color: #1f6b34;
+}
+.pillDefault {
+  background: #ececec;
+  color: #555555;
+}
+.body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  overflow: auto;
+}
+.info {
+  margin: 0;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border-light, #e3e3e3);
+  border-radius: var(--erp-radius, 2px);
+  background: var(--row-alt, #fafafa);
+  font-size: 0.8rem;
+  color: var(--text-soft, #444444);
+}
+.gridViewport {
+  max-width: 47.5rem;
+  max-height: 24rem;
+  overflow: auto;
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 2px);
+}
+.grid {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+.grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--header-bg, #ededed);
+  font-weight: 600;
+  text-align: left;
+  padding: 0.42rem 0.5rem;
+  border-bottom: 1px solid var(--border, #c9c9c9);
+  border-right: 1px solid var(--border-light, #e3e3e3);
+  white-space: nowrap;
+}
+.grid thead th.numCol {
+  text-align: right;
+  width: 6.5rem;
+}
+.grid tbody td {
+  padding: 0.2rem 0.35rem;
+  border-bottom: 1px solid var(--border-light, #e3e3e3);
+  border-right: 1px solid var(--border-light, #e3e3e3);
+  vertical-align: middle;
+}
+.grid tbody tr:nth-child(even) td {
+  background: var(--row-alt, #fafafa);
+}
+.grid tbody tr.rowCurrent td {
+  background: var(--row-selected, #f3ece0);
+}
+.cellIndex {
+  width: 2.75rem;
+  text-align: center;
+  color: var(--text-muted, #888888);
+}
+.numCell {
+  padding-right: 0.7rem !important;
+  text-align: right;
+  color: var(--text-muted, #6b7280);
+}
+.coversCell {
+  color: var(--text-muted, #6b7280);
+  padding-left: 0.6rem !important;
+}
+.cellInput {
+  width: 100%;
+  min-height: 1.9rem;
+  padding: 0.25rem 0.45rem;
+  border: none;
+  border-radius: var(--erp-radius, 2px);
+  background: transparent;
+  font-size: 0.8rem;
+  color: var(--text-main, #222222);
+  box-sizing: border-box;
+}
+.cellNumber {
+  text-align: right;
+}
+.cellInput:focus-visible {
+  outline: 2px solid var(--primary, #7b1515);
+  outline-offset: -1px;
+  background: var(--surface, #ffffff);
+}
+.cellInput[readonly] {
+  cursor: default;
+}
+.emptyState {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--text-muted, #888888);
+  font-size: 0.85rem;
+}
+.rowButtons {
+  display: flex;
+  gap: 0.5rem;
+}
+.cardTitle {
+  margin: 0.3rem 0 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-muted, #666666);
+}
+// The ladder on a day axis: one band per slab, the open-ended one running off
+// the right edge. Percent positions, so the bar follows the page width.
+.coverage {
+  padding: 0 1.5rem 0 0.6rem;
+}
+.track {
+  position: relative;
+  height: 1.7rem;
+}
+.band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-left: 1px solid #ffffff;
+  font-size: 0.78rem;
+  color: var(--text-main, #222222);
+  box-sizing: border-box;
+}
+.bandA {
+  background: #dbe6f5;
+}
+.bandB {
+  background: #c9d8ef;
+}
+.bandLabel {
+  padding: 0 0.3rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.openEnd {
+  position: absolute;
+  right: -1.3rem;
+  color: var(--text-main, #222222);
+}
+.axis {
+  position: relative;
+  height: 1.3rem;
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  color: #9ca3af;
+}
+.tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  padding-top: 0.2rem;
+  border-top: 1px solid #9ca3af;
+}
+.axisCaption {
+  position: absolute;
+  right: 0;
+  top: 0.2rem;
+}
+.checkGood,
+.checkBad {
+  margin: 0;
+  font-size: 0.8rem;
+}
+.checkGood {
+  color: #1f6b34;
+}
+.checkBad {
+  color: #b13b3b;
+}
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0;
+  border-top: 1px solid var(--border, #d5d5d5);
+}
+.footerSpacer {
+  flex: 1;
+}
+.footNote {
+  font-size: 0.74rem;
+  color: var(--text-muted, #666666);
+}
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2rem;
+  padding: 0 0.85rem;
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 2px);
+  background: var(--surface, #ffffff);
+  color: var(--text-main, #333333);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.button:hover:not(:disabled) {
+  background: var(--header-bg, #ececec);
+}
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.buttonDanger {
+  composes: button;
+  color: #b13b3b;
+}
+.buttonPrimary {
+  composes: button;
+  background: var(--primary, #7b1515);
+  border-color: var(--primary, #7b1515);
+  color: #ffffff;
+}
+.buttonPrimary:hover:not(:disabled) {
+  background: var(--primary, #7b1515);
+  filter: brightness(0.92);
+}

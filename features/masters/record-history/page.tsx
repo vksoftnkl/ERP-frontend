@@ -21,342 +21,39 @@ import { notifyGlobalNavigationStart } from "@/lib/navigation/global-loader";
 import type { ApiSuccessResponse, ListMeta } from "@/utils/types";
 import styles from "./record-history-modal.module.scss";
 import { useDataRefresh } from "@/lib/data-freshness";
-import { formatClock12 } from "@/lib/time-format";
+import {
+  buildAuditComparisonRows,
+  buildHistoryGroups,
+  buildRecordHistoryQuery,
+  countChangedFields,
+  DEFAULT_PAGE,
+  DEFAULT_PAGE_SIZE,
+  EMPTY_META,
+  formatActionLabel,
+  formatAuditFieldLabel,
+  formatAuditPrimitiveValue,
+  formatDateOnly,
+  formatDateTime,
+  formatTimeOnly,
+  getRowUserLabel,
+  HISTORY_SUB_ENTITY_LABELS,
+  isRecord,
+  MODAL_FETCH_ALL_LIMIT,
+  MODAL_FETCH_ALL_MAX_PAGES,
+  normalizeQueryValue,
+  normalizeStructuredValue,
+  normalizeViewerValue,
+  pageHistoryGroups,
+  resolveActionVariant,
+  truncateValue,
+  type AuditLogListItem,
+  type ModalHistoryGroup,
+} from "./record-history";
 const AUDIT_LOG_LIST_ENDPOINT = "/audit-logs/list";
-const DEFAULT_PAGE = 1;
-const DEFAULT_PAGE_SIZE = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
 const TABLE_COLUMN_COUNT = 5;
-const EMPTY_META: ListMeta = {
-  page: DEFAULT_PAGE,
-  limit: DEFAULT_PAGE_SIZE,
-  total: 0,
-  total_pages: 0,
-};
-type AuditLogListItem = {
-  log_id: string;
-  log_date: string;
-  log_action: string;
-  log_screen_id: number;
-  screen_name: string;
-  log_table_name: string;
-  log_pk: string | null;
-  log_display_name: string | null;
-  log_original_record: unknown;
-  log_modified_record: unknown;
-  log_changed_fields: unknown;
-  log_user_id: string | null;
-  log_user_name: string | null;
-  log_branch_id: string | null;
-  log_branch_name: string | null;
-  log_notes: string | null;
-};
-type AuditDiffRow = {
-  field: string;
-  from: unknown;
-  to: unknown;
-};
-type AuditComparisonRow = {
-  field: string;
-  original: unknown;
-  modified: unknown;
-  diff: AuditDiffRow | null;
-};
 function cx(...tokens: Array<string | false | null | undefined>): string {
   return tokens.filter(Boolean).join(" ");
-}
-function normalizeQueryValue(value: string | null): string {
-  return value?.trim() ?? "";
-}
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-function isDiffLeaf(value: unknown): value is { from: unknown; to: unknown } {
-  return isRecord(value) && "from" in value && "to" in value;
-}
-function looksLikeJsonString(value: string): boolean {
-  const normalized = value.trim();
-  if (!normalized) {
-    return false;
-  }
-  return (
-    normalized.startsWith("{") ||
-    normalized.startsWith("[") ||
-    normalized === "null" ||
-    normalized === "true" ||
-    normalized === "false" ||
-    /^-?\d+(\.\d+)?$/.test(normalized)
-  );
-}
-function normalizeStructuredValue(value: unknown): unknown {
-  if (typeof value !== "string") {
-    return value;
-  }
-  if (!looksLikeJsonString(value)) {
-    return value;
-  }
-  try {
-    return JSON.parse(value) as unknown;
-  } catch {
-    return value;
-  }
-}
-function buildRecordHistoryQuery(
-  screenName: string,
-  recordPk: string,
-  page: number,
-  limit: number,
-): Record<string, string> {
-  return {
-    screen_name: screenName,
-    record_pk: recordPk,
-    page: String(page),
-    limit: String(limit),
-    /* total/total_pages come back null unless this is opted into, which leaves
-       the pager stuck on a single page. */
-    include_total: "true",
-  };
-}
-/* Page size the modal reads with when it has to pull the whole history in one
-   go (server allows up to 100 per page), plus a hard stop so a record with a
-   runaway history can never spin an unbounded fetch loop. */
-const MODAL_FETCH_ALL_LIMIT = 100;
-const MODAL_FETCH_ALL_MAX_PAGES = 50;
-/* Accordion groups shown per page once the whole history is in memory. */
-const MODAL_GROUPS_PER_PAGE = 10;
-/* Composite screens whose audit history the server fans out across several
-   child screens (mirrors the server's RELATED_AUDIT_SCREENS_BY_SCREEN_NAME).
-   Their rows are merged into one date/time-keyed list; this map only supplies
-   the short label each sub-entity carries inside a group, keyed on the row's
-   `screen_name` — the reliable discriminator (`log_table_name` is a free-text
-   label). Any master not listed here keeps the plain single-list,
-   server-paginated view. */
-const HISTORY_SUB_ENTITY_LABELS: Record<string, Record<string, string>> = {
-  "Item Master": {
-    "Item Master": "Item",
-    "Item Unit Conversion Master": "Unit Conversion",
-    "Item EAN Code Master": "EAN Codes",
-    "Item Reorder Master": "Reorders",
-    "Item Price Master": "Price List",
-  },
-};
-const DATE_FORMATTER = new Intl.DateTimeFormat("en-IN", {
-  dateStyle: "medium",
-});
-/** "15 Oct 2026, 02:05 PM" — the date as before, the clock 12-hour (Qt `hh:mm AP`). */
-function formatDateTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return `${DATE_FORMATTER.format(date)}, ${formatClock12(date)}`;
-}
-function formatDateOnly(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return DATE_FORMATTER.format(date);
-}
-function formatTimeOnly(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return formatClock12(date);
-}
-function formatActionLabel(value: string): string {
-  const normalized = value.trim().toLowerCase();
-  if (!normalized) {
-    return "Unknown";
-  }
-  if (normalized === "new" || normalized === "insert") {
-    return "New";
-  }
-  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
-}
-function resolveActionVariant(value: string): "new" | "update" | "approve" | "cancel" | "neutral" {
-  const normalized = value.trim().toLowerCase();
-  if (normalized === "new" || normalized === "insert") {
-    return "new";
-  }
-  if (normalized === "update") {
-    return "update";
-  }
-  if (normalized === "approve") {
-    return "approve";
-  }
-  if (normalized === "cancel") {
-    return "cancel";
-  }
-  return "neutral";
-}
-function countChangedFields(value: unknown): number {
-  const normalizedValue = normalizeStructuredValue(value);
-  if (normalizedValue === null || normalizedValue === undefined) {
-    return 0;
-  }
-  if (isDiffLeaf(normalizedValue)) {
-    return 1;
-  }
-  if (Array.isArray(normalizedValue)) {
-    const nestedCount = normalizedValue.reduce(
-      (count: number, item) => count + countChangedFields(item),
-      0,
-    );
-    return nestedCount || normalizedValue.length;
-  }
-  if (isRecord(normalizedValue)) {
-    const nestedCount = Object.values(normalizedValue).reduce(
-      (count: number, item) => count + countChangedFields(item),
-      0,
-    );
-    return nestedCount || Object.keys(normalizedValue).length;
-  }
-  return 1;
-}
-function formatAuditFieldLabel(value: string): string {
-  const normalized = value.trim();
-  if (!normalized) {
-    return "Field";
-  }
-  return normalized
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/_/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/\b\w/g, (character) => character.toUpperCase());
-}
-function isIsoDateString(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value) && !Number.isNaN(Date.parse(value));
-}
-function formatAuditPrimitiveValue(value: unknown): string {
-  if (value === null || value === undefined) {
-    return "null";
-  }
-  if (typeof value === "boolean") {
-    return value ? "true" : "false";
-  }
-  if (typeof value === "number" || typeof value === "bigint") {
-    return String(value);
-  }
-  if (typeof value === "string") {
-    if (value.trim().length === 0) {
-      return '""';
-    }
-    if (isIsoDateString(value)) {
-      return formatDateTime(value);
-    }
-    return value;
-  }
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-}
-function flattenAuditDiff(value: unknown, path = ""): AuditDiffRow[] {
-  const normalizedValue = normalizeStructuredValue(value);
-  if (normalizedValue === null || normalizedValue === undefined) {
-    return [];
-  }
-  if (isDiffLeaf(normalizedValue)) {
-    return [
-      {
-        field: path || "Value",
-        from: normalizeStructuredValue(normalizedValue.from),
-        to: normalizeStructuredValue(normalizedValue.to),
-      },
-    ];
-  }
-  if (Array.isArray(normalizedValue)) {
-    return normalizedValue.flatMap((item, index) =>
-      flattenAuditDiff(item, path ? `${path} / Item ${index + 1}` : `Item ${index + 1}`),
-    );
-  }
-  if (isRecord(normalizedValue)) {
-    return Object.entries(normalizedValue).flatMap(([key, entryValue]) =>
-      flattenAuditDiff(
-        entryValue,
-        path ? `${path} / ${formatAuditFieldLabel(key)}` : formatAuditFieldLabel(key),
-      ),
-    );
-  }
-  if (!path) {
-    return [];
-  }
-  return [{ field: path, from: null, to: normalizedValue }];
-}
-function flattenAuditRecord(value: unknown, path = ""): Array<{ field: string; value: unknown }> {
-  const normalizedValue = normalizeStructuredValue(value);
-  if (normalizedValue === null || normalizedValue === undefined) {
-    return path ? [{ field: path, value: null }] : [];
-  }
-  if (Array.isArray(normalizedValue)) {
-    if (normalizedValue.length === 0) {
-      return path ? [{ field: path, value: [] }] : [];
-    }
-    return normalizedValue.flatMap((item, index) =>
-      flattenAuditRecord(item, path ? `${path} / Item ${index + 1}` : `Item ${index + 1}`),
-    );
-  }
-  if (isRecord(normalizedValue)) {
-    const entries = Object.entries(normalizedValue);
-    if (entries.length === 0) {
-      return path ? [{ field: path, value: {} }] : [];
-    }
-    return entries.flatMap(([key, entryValue]) =>
-      flattenAuditRecord(
-        entryValue,
-        path ? `${path} / ${formatAuditFieldLabel(key)}` : formatAuditFieldLabel(key),
-      ),
-    );
-  }
-  return [{ field: path || "Value", value: normalizedValue }];
-}
-function buildAuditComparisonRows(
-  originalRecord: unknown,
-  modifiedRecord: unknown,
-  changedFields: unknown,
-): AuditComparisonRow[] {
-  const originalEntries = flattenAuditRecord(originalRecord);
-  const modifiedEntries = flattenAuditRecord(modifiedRecord);
-  const diffRows = flattenAuditDiff(changedFields);
-  const originalMap = new Map(originalEntries.map((entry) => [entry.field, entry.value]));
-  const modifiedMap = new Map(modifiedEntries.map((entry) => [entry.field, entry.value]));
-  const diffMap = new Map(diffRows.map((entry) => [entry.field, entry]));
-  const orderedFields: string[] = [];
-  const seenFields = new Set<string>();
-  for (const field of [
-    ...diffRows.map((entry) => entry.field),
-    ...originalEntries.map((entry) => entry.field),
-    ...modifiedEntries.map((entry) => entry.field),
-  ]) {
-    if (seenFields.has(field)) {
-      continue;
-    }
-    seenFields.add(field);
-    orderedFields.push(field);
-  }
-  return orderedFields.map((field) => ({
-    field,
-    original: originalMap.has(field) ? originalMap.get(field) : null,
-    modified: modifiedMap.has(field) ? modifiedMap.get(field) : null,
-    diff: diffMap.get(field) ?? null,
-  }));
-}
-function truncateValue(value: string | null | undefined, maxLength = 42): string {
-  const normalized = value?.trim();
-  if (!normalized) {
-    return "-";
-  }
-  if (normalized.length <= maxLength) {
-    return normalized;
-  }
-  return `${normalized.slice(0, maxLength - 1)}…`;
-}
-function getRowUserLabel(row: AuditLogListItem): string {
-  return row.log_user_name?.trim() || row.log_user_id?.trim() || "-";
 }
 const PANEL_CLASS =
   "rounded-[4px] border border-slate-200 bg-white shadow-[0_18px_52px_rgba(15,23,42,0.18)]";
@@ -508,12 +205,6 @@ export type RecordHistoryModalProps = {
   recordPk: string | number | null | undefined;
   screenName: string | number | null | undefined;
 };
-function normalizeViewerValue(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) {
-    return "";
-  }
-  return String(value).trim();
-}
 function RecordHistoryViewer({
   displayName: displayNameProp,
   onBack,
@@ -1054,58 +745,6 @@ function RecordHistoryViewer({
     </main>
   );
 }
-type ModalDiffRow = {
-  field: string;
-  old: string;
-  new: string;
-};
-/* One audit row inside a date/time group (e.g. the EAN-code write of a save). */
-type ModalHistoryEntry = {
-  id: string;
-  label: string;
-  actionLabel: string;
-  badgeClass: string;
-  notes: string;
-  diff: ModalDiffRow[];
-};
-/* Every audit row written at the same date/time, folded into one accordion
-   item — a single save fans out across the record's child tables, and the user
-   reads that as one change, not five. */
-type ModalHistoryGroup = {
-  id: string;
-  dateLabel: string;
-  timeLabel: string;
-  users: string[];
-  actions: Array<{ label: string; badgeClass: string }>;
-  sections: string[];
-  entries: ModalHistoryEntry[];
-  changeCount: number;
-};
-/* Rows are folded to the minute — that is the precision the modal prints, and
-   the child writes of one save land within the same minute. */
-function getHistoryGroupKey(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  date.setSeconds(0, 0);
-  return String(date.getTime());
-}
-function resolveSubEntityLabel(parentScreen: string, rowScreen: string): string {
-  const normalizedRowScreen = normalizeViewerValue(rowScreen);
-  const labels = HISTORY_SUB_ENTITY_LABELS[parentScreen];
-  if (labels?.[normalizedRowScreen]) {
-    return labels[normalizedRowScreen];
-  }
-  return normalizedRowScreen.replace(/\s*Master$/i, "").trim() || "Record";
-}
-function buildModalDiffRows(changedFields: unknown): ModalDiffRow[] {
-  return flattenAuditDiff(changedFields).map((row) => ({
-    field: row.field,
-    old: formatAuditPrimitiveValue(row.from),
-    new: formatAuditPrimitiveValue(row.to),
-  }));
-}
 function getModalBadgeClass(action: string): string {
   switch (resolveActionVariant(action)) {
     case "new":
@@ -1327,57 +966,16 @@ function RecordHistoryModalContent({
   /* One accordion item per date/time: every audit row the server returned for
      that minute — item, unit conversion, EAN code, reorder, price — is folded
      into a single group instead of standing as its own line. */
-  const groups = useMemo<ModalHistoryGroup[]>(() => {
-    const byKey = new Map<string, ModalHistoryGroup>();
-    for (const log of logs) {
-      const key = getHistoryGroupKey(log.log_date);
-      let group = byKey.get(key);
-      if (!group) {
-        group = {
-          id: key,
-          dateLabel: formatDateOnly(log.log_date),
-          timeLabel: formatTimeOnly(log.log_date),
-          users: [],
-          actions: [],
-          sections: [],
-          entries: [],
-          changeCount: 0,
-        };
-        byKey.set(key, group);
-      }
-      const diff = buildModalDiffRows(log.log_changed_fields);
-      const actionLabel = formatActionLabel(log.log_action);
-      const label = resolveSubEntityLabel(screen, log.screen_name);
-      const user = getRowUserLabel(log);
-      group.entries.push({
-        id: log.log_id,
-        label,
-        actionLabel,
-        badgeClass: getModalBadgeClass(log.log_action),
-        notes: log.log_notes?.trim() ?? "",
-        diff,
-      });
-      group.changeCount += diff.length;
-      if (user !== "-" && !group.users.includes(user)) {
-        group.users.push(user);
-      }
-      if (!group.actions.some((action) => action.label === actionLabel)) {
-        group.actions.push({ label: actionLabel, badgeClass: getModalBadgeClass(log.log_action) });
-      }
-      if (!group.sections.includes(label)) {
-        group.sections.push(label);
-      }
-    }
-    return [...byKey.values()];
-  }, [logs, screen]);
-  /* Composite mode holds the whole history in memory, so it paginates the
-     groups client-side; the plain view keeps the server's page as-is. */
-  const clientTotalPages = Math.max(1, Math.ceil(groups.length / MODAL_GROUPS_PER_PAGE));
-  const effectiveTotalPages = isComposite ? clientTotalPages : safeTotalPages;
-  const startIndex = isComposite ? (page - 1) * MODAL_GROUPS_PER_PAGE : 0;
-  const displayGroups = isComposite
-    ? groups.slice(startIndex, startIndex + MODAL_GROUPS_PER_PAGE)
-    : groups;
+  const groups = useMemo<ModalHistoryGroup[]>(
+    () => buildHistoryGroups(logs, screen, getModalBadgeClass),
+    [logs, screen],
+  );
+  const { effectiveTotalPages, startIndex, displayGroups } = pageHistoryGroups(
+    groups,
+    page,
+    isComposite,
+    safeTotalPages,
+  );
   useEffect(() => {
     if (page > effectiveTotalPages) {
       setPage(effectiveTotalPages);

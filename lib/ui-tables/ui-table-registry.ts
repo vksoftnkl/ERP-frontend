@@ -99,6 +99,10 @@ export const UI_TABLES = {
    * order and Enter stops. The server's tag routes are not built yet (notes 136).
    */
   textileTagLines: { name: "TEXTILE TAGS - NEW TAG LINES", fallbackId: "53" },
+  /** Godown Transfer + Branch Outward (menus 41 / 192; Qt 62d1d87) — the line grid. */
+  godownTransferLines: { name: "GODOWN TRANSFER - LINES", fallbackId: "54" },
+  /** Branch Inward (menu 193) — the receipt's line grid. */
+  branchInwardLines: { name: "BRANCH INWARD - LINES", fallbackId: "55" },
 } as const;
 export type UiTableKey = keyof typeof UI_TABLES;
 const ID_KEYS = ["ui_tbl_id", "uiTblId", "uiTableId", "id"] as const;

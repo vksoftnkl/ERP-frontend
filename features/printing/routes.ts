@@ -9,35 +9,14 @@
  */
 
 /**
- * -- NAV REGISTRATION, AND WHY IT IS NOT DONE YET --------------------------
+ * -- NAV REGISTRATION -------------------------------------------------------
  *
- * Neither route is in `DEFAULT_PRIMARY_MENU`, and that is deliberate. Binding
- * an href there does two things at once: it gives a DB menu row its route, and
- * it makes the route GOVERNED. A governed route the user's `/menu-masters/
- * usermenu` does not carry is DENIED -- "You do not have access to this
- * screen". `fixed.menu_master` has no row for either screen, so binding them
- * today locks every user, administrators included, out of a screen that
- * otherwise works. Verified in a browser on 27-08-2026.
- *
- * An ungoverned route fails open, which is why both screens are reachable now.
- *
- * TO PUT THEM IN THE MENU, both halves have to land together:
- *
- *   1. Seed two rows under Configuration (menu_parent 60), whose menu_name
- *      matches the labels below EXACTLY -- the merge is by label path:
- *
- *      INSERT INTO fixed.menu_master
- *        (menu_id, menu_parent, menu_name, menu_visiblity, menu_position, menu_is_active)
- *      VALUES (<id>, 60, 'Print Templates',   true, 5.00, true),
- *             (<id>, 60, 'Print Assignments', true, 5.50, true);
- *
- *   2. Add the matching entries to DEFAULT_PRIMARY_MENU's Configuration block:
- *
- *      {label:"Print Templates",href:"/settings/printing/templates"},
- *      {label:"Print Assignments",href:"/settings/printing/assignments"}
- *
- *   3. Grant the two menus in Settings -> User Administration, or nobody can
- *      open them -- step 2 is what makes them refusable.
+ * Both routes are bound by menu id in `MENU_ROUTES`
+ * (components/layout/constants.ts): templates to 62 "Printing Configuration"
+ * and assignments to 248 "Printing Assignments", both under Configuration.
+ * Binding makes a route GOVERNED: a user whose `/menu-masters/usermenu` lacks
+ * the menu is refused it ("You do not have access to this screen"), so grant
+ * both in Settings -> User Administration.
  */
 export const PRINTING_TEMPLATES_ROUTE = "/settings/printing/templates";
 export const PRINTING_ASSIGNMENTS_ROUTE = "/settings/printing/assignments";

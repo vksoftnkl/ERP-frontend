@@ -1,23 +1,19 @@
 /**
  * Sale Bill — navigation wiring. The header menu is SERVER-driven
  * (`fixed.menu_master` via /menu-masters), and hrefs are attached to it by
- * normalized-label match against `DEFAULT_PRIMARY_MENU`. The live tree names
+ * menu id from `MENU_ROUTES`. The live tree names
  * the entry "Sales Entry" — menu 12, a direct child of "&1 Sales", with
- * Ctrl+S — so this test feeds `applyMenuMasterLabels` a payload shaped exactly
+ * Ctrl+S — so this test feeds `buildPrimaryMenu` a payload shaped exactly
  * like the DB and asserts the item comes out clickable.
  *
  * It matters more here than on either sibling. "Sales Entry" is the label the
  * DB has always carried and the local list pointed it at `/dashboard` until this
  * screen existed, so the failure mode is not a dead link — it is a link that
- * silently still goes somewhere plausible. A rename in either place breaks it
+ * silently still goes somewhere plausible. A wrong id in either place breaks it
  * quietly in the UI; here it breaks a test.
  */
 import { describe, expect, it } from "vitest";
-import {
-  applyMenuMasterLabels,
-  DEFAULT_PRIMARY_MENU,
-  extractMenuMasterItems,
-} from "@/components/layout/constants";
+import { buildPrimaryMenu, extractMenuMasterItems } from "@/components/layout/constants";
 import type { ErpHeaderItem } from "@/components/layout/types";
 
 /** The live rows, as `fixed.menu_master` carries them. */
@@ -50,7 +46,7 @@ function findByLabel(items: ErpHeaderItem[], label: string): ErpHeaderItem | nul
 }
 
 function resolved(): ErpHeaderItem[] {
-  return applyMenuMasterLabels(DEFAULT_PRIMARY_MENU, extractMenuMasterItems(DB_MENU_PAYLOAD));
+  return buildPrimaryMenu(extractMenuMasterItems(DB_MENU_PAYLOAD));
 }
 
 describe("sale bill menu wiring", () => {

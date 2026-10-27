@@ -84,13 +84,35 @@ $muted: #8a8a8a;
 /* ---------------------------------------------------------- filter card */
 .card {
   display: grid;
-  grid-template-columns: auto minmax(u(8), 1fr) auto auto minmax(u(10), 1fr) auto minmax(u(10), 1.2fr) auto minmax(u(12), 1.6fr) auto;
+  grid-template-columns: auto minmax(u(8), 1fr) auto auto minmax(u(10), 1fr) auto minmax(u(12), 2fr) auto auto;
   align-items: center;
   gap: u(0.4) u(0.5);
   padding: u(0.45) u(0.7);
   background: var(--surface, #ffffff);
   border: 1px solid var(--border, #e0e0e0);
   border-radius: u(0.25);
+}
+.filterBarWrap {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.25);
+}
+.filterSummary {
+  font-size: u(0.7);
+  color: var(--text-muted, #6b6b6b);
+}
+.filterForm {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: u(0.5) u(0.7);
+  // The options list of a configured dropdown drops below its box inside the body.
+  min-height: u(17);
+}
+.button.buttonActive {
+  border-color: $accent;
+  color: $accent;
+  font-weight: 600;
 }
 .fieldLabel {
   font-size: u(0.66);

@@ -120,6 +120,13 @@ export const CONFIGURED_DROPDOWNS = {
   tillApproverUser: { name: "TILL APPROVER USERS", fallbackId: "68", paramBound: true },
   /** Income ledgers (till Paid In, settlement write-offs). Binds a QUOTED `'icompany_id'`. */
   incomeLedger: { name: "INCOME LEDGERS", fallbackId: "69", paramBound: true },
+  /**
+   * Transfer screens' loading / unloading crew (Qt 75c682b, notes 160): active
+   * employees of the branch whose designation matches the role — or EVERY
+   * employee when nobody holds it. Binds QUOTED `'iemp_branch_id'` and
+   * `'iemp_role'` ('' = no role filter), both always sent.
+   */
+  employeeByDesignation: { name: "EMPLOYEES BY DESIGNATION", fallbackId: "72", paramBound: true },
 } as const;
 export type ConfiguredDropdownKey = keyof typeof CONFIGURED_DROPDOWNS;
 const ID_KEYS = ["dropdown_id", "dropdownId", "id"] as const;

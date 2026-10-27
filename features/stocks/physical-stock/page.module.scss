@@ -322,6 +322,47 @@
   color: var(--primary, #7b1515);
 }
 
+.sheetFilterForm {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.45);
+  margin-bottom: u(0.5);
+}
+
+.sheetFilterRow {
+  display: flex;
+  align-items: center;
+  gap: u(0.5);
+}
+
+.sheetFilterLabel {
+  flex: 0 0 u(7);
+  font-size: u(0.76);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sheetFilterControl {
+  flex: 1 1 auto;
+  min-width: 0;
+
+  // The combo draws its own label; the row's label stands in for it.
+  > label {
+    display: none;
+  }
+}
+
+.sheetFilterClear {
+  flex: 0 0 auto;
+  padding: u(0.2) u(0.55);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: 999px;
+  background: #ffffff;
+  font: inherit;
+  font-size: u(0.72);
+  cursor: pointer;
+}
+
 .askField {
   display: flex;
   flex-direction: column;

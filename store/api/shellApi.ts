@@ -1,8 +1,7 @@
 import type { ErpHeaderItem } from "@/components/layout/types";
 import {
-  DEFAULT_PRIMARY_MENU,
   MENU_MASTERS_USERMENU_ENDPOINT,
-  applyMenuMasterLabels,
+  buildPrimaryMenu,
   extractMenuMasterItems,
 } from "@/components/layout/constants";
 import { baseApi } from "@/store/api/baseApi";
@@ -16,7 +15,7 @@ export const shellApi = baseApi.injectEndpoints({
         url: MENU_MASTERS_USERMENU_ENDPOINT,
       }),
       transformResponse: (payload: unknown) =>
-        applyMenuMasterLabels(DEFAULT_PRIMARY_MENU, extractMenuMasterItems(payload)),
+        buildPrimaryMenu(extractMenuMasterItems(payload)),
       providesTags: ["MenuMasters"],
       keepUnusedDataFor: 300,
     }),

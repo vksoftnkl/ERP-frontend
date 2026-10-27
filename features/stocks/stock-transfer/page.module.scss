@@ -1,0 +1,406 @@
+/**
+ * Godown Transfer / Branch Outward — the screen's own skin, on top of the
+ * quotation shell's page / title bar / fields / grid / buttons (imported where
+ * used). Lengths are `u(n)` off the same fluid unit the transaction screens
+ * share. The top band follows Stock Adjustment's; the header card is the
+ * four-column one of Qt 69b86a0.
+ */
+@function u($n) {
+  @return calc(#{$n} * var(--erp-q-u, 1rem));
+}
+
+/* ------------------------------------------------------------- top band */
+.topBand {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: minmax(u(15), 1fr) minmax(0, 3.2fr);
+  gap: u(0.9);
+  align-items: start;
+  padding-bottom: u(0.35);
+  border-bottom: 3px solid var(--primary, #7b1515);
+}
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.25);
+  min-width: 0;
+}
+.titleLine {
+  display: flex;
+  gap: u(0.5);
+  align-items: baseline;
+}
+.docTitle {
+  color: var(--text-muted, #666666);
+  font-size: u(0.78);
+  font-weight: 600;
+}
+.scope {
+  color: var(--text-muted, #666666);
+  font-size: u(0.72);
+}
+.statusLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.5);
+  align-items: center;
+  font-size: u(0.72);
+}
+.audit {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.1);
+  color: var(--text-muted, #666666);
+  font-size: u(0.7);
+}
+.notice {
+  color: #a15c00;
+  font-weight: 600;
+}
+.statusPill {
+  padding: u(0.08) u(0.6);
+  border-radius: 999px;
+  font-size: u(0.7);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.statusDraft {
+  background: #fef3e2;
+  color: #b45309;
+}
+.statusPosted {
+  background: #e8f5ea;
+  color: #15803d;
+}
+.statusCancelled {
+  background: #fde8e8;
+  color: #b42318;
+}
+.statusTransit {
+  background: #e6efff;
+  color: #1d4ed8;
+}
+
+/* ---------------------------------------------------- the header card */
+/*
+ * Four label / field pairs a row (Qt gridHeaderFields, columnminimumwidth 16
+ * gaps). DOM order is the reading order Enter and Tab follow.
+ */
+.headerCard {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: u(0.45) u(0.9);
+  align-items: center;
+  padding: u(0.55) u(0.75);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: var(--card-bg, #ffffff);
+}
+/* One label / field pair, placed by the view (row, column, span); labels share one width. */
+.pair {
+  display: grid;
+  grid-template-columns: u(6.5) minmax(0, 1fr);
+  gap: u(0.5);
+  align-items: center;
+  min-width: 0;
+}
+/* From / To godown / To branch: red until chosen, green once set (Qt NexStyle::tone). */
+.pair[data-tone="missing"] {
+  padding: u(0.15) u(0.3);
+  border-radius: var(--erp-radius, 4px);
+  outline: 2px solid var(--danger, #b3261e);
+  outline-offset: 0;
+  background: #fdecec;
+}
+.pair[data-tone="set"] {
+  padding: u(0.15) u(0.3);
+  border-radius: var(--erp-radius, 4px);
+  outline: 2px solid var(--success-text, #1c6b2e);
+  outline-offset: 0;
+  background: #eef7f0;
+}
+.shapeNote {
+  margin: 0;
+  color: var(--text-muted, #555555);
+  font-size: u(0.72);
+}
+
+/* ------------------------------------------------------------ the grid */
+.gridShell {
+  flex: 1 1 auto;
+  min-height: u(12);
+}
+.gridViewport {
+  min-height: u(10);
+  max-height: 46vh;
+}
+.gridViewport:focus {
+  outline: none;
+}
+.lineGrid {
+  width: 100%;
+  min-width: u(52);
+}
+.problemRow > td {
+  background: #fdf3d8;
+}
+.cellReadOnly {
+  cursor: default;
+}
+.cellMuted {
+  color: #8a8f98;
+}
+.cellPlaceholder::placeholder {
+  color: #9ca3af;
+}
+.noteCell {
+  color: #6b7280;
+  font-size: u(0.66);
+  white-space: nowrap;
+}
+.bucketChip {
+  padding: u(0.05) u(0.5);
+  border-radius: 999px;
+  font-size: u(0.66);
+  font-weight: 700;
+}
+.bucketSaleable {
+  background: #e8f5ea;
+  color: #15803d;
+}
+.bucketDamaged {
+  background: #fef3e2;
+  color: #b45309;
+}
+.bucketOther {
+  background: #eef2f8;
+  color: #1d4ed8;
+}
+.linesBar {
+  display: flex;
+  gap: u(0.6);
+  align-items: center;
+}
+
+/* ------------------------------------------------------- transit panel */
+.card {
+  padding: u(0.45) u(0.7);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: var(--card-bg, #ffffff);
+}
+.cardTitle {
+  margin: 0 0 u(0.3);
+  font-size: u(0.7);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.transitHead {
+  display: flex;
+  gap: u(0.6);
+  align-items: center;
+  justify-content: space-between;
+}
+.transitTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: u(0.74);
+}
+.transitTable th,
+.transitTable td {
+  padding: u(0.15) u(0.4);
+  border-bottom: 1px solid var(--border, #e2e2e2);
+  text-align: left;
+}
+.transitTable .num {
+  text-align: right;
+}
+.shortRed {
+  color: #b42318;
+  font-weight: 700;
+}
+.stReceived {
+  color: #15803d;
+  font-weight: 700;
+}
+.stPartial {
+  color: #b45309;
+  font-weight: 700;
+}
+.stTransit {
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+/* ----------------------------------------------- the bottom row: boxes */
+.bottomRow {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 3fr) minmax(u(11), 2fr);
+  gap: u(0.6);
+  align-items: stretch;
+}
+.bottomRowBranch {
+  grid-template-columns: minmax(0, 8fr) minmax(u(11), 2fr);
+}
+.handling {
+  margin: 0;
+  padding: u(0.3) u(0.7) u(0.5);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: var(--card-bg, #ffffff);
+}
+.handling:disabled {
+  opacity: 0.75;
+}
+.handlingOn {
+  border-color: var(--primary, #7b1515);
+}
+.handlingLegend {
+  display: flex;
+  gap: u(0.4);
+  align-items: center;
+  padding: 0 u(0.3);
+  font-size: u(0.76);
+  font-weight: 700;
+}
+.handlingGrid {
+  display: grid;
+  grid-template-columns: auto minmax(0, 3fr) auto minmax(0, 3fr) auto minmax(0, 3fr);
+  gap: u(0.35) u(0.5);
+  align-items: center;
+}
+.handlingGridNarrow {
+  grid-template-columns: auto minmax(0, 3fr) auto minmax(0, 3fr);
+}
+.handlingLabel {
+  font-size: u(0.72);
+  font-weight: 600;
+}
+.chargeValue {
+  text-align: right;
+  font-weight: 700;
+}
+.boxProblem {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #b42318;
+  font-size: u(0.7);
+}
+.totals {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: u(0.2) u(0.6);
+  align-content: center;
+  font-size: u(0.76);
+}
+.totals dt {
+  font-weight: 600;
+  color: var(--text-muted, #555555);
+}
+.totals dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 800;
+}
+
+/* ---------------------------------------------------- strip and hint */
+.validation {
+  margin: 0;
+  padding: u(0.3) u(0.6);
+  border: 1px solid #f0c36d;
+  border-radius: var(--erp-radius, 4px);
+  background: #fdf3d8;
+  color: #7a4b00;
+  font-size: u(0.74);
+}
+.hintLine {
+  min-height: u(1);
+  margin: 0;
+  color: var(--text-muted, #555555);
+  font-size: u(0.72);
+}
+.buttonBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.35);
+  justify-content: flex-end;
+}
+.footerHint {
+  margin-right: auto;
+  align-self: center;
+  color: var(--text-muted, #666666);
+  font-size: u(0.7);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------- dialogs */
+.prompt {
+  margin: 0 0 u(0.35);
+  font-size: u(0.76);
+  white-space: pre-line;
+}
+.fieldError {
+  margin: 0;
+  color: #b42318;
+  font-size: u(0.7);
+}
+.presetList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.3);
+}
+.presetButton {
+  padding: u(0.15) u(0.5);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: 999px;
+  background: #ffffff;
+  font: inherit;
+  font-size: u(0.7);
+  cursor: pointer;
+}
+.presetButton:hover {
+  border-color: var(--primary, #7b1515);
+}
+
+/* --------------------------------------------------------------- list */
+.listPill {
+  padding: u(0.05) u(0.5);
+  border-radius: 999px;
+  font-size: u(0.66);
+  font-weight: 800;
+}
+.cancelledRow {
+  opacity: 0.7;
+}
+.filterSelect,
+.filterDate {
+  padding: u(0.15) u(0.3);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: #ffffff;
+  font: inherit;
+  font-size: u(0.74);
+}
+.dropdownBox {
+  min-width: 0;
+}
+
+@container erp-txn-page (max-width: 1100px) {
+  .topBand {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bottomRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@container erp-txn-page (max-width: 760px) {
+  .headerCard {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .pair {
+    grid-column: 1 / -1 !important;
+    grid-row: auto !important;
+  }
+}

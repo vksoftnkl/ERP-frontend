@@ -1,6 +1,4 @@
-import {
-  DEFAULT_PRIMARY_MENU,
-} from "@/components/layout/constants";
+import { MENU_ROUTES } from "@/components/layout/constants";
 import type { ErpHeaderItem, ErpMenuPermissionFlags } from "@/components/layout/types";
 
 /**
@@ -118,9 +116,8 @@ export function buildMenuPermissionIndex(items: ErpHeaderItem[]): MenuPermission
  *
  * The designers are reached from the record they are editing (a grid, a
  * dropdown, a UI table), not from the menu, and the person configuring a screen
- * is not necessarily granted the menu that screen belongs to. They are listed
- * in `DEFAULT_PRIMARY_MENU` for navigation only, so without this exemption the
- * gate below would refuse them.
+ * is not necessarily granted the menu that screen belongs to, so they stay
+ * open even if a menu row is ever bound to them.
  */
 const EXEMPT_ROUTES: readonly string[] = [
   "/master/grid-designer",
@@ -136,26 +133,30 @@ function isExemptRoute(pathname: string): boolean {
 }
 
 /**
- * Every route the static menu catalogue knows about. A route in here is
- * "governed": if the user's menu does not carry it, they were not granted it.
- * A route absent from the catalogue (a designer screen, `/home`) has no menu
- * row to be granted through, so permissions never block it.
+ * Screens with a page but no `fixed.menu_master` row yet, so no grant can reach
+ * them. They stay governed — refused to everyone — as they were while the menu
+ * catalogue listed them by name; dropping them would open them to every user.
+ * Move one to `MENU_ROUTES` once its row is seeded.
  */
-function collectGovernedRoutes(items: ErpHeaderItem[], into: Set<string>): Set<string> {
-  for (const item of items) {
-    if (item.href) {
-      into.add(normalizeRoutePath(item.href));
-    }
-    if (item.children?.length) {
-      collectGovernedRoutes(item.children, into);
-    }
-  }
-  return into;
-}
+const GOVERNED_WITHOUT_MENU_ROW: readonly string[] = [
+  "/master/gsp-service-master",
+  "/master/gsp-provider-master",
+  "/master/gsp-company-service",
+  "/master/ledger-bank-account-master",
+  "/master/ledger-shipping-address-master",
+];
 
-export const GOVERNED_ROUTES: ReadonlySet<string> = collectGovernedRoutes(
-  DEFAULT_PRIMARY_MENU,
-  new Set<string>(),
+/**
+ * Every route a menu row opens. A route in here is "governed": if the user's
+ * menu does not carry it, they were not granted it. A route outside it (a
+ * designer screen, `/home`) has no menu row to be granted through, so
+ * permissions never block it.
+ */
+export const GOVERNED_ROUTES: ReadonlySet<string> = new Set(
+  [
+    ...Object.values(MENU_ROUTES).flatMap((route) => (route.href ? [route.href] : [])),
+    ...GOVERNED_WITHOUT_MENU_ROW,
+  ].map(normalizeRoutePath),
 );
 
 /**

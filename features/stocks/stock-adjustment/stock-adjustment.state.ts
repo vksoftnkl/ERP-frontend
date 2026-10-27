@@ -274,9 +274,9 @@ export function titleLine(draft: AdjustmentDraft): string {
   return `${doc} · ${draft.status} · ${kindHint(draft.kind)}`;
 }
 
-/** lblScope — "{godown} · {year}" once a godown is chosen, the year alone before. */
-export function scopeLabel(draft: Pick<AdjustmentDraft, "godownName" | "accYear">): string {
-  return draft.godownName ? `${draft.godownName} · ${draft.accYear}` : draft.accYear;
+/** lblScope — the godown alone; the voucher number carries the year (Qt 091bf5b). */
+export function scopeLabel(draft: Pick<AdjustmentDraft, "godownName">): string {
+  return draft.godownName;
 }
 
 function auditLine(verb: string, on: string, by: string): string {

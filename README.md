@@ -140,8 +140,9 @@ scripts/           build gate, cert and codegen scripts, legacy CloudJiffy deplo
   `lib/configured-dropdowns`, `lib/ui-tables`), so never hardcode an id. When a
   name is missing from the target database, the screen shows "No matches" or an
   empty grid with no error. See [Live config sync](#live-config-sync).
-- **Menu:** the database supplies the menu tree. `DEFAULT_PRIMARY_MENU` in
-  `components/layout/constants.ts` maps each label to a route and icon. A route is
+- **Menu:** the database supplies the whole menu: names, order and nesting.
+  `MENU_ROUTES` in `components/layout/constants.ts` maps each `menu_id` to a route
+  and icon, so renaming a menu in the database keeps its route. A route is
   permission-gated only after it is listed there.
 - **UI scale:** the whole UI scales with `zoom` on `<html>` (`lib/ui-scale.ts`).
   Divide new `vw`/`vh` values by `var(--erp-ui-scale)`. Convert
