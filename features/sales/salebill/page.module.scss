@@ -576,7 +576,7 @@
 }
 
 .whatsappMessage {
-  min-height: 120px;
+  min-height: 168px;
   white-space: pre-wrap;
 }
 
@@ -625,4 +625,20 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.whatsappInlineLink {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.whatsappLinkUrl {
+  color: var(--primary, #7b1515);
+  font-weight: 700;
 }

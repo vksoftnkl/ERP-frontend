@@ -2,10 +2,15 @@
  * Sale Bill — sending the bill's PDF to the customer on WhatsApp. Pure: no
  * React, no fetch.
  *
- * Click-to-chat, not the WhatsApp Business API: the screen renders the PDF,
- * saves it to the operator's machine and opens WhatsApp on the customer's chat
- * with a message already typed. The operator attaches the file and presses
+ * Click-to-chat, not the WhatsApp Business API: the screen opens WhatsApp on
+ * the customer's chat with a message already typed, and the operator presses
  * Send — nothing leaves the building on its own, and no Meta account is needed.
+ *
+ * A chat link carries TEXT only; no web page can make WhatsApp attach a file
+ * through it. So the PDF travels as a LINK in the message: the server's
+ * `/print-share` hands out an expiring public link to the rendered bill. Where
+ * that link cannot be had (an older server), the screen falls back to saving
+ * the PDF for the operator to attach by hand.
  *
  * What this module decides is which number that chat is opened on, and what
  * the message says.
@@ -170,6 +175,11 @@ export type BillMessageFacts = {
   amount: number;
   /** The company the bill was raised in; left off the signature when unknown. */
   companyName?: string | null;
+  /**
+   * The public link to the bill's PDF. With one, the message points at it;
+   * without, it says the PDF is attached — the operator attaches it by hand.
+   */
+  link?: string | null;
 };
 
 /**
@@ -190,14 +200,28 @@ export function buildBillWhatsappMessage(facts: BillMessageFacts): string {
     .filter(Boolean)
     .join(" ");
   const company = (facts.companyName ?? "").trim();
+  const link = (facts.link ?? "").trim();
+  const body = link
+    ? [`Your ${what} is ready. You can view and download it here:`, link]
+    : [`Please find attached your ${what}.`];
   return [
     `Dear ${name || "Customer"},`,
     "",
-    `Please find attached your ${what}.`,
+    ...body,
     "",
     "Thank you for your business.",
     ...(company ? [company] : []),
   ].join("\n");
+}
+
+/** A link's expiry, as the operator reads dates: `27-11-2026`, in local time. */
+export function formatLinkExpiry(iso: string | null | undefined): string {
+  const at = new Date(iso ?? "");
+  if (Number.isNaN(at.getTime())) {
+    return "";
+  }
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${pad(at.getDate())}-${pad(at.getMonth() + 1)}-${at.getFullYear()}`;
 }
 
 /**

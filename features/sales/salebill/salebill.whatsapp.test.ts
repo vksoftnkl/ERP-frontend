@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildBillWhatsappMessage,
   customerContactsOf,
+  formatLinkExpiry,
   formatWhatsappNumber,
   normalizeWhatsappNumber,
   whatsappCandidates,
@@ -148,6 +149,29 @@ describe("buildBillWhatsappMessage", () => {
     );
   });
 
+  it("points at the bill's link instead of an attachment when there is one", () => {
+    expect(
+      buildBillWhatsappMessage({
+        customerName: "Balu S",
+        billRefno: "bil00016",
+        billDate: "2026-10-22",
+        amount: 228,
+        companyName: "Amazon Retail India Private Limited",
+        link: "https://erp.example.com/api/v1/print-share/k3J9xQ2mP7vT5wL8nR4sYb/bill-bil00016.pdf",
+      }),
+    ).toBe(
+      [
+        "Dear Balu S,",
+        "",
+        "Your bill bil00016 dated 22-10-2026 for ₹228.00 is ready. You can view and download it here:",
+        "https://erp.example.com/api/v1/print-share/k3J9xQ2mP7vT5wL8nR4sYb/bill-bil00016.pdf",
+        "",
+        "Thank you for your business.",
+        "Amazon Retail India Private Limited",
+      ].join("\n"),
+    );
+  });
+
   it("leaves out what it does not know", () => {
     expect(
       buildBillWhatsappMessage({ customerName: "  ", billRefno: "", billDate: "", amount: 0 }),
@@ -246,5 +270,16 @@ describe("whatsappTargetOfBill", () => {
     expect(target.custId).toBeNull();
     expect(target.billRefno).toBe("");
     expect(target.amount).toBe(0);
+  });
+});
+
+describe("formatLinkExpiry", () => {
+  it("reads an ISO timestamp as a local dd-mm-yyyy date", () => {
+    expect(formatLinkExpiry(new Date(2026, 10, 27, 12, 0).toISOString())).toBe("27-11-2026");
+  });
+
+  it("is blank for nothing or nonsense", () => {
+    expect(formatLinkExpiry(null)).toBe("");
+    expect(formatLinkExpiry("soon")).toBe("");
   });
 });

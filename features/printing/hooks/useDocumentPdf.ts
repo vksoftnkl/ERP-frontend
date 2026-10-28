@@ -61,10 +61,23 @@ export type DocumentPdf = {
   /** The same bytes as a URL, for a download link. Revoked on unmount. */
   objectUrl: string | null;
   pageCount: number | null;
+  /**
+   * What was rendered — the revision and the document's scope — for a caller
+   * that hands the same render on (a share link). Null until ready.
+   */
+  source: DocumentPdfSource | null;
   /** Put the send in `print_log` as a FILE — the PDF left as a file. */
   recordFile: () => void;
   /** Render again after a refusal (a design fixed meanwhile, a timeout). */
   retry: () => void;
+};
+
+export type DocumentPdfSource = {
+  versionId: string;
+  docId: string;
+  companyId?: string;
+  accYear?: string;
+  branchId?: string;
 };
 
 type Resolution = { ptaTemplateId: string; publishedRevId?: string | null };
@@ -282,6 +295,15 @@ export function useDocumentPdf(options: {
       file: isReady ? rendered.file : null,
       objectUrl: isReady ? rendered.result.objectUrl : null,
       pageCount: isReady ? rendered.result.pageCount : null,
+      source: isReady
+        ? {
+            versionId: rendered.request.versionId,
+            docId: rendered.request.docId ?? docId,
+            ...(rendered.request.companyId ? { companyId: rendered.request.companyId } : {}),
+            ...(rendered.request.accYear ? { accYear: rendered.request.accYear } : {}),
+            ...(rendered.request.branchId ? { branchId: rendered.request.branchId } : {}),
+          }
+        : null,
       recordFile,
       retry,
     };
