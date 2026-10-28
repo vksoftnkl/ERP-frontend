@@ -192,7 +192,7 @@ describe("the cockpit", () => {
   it("heads and describes the session", () => {
     const header = cockpitHeader(session());
     expect(header.title).toBe("Till Session  C01-261009-01");
-    expect(header.sub).toBe("RAVI K · Counter 1 (C01) · business date 09-10-2026");
+    expect(header.sub).toBe("RAVI K · Counter 1 (C01) · business date 09/10/2026");
     expect(header.pillTone).toBe("amber");
     const facts = cockpitFacts(session(), new Date("2026-10-09T12:00:00Z"));
     expect(facts.duration).toBe("7 h 12 m");

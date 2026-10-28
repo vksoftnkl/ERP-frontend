@@ -30,6 +30,7 @@ import {
 } from "./cash-office";
 import { walkOnEnter } from "./enter-walk";
 import local from "./cash-office.module.scss";
+import { DateInput } from "@/components/design-system/ui/date-input";
 
 // ─── Count safe ──────────────────────────────────────────────────────────────
 
@@ -256,13 +257,13 @@ export function RemitPanel({ form, onForm, button, busy, onPost }: RemitPanelPro
         <label className={styles.formLabel} htmlFor="till-safe-remit-slip-date">
           Slip date
         </label>
-        <input
+        <DateInput
+          block
           id="till-safe-remit-slip-date"
-          type="date"
           className={cx(styles.input, local.dateInput)}
           title="Sent with a slip no only"
           value={form.slipDate}
-          onChange={(event) => onForm({ slipDate: event.target.value })}
+          onChange={(value) => onForm({ slipDate: value })}
         />
 
         <label className={styles.formLabel} htmlFor="till-safe-remit-amount">

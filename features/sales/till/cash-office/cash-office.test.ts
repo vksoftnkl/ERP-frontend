@@ -163,7 +163,7 @@ describe("cash office — the safe picked", () => {
   it("titles the screen by the safe, and says whose day it is", () => {
     expect(cashOfficeTitle(safeState())).toBe("Cash Office  ZT S1 test safe");
     expect(cashOfficeTitle(null)).toBe("Cash Office");
-    expect(cashOfficeSub("ACME", "2026-10-15", "VKPOS")).toBe("ACME  ·  business date 15-10-2026  ·  VKPOS");
+    expect(cashOfficeSub("ACME", "2026-10-15", "VKPOS")).toBe("ACME  ·  business date 15/10/2026  ·  VKPOS");
     expect(cashOfficeSub("", null, "VKPOS")).toBe("VKPOS");
   });
 });
@@ -388,7 +388,7 @@ describe("cash office — on the way", () => {
     expect(row).toMatchObject({
       tcmId: remit.tcmId,
       doc: "crm00012",
-      date: "13-10-2026",
+      date: "13/10/2026",
       safe: "ZT S1 test safe",
       agency: "CMS Info Systems · bag C-11920",
       amount: "1,50,000.00",

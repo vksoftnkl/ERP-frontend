@@ -38,7 +38,7 @@ import {
   type RowView,
   type TableView,
 } from "../reports/till-reports";
-import { ddmmyyyy, textOf } from "../shared/format";
+import { ddmmyyyy, displayText, textOf } from "../shared/format";
 import { paiseToAmount, toPaise } from "../shared/money";
 import type { GridRow, TillSessionPayload } from "../shared/wire/types";
 
@@ -186,10 +186,10 @@ export function transitText(row: GridRow): string {
   return `${moneyText(transit)} · ${Math.round(numberOf(row, "transit_days"))} d`;
 }
 
-/** `16-10 OPEN` when an older day is still open, else the day's status. */
+/** `16/10 OPEN` when an older day is still open, else the day's status. */
 export function dayStatusText(row: GridRow): string {
   const old = textOf(row, "old_open_day");
-  return old ? `${old} OPEN` : textOf(row, "day_status");
+  return old ? `${displayText(old)} OPEN` : textOf(row, "day_status");
 }
 
 /** CLOSED green, OPEN blue, NOT OPEN grey, an older day still open red. */

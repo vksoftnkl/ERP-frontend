@@ -27,6 +27,7 @@ import { errorMessageOf } from "@/features/sales/testbill/domain/notes";
 import type { SaleBillDocKey } from "@/features/sales/testbill/types";
 import { FollowUpDialog } from "./follow-up-dialog";
 import { RegisterShell, type RegisterColumn } from "./register-shell";
+import { DateInput } from "@/components/design-system/ui/date-input";
 
 const STATUS_OPTIONS = [
   { value: "", label: "Open + Partial" },
@@ -225,11 +226,11 @@ export function TempCreditListView({ onOpenBill }: TempCreditListViewProps) {
             </label>
             <label className={quotationStyles.filterField}>
               <span>From:</span>
-              <input type="date" className={quotationStyles.input} value={fromDate} max={toDate || undefined} onChange={(event) => setFromDate(event.target.value)} />
+              <DateInput className={quotationStyles.input} value={fromDate} max={toDate || undefined} onChange={(value) => setFromDate(value)} />
             </label>
             <label className={quotationStyles.filterField}>
               <span>To:</span>
-              <input type="date" className={quotationStyles.input} value={toDate} min={fromDate || undefined} onChange={(event) => setToDate(event.target.value)} />
+              <DateInput className={quotationStyles.input} value={toDate} min={fromDate || undefined} onChange={(value) => setToDate(value)} />
             </label>
           </>
         }

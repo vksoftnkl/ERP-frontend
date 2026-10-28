@@ -19,6 +19,7 @@ import { cx } from "@/components/design-system/cx";
 import { useDropdownMaster } from "@/components/design-system/dropdown/use-dropdown-master";
 import { useLazyRunDropdownQuery } from "@/store/api/quotationApi";
 import { SECTION_ATTR } from "../quotation.constants";
+import { DATE_PLACEHOLDER } from "@/lib/date-format";
 import { fromDisplayDate, toDisplayDate } from "../quotation.utils";
 import { dateStepOf, stepIsoDate } from "@/lib/date-step";
 import styles from "../page.module.scss";
@@ -154,7 +155,7 @@ export function NumberField({
 }
 
 /**
- * A `dd-mm-yyyy` date field.
+ * A `dd/mm/yyyy` date field.
  *
  * Not `<input type="date">`: that renders in the BROWSER's locale, so the same
  * screen reads `08/01/2026` here and `01/08/2026` on the next desk. The text
@@ -207,7 +208,7 @@ export function DateField({
           id={id}
           className={cx(styles.input, styles.dateInput)}
           value={text}
-          placeholder="dd-mm-yyyy"
+          placeholder={DATE_PLACEHOLDER}
           inputMode="numeric"
           autoComplete="off"
           disabled={disabled}

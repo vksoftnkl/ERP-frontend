@@ -77,7 +77,7 @@ describe("Not received → write off", () => {
     expect(notReceivedHead(NOT_RECEIVED)).toBe("bil00611 · 160.00 · CARD-T2 · keyed Q1W2E3 · 0000");
     expect(notReceivedHead(null)).toBe("Pick a row above");
     expect(notReceivedFacts(NOT_RECEIVED)).toBe(
-      "Billed 160.00 on 07-10-2026 · expected 08-10-2026 · 3 day(s) overdue · session C02-261007-01 (SURESH B) · PENDING",
+      "Billed 160.00 on 07/10/2026 · expected 08/10/2026 · 3 day(s) overdue · session C02-261007-01 (SURESH B) · PENDING",
     );
   });
 
@@ -129,7 +129,7 @@ describe("Unexplained → resolve", () => {
     expect(unexplainedHead(UNEXPLAINED)).toBe("Line 03:12 PM · 500.00 · UPI-QR2");
     expect(unexplainedHead(null)).toBe("Pick a line above");
     expect(unexplainedFacts(UNEXPLAINED)).toBe(
-      "Payout 08-10-2026 (tst00014) · RRN / UTR 428111026638 · payer anand.r@okicici · 2 day(s) in suspense",
+      "Payout 08/10/2026 (tst00014) · RRN / UTR 428111026638 · payer anand.r@okicici · 2 day(s) in suspense",
     );
   });
 

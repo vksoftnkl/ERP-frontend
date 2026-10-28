@@ -40,13 +40,13 @@ export function parseIsoDate(value: string): { year: number; month: number; day:
   return { year, month, day };
 }
 
-/** `dd-MM-yyyy`, the Qt message's spelling; the input when it is not a date. */
+/** `dd/MM/yyyy`, the Qt message (slashes)'s spelling; the input when it is not a date. */
 export function formatIsoDateDmy(value: IsoDate): string {
   const parsed = parseIsoDate(value);
   if (!parsed) {
     return value;
   }
-  return `${pad2(parsed.day)}-${pad2(parsed.month)}-${parsed.year}`;
+  return `${pad2(parsed.day)}/${pad2(parsed.month)}/${parsed.year}`;
 }
 
 /** The year running on `today`: 1 April of this year when April has come, else of last year. */

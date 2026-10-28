@@ -200,7 +200,7 @@ export const LINE_REMARKS_MAX_LENGTH = 250;
 export const LINE_MODEL_MAX_LENGTH = 100;
 
 /** What the date cells are keyed and shown in — NexDateEdit's mask. */
-export const GRID_DATE_PLACEHOLDER = "dd-mm-yyyy";
+export const GRID_DATE_PLACEHOLDER = "dd/mm/yyyy";
 
 /** The screen-memory slot (lib/screen-memory) an unsaved opening waits in. */
 export const OPENING_STOCK_MEMORY_KEY = "stocks/opening-stock";

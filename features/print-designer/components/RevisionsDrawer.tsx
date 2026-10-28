@@ -18,6 +18,7 @@ import {
 } from "@/features/print-designer/api/printTemplateApi";
 import type { TemplatePayload } from "@/features/print-designer/types/template-definition";
 import styles from "@/features/print-designer/components/designer.module.scss";
+import { formatLocalDateTime } from "@/lib/date-format";
 
 export type RevisionsDrawerProps = {
   open: boolean;
@@ -27,11 +28,10 @@ export type RevisionsDrawerProps = {
   onRestored: (template: TemplatePayload) => void;
 };
 
-const TIMESTAMP = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" });
 
 function formatTimestamp(value: string): string {
   const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? value : TIMESTAMP.format(parsed);
+  return Number.isNaN(parsed.getTime()) ? value : formatLocalDateTime(parsed);
 }
 
 export function RevisionsDrawer({

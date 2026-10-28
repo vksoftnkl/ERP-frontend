@@ -55,6 +55,7 @@ import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import styles from "@/features/sales/quotation/page.module.scss";
 import { useListBillsQuery, type BillListRow } from "@/store/api/saleBillApi";
 import type { SaleBillDocKey } from "../salebill.types";
+import { DateInput } from "@/components/design-system/ui/date-input";
 
 export type BillListPick = (key: SaleBillDocKey, mode: "browse" | "entry") => void;
 
@@ -471,13 +472,12 @@ export function BillListModal({
         </label>
         <label className={styles.filterField}>
           <span>From:</span>
-          <input
-            type="date"
+          <DateInput
             className={styles.input}
             value={fromDate}
             max={toDate || undefined}
-            onChange={(event) => {
-              setFromDate(event.target.value);
+            onChange={(value) => {
+              setFromDate(value);
               setPeriod("custom");
               setLocalPage(1);
             }}
@@ -485,13 +485,12 @@ export function BillListModal({
         </label>
         <label className={styles.filterField}>
           <span>To:</span>
-          <input
-            type="date"
+          <DateInput
             className={styles.input}
             value={toDate}
             min={fromDate || undefined}
-            onChange={(event) => {
-              setToDate(event.target.value);
+            onChange={(value) => {
+              setToDate(value);
               setPeriod("custom");
               setLocalPage(1);
             }}

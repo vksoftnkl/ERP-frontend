@@ -13,6 +13,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useAutoFitPageSize } from "@/hooks/useAutoFitPageSize";
+import { normalizeDateText } from "@/lib/date-format";
 import {
   FiChevronLeft,
   FiChevronRight,
@@ -434,15 +435,18 @@ function getCellContent<T extends Record<string, unknown>>(
   column: ReusableTableColumn<T>,
   rowIndex: number,
 ): ReactNode {
+  // Plain-text cells are re-spelled in the house date format (`dd/MM/yyyy`):
+  // configured grid SQL writes `DD-MM-YYYY`, and raw ISO dates reach cells too.
   if (column.render) {
-    return column.render(row, rowIndex);
+    const content = column.render(row, rowIndex);
+    return typeof content === "string" ? normalizeDateText(content) : content;
   }
   if (column.accessor) {
     const value = row[column.accessor];
     if (value === "" || value === null || value === undefined) {
       return "-";
     }
-    return String(value);
+    return normalizeDateText(String(value));
   }
   return "-";
 }
@@ -465,13 +469,18 @@ function resolveSearchValue<T extends Record<string, unknown>>(
   rowIndex: number,
   column: ReusableTableColumn<T>,
 ): string {
-  if (column.searchAccessor) {
-    return normalizeString(column.searchAccessor(row, rowIndex));
+  const raw = column.searchAccessor
+    ? column.searchAccessor(row, rowIndex)
+    : column.accessor
+      ? row[column.accessor]
+      : undefined;
+  if (raw === undefined) {
+    return "";
   }
-  if (column.accessor) {
-    return normalizeString(row[column.accessor]);
-  }
-  return "";
+  const text = normalizeString(raw);
+  // A date is found by what the cell shows (`28/10`) as well as by its raw text.
+  const shown = typeof raw === "string" ? normalizeDateText(raw.trim()).toLowerCase() : text;
+  return shown === text ? text : `${text}\n${shown}`;
 }
 function resolveSortValue<T extends Record<string, unknown>>(
   row: T,

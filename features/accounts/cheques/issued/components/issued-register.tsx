@@ -9,7 +9,7 @@
  *
  * WHICH columns show, and in what order, is grid 121's own configuration;
  * only a cell's rendering is decided here — a pill for the status and the
- * state, dd-mm-yyyy for dates, Indian grouping for money, Yes / No for the
+ * state, dd/mm/yyyy for dates, Indian grouping for money, Yes / No for the
  * crossing. What the screen READS about a row comes from the parsed row,
  * never a cell, so hiding a column cannot break an action.
  *

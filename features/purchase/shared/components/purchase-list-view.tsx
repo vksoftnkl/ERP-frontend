@@ -12,6 +12,8 @@
  * `{ <idKey>, accYear, reason }`. The list's keys: F1 add, Enter / F2 edit,
  * Ctrl+Enter view, F3 cancel, F5 refresh.
  */
+import { isoToDisplayDate } from "@/lib/date-format";
+import { DateInput } from "@/components/design-system/ui/date-input";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import type { MasterTableRow } from "@/components/master/crud-master-page.types";
@@ -21,7 +23,7 @@ import { cx } from "@/components/design-system/cx";
 import { ErpActionIcon } from "@/components/design-system/icons/erp-action-icons";
 import { formatCurrency } from "@/domain/pricing";
 import { ReasonDialog } from "@/features/accounts/vouchers/components/reason-dialog";
-import { accountingYearOf, addDays, toDisplayDate, todayIso } from "@/features/sales/quotation/quotation.utils";
+import { accountingYearOf, addDays, todayIso } from "@/features/sales/quotation/quotation.utils";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { toast } from "@/lib/notify";
 import { documentRights } from "@/lib/permissions/document-rights";
@@ -264,7 +266,7 @@ export function PurchaseListView({ docType, onCreate, onOpen }: PurchaseListView
   const columnRenderOverrides = useMemo(() => {
     const overrides: Record<string, (row: MasterTableRow) => ReactNode> = {};
     for (const column of config.dateColumns) {
-      overrides[column] = (row) => toDisplayDate(text(sourceOf(row)[column]).slice(0, 10));
+      overrides[column] = (row) => isoToDisplayDate(text(sourceOf(row)[column]).slice(0, 10));
     }
     for (const column of config.moneyColumns) {
       overrides[column] = (row) => formatCurrency(num(sourceOf(row)[column]), 2, true);
@@ -286,14 +288,13 @@ export function PurchaseListView({ docType, onCreate, onOpen }: PurchaseListView
           <label className={masterStyles.filterLabel} htmlFor={`${idPrefix}-from`}>
             From
           </label>
-          <input
+          <DateInput
             id={`${idPrefix}-from`}
-            type="date"
             className={styles.filterDate}
             value={fromDate}
             max={toDate || undefined}
-            onChange={(event) => {
-              setFromDate(event.target.value);
+            onChange={(value) => {
+              setFromDate(value);
               setPeriod("custom");
             }}
           />
@@ -302,14 +303,13 @@ export function PurchaseListView({ docType, onCreate, onOpen }: PurchaseListView
           <label className={masterStyles.filterLabel} htmlFor={`${idPrefix}-to`}>
             To
           </label>
-          <input
+          <DateInput
             id={`${idPrefix}-to`}
-            type="date"
             className={styles.filterDate}
             value={toDate}
             min={fromDate || undefined}
-            onChange={(event) => {
-              setToDate(event.target.value);
+            onChange={(value) => {
+              setToDate(value);
               setPeriod("custom");
             }}
           />

@@ -19,20 +19,12 @@ import type { PrintTemplateVersionPayload } from "@/features/printing/types/prin
 import { Note, SectionHead } from "@/features/printing/components/screen-shell";
 import { useUserNames } from "@/features/printing/designer/useUserNames";
 import styles from "@/features/printing/printing.module.scss";
-
-const WHEN = new Intl.DateTimeFormat("en-IN", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
+import { formatLocalDateTime } from "@/lib/date-format";
 
 function when(value: string | null | undefined): string {
   if (!value) return "—";
   const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? "—" : WHEN.format(parsed).replace(",", "");
+  return Number.isNaN(parsed.getTime()) ? "—" : formatLocalDateTime(parsed);
 }
 
 /**

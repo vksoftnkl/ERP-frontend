@@ -11,6 +11,7 @@
  * has the Loading box only: its charge posts at despatch, at this branch; the
  * vehicle is the header's, and the Unloading is keyed where the goods arrive.
  */
+import { DateTimeInput } from "@/components/design-system/ui/date-input";
 import { useMemo } from "react";
 import { NexDropdownMulti, NexDropdownSingle } from "@/components/design-system/dropdown";
 import { cx } from "@/components/design-system/cx";
@@ -71,13 +72,12 @@ export function HandlingBoxes(props: HandlingBoxesProps) {
           <label className={styles.handlingLabel} htmlFor="stock-transfer-load-at">
             On
           </label>
-          <input
+          <DateTimeInput
             id="stock-transfer-load-at"
-            type="datetime-local"
             className={quotationInput}
             value={handling.loadAt}
             disabled={loadOff}
-            onChange={(event) => onChange({ loadAt: event.target.value })}
+            onChange={(value) => onChange({ loadAt: value })}
           />
           <span className={styles.handlingLabel}>Loadman</span>
           <NexDropdownMulti
@@ -155,13 +155,12 @@ export function HandlingBoxes(props: HandlingBoxesProps) {
             <label className={styles.handlingLabel} htmlFor="stock-transfer-unload-at">
               On
             </label>
-            <input
+            <DateTimeInput
               id="stock-transfer-unload-at"
-              type="datetime-local"
               className={quotationInput}
               value={handling.unloadAt}
               disabled={unloadOff}
-              onChange={(event) => onChange({ unloadAt: event.target.value })}
+              onChange={(value) => onChange({ unloadAt: value })}
             />
             <span className={styles.handlingLabel}>Unloadman</span>
             <NexDropdownMulti

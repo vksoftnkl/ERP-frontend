@@ -1,9 +1,9 @@
 /**
- * Dates: ISO `YYYY-MM-DD` on the wire, `dd-MM-yyyy` on screen.
+ * Dates: ISO `YYYY-MM-DD` on the wire, `dd/MM/yyyy` on screen.
  *
  * The Qt screen needed this pair because `NexTable` stored cell text verbatim,
  * so a typed "31-03-2026" would have reached `abl_doc_date` as that literal
- * string. Here the grids use real `<input type="date">`, which speaks ISO
+ * string. Here the grids use the shared `DateInput`, which holds ISO
  * natively — so the wire helpers are trivial and `toDisplayDate` exists only
  * for the read-only captions (the tie band, a confirmation, an error message).
  *
@@ -13,7 +13,7 @@
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Today, as the value a `<input type="date">` holds. */
+/** Today, as the value a `DateInput` holds. */
 export function todayIso(): string {
   const now = new Date();
   const month = `${now.getMonth() + 1}`.padStart(2, "0");
@@ -56,7 +56,7 @@ export function toDisplayDate(value: string | null | undefined): string {
     return "";
   }
   const [year, month, day] = iso.split("-");
-  return `${day}-${month}-${year}`;
+  return `${day}/${month}/${year}`;
 }
 
 /** A date input's value on the wire, or `null` for an unset optional date. */

@@ -219,9 +219,9 @@ function escapeHtml(value: string): string {
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/** "Printed 23-10-2026 02:10 PM by VKPOS". */
+/** "Printed 23/10/2026 02:10 PM by VKPOS". */
 export function printedLine(now: Date, userName: string | null | undefined): string {
-  const when = `${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${now.getFullYear()} ${formatClock12(now)}`;
+  const when = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${formatClock12(now)}`;
   return `Printed ${when} by ${userName || "—"}`;
 }
 

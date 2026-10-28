@@ -13,8 +13,10 @@ import {
 } from "react";
 import { cx } from "@/components/design-system/cx";
 import { ERPColorPicker } from "@/components/design-system/ui/color-picker";
+import { DateInput } from "@/components/design-system/ui/date-input";
 import ModalPortal from "@/components/ui/modal-portal";
 import { SHOW_DROPDOWN_ADD_BUTTON } from "@/config/ui";
+import { formatLocalDate } from "@/lib/date-format";
 import { formatClock12 } from "@/lib/time-format";
 import styles from "./dynamic-modal-form.module.scss";
 import {
@@ -158,7 +160,7 @@ function formatDraftSavedAt(savedAt: number): string {
   const time = formatClock12(saved);
   return saved.toDateString() === new Date().toDateString()
     ? `today ${time}`
-    : `${saved.toLocaleDateString(undefined, { day: "2-digit", month: "short" })} ${time}`;
+    : `${formatLocalDate(saved)} ${time}`;
 }
 
 export function ERPDynamicModalForm({
@@ -2355,6 +2357,25 @@ export function ERPDynamicModalForm({
               </p>
             ) : null}
           </div>
+        ) : inputType === "date" ? (
+          <DateInput
+            {...commonProps}
+            onChange={setCustomValue}
+            data-erp-modal-field-control="true"
+            value={fieldValue}
+            placeholder={field.placeholder}
+            min={field.min === undefined ? undefined : String(field.min)}
+            max={field.max === undefined ? undefined : String(field.max)}
+            // ↑ / ↓ belong to the form's field-to-field walk when it is on.
+            arrowStep={!enableArrowKeyFieldNavigation}
+            block
+            className={cx(
+              styles.control,
+              "erp-ms-modal-control",
+              fieldError && styles.controlInvalid,
+            )}
+            style={field.controlStyle}
+          />
         ) : inputType === "color" ? (
           <ERPColorPicker
             id={commonProps.id}

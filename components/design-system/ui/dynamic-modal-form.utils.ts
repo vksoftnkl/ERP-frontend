@@ -1,3 +1,4 @@
+import { formatDateOrRaw } from "@/lib/date-format";
 import {
   ACCENT_PRESETS,
   DEFAULT_ACCENT,
@@ -358,10 +359,16 @@ export function validateFieldValue(
   }
   if (fieldType === "date") {
     if (field.min !== undefined && value < String(field.min)) {
-      return validation?.minMessage ?? `${field.label} cannot be before ${field.min}.`;
+      return (
+        validation?.minMessage ??
+        `${field.label} cannot be before ${formatDateOrRaw(String(field.min))}.`
+      );
     }
     if (field.max !== undefined && value > String(field.max)) {
-      return validation?.maxMessage ?? `${field.label} cannot be after ${field.max}.`;
+      return (
+        validation?.maxMessage ??
+        `${field.label} cannot be after ${formatDateOrRaw(String(field.max))}.`
+      );
     }
   }
   if (validation?.custom) {

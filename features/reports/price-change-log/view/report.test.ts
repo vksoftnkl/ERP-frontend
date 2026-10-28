@@ -33,7 +33,7 @@ describe("the range", () => {
 describe("the title, strip and totals", () => {
   it("reads the gap check", () => {
     expect(gapsLabel({ since: "2026-10-20T09:00:00+05:30", total: 0 })).toEqual({
-      text: "Recorded from 20-10-2026 · 0 changes outside the log ✓",
+      text: "Recorded from 20/10/2026 · 0 changes outside the log ✓",
       tone: "ok",
     });
     expect(gapsLabel({ since: null, total: 0 })).toEqual({ text: "Nothing recorded yet", tone: "ok" });
@@ -56,7 +56,7 @@ describe("the title, strip and totals", () => {
     }));
     const chips = dayChips(days);
     expect(chips).toHaveLength(14);
-    expect(chips[0]).toEqual({ day: "2026-10-20", label: "Tue 20-10-2026", sub: "1 change · 1 item" });
+    expect(chips[0]).toEqual({ day: "2026-10-20", label: "Tue 20/10/2026", sub: "1 change · 1 item" });
     expect(chips.at(-1)?.day).toBe("2026-10-07");
   });
 
@@ -73,7 +73,7 @@ describe("the title, strip and totals", () => {
   });
 
   it("summarises the filters for the printout", () => {
-    expect(filterSummary({ from: "2026-10-23", to: "2026-10-23" })).toBe("23-10-2026 to 23-10-2026 · every branch");
+    expect(filterSummary({ from: "2026-10-23", to: "2026-10-23" })).toBe("23/10/2026 to 23/10/2026 · every branch");
     expect(
       filterSummary({
         from: "2026-10-01",
@@ -86,7 +86,7 @@ describe("the title, strip and totals", () => {
         userName: "VKPOS",
         search: " sam ",
       }),
-    ).toBe("01-10-2026 to 23-10-2026 · Coimbatore · Samsung H1 · Prices only · Qty price · Deleted · by VKPOS · “sam”");
+    ).toBe("01/10/2026 to 23/10/2026 · Coimbatore · Samsung H1 · Prices only · Qty price · Deleted · by VKPOS · “sam”");
   });
 });
 
@@ -98,7 +98,7 @@ describe("export and print", () => {
       "Date,Time,Item code,Item,Unit,Branch,Applies to,Action,What changed,Changed fields,By,Device,IP,App,Source,Menu,Reason",
     );
     const cells = csv[1].split('","');
-    expect(cells[0]).toBe('"23-10-2026');
+    expect(cells[0]).toBe('"23/10/2026');
     expect(cells.slice(2, 8)).toEqual(["SAM-H1", "Samsung H1", "PCS", "All branches", "MRP 150", "Changed"]);
     expect(cells[8]).toBe("Price A 118 → 119  ▲0.8%; MRP 140 → 150  ▲7.1%; below cost");
     expect(cells[9]).toBe("Price A, Price A (w/o tax), Markup A %, MRP");
@@ -108,15 +108,15 @@ describe("export and print", () => {
   });
 
   it("prints a landscape table with a header row per day", () => {
-    const html = printHtml({ rows: QT_ROWS, summary: "22-10-2026 to 23-10-2026 · every branch", printed: "Printed x by VKPOS" });
+    const html = printHtml({ rows: QT_ROWS, summary: "22/10/2026 to 23/10/2026 · every branch", printed: "Printed x by VKPOS" });
     expect(html).toContain("size: A4 landscape");
     expect(html).toContain("<h2>Price Change Log</h2>");
-    expect(html).toContain("22-10-2026 to 23-10-2026 · every branch<br>Printed x by VKPOS");
+    expect(html).toContain("22/10/2026 to 23/10/2026 · every branch<br>Printed x by VKPOS");
     expect(html.match(/<tr class="day">/g)).toHaveLength(2);
-    expect(html).toContain("<b>Fri 23-10-2026</b>");
+    expect(html).toContain("<b>Fri 23/10/2026</b>");
     expect(html.match(/<tr><td>/g)).toHaveLength(6);
     expect(printHtml({ rows: [logRow({ reason: "<b>x</b>" })], summary: "", printed: "" })).toContain("&lt;b&gt;x&lt;/b&gt;");
-    expect(printedLine(new Date(2026, 9, 23, 14, 5), "VKPOS")).toBe("Printed 23-10-2026 02:05 PM by VKPOS");
+    expect(printedLine(new Date(2026, 9, 23, 14, 5), "VKPOS")).toBe("Printed 23/10/2026 02:05 PM by VKPOS");
   });
 });
 

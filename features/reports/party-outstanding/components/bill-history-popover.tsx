@@ -32,7 +32,7 @@ function typeWord(row: BillHistoryRow): string {
   return row.isReversal ? `${type} · reversal` : type;
 }
 
-/** `30-09`: from when a post-dated row counts. */
+/** `30/09`: from when a post-dated row counts. */
 function dayMonth(iso: string): string {
   return displayDate(iso).slice(0, 5);
 }

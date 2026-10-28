@@ -82,7 +82,7 @@ const SAFE_ROW: GridRow = {
   counter_count: "2",
   balance: "51250.00",
   last_count: "",
-  last_remit: "05-10-2026 · 10,000.00",
+  last_remit: "05/10/2026 · 10,000.00",
 };
 
 const SHIPPED_TEA: GridRow = {
@@ -185,7 +185,7 @@ describe("the lists", () => {
     expect(cellText("tsf_is_default", { tsf_is_default: "t" })).toBe("★");
     expect(cellText("shipped", SHIPPED_TEA)).toBe("✓");
     expect(cellText("overridden", SHIPPED_TEA)).toBe("");
-    expect(cellText("tdn_valid_to", { tdn_valid_to: "2027-03-31" })).toBe("31-03-2027");
+    expect(cellText("tdn_valid_to", { tdn_valid_to: "2027-03-31" })).toBe("31/03/2027");
     expect(cellText("tcn_name", COUNTER_ROW)).toBe("Counter 1");
   });
 
@@ -364,7 +364,7 @@ describe("safes", () => {
       "Counters C01 C02 drop into it.",
     ]);
     expect(entryFacts("safes", SAFE_ROW, "edit")).toBe(
-      "balance 51,250.00 — over the insured limit  ·  counters C01 C02  ·  last count —  ·  last remit 05-10-2026 · 10,000.00",
+      "balance 51,250.00 — over the insured limit  ·  counters C01 C02  ·  last count —  ·  last remit 05/10/2026 · 10,000.00",
     );
   });
 

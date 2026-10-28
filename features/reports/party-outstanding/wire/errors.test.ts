@@ -5,7 +5,7 @@ import { OutstandingParseError } from "./parse";
 
 describe("toOutstandingError", () => {
   it.each([
-    ["AS_ON_OUTSIDE_YEARS", "asOn", "25-09-2030 is outside every financial year set up for this company.", "asOn"],
+    ["AS_ON_OUTSIDE_YEARS", "asOn", "25/09/2030 is outside every financial year set up for this company.", "asOn"],
     ["BAD_BUCKETS", "buckets", "Buckets must be rising whole numbers of days, e.g. 30 60 90 180.", "buckets"],
     ["NOT_FOR_PAYABLE", "areaId", "Area / salesman filters apply to customers only.", null],
     ["PARTY_NOT_IN_COMPANY", "partyId", "This party belongs to another company.", "party"],

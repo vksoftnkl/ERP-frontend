@@ -13,6 +13,7 @@
  * `forbidNonWhitelisted` means one extra key fails the whole request), and it
  * filters no bill on the screen.
  */
+import { DateInput } from "@/components/design-system/ui/date-input";
 import { NexDropdownSingle } from "@/components/design-system/dropdown";
 import { RECEIPT_FIELD_ATTR } from "../focus-walk";
 import { useDropdownId } from "@/lib/configured-dropdowns";
@@ -55,15 +56,14 @@ export function DocStrip(props: DocStripProps) {
 
       <label className={styles.field}>
         <span className={styles.fieldLabel}>Date</span>
-        <input
+        <DateInput block
           className={`${styles.input} ${invalid("voucherDate")}`}
           {...{ [RECEIPT_FIELD_ATTR]: "date" }}
-          type="date"
           value={header.voucherDate}
           disabled={!editable}
           // It decides the year the receipt lands in, which tenders are
           // offered, and what discount the bills still qualify for.
-          onChange={(event) => onChange({ voucherDate: event.target.value })}
+          onChange={(value) => onChange({ voucherDate: value })}
         />
       </label>
 
@@ -121,13 +121,12 @@ export function DocStrip(props: DocStripProps) {
 
       <label className={styles.field}>
         <span className={styles.fieldLabel}>Ref date</span>
-        <input
+        <DateInput block
           className={styles.input}
           {...{ [RECEIPT_FIELD_ATTR]: "refDate" }}
-          type="date"
           value={header.docDate}
           disabled={!editable}
-          onChange={(event) => onChange({ docDate: event.target.value })}
+          onChange={(value) => onChange({ docDate: value })}
         />
       </label>
 

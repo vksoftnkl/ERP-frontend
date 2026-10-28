@@ -42,16 +42,19 @@ export function clock12Of(value: string | Date | null | undefined): string {
   return at ? formatClock12(at) : "";
 }
 
-/** An ISO instant (or a Date) as the local `dd-MM-yyyy hh:mm AM`; blank when it is not one. */
+/**
+ * An ISO instant (or a Date) as the local `dd/MM/yyyy hh:mm AM` — the house
+ * date (`lib/date-format.ts`) and clock; blank when it is not one.
+ */
 export function dateTime12Of(value: string | Date | null | undefined): string {
   const at = instantOf(value);
   if (!at) return "";
-  return `${pad(at.getDate())}-${pad(at.getMonth() + 1)}-${at.getFullYear()} ${formatClock12(at)}`;
+  return `${pad(at.getDate())}/${pad(at.getMonth() + 1)}/${at.getFullYear()} ${formatClock12(at)}`;
 }
 
-/** An ISO instant (or a Date) as the local `dd-MM hh:mm AM` (no year); blank when it is not one. */
+/** An ISO instant (or a Date) as the local `dd/MM hh:mm AM` (no year); blank when it is not one. */
 export function dayMonthTime12Of(value: string | Date | null | undefined): string {
   const at = instantOf(value);
   if (!at) return "";
-  return `${pad(at.getDate())}-${pad(at.getMonth() + 1)} ${formatClock12(at)}`;
+  return `${pad(at.getDate())}/${pad(at.getMonth() + 1)} ${formatClock12(at)}`;
 }

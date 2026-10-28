@@ -115,7 +115,7 @@ describe("parseDay", () => {
   it("refuses what is not a day", () => {
     expect(parseDay(null)).toBeNull();
     expect(parseDay({ success: true, data: { tbdId: "" } })).toBeNull();
-    expect(parseDay({ success: true, data: { tbdId: "x", tbdBusinessDate: "07-10-2026" } })).toBeNull();
+    expect(parseDay({ success: true, data: { tbdId: "x", tbdBusinessDate: "07/10/2026" } })).toBeNull();
   });
 });
 
@@ -246,7 +246,7 @@ describe("errors", () => {
 
 describe("dates", () => {
   it("shows and shifts calendar dates", () => {
-    expect(displayDate("2026-10-07")).toBe("07-10-2026");
+    expect(displayDate("2026-10-07")).toBe("07/10/2026");
     expect(addDaysIso("2026-03-01", -1)).toBe("2026-02-28");
     expect(addDaysIso("2026-12-31", 1)).toBe("2027-01-01");
   });

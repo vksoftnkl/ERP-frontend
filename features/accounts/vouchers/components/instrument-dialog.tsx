@@ -19,6 +19,7 @@
  * has it); Ctrl+Enter is OK from anywhere, and OK checks what the server
  * would refuse so the operator stays where the fields are.
  */
+import { DateInput } from "@/components/design-system/ui/date-input";
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { ModalShell } from "@/features/sales/quotation/components/modal-shell";
 import { DropdownCombo } from "@/features/sales/quotation/components/fields";
@@ -60,7 +61,7 @@ export type InstrumentDialogProps = {
 
 function displayDate(iso: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
-  return match ? `${match[3]}-${match[2]}-${match[1]}` : iso;
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : iso;
 }
 
 export function InstrumentDialog(props: InstrumentDialogProps) {
@@ -122,7 +123,7 @@ export function InstrumentDialog(props: InstrumentDialogProps) {
       return;
     }
     const focusable = Array.from(
-      bodyRef.current?.querySelectorAll<HTMLElement>("input:not([readonly]):not([disabled]), select:not([disabled])") ?? [],
+      bodyRef.current?.querySelectorAll<HTMLElement>("input:not([readonly]):not([disabled]):not([data-date-picker-proxy]), select:not([disabled])") ?? [],
     );
     const at = focusable.indexOf(target);
     const next = at >= 0 ? focusable[at + 1] : undefined;
@@ -257,12 +258,11 @@ export function InstrumentDialog(props: InstrumentDialogProps) {
               <label className={styles.formLabel} htmlFor="ins-date">
                 {fields.dateCaption}
               </label>
-              <input
+              <DateInput block
                 id="ins-date"
                 className={receiptStyles.input}
-                type="date"
                 value={form.instrumentDate}
-                onChange={(event) => patch({ instrumentDate: event.target.value })}
+                onChange={(value) => patch({ instrumentDate: value })}
               />
             </>
           ) : null}

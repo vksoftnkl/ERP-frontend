@@ -116,7 +116,7 @@ describe("every code × level", () => {
   it("FUTURE_DATED counts", () => {
     expect(checkText(c("FUTURE_DATED", "INFO", { count: 24, lastDate: "2026-11-08", today: "2026-10-12" }))).toEqual({
       heading: "24 vouchers dated after today",
-      line: "the latest on 08-11-2026",
+      line: "the latest on 08/11/2026",
     });
   });
 

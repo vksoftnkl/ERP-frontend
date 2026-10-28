@@ -78,27 +78,27 @@ export function timeText(iso: string | null | undefined): string {
   return clock12Of(iso ?? "") || text(iso);
 }
 
-/** `dd-MM-yyyy hh:mm AM`, local. */
+/** `dd/MM/yyyy hh:mm AM`, local. */
 export function stampText(iso: string | null | undefined): string {
   return dateTime12Of(iso ?? "") || text(iso);
 }
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
-/** `2026-10-23` → `Fri 23-10-2026`. */
+/** `2026-10-23` → `Fri 23/10/2026`. */
 export function dayText(day: string | null | undefined): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(text(day));
   if (!match) {
     return text(day);
   }
   const weekday = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))).getUTCDay();
-  return `${WEEKDAYS[weekday]} ${match[3]}-${match[2]}-${match[1]}`;
+  return `${WEEKDAYS[weekday]} ${match[3]}/${match[2]}/${match[1]}`;
 }
 
-/** `2026-10-23` (or a timestamp) → `23-10-2026`; anything else as it came. */
+/** `2026-10-23` (or a timestamp) → `23/10/2026`; anything else as it came. */
 export function dateText(value: string | null | undefined): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(text(value));
-  return match ? `${match[3]}-${match[2]}-${match[1]}` : text(value);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : text(value);
 }
 
 /** Where the price applies: "MRP 150 · SP 140" for a price row, "10+ qty · Retail · Ravi Stores" for a slab. */

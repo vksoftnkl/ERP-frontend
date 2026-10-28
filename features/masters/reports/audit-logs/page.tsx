@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FiDownload, FiRefreshCw, FiSearch } from "react-icons/fi";
 import { useApi } from "@/hooks/useApi";
+import { DateInput } from "@/components/design-system/ui/date-input";
 import ModalPortal from "@/components/ui/modal-portal";
 import type { ApiSuccessResponse, ListMeta } from "@/utils/types";
 import styles from "./page.module.scss";
@@ -281,24 +282,22 @@ export default function AuditLogsPage() {
           <label className={styles.filterLabel} htmlFor="audit-date-from">
             From
           </label>
-          <input
+          <DateInput
             className={cx(styles.input, styles.inputMono, isDateRangeInvalid && styles.inputInvalid)}
             id="audit-date-from"
-            type="date"
             value={filters.dateFrom}
-            onChange={(event) => updateFilters({ dateFrom: event.target.value })}
+            onChange={(value) => updateFilters({ dateFrom: value })}
           />
         </div>
         <div className={styles.filterGroup}>
           <label className={styles.filterLabel} htmlFor="audit-date-to">
             To
           </label>
-          <input
+          <DateInput
             className={cx(styles.input, styles.inputMono, isDateRangeInvalid && styles.inputInvalid)}
             id="audit-date-to"
-            type="date"
             value={filters.dateTo}
-            onChange={(event) => updateFilters({ dateTo: event.target.value })}
+            onChange={(value) => updateFilters({ dateTo: value })}
           />
         </div>
         <div className={styles.presets}>

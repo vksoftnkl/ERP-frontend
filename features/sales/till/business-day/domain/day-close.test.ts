@@ -144,21 +144,21 @@ describe("dayPrintOf", () => {
   it("prints the day X while open, the store Z once closed, with the day's own branch", () => {
     expect(dayPrintOf(DAY, { companyId: "hc", branchId: "hb" })).toEqual({
       target: { docId: "d1", companyId: "c1", accYear: "2026-2027", branchId: "b1", filename: "day-x-20261014" },
-      label: "Day X 14-10-2026",
+      label: "Day X 14/10/2026",
     });
     expect(dayPrintOf(CLOSED, { companyId: "hc", branchId: "hb" })).toEqual({
       target: { docId: "d1", companyId: "c1", accYear: "2026-2027", branchId: "b1", filename: "store-z-20261014" },
-      label: "Store Z 14-10-2026",
+      label: "Store Z 14/10/2026",
     });
   });
 });
 
 describe("close day", () => {
   it("asks and answers as Qt", () => {
-    expect(closeQuestion(DAY)).toBe("Close business day 14-10-2026?");
+    expect(closeQuestion(DAY)).toBe("Close business day 14/10/2026?");
     expect(CLOSE_CONFIRM_NOTE).toContain("The store Z is issued.");
-    expect(closedText(DAY, "4")).toBe("Business day 14-10-2026 is closed — store Z 4.");
-    expect(closedText(DAY, "")).toBe("Business day 14-10-2026 is closed.");
+    expect(closedText(DAY, "4")).toBe("Business day 14/10/2026 is closed — store Z 4.");
+    expect(closedText(DAY, "")).toBe("Business day 14/10/2026 is closed.");
   });
 
   it("treats TILL_DAY_CLOSE_BLOCKED or any 409 as 'something changed': the check is read again", () => {
@@ -321,10 +321,10 @@ describe("reopen day", () => {
   const reasons = [{ id: "r1", name: "Correction", needsNote: true }];
 
   it("names the day with its store Z", () => {
-    expect(dayLabelOf(CLOSED)).toBe("14-10-2026 · Z 3");
-    expect(dayLabelOf(DAY)).toBe("14-10-2026");
-    expect(reopenIntro("14-10-2026 · Z 3")).toMatch(/^Business day 14-10-2026 · Z 3 opens again:/);
-    expect(reopenedText("14-10-2026 · Z 3")).toBe("Business day 14-10-2026 · Z 3 is open again.");
+    expect(dayLabelOf(CLOSED)).toBe("14/10/2026 · Z 3");
+    expect(dayLabelOf(DAY)).toBe("14/10/2026");
+    expect(reopenIntro("14/10/2026 · Z 3")).toMatch(/^Business day 14\/10\/2026 · Z 3 opens again:/);
+    expect(reopenedText("14/10/2026 · Z 3")).toBe("Business day 14/10/2026 · Z 3 is open again.");
   });
 
   it("asks for the reason, its note, then the PIN", () => {

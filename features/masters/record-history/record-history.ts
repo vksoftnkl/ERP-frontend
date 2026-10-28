@@ -1,4 +1,5 @@
 import type { ListMeta } from "@/utils/types";
+import { formatLocalDate } from "@/lib/date-format";
 import { formatClock12 } from "@/lib/time-format";
 export const DEFAULT_PAGE = 1;
 export const DEFAULT_PAGE_SIZE = 20;
@@ -112,23 +113,20 @@ export const HISTORY_SUB_ENTITY_LABELS: Record<string, Record<string, string>> =
     "Item Price Master": "Price List",
   },
 };
-export const DATE_FORMATTER = new Intl.DateTimeFormat("en-IN", {
-  dateStyle: "medium",
-});
-/** "15 Oct 2026, 02:05 PM" — the date as before, the clock 12-hour (Qt `hh:mm AP`). */
+/** "15/10/2026, 02:05 PM" — the date as dd/MM/yyyy, the clock 12-hour (Qt `hh:mm AP`). */
 export function formatDateTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return `${DATE_FORMATTER.format(date)}, ${formatClock12(date)}`;
+  return `${formatLocalDate(date)}, ${formatClock12(date)}`;
 }
 export function formatDateOnly(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return DATE_FORMATTER.format(date);
+  return formatLocalDate(date);
 }
 export function formatTimeOnly(value: string): string {
   const date = new Date(value);

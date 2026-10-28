@@ -17,6 +17,7 @@
  * What a kind cannot use is greyed WITH THE REASON IN ITS TOOLTIP, so the
  * operator sees why before clicking rather than after.
  */
+import { DateInput } from "@/components/design-system/ui/date-input";
 import { useMemo, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import type { TenderMasterRow } from "@/features/sales/sale-order/sale-order.types";
 import { scaledWidth, totalColumnWidth } from "@/features/sales/quotation/quotation.utils";
@@ -240,13 +241,12 @@ export function InstrumentsGrid(props: InstrumentsGridProps) {
           return disabledCell("Only a cheque carries an instrument date.");
         }
         return (
-          <input
+          <DateInput arrowStep={false} noPicker
             className={styles.cellInput}
-            type="date"
             value={row.instrumentDate}
             disabled={!editable}
             title="The date written on the cheque. Later than the receipt's date makes it post-dated — and a voucher of its own."
-            onChange={(event) => onSetTender(row.key, { instrumentDate: event.target.value })}
+            onChange={(value) => onSetTender(row.key, { instrumentDate: value })}
             onKeyDown={(event) => onRowKeyDown(event, row.key, cheque)}
           />
         );

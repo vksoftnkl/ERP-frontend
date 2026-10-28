@@ -22,6 +22,7 @@
  * the party in the callback; neither is needed here, and neither is a
  * "discard if stale" branch.
  */
+import { DateInput } from "@/components/design-system/ui/date-input";
 import { useMemo, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { cx } from "@/components/design-system/cx";
 import { scaledWidth, totalColumnWidth } from "@/features/sales/quotation/quotation.utils";
@@ -161,16 +162,15 @@ export function BillPanel(props: BillPanelProps) {
       case "duedate": {
         const field = column.key === "invoicedate" ? "docDate" : "dueDate";
         return (
-          <input
+          <DateInput arrowStep={false} noPicker
             {...cellProps}
             className={styles.cellInput}
-            type="date"
             // The ORIGINAL invoice date, not today's: ageing measures from it.
             value={column.key === "invoicedate" ? row.docDate : row.dueDate}
             min={column.key === "duedate" ? row.docDate || undefined : undefined}
             disabled={disabled}
             title={title}
-            onChange={(event) => onSetField(row.key, { [field]: event.target.value })}
+            onChange={(value) => onSetField(row.key, { [field]: value })}
             onKeyDown={(event) => onCellKeyDown(event, row)}
           />
         );

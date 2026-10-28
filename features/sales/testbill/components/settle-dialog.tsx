@@ -1063,7 +1063,7 @@ function TempCreditPanel({
   const set = (patch: Partial<typeof details>) => onPatch({ tempCredit: { ...details, ...patch } });
   const due = new Date(`${todayIso()}T00:00:00`);
   due.setDate(due.getDate() + Math.max(0, details.days));
-  const dueText = `${String(due.getDate()).padStart(2, "0")}-${String(due.getMonth() + 1).padStart(2, "0")}-${due.getFullYear()}`;
+  const dueText = `${String(due.getDate()).padStart(2, "0")}/${String(due.getMonth() + 1).padStart(2, "0")}/${due.getFullYear()}`;
   return (
     <div className={styles.settlePanel}>
       <div className={quotationStyles.gridHeadTitle}>Temp Credit — who is borrowing</div>

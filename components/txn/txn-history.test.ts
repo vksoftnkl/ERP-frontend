@@ -83,8 +83,8 @@ describe("txnHistorySummary", () => {
 
   it("says who made it, where it stands now and how many steps it took", () => {
     expect(flat(txnHistorySummary(toTxnHistoryRows(PAYLOAD)))).toEqual([
-      "Created by VKPOS on 06-10-2026 18:51:43",
-      "now CANCELLED — Cancelled by VIJAY on 06-10-2026 18:51:47",
+      "Created by VKPOS on 06/10/2026 18:51:43",
+      "now CANCELLED — Cancelled by VIJAY on 06/10/2026 18:51:47",
       "3 steps",
     ]);
   });
@@ -99,12 +99,12 @@ describe("txnHistorySummary", () => {
 
   it("names an unrecorded user as unknown", () => {
     const rows = toTxnHistoryRows(PAYLOAD).slice(0, 2);
-    expect(flat(txnHistorySummary(rows))[1]).toBe("now POSTED — Posted by unknown on 06-10-2026 18:51:43");
+    expect(flat(txnHistorySummary(rows))[1]).toBe("now POSTED — Posted by unknown on 06/10/2026 18:51:43");
   });
 
   it("leaves 'now' out of a one-step trail, and nothing at all without rows", () => {
     expect(flat(txnHistorySummary(toTxnHistoryRows(PAYLOAD).slice(0, 1)))).toEqual([
-      "Created by VKPOS on 06-10-2026 18:51:43",
+      "Created by VKPOS on 06/10/2026 18:51:43",
       "1 step",
     ]);
     expect(txnHistorySummary([])).toEqual([]);

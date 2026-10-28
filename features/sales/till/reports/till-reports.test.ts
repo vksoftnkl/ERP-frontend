@@ -149,7 +149,7 @@ const VARIANCE_ROW: GridRow = {
 const EVENT_ROWS: GridRow[] = [
   {
     at: "2026-10-17T04:54:11.879Z",
-    at_text: "17-10-2026 10:24 AM",
+    at_text: "17/10/2026 10:24 AM",
     session_no: "ZT1-261017-01",
     tss_id: "01a14835-1410-7975-b31e-f495550577b6",
     tss_acc_year: "2026-2027",
@@ -164,7 +164,7 @@ const EVENT_ROWS: GridRow[] = [
   },
   {
     at: "2026-10-17T04:54:11.566Z",
-    at_text: "17-10-2026 10:24 AM",
+    at_text: "17/10/2026 10:24 AM",
     session_no: "ZT1-261017-01",
     tss_id: "01a14835-1410-7975-b31e-f495550577b6",
     tss_acc_year: "2026-2027",
@@ -252,7 +252,7 @@ describe("the tabs", () => {
     expect(exportFileName("performance", TODAY)).toBe("till-cashier-performance-2026-10-17.csv");
     expect(exportFileName("tender", TODAY)).toBe("till-tender-reconciliation-2026-10-17.csv");
     expect(printTitle("ledger", "2026-10-11", TODAY, "Every branch")).toBe(
-      "Till Reports — Ledger check · 11-10-2026 to 17-10-2026 · Every branch",
+      "Till Reports — Ledger check · 11/10/2026 to 17/10/2026 · Every branch",
     );
   });
 });
@@ -454,14 +454,14 @@ describe("Approver activity", () => {
   it("the not-decided band", () => {
     expect(undecidedLine([])).toEqual({ text: "Every request in the range was decided.", tone: "green" });
     const line = undecidedLine([
-      { tap_status: "EXPIRED", event_code: "CASH_PAYMENT", amount: "1500.00", ref: "ZT1-01", requested_at: "17-10-2026 10:00 AM", waited: "30 min" },
-      { tap_status: "PENDING", event_code: "FORCE_CLOSE", amount: "0", ref: "ZT1-02", requested_at: "17-10-2026 11:00 AM", waited: "5 min" },
+      { tap_status: "EXPIRED", event_code: "CASH_PAYMENT", amount: "1500.00", ref: "ZT1-01", requested_at: "17/10/2026 10:00 AM", waited: "30 min" },
+      { tap_status: "PENDING", event_code: "FORCE_CLOSE", amount: "0", ref: "ZT1-02", requested_at: "17/10/2026 11:00 AM", waited: "5 min" },
     ]);
     expect(line.tone).toBe("amber");
     expect(line.text).toBe(
       "NOT DECIDED — 2 requests: 1 expired, 1 still pending.  " +
-        "expired CASH_PAYMENT 1,500.00 (ZT1-01, 17-10-2026 10:00 AM · waited 30 min) · " +
-        "pending FORCE_CLOSE 0.00 (ZT1-02, 17-10-2026 11:00 AM · waiting 5 min)",
+        "expired CASH_PAYMENT 1,500.00 (ZT1-01, 17/10/2026 10:00 AM · waited 30 min) · " +
+        "pending FORCE_CLOSE 0.00 (ZT1-02, 17/10/2026 11:00 AM · waiting 5 min)",
     );
   });
 
@@ -472,8 +472,8 @@ describe("Approver activity", () => {
 
 describe("Safe book", () => {
   const DAYS: GridRow[] = [
-    { day: "2026-10-16", day_text: "16-10-2026", opening: "100", from_tills: "0", floats_out: "0", book_closing: "100", diff: null, bags_awaiting: "0", limit_flag: "", tsf_insured_limit: "0.00" },
-    { day: "2026-10-17", day_text: "17-10-2026", opening: "100", from_tills: "50", floats_out: "-4000.00", book_closing: "-3850.00", diff: "-10.00", bags_awaiting: "1", limit_flag: "OVER LIMIT", tsf_insured_limit: "0.00" },
+    { day: "2026-10-16", day_text: "16/10/2026", opening: "100", from_tills: "0", floats_out: "0", book_closing: "100", diff: null, bags_awaiting: "0", limit_flag: "", tsf_insured_limit: "0.00" },
+    { day: "2026-10-17", day_text: "17/10/2026", opening: "100", from_tills: "50", floats_out: "-4000.00", book_closing: "-3850.00", diff: "-10.00", bags_awaiting: "1", limit_flag: "OVER LIMIT", tsf_insured_limit: "0.00" },
   ];
 
   it("the totals row: the first opening, the last closing + difference", () => {
@@ -491,7 +491,7 @@ describe("Safe book", () => {
   it("picks the day kept, else the last", () => {
     expect(pickSafeDay(DAYS, "2026-10-16")?.day).toBe("2026-10-16");
     expect(pickSafeDay(DAYS, "")?.day).toBe("2026-10-17");
-    expect(dayHead(DAYS[1])).toBe("17-10-2026 — the day's lines · opening 100.00");
+    expect(dayHead(DAYS[1])).toBe("17/10/2026 — the day's lines · opening 100.00");
   });
 
   it("the hint names the insured limit", () => {
@@ -502,10 +502,10 @@ describe("Safe book", () => {
   it("the remittances: age, total, what is on the way", () => {
     const rows: GridRow[] = [
       { tcm_id: "1", rm_status: "IN TRANSIT", rm_age: 3, rm_amount: "1000.00", rm_bank_date: "" },
-      { tcm_id: "2", rm_status: "CONFIRMED", rm_age: null, rm_amount: "500.00", rm_bank_date: "16-10-2026" },
+      { tcm_id: "2", rm_status: "CONFIRMED", rm_age: null, rm_amount: "500.00", rm_bank_date: "16/10/2026" },
     ];
     expect(remitAge(rows[0])).toBe("3 days");
-    expect(remitAge(rows[1])).toBe("bank 16-10");
+    expect(remitAge(rows[1])).toBe("bank 16/10");
     const table = remitsTable(rows);
     expect(texts(table)[2]).toEqual(["2 remittances", "", "", "1,500.00", "", ""]);
     expect(remitHint(rows)).toMatch(/^In transit 1,000\.00 — /);
@@ -625,19 +625,19 @@ describe("Ledger check", () => {
   const ROWS: GridRow[] = [
     {
       tss_id: "off", tss_acc_year: "2026-2027", tss_company_id: COMPANY, tss_branch_id: BRANCH,
-      tss_session_no: "ZT1-261016-02", business_date: "16-10-2026", counter_code: "ZT1", cashier: "VKPOS",
+      tss_session_no: "ZT1-261016-02", business_date: "16/10/2026", counter_code: "ZT1", cashier: "VKPOS",
       status_text: "CLOSED", tss_float_mode: "CARRIED", tss_float_issued: "2000.00", tss_float_left: "2000.00",
       books: "150.00", should: "0.00", diff: "150.00", legs: "4", verdict: "OFF",
     },
     {
       tss_id: "live", tss_acc_year: "2026-2027", tss_company_id: COMPANY, tss_branch_id: BRANCH,
-      tss_session_no: "ZT2-261017-01", business_date: "17-10-2026", counter_code: "ZT2", cashier: "zt-cashier",
+      tss_session_no: "ZT2-261017-01", business_date: "17/10/2026", counter_code: "ZT2", cashier: "zt-cashier",
       status_text: "OPEN", tss_float_mode: "ISSUED", tss_float_issued: "2000.00", tss_float_left: null,
       books: "1500.00", should: null, diff: null, legs: "2", verdict: "LIVE",
     },
     {
       tss_id: "ok", tss_acc_year: "2026-2027", tss_company_id: COMPANY, tss_branch_id: BRANCH,
-      tss_session_no: "ZT1-261017-01", business_date: "17-10-2026", counter_code: "ZT1", cashier: "VKPOS",
+      tss_session_no: "ZT1-261017-01", business_date: "17/10/2026", counter_code: "ZT1", cashier: "VKPOS",
       status_text: "CLOSED", tss_float_mode: "ISSUED", tss_float_issued: "2000.00", tss_float_left: "2000.00",
       books: "2000.00", should: "2000.00", diff: "0.00", legs: "3", verdict: "OK",
     },
@@ -685,8 +685,8 @@ describe("Ledger check", () => {
 
   it("the legs: oldest first, Dr / Cr summed, the totals row's Running is the last leg's", () => {
     const legs: GridRow[] = [
-      { av_id: "2", av_created_on: "2026-10-17T05:00:00Z", at_text: "17-10 10:30 AM", refno: "TDrp/1", type_code: "TDrp", type_name: "Till drop", dr: null, cr: "500.00", running: "1500.00", remarks: "" },
-      { av_id: "1", av_created_on: "2026-10-17T04:00:00Z", at_text: "17-10 09:30 AM", refno: "TFlt/1", type_code: "TFlt", type_name: "Till float", dr: "2000.00", cr: null, running: "2000.00", remarks: "float" },
+      { av_id: "2", av_created_on: "2026-10-17T05:00:00Z", at_text: "17/10 10:30 AM", refno: "TDrp/1", type_code: "TDrp", type_name: "Till drop", dr: null, cr: "500.00", running: "1500.00", remarks: "" },
+      { av_id: "1", av_created_on: "2026-10-17T04:00:00Z", at_text: "17/10 09:30 AM", refno: "TFlt/1", type_code: "TFlt", type_name: "Till float", dr: "2000.00", cr: null, running: "2000.00", remarks: "float" },
     ];
     const table = legsTable(ROW_ORDER.legs(legs));
     expect(table.rows.map((row) => row.key)).toEqual(["1", "2", "__total"]);
@@ -713,19 +713,19 @@ describe("Tender reconciliation", () => {
   const ROWS: GridRow[] = [
     {
       tss_id: "s1", tss_acc_year: "2026-2027", tss_company_id: COMPANY, tss_branch_id: BRANCH,
-      tss_session_no: "ZT1-261017-01", business_date: "17-10-2026", counter_code: "ZT1", cashier: "VKPOS",
+      tss_session_no: "ZT1-261017-01", business_date: "17/10/2026", counter_code: "ZT1", cashier: "VKPOS",
       tender_type_id: 2, tender: "Card", txns: "3", expected: "3000.00", settled: "1000.00", mdr: "15.00",
       gap: "2000.00", pending_n: "1", failed_n: "1", oldest_days: "4", state: "FAILED",
     },
     {
       tss_id: "s1", tss_acc_year: "2026-2027", tss_company_id: COMPANY, tss_branch_id: BRANCH,
-      tss_session_no: "ZT1-261017-01", business_date: "17-10-2026", counter_code: "ZT1", cashier: "VKPOS",
+      tss_session_no: "ZT1-261017-01", business_date: "17/10/2026", counter_code: "ZT1", cashier: "VKPOS",
       tender_type_id: 3, tender: "UPI", txns: "2", expected: "500.00", settled: "500.00", mdr: "0.00",
       gap: "0.00", pending_n: "0", failed_n: "0", oldest_days: null, state: "SETTLED",
     },
     {
       tss_id: "s2", tss_acc_year: "2026-2027", tss_company_id: COMPANY, tss_branch_id: BRANCH,
-      tss_session_no: "ZT1-261016-01", business_date: "16-10-2026", counter_code: "ZT1", cashier: "VKPOS",
+      tss_session_no: "ZT1-261016-01", business_date: "16/10/2026", counter_code: "ZT1", cashier: "VKPOS",
       tender_type_id: 5, tender: "Cheque", txns: "1", expected: "-200.00", settled: "0.00", mdr: "0.00",
       gap: "-200.00", pending_n: "0", failed_n: "0", oldest_days: null, state: "NOT TRACKED",
     },
@@ -781,9 +781,9 @@ describe("Tender reconciliation", () => {
 
   it("the tender rows: oldest first, the settlement pilled, the amount signed and summed", () => {
     const rows: GridRow[] = [
-      { td_id: "b", td_created_on: "2026-10-17T06:00:00Z", at_text: "17-10 11:30 AM", doc_type: "SALE_RETURN", doc_refno: "SR/2", tender_name: "HDFC Card", amount: "-200.00", reference: "xx1234", settle_status: "NA", settled_on: "", settled: null, mdr: null, settle_ref: "", age_days: null },
-      { td_id: "a", td_created_on: "2026-10-17T05:00:00Z", at_text: "17-10 10:30 AM", doc_type: "SALE_BILL", doc_refno: "SB/1", tender_name: "HDFC Card", amount: "1000.00", reference: "AUTH1 · xx1234", settle_status: "SETTLED", settled_on: "18-10-2026", settled: "1000.00", mdr: "15.00", settle_ref: "BATCH9", age_days: null },
-      { td_id: "c", td_created_on: "2026-10-17T07:00:00Z", at_text: "17-10 12:30 PM", doc_type: "SALE_BILL", doc_refno: "SB/3", tender_name: "HDFC Card", amount: "2000.00", reference: "", settle_status: "FAILED", settled_on: "", settled: null, mdr: null, settle_ref: "", age_days: "4" },
+      { td_id: "b", td_created_on: "2026-10-17T06:00:00Z", at_text: "17/10 11:30 AM", doc_type: "SALE_RETURN", doc_refno: "SR/2", tender_name: "HDFC Card", amount: "-200.00", reference: "xx1234", settle_status: "NA", settled_on: "", settled: null, mdr: null, settle_ref: "", age_days: null },
+      { td_id: "a", td_created_on: "2026-10-17T05:00:00Z", at_text: "17/10 10:30 AM", doc_type: "SALE_BILL", doc_refno: "SB/1", tender_name: "HDFC Card", amount: "1000.00", reference: "AUTH1 · xx1234", settle_status: "SETTLED", settled_on: "18/10/2026", settled: "1000.00", mdr: "15.00", settle_ref: "BATCH9", age_days: null },
+      { td_id: "c", td_created_on: "2026-10-17T07:00:00Z", at_text: "17/10 12:30 PM", doc_type: "SALE_BILL", doc_refno: "SB/3", tender_name: "HDFC Card", amount: "2000.00", reference: "", settle_status: "FAILED", settled_on: "", settled: null, mdr: null, settle_ref: "", age_days: "4" },
     ];
     const table = tenderRowsTable(ROW_ORDER.tenderRows(rows));
     expect(table.rows.map((row) => row.key)).toEqual(["a", "b", "c", "__total"]);
@@ -873,7 +873,7 @@ describe("print and export", () => {
 
   it("the printable page: landscape, the title, each table under its caption, escaped", () => {
     const title = printTitle("safe", "2026-10-11", TODAY, "Acme <Main>");
-    expect(title).toBe("Till Reports — Safe book · 11-10-2026 to 17-10-2026 · Acme <Main>");
+    expect(title).toBe("Till Reports — Safe book · 11/10/2026 to 17/10/2026 · Acme <Main>");
     const page = printDocument(title, [{ caption: "Safe book", table: safeDaysTable([]) }]);
     expect(page).toContain("size:A4 landscape");
     expect(page).toContain("Acme &lt;Main&gt;");
@@ -932,7 +932,7 @@ describe("opened on a scope (Cash Position's drill)", () => {
     const scope = scopeFromSearch(`?branch=${BRANCH}&branchName=Coimbatore+Main&from=2026-10-01&to=2026-10-17`);
     expect(scope).toEqual({ branch: { id: BRANCH, text: "Coimbatore Main" }, fromDate: "2026-10-01", toDate: "2026-10-17" });
     expect(scopeFromSearch(`branch=${BRANCH}`)).toEqual({ branch: { id: BRANCH, text: "" }, fromDate: "", toDate: "" });
-    expect(scopeFromSearch(`branch=${BRANCH}&from=2026-02-30&to=17-10-2026`)).toMatchObject({ fromDate: "", toDate: "" });
+    expect(scopeFromSearch(`branch=${BRANCH}&from=2026-02-30&to=17/10/2026`)).toMatchObject({ fromDate: "", toDate: "" });
   });
 
   it("no branch, no scope", () => {

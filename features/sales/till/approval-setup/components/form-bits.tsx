@@ -6,6 +6,7 @@ import { cx } from "@/components/design-system/cx";
 import { focusNextInteractiveControl } from "@/components/design-system/ui/focus-next-control";
 import type { Tone } from "../domain/approval-setup";
 import styles from "../page.module.scss";
+import { DateInput } from "@/components/design-system/ui/date-input";
 
 const INK: Partial<Record<Tone, string>> = {
   danger: styles.inkDanger,
@@ -148,17 +149,17 @@ export function DateBox({
   ariaLabel?: string;
 }) {
   return (
-    <input
+    <DateInput
+      block
       id={id}
-      type="date"
       className={styles.textInput}
       data-uppercase="off"
       value={value}
       disabled={disabled}
       aria-label={ariaLabel}
       // A cleared date is not a date: keep the last one.
-      onChange={(event) => {
-        if (event.target.value) onChange(event.target.value);
+      onChange={(value) => {
+        if (value) onChange(value);
       }}
     />
   );

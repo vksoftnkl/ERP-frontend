@@ -78,6 +78,7 @@ import { HoReviewDialog } from "./ho-review-dialog";
 import { StoresTable } from "./stores-table";
 import { useCashPosition } from "./use-cash-position";
 import local from "./cash-position.module.scss";
+import { DateInput } from "@/components/design-system/ui/date-input";
 
 const TILE_TONE: Record<TileTone, string | undefined> = {
   "": undefined,
@@ -272,13 +273,12 @@ function CashPositionScreen({ companyId, ownBranchId, headerYear }: ScreenProps)
         <label className={local.cap} htmlFor="till-cp-as-on">
           As on
         </label>
-        <input
+        <DateInput
           id="till-cp-as-on"
-          type="date"
           className={cx(styles.input, local.dateInput)}
           value={asOn}
-          onChange={(changeEvent) => {
-            setAsOn(changeEvent.target.value);
+          onChange={(value) => {
+            setAsOn(value);
             refresh();
           }}
         />

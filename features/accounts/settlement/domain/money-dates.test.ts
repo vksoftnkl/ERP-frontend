@@ -60,12 +60,12 @@ describe("formatPaise", () => {
 describe("IST times", () => {
   it("shows a UTC instant on India's clock", () => {
     expect(istClock("2026-10-07T06:48:00.000Z")).toBe("12:18 PM");
-    expect(istDateTime("2026-10-07T20:40:00Z")).toBe("08-10-2026 02:10 AM");
+    expect(istDateTime("2026-10-07T20:40:00Z")).toBe("08/10/2026 02:10 AM");
   });
 
   it("reads the grids' IST text with its offset as the same wall clock", () => {
     expect(istClock("2026-10-09T15:10:00+05:30")).toBe("03:10 PM");
-    expect(istDateTime("2026-10-09T15:10:00+05:30")).toBe("09-10-2026 03:10 PM");
+    expect(istDateTime("2026-10-09T15:10:00+05:30")).toBe("09/10/2026 03:10 PM");
     expect(instantMs("2026-10-09T15:10:00+05:30")).toBe(Date.UTC(2026, 9, 9, 9, 40));
   });
 
@@ -77,8 +77,8 @@ describe("IST times", () => {
   });
 
   it("formats a calendar day without moving it", () => {
-    expect(shortDate("2026-10-08")).toBe("08-10-2026");
-    expect(shortDate("2026-10-07T20:40:00Z")).toBe("08-10-2026");
+    expect(shortDate("2026-10-08")).toBe("08/10/2026");
+    expect(shortDate("2026-10-07T20:40:00Z")).toBe("08/10/2026");
     expect(shortDate("")).toBe("");
     expect(shortDate("someday")).toBe("someday");
   });

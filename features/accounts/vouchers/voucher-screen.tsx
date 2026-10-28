@@ -32,6 +32,7 @@
  * edit is waiting to be worked out; a voucher out by a paisa is refused at
  * post and Save says why.
  */
+import { DateInput } from "@/components/design-system/ui/date-input";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { skipToken } from "@reduxjs/toolkit/query";
 import { useBusinessContext } from "@/components/layout/business-context";
@@ -144,7 +145,7 @@ function partyLine(rules: VoucherTypeRules): string {
 
 function displayDate(iso: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
-  return match ? `${match[3]}-${match[2]}-${match[1]}` : iso;
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : iso;
 }
 
 export default function VoucherScreen(props: VoucherScreenProps) {
@@ -751,13 +752,12 @@ export default function VoucherScreen(props: VoucherScreenProps) {
                 <label className={own.formCap} htmlFor={`${fieldId}-date`}>
                   Date *
                 </label>
-                <input
+                <DateInput block
                   id={`${fieldId}-date`}
                   className={styles.input}
-                  type="date"
                   value={doc.header.date}
                   disabled={readOnly}
-                  onChange={(event) => api.setHeader({ date: event.target.value })}
+                  onChange={(value) => api.setHeader({ date: value })}
                 />
                 {api.instrumentsOn ? (
                   <>
@@ -795,13 +795,12 @@ export default function VoucherScreen(props: VoucherScreenProps) {
                 <label className={own.formCap} htmlFor={`${fieldId}-docdate`}>
                   {captions.date}
                 </label>
-                <input
+                <DateInput block
                   id={`${fieldId}-docdate`}
                   className={styles.input}
-                  type="date"
                   value={doc.header.docDate}
                   disabled={readOnly}
-                  onChange={(event) => api.setHeader({ docDate: event.target.value })}
+                  onChange={(value) => api.setHeader({ docDate: value })}
                 />
               </div>
 

@@ -150,7 +150,7 @@ describe("trap 3 — ptlPublishedRevId is never sent", () => {
   /*
    * The one exception, and it can only ever DEFEND a pointer, never move one.
    * The server nulls `ptl_published_rev_id` on every update that does not
-   * publish (verified 27-08-2026), which silently unpublishes a live design.
+   * publish (verified 27/08/2026), which silently unpublishes a live design.
    */
   describe("preservePublishedRevId — the workaround for that defect", () => {
     it("echoes the current pointer back on an identity save", () => {

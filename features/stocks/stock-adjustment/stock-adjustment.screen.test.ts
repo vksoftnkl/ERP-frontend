@@ -68,12 +68,13 @@ describe("cells", () => {
     expect(qtyCell(0)).toBe("0");
   });
 
-  it("dd-MM-yyyy on screen, ISO on the wire", () => {
-    expect(dateToWire("31-03-2027")).toBe("2027-03-31");
+  it("dd/MM/yyyy on screen, ISO on the wire", () => {
+    expect(dateToWire("31/03/2027")).toBe("2027-03-31");
     expect(dateToWire("31032027")).toBe("2027-03-31");
+    expect(dateToWire("31-03-2027")).toBe("2027-03-31");
     expect(dateToWire("2027-03-31")).toBe("2027-03-31");
-    expect(dateToWire("31-02-2027")).toBe("");
-    expect(dateFromWire("2027-03-31T00:00:00.000Z")).toBe("31-03-2027");
+    expect(dateToWire("31/02/2027")).toBe("");
+    expect(dateFromWire("2027-03-31T00:00:00.000Z")).toBe("31/03/2027");
     expect(dateFromWire("")).toBe("");
   });
 });
@@ -164,7 +165,7 @@ describe("pick from stock", () => {
     expect(hidden.display.map((entry) => (entry.type === "row" ? entry.row.sblId : ""))).toEqual(["old"]);
     expect(hidden.hidden).toBe(2);
     expect(pickNote(rows, { itemScoped: true, hidden: hidden.hidden, expiredBy: "2026-10-02" }).text).toContain(
-      "2 lot(s) not expired by 02-10-2026 are hidden — an unexpired lot is a damage write-off, not an expiry.",
+      "2 lot(s) not expired by 02/10/2026 are hidden — an unexpired lot is a damage write-off, not an expiry.",
     );
     const all = pickDisplayRows(rows, { group: false, expiredBy: "2026-10-02", showAll: true });
     expect(all.display.filter((entry) => entry.type === "row" && entry.grey)).toHaveLength(2);

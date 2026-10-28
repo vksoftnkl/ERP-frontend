@@ -136,8 +136,8 @@ describe("configured columns", () => {
       age_days: 2,
     };
     const byField = Object.fromEntries(columns.map((c) => [c.field, c]));
-    expect(cellText(row, byField.asi_payout_date)).toBe("08-10-2026");
-    expect(cellText(row, byField.asl_txn_on)).toBe("07-10-2026 03:12 PM");
+    expect(cellText(row, byField.asi_payout_date)).toBe("08/10/2026");
+    expect(cellText(row, byField.asl_txn_on)).toBe("07/10/2026 03:12 PM");
     expect(cellText(row, byField.asl_gross_amount)).toBe("1,200.00");
     expect(cellText(row, byField.age_days)).toBe("2");
     expect(columnTotals([row, { ...row, asl_gross_amount: "500.00" }], columns)).toEqual({ asl_gross_amount: 170000 });

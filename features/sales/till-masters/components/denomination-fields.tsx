@@ -9,6 +9,7 @@ import { bundleAfterKindChange } from "../domain/till-masters";
 import type { EntryFieldsProps } from "./fields-props";
 import { Check, Field, NumberBox, SectionHeading, fieldId } from "./form-bits";
 import styles from "../page.module.scss";
+import { DateInput } from "@/components/design-system/ui/date-input";
 
 export function DenominationFields({ form, update, mode, editable, locked, focus }: EntryFieldsProps<"denominations">) {
   const off = (field: string) => !editable || locked.includes(field);
@@ -96,14 +97,14 @@ export function DenominationFields({ form, update, mode, editable, locked, focus
           />
         </Field>
         <Field id={id("validTo")} label="Valid To">
-          <input
+          <DateInput
+            block
             id={id("validTo")}
-            type="date"
             className={styles.textInput}
             title="blank = no end"
             value={form.validTo}
             disabled={off("validTo")}
-            onChange={(event) => update({ validTo: event.target.value })}
+            onChange={(value) => update({ validTo: value })}
           />
         </Field>
         <Check

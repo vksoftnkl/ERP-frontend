@@ -234,7 +234,7 @@ describe("the Vouchers, Day-wise and group-ledger rows", () => {
     expect(reversal.chip).toMatchObject({ text: "BIL", variant: "reversal", tone: "payment" });
     const first = voucherCells(page.rows[0]);
     expect([first.date, first.chip.text, first.voucherNo, first.party.text, first.amount, first.branch]).toEqual([
-      "09-10-2026",
+      "09/10/2026",
       "BIL",
       "bil01412",
       "Cash Sales",
@@ -260,7 +260,7 @@ describe("the Vouchers, Day-wise and group-ledger rows", () => {
     const wire = dailyFixture({ fromDate: "2026-10-08", toDate: "2026-10-09" });
     const rows = parseDaily(wire).rows.map(dailyCells);
     expect(rows[1]).toEqual({
-      date: "09-10-2026",
+      date: "09/10/2026",
       vouchers: "56",
       drafts: "1",
       cancelled: "1 pair",

@@ -117,7 +117,7 @@ describe("buildLines", () => {
       direction: "IN",
       trackSignature: "BE",
       batchNo: " B-9 ",
-      expiryDate: "31-03-2027",
+      expiryDate: "31/03/2027",
       mrp: 55,
       lotId: "lot-ignored",
       supplierId: "sup-1",
@@ -199,7 +199,7 @@ describe("a loaded document", () => {
       baseQty: -36,
       costRate: 30,
       value: -90,
-      expiryDate: "31-01-2027",
+      expiryDate: "31/01/2027",
       trackSignature: "BE",
     });
     expect(lineFromPayload(linePayload({ direction: 1 }))).toMatchObject({ direction: "IN", qty: "3" });

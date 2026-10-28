@@ -16,6 +16,7 @@ import { addDays, dayMonthLabel, displayDate, weekdayOf } from "@/features/repor
 import { formatAmount } from "@/features/reports/shared/wire/money";
 import styles from "../page.module.scss";
 import type { DueCalendarPayload, DueDay } from "../wire/types";
+import { DateInput } from "@/components/design-system/ui/date-input";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 /** A runaway window can never lay out forever. */
@@ -73,11 +74,11 @@ export function DueCalendarTab({ calendar, window, asOn, loading, onWindow, onPi
         <span className={styles.sectionTools}>
           <label className={styles.field}>
             <span className={styles.fieldLabel}>From</span>
-            <input type="date" className={cx(styles.input, styles.inputDate)} value={from} onChange={(e) => setFrom(e.target.value)} />
+            <DateInput className={cx(styles.input, styles.inputDate)} value={from} onChange={setFrom} />
           </label>
           <label className={styles.field}>
             <span className={styles.fieldLabel}>To</span>
-            <input type="date" className={cx(styles.input, styles.inputDate)} value={to} onChange={(e) => setTo(e.target.value)} />
+            <DateInput className={cx(styles.input, styles.inputDate)} value={to} onChange={setTo} />
           </label>
           <button type="button" className={styles.button} onClick={() => onWindow(from, to)} title="At most 92 days">
             Show window

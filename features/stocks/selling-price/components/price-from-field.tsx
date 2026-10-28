@@ -2,7 +2,7 @@
 
 /**
  * "Price from" (notes 140 A, Qt `datePriceFrom`) — the day the new prices
- * start, `dd-mm-yyyy`. Today = at once; a later day keeps today's prices until
+ * start, `dd/mm/yyyy`. Today = at once; a later day keeps today's prices until
  * then (Save reads "Schedule"); blank reads as today.
  *
  * The quotation's date field, without its label: the text input owns the
@@ -14,7 +14,7 @@
 import { useState } from "react";
 import { cx } from "@/components/design-system/cx";
 import qs from "@/features/sales/quotation/page.module.scss";
-import { fromDisplayDate, toDisplayDate } from "@/features/sales/quotation/quotation.utils";
+import { isoToDisplayDate, parseDisplayDate } from "@/lib/date-format";
 import { PRICE_FROM_INPUT_ID } from "../selling-price.constants";
 import styles from "../page.module.scss";
 
@@ -42,13 +42,13 @@ export function PriceFromField({
   id?: string;
   title?: string;
 }) {
-  const [text, setText] = useState(() => toDisplayDate(value));
+  const [text, setText] = useState(() => isoToDisplayDate(value));
   // The day can change from outside (back to today after a scheduled save):
   // the text follows it.
   const [seenValue, setSeenValue] = useState(value);
   if (seenValue !== value) {
     setSeenValue(value);
-    setText(toDisplayDate(value));
+    setText(isoToDisplayDate(value));
   }
 
   const commit = (raw: string) => {
@@ -57,14 +57,14 @@ export function PriceFromField({
       onChange("");
       return;
     }
-    const iso = fromDisplayDate(trimmed);
+    const iso = parseDisplayDate(trimmed, { allowShortYear: true });
     if (iso) {
       onChange(iso);
-      setText(toDisplayDate(iso));
+      setText(isoToDisplayDate(iso));
       return;
     }
     // Not a date — snap back rather than leave a half-typed day standing.
-    setText(toDisplayDate(value));
+    setText(isoToDisplayDate(value));
   };
 
   return (
@@ -83,7 +83,7 @@ export function PriceFromField({
         data-selling-price-commit="true"
         onChange={(event) => {
           setText(event.target.value);
-          const iso = fromDisplayDate(event.target.value);
+          const iso = parseDisplayDate(event.target.value);
           if (iso) {
             onChange(iso);
           } else if (!event.target.value.trim()) {
@@ -129,6 +129,7 @@ export function PriceFromField({
           value={value}
           min={today}
           tabIndex={-1}
+          data-date-picker-proxy="true"
           disabled={disabled}
           aria-label="Price from calendar"
           onChange={(event) => onChange(event.target.value)}

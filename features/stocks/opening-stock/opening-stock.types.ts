@@ -302,7 +302,7 @@ export type OpeningStockLine = {
   qty: number;
   freeQty: number;
   batchNo: string;
-  /** dd-mm-yyyy as keyed (the cell's text) — converted to ISO only on the way out. */
+  /** dd/mm/yyyy as keyed (the cell's text) — converted to ISO only on the way out. */
   mfgDate: string;
   expiryDate: string;
   mrp: number;

@@ -207,7 +207,7 @@ describe("which verbs are open", () => {
 describe("the payout's facts and the voucher", () => {
   it("fills the facts strip, or asks for a payout", () => {
     expect(payoutFacts(payout)).toMatchObject({
-      payout: "08-10-2026",
+      payout: "08/10/2026",
       utr: "HDFCN26281004417",
       lines: "6",
       net: "3,698.60",
@@ -231,7 +231,7 @@ describe("the payout's facts and the voucher", () => {
 
   it("asks before posting and voiding, in Qt's words", () => {
     expect(postQuestion(payout)).toBe(
-      "Post the payout of 08-10-2026 (HDFCN26281004417)? One TSet voucher: Dr bank 3,698.60 · fee · GST on fee, " +
+      "Post the payout of 08/10/2026 (HDFCN26281004417)? One TSet voucher: Dr bank 3,698.60 · fee · GST on fee, " +
         "Cr each matched row's clearing ledger, the rest to Tender suspense. Matched rows become SETTLED " +
         "(PARTIAL when the provider paid another amount).",
     );

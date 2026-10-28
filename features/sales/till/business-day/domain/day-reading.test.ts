@@ -122,7 +122,7 @@ function live(tssId: string, over: Partial<LiveSession> = {}): LiveSession {
 describe("the head", () => {
   it("reads an open day as Qt shows it", () => {
     const head = dayHead({ ...DAY, tbdStatus: "OPEN" }, CONTEXT);
-    expect(head.title).toBe("Business Day  07-10-2026");
+    expect(head.title).toBe("Business Day  07/10/2026");
     expect(head.sub).toBe("Acme Foods Pvt Ltd · opened 08:58 AM");
     expect(head.pill).toBe("OPEN");
     expect(head.pillTone).toBe("info");
@@ -156,7 +156,7 @@ describe("the head", () => {
 
   it("says when today is not opened yet", () => {
     const head = noDayHead("2026-10-10", { ...CONTEXT, cutoff: null });
-    expect(head.title).toBe("Business Day  10-10-2026");
+    expect(head.title).toBe("Business Day  10/10/2026");
     expect(head.pill).toBe("NOT OPEN");
     expect(head.facts.status).toBe("NOT OPEN — no session yet");
     expect(head.facts.cutoff).toBe("till.day_cutoff");
@@ -425,7 +425,7 @@ describe("cash to approve (the screen's own reading)", () => {
         session({ tss_session_no: "C", cash_receipt: "TO APPROVE", tss_id: "s-c" }),
       ],
     );
-    expect(check?.detail).toBe("1 hand-over / drop not yet approved by a supervisor: 1 today · oldest 14-10 06:17 PM");
+    expect(check?.detail).toBe("1 hand-over / drop not yet approved by a supervisor: 1 today · oldest 14/10 06:17 PM");
     expect(check?.action?.session?.tssId).toBe("s-c");
   });
 });

@@ -6,7 +6,7 @@
  * WHICH columns show, in what order, is grid 109's own configuration
  * (`fixed.grid_columns`), read through `/configured-grid-sql/columns`. Only the
  * rendering of a cell is decided here — a pill for the status and the bucket,
- * dd-mm-yyyy for dates, Indian grouping for money — keyed by the SQL field.
+ * dd/mm/yyyy for dates, Indian grouping for money — keyed by the SQL field.
  *
  * What the screen READS about a row never comes from a cell: the row object
  * is parsed once (`fromGridRow`) and keys, money and dates come from there, so

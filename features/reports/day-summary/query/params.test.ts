@@ -162,7 +162,7 @@ describe("defaults and the pre-Show check", () => {
       "The To date is before the Date.",
     );
     expect(checkFilters({ fromDate: "2026-03-31", toDate: "2026-04-02" }, session)?.message).toBe(
-      "The dates must be inside the year 2026-2027 (01-04-2026 – 31-03-2027).",
+      "The dates must be inside the year 2026-2027 (01/04/2026 – 31/03/2027).",
     );
     expect(checkFilters({ fromDate: "2026-10-09", toDate: "2026-10-09" }, session)).toBeNull();
   });

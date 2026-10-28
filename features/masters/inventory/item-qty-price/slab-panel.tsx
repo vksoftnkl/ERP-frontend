@@ -1,6 +1,7 @@
 "use client";
 import type { ReactNode } from "react";
 import { NexDropdownSingle, type DropdownSelection } from "@/components/design-system/dropdown";
+import { DateInput } from "@/components/design-system/ui/date-input";
 import { useDropdownId, type ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
 import type { ItemQtyPriceRow, SlabPanelField } from "./item-qty-price.types";
 import styles from "./item-qty-price.module.scss";
@@ -86,17 +87,13 @@ function ScopeDropdown({
 export function SlabPanel({ row, rowNumber, onScope, onDate, onFlag }: SlabPanelProps) {
   const slab = row && rowNumber ? ` — slab ${rowNumber}` : "";
   const dateInput = (field: SlabDateField, value: string) => (
-    <input
+    <DateInput
+      block
       id={SLAB_PANEL_FIELD_ID[field]}
-      type="date"
       className={styles.fieldInput}
       value={value}
       disabled={!row}
-      onChange={(event) => {
-        // Only a whole date, or nothing: a half-typed one reads "" (badInput).
-        if (event.target.value === "" && event.target.validity.badInput) return;
-        onDate(field, event.target.value);
-      }}
+      onChange={(next) => onDate(field, next)}
     />
   );
   return (

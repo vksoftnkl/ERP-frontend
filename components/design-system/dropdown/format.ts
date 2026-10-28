@@ -12,6 +12,7 @@
  * Pure: no React, no locale detection beyond the fixed `en-IN` grouping the rest of
  * the app formats numbers with.
  */
+import { normalizeDateText } from "@/lib/date-format";
 import type { DropdownDataType } from "./types";
 
 const GROUPED_INTEGER = new Intl.NumberFormat("en-IN", {
@@ -155,6 +156,7 @@ export function formatDropdownValue(value: unknown, dataType: DropdownDataType):
       return parts ? formatDateTime(parts) : raw;
     }
     default:
-      return raw;
+      // Text columns too: SQL that writes `DD-MM-YYYY` reads in the house format.
+      return normalizeDateText(raw);
   }
 }

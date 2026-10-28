@@ -1,0 +1,77 @@
+/* The house date box: a text input that owns the dd/MM/yyyy format, with a
+   calendar button laid over its right edge. The wrapper adds no box of its own
+   — the caller's input class draws the border, height and focus ring — so the
+   control drops in wherever an `<input type="date">` stood. */
+
+.root {
+  --erp-date-input-button: 1.6em;
+
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  vertical-align: middle;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Fill the parent's width — for a box that sat in a grid cell or a stretched
+   column at `width: 100%`. */
+.block {
+  display: flex;
+  width: 100%;
+}
+
+/* The input fills the wrapper, so a stretched wrapper stretches it and a
+   caller's fixed width still sizes both. */
+.root > .text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.button {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--erp-date-input-button);
+  color: var(--primary, #7b1515);
+  opacity: 0.85;
+}
+
+.root:hover .button {
+  opacity: 1;
+}
+
+.buttonDisabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.icon {
+  width: 0.95em;
+  height: 0.95em;
+  pointer-events: none;
+}
+
+/* The native picker, kept rendered so `showPicker()` opens it, with its own
+   text and icon hidden — the text input beside it owns what is shown. */
+.picker {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.picker:disabled {
+  cursor: default;
+}

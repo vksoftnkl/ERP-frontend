@@ -73,7 +73,7 @@ describe("the six tiles", () => {
       ["Above 90 days", "1,28,600.00", "3 parties"],
       ["On-account credit", "21,500.00", "advances + unadjusted notes"],
       ["PDC in hand", "1,10,000.00", "3 cheques · not deducted"],
-      ["Due next 7 days", "1,26,450.00", "26-09 → 02-10"],
+      ["Due next 7 days", "1,26,450.00", "26/09 → 02/10"],
     ]);
     expect(buildTiles(parties().tiles, { side: "RECEIVABLE", deductPdc: true })[4].caption).toBe("3 cheques · deducted");
   });
@@ -92,15 +92,15 @@ describe("the bills grid reproduces the mockup", () => {
 
   it("prints Sri Krishna Traders' nine open items", () => {
     expect(sktBills().rows.map((row) => bill(billCells(row, ctx)))).toEqual([
-      ["31-03-2026", "OPENING", "opn00028", "Main Store", "30-04-2026", "60,500.00", "25,000.00", "35,500.00 Dr", "178", "148 d", "part rct00002"],
-      ["22-06-2026", "SALES", "bil00361", "Main Store", "22-07-2026", "38,500.00", "15,000.00", "23,500.00 Dr", "95", "65 d", "part rct00002"],
-      ["18-07-2026", "SALES", "bil00377", "Main Store", "17-08-2026", "18,500.00", "", "18,500.00 Dr", "69", "39 d", "re-opened · chq bounced"],
-      ["02-08-2026", "SALES", "bil00398", "Main Store", "01-09-2026", "32,400.00", "", "32,400.00 Dr", "54", "24 d", "12 items"],
-      ["11-08-2026", "SALES", "bil00412", "Main Store", "10-09-2026", "48,600.00", "500.00", "48,100.00 Dr", "45", "15 d", "disc jv00007"],
-      ["24-08-2026", "SALES", "bil00501", "Karur", "23-09-2026", "12,150.00", "", "12,150.00 Dr", "32", "2 d", ""],
-      ["28-08-2026", "CR NOTE", "crn00014", "Main Store", "—", "4,000.00", "", "4,000.00 Cr", "28", "", "on account"],
-      ["02-09-2026", "SALES", "bil00577", "Main Store", "02-10-2026", "9,800.00", "", "9,800.00 Dr", "23", "", ""],
-      ["09-09-2026", "BNC CHARGE", "BNC/114402", "Main Store", "09-09-2026", "350.00", "", "350.00 Dr", "16", "16 d", "bounce charge"],
+      ["31/03/2026", "OPENING", "opn00028", "Main Store", "30/04/2026", "60,500.00", "25,000.00", "35,500.00 Dr", "178", "148 d", "part rct00002"],
+      ["22/06/2026", "SALES", "bil00361", "Main Store", "22/07/2026", "38,500.00", "15,000.00", "23,500.00 Dr", "95", "65 d", "part rct00002"],
+      ["18/07/2026", "SALES", "bil00377", "Main Store", "17/08/2026", "18,500.00", "", "18,500.00 Dr", "69", "39 d", "re-opened · chq bounced"],
+      ["02/08/2026", "SALES", "bil00398", "Main Store", "01/09/2026", "32,400.00", "", "32,400.00 Dr", "54", "24 d", "12 items"],
+      ["11/08/2026", "SALES", "bil00412", "Main Store", "10/09/2026", "48,600.00", "500.00", "48,100.00 Dr", "45", "15 d", "disc jv00007"],
+      ["24/08/2026", "SALES", "bil00501", "Karur", "23/09/2026", "12,150.00", "", "12,150.00 Dr", "32", "2 d", ""],
+      ["28/08/2026", "CR NOTE", "crn00014", "Main Store", "—", "4,000.00", "", "4,000.00 Cr", "28", "", "on account"],
+      ["02/09/2026", "SALES", "bil00577", "Main Store", "02/10/2026", "9,800.00", "", "9,800.00 Dr", "23", "", ""],
+      ["09/09/2026", "BNC CHARGE", "BNC/114402", "Main Store", "09/09/2026", "350.00", "", "350.00 Dr", "16", "16 d", "bounce charge"],
     ]);
   });
 
@@ -114,7 +114,7 @@ describe("the bills grid reproduces the mockup", () => {
 
   it("shows the effective due date muted and italic when the bill has none", () => {
     const row = { ...sktBills().rows[1], dueDate: null };
-    expect(billCells(row, ctx).due).toMatchObject({ text: "22-07-2026", italic: true, title: expect.stringContaining("bill date + credit days") });
+    expect(billCells(row, ctx).due).toMatchObject({ text: "22/07/2026", italic: true, title: expect.stringContaining("bill date + credit days") });
   });
 
   it("appends the counter hint, and keeps the data warning", () => {

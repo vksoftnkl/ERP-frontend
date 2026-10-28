@@ -32,6 +32,7 @@
  * the bills print from — the highlighted row, or every ticked one as one PDF.
  * A draft does not print: it has no number yet.
  */
+import { DateInput } from "@/components/design-system/ui/date-input";
 import { useCallback, useMemo, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import type { MasterTableRow } from "@/components/master/crud-master-page.types";
@@ -117,7 +118,7 @@ function docKeyOf(row: MasterTableRow): ReceiptKeys {
 
 /** Per-column formatting, keyed by grid 108's own SQL field names. */
 const COLUMN_RENDER_OVERRIDES = {
-  // dd-MM-yyyy on screen, ISO on the wire — a register is read by eye.
+  // dd/MM/yyyy on screen, ISO on the wire — a register is read by eye.
   avh_voucher_date: (row: MasterTableRow) =>
     toDisplayDate(asText(sourceValue(row, "avh_voucher_date")).slice(0, 10)),
   avh_doc_amount: (row: MasterTableRow) =>
@@ -233,14 +234,13 @@ export function ReceiptListView({ onCreate, onOpen }: ReceiptListViewProps) {
           <label className={masterStyles.filterLabel} htmlFor="receipt-from">
             From
           </label>
-          <input
+          <DateInput
             id="receipt-from"
-            type="date"
             className={styles.input}
             value={fromDate}
             max={toDate || undefined}
-            onChange={(event) => {
-              setFromDate(event.target.value);
+            onChange={(value) => {
+              setFromDate(value);
               setPeriod("custom");
             }}
           />
@@ -249,14 +249,13 @@ export function ReceiptListView({ onCreate, onOpen }: ReceiptListViewProps) {
           <label className={masterStyles.filterLabel} htmlFor="receipt-to">
             To
           </label>
-          <input
+          <DateInput
             id="receipt-to"
-            type="date"
             className={styles.input}
             value={toDate}
             min={fromDate || undefined}
-            onChange={(event) => {
-              setToDate(event.target.value);
+            onChange={(value) => {
+              setToDate(value);
               setPeriod("custom");
             }}
           />

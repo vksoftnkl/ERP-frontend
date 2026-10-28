@@ -27,7 +27,7 @@
  */
 import { matchesSearchTokens, searchTokens } from "@/lib/search-text";
 import { newestFirst } from "../cash-office/cash-office";
-import { addDaysIso, ddmmyyyy, sortRowsBy, textOf } from "../shared/format";
+import { addDaysIso, ddmmyyyy, displayText, sortRowsBy, textOf } from "../shared/format";
 import { formatMoney, toPaise } from "../shared/money";
 import { sessionBadgeBucket, type SessionBadgeBucket } from "../shared/session-badges";
 import type { GridRow } from "../shared/wire/types";
@@ -634,7 +634,7 @@ export const TENDER_ROW_COLUMNS: readonly ReportColumn[] = [
 export function cellText(column: ReportColumn, row: GridRow): string {
   switch (column.kind) {
     case "text":
-      return textOf(row, column.key);
+      return displayText(textOf(row, column.key));
     case "count": {
       const value = figureOf(row, column.key);
       return value === null || value === 0 ? "" : String(Math.round(value));
@@ -1019,11 +1019,11 @@ export function dayLinesTable(rows: readonly GridRow[]): TableView {
   return buildTable(DAY_LINE_COLUMNS, rows, { rowKey: byIndex, pills: dayLinePills });
 }
 
-/** Age: on the way for n days, or the bank's credit date (`bank 17-10`). */
+/** Age: on the way for n days, or the bank's credit date (`bank 17/10`). */
 export function remitAge(row: GridRow): string {
   if (textOf(row, "rm_status") === "IN TRANSIT") return countLabel(Math.round(numberOf(row, "rm_age")), "day");
   const bankDate = textOf(row, "rm_bank_date");
-  return bankDate ? `bank ${bankDate.slice(0, 5)}` : "";
+  return bankDate ? `bank ${displayText(bankDate).slice(0, 5)}` : "";
 }
 
 /** The branch's remittances (grid 157), raised against bank-credited. */

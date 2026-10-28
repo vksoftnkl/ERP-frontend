@@ -1,3 +1,4 @@
+import { formatLocalDate } from "@/lib/date-format";
 import { formatClock12 } from "@/lib/time-format";
 export type AuditActionFilter = "" | "New" | "update" | "approve" | "cancel";
 export type AuditDatePreset = "7d" | "30d" | "all" | "custom";
@@ -47,9 +48,6 @@ export const DATE_PRESETS: ReadonlyArray<{ key: Exclude<AuditDatePreset, "custom
   { key: "30d", label: "30 days", days: 30 },
   { key: "all", label: "All", days: null },
 ];
-export const DATE_FORMATTER = new Intl.DateTimeFormat("en-IN", {
-  dateStyle: "medium",
-});
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -146,14 +144,14 @@ export function formatDateTime(value: string): string {
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return `${DATE_FORMATTER.format(date)}, ${formatClock12(date)}`;
+  return `${formatLocalDate(date)}, ${formatClock12(date)}`;
 }
 export function formatDateOnly(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return DATE_FORMATTER.format(date);
+  return formatLocalDate(date);
 }
 export function formatTimeOnly(value: string): string {
   const date = new Date(value);

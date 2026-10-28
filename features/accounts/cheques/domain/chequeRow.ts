@@ -143,10 +143,10 @@ export function formatAmount(value: number): string {
   });
 }
 
-/** `yyyy-mm-dd` → `dd-mm-yyyy`, the way a register is read by eye. */
+/** `yyyy-mm-dd` → `dd/mm/yyyy`, the way a register is read by eye. */
 export function formatDate(value: string | null | undefined): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value ?? "");
-  return match ? `${match[3]}-${match[2]}-${match[1]}` : "";
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : "";
 }
 
 /** `"55492 — Deepan — 1,000.00"`. Every confirmation names rows this way. */

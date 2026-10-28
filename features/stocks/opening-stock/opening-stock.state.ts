@@ -155,7 +155,7 @@ export function createDraft(scope: DraftScope, today: string): OpeningStockDraft
   };
 }
 
-/** One audit line — "Created 23-10-2026 10:15 AM by VKPOS" — from whichever halves there are. */
+/** One audit line — "Created 23/10/2026 10:15 AM by VKPOS" — from whichever halves there are. */
 function auditLine(verb: string, on: string, by: string): string {
   const when = dateTime12Of(on);
   const who = by.trim();

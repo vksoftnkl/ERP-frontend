@@ -29,7 +29,7 @@ export type OpeningStockColumnKind =
   /** Shown, never keyed. */
   | "label"
   | "text"
-  /** dd-mm-yyyy text. */
+  /** dd/mm/yyyy text. */
   | "date"
   /** Quantities, at the item's own precision. */
   | "qty"

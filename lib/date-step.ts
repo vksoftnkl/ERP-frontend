@@ -3,10 +3,9 @@
  * empty or unreadable box starts from today. A step is the operator editing
  * the date, so the box reports it as a change like typing would.
  *
- * For the TEXT date boxes (`dd-mm-yyyy`, the quotation `DateField` and the
- * expense `DateInput`), where the arrows otherwise do nothing. A native
- * `<input type="date">` is left alone: there the browser already steps the
- * focused day / month / year segment.
+ * For the TEXT date boxes (`dd/mm/yyyy`: the shared design-system `DateInput`,
+ * the quotation `DateField`, the expense `DateInput`), where the arrows
+ * otherwise do nothing.
  */
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;

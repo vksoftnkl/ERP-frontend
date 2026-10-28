@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, useMemo, useState } from "react";
+import { DateInput } from "@/components/design-system/ui/date-input";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import { confirm } from "@/lib/confirm";
 
@@ -1028,13 +1029,12 @@ export default function ERPAdvancedFixed() {
                         className="rounded-[4px] border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                       />
                     </div>
-                    <input
-                      autoComplete="off"
-                      type="date"
+                    <DateInput
+                      block
                       name="startDate"
                       value={formData.startDate}
-                      onChange={(event) =>
-                        setFormData((current) => ({ ...current, startDate: event.target.value }))
+                      onChange={(value) =>
+                        setFormData((current) => ({ ...current, startDate: value }))
                       }
                       required
                       className="rounded-[4px] border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
@@ -1092,13 +1092,12 @@ export default function ERPAdvancedFixed() {
                         placeholder="Budget"
                         className="rounded-[4px] border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                       />
-                      <input
-                        autoComplete="off"
-                        type="date"
+                      <DateInput
+                        block
                         name="deadline"
                         value={formData.deadline}
-                        onChange={(event) =>
-                          setFormData((current) => ({ ...current, deadline: event.target.value }))
+                        onChange={(value) =>
+                          setFormData((current) => ({ ...current, deadline: value }))
                         }
                         required
                         className="rounded-[4px] border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"

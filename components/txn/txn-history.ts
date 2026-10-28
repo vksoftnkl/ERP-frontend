@@ -10,6 +10,7 @@
  * partition) and its company: `idoc_id`, `iacc_year`, `icompany_id`.
  */
 import { extractRows } from "@/app/master/_shared/crud-utils";
+import { normalizeDateText } from "@/lib/date-format";
 
 export type TxnHistoryRow = Record<string, string>;
 
@@ -137,12 +138,14 @@ export function txnHistorySummary(rows: readonly TxnHistoryRow[]): TxnSummaryRun
     return [];
   }
   const who = (row: TxnHistoryRow) => (row[TXN_HISTORY_FIELDS.user] ?? "").trim() || "unknown";
+  // Grid 126 writes `DD-MM-YYYY hh:mm AM`; shown in the house date format.
+  const when = (row: TxnHistoryRow) => normalizeDateText(row[TXN_HISTORY_FIELDS.when] ?? "");
   const first = rows[0];
   const last = rows[rows.length - 1];
   const items: TxnSummaryRun[][] = [
     [
       { text: "Created", strong: true },
-      { text: ` by ${who(first)} on ${first[TXN_HISTORY_FIELDS.when] ?? ""}` },
+      { text: ` by ${who(first)} on ${when(first)}` },
     ],
   ];
   if (rows.length > 1) {
@@ -151,7 +154,7 @@ export function txnHistorySummary(rows: readonly TxnHistoryRow[]): TxnSummaryRun
       { text: "now " },
       { text: status, strong: true },
       {
-        text: ` — ${last[TXN_HISTORY_FIELDS.event] ?? ""} by ${who(last)} on ${last[TXN_HISTORY_FIELDS.when] ?? ""}`,
+        text: ` — ${last[TXN_HISTORY_FIELDS.event] ?? ""} by ${who(last)} on ${when(last)}`,
       },
     ]);
   }

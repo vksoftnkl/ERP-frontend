@@ -136,6 +136,7 @@ import {
 } from "./till-reports";
 import { useReportPickers, useTillReports, type GridRead } from "./use-till-reports";
 import local from "./reports.module.scss";
+import { DateInput } from "@/components/design-system/ui/date-input";
 
 // ─── back from the Cockpit ───────────────────────────────────────────────────
 
@@ -924,22 +925,20 @@ function TillReportsScreen({ companyId, headerBranch }: ScreenProps) {
         <label className={local.cap} htmlFor="till-rpt-from">
           From
         </label>
-        <input
+        <DateInput
           id="till-rpt-from"
-          type="date"
           className={cx(styles.input, local.dateInput)}
           value={fromDate}
-          onChange={(changeEvent) => setFromDate(changeEvent.target.value)}
+          onChange={(value) => setFromDate(value)}
         />
         <label className={local.cap} htmlFor="till-rpt-to">
           To
         </label>
-        <input
+        <DateInput
           id="till-rpt-to"
-          type="date"
           className={cx(styles.input, local.dateInput)}
           value={toDate}
-          onChange={(changeEvent) => setToDate(changeEvent.target.value)}
+          onChange={(value) => setToDate(value)}
         />
         <label className={local.cap} htmlFor="till-rpt-counter">
           Counter

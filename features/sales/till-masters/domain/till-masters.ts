@@ -279,10 +279,10 @@ export function toCount(text: string): number {
   return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
-/** `YYYY-MM-DD` → `DD-MM-YYYY`; anything else as it came. */
+/** `YYYY-MM-DD` → `DD/MM/YYYY`; anything else as it came. */
 export function displayDate(iso: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
-  return match ? `${match[3]}-${match[2]}-${match[1]}` : iso;
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : iso;
 }
 
 /** Qt's `simplified()`: trimmed, inner runs of white space folded to one. */

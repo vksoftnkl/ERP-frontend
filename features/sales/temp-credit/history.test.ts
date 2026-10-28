@@ -94,7 +94,7 @@ describe("historySummary", () => {
       .map((part) => `${part.lead}${part.value}`)
       .join(" · ");
     expect(line).toBe(
-      "ZT Borrower · 9865500000 · credit 210.00 · settled 10.00 · balance 200.00 · now PARTIAL · due 08-10-2026 · 5 events",
+      "ZT Borrower · 9865500000 · credit 210.00 · settled 10.00 · balance 200.00 · now PARTIAL · due 08/10/2026 · 5 events",
     );
   });
 

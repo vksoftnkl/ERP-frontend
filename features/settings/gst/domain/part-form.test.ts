@@ -246,7 +246,7 @@ describe("refusals", () => {
   it("formats a stamp or says nothing", () => {
     expect(formatStamp(null)).toBe("—");
     expect(formatStamp("not a date")).toBe("—");
-    expect(formatStamp("2026-10-02T11:42:00")).toBe("02-10-2026 11:42 AM");
-    expect(formatStamp("2026-10-02T15:42:00")).toBe("02-10-2026 03:42 PM");
+    expect(formatStamp("2026-10-02T11:42:00")).toBe("02/10/2026 11:42 AM");
+    expect(formatStamp("2026-10-02T15:42:00")).toBe("02/10/2026 03:42 PM");
   });
 });

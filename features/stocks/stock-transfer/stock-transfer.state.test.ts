@@ -39,7 +39,7 @@ describe("applyHolding", () => {
       lotId: "lot-1",
       bucket: "SALEABLE",
       batchNo: "B-2604",
-      expiryDate: "30-06-2026",
+      expiryDate: "30/06/2026",
       available: 20,
       costRate: 473.5,
       toBaseFactor: 1,
@@ -138,7 +138,7 @@ describe("applyAvailability", () => {
       ),
     };
     const next = applyAvailability(loaded, loaded.lines[0].key, [holding({ availableQty: 12, freeAvailableQty: 2 })]);
-    expect(next.lines[0]).toMatchObject({ available: 12, freeAvailableBase: 2, batchNo: "B-2604", expiryDate: "30-06-2026" });
+    expect(next.lines[0]).toMatchObject({ available: 12, freeAvailableBase: 2, batchNo: "B-2604", expiryDate: "30/06/2026" });
   });
 });
 

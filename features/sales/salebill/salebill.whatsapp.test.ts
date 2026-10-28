@@ -141,7 +141,7 @@ describe("buildBillWhatsappMessage", () => {
       [
         "Dear Ravi Textiles,",
         "",
-        "Please find attached your bill bil00030 dated 28-10-2026 for ₹1,23,456.50.",
+        "Please find attached your bill bil00030 dated 28/10/2026 for ₹1,23,456.50.",
         "",
         "Thank you for your business.",
         "THE SCM SILK",
@@ -163,7 +163,7 @@ describe("buildBillWhatsappMessage", () => {
       [
         "Dear Balu S,",
         "",
-        "Your bill bil00016 dated 22-10-2026 for ₹228.00 is ready. You can view and download it here:",
+        "Your bill bil00016 dated 22/10/2026 for ₹228.00 is ready. You can view and download it here:",
         "https://erp.example.com/api/v1/print-share/k3J9xQ2mP7vT5wL8nR4sYb/bill-bil00016.pdf",
         "",
         "Thank you for your business.",
@@ -275,7 +275,7 @@ describe("whatsappTargetOfBill", () => {
 
 describe("formatLinkExpiry", () => {
   it("reads an ISO timestamp as a local dd-mm-yyyy date", () => {
-    expect(formatLinkExpiry(new Date(2026, 10, 27, 12, 0).toISOString())).toBe("27-11-2026");
+    expect(formatLinkExpiry(new Date(2026, 10, 27, 12, 0).toISOString())).toBe("27/11/2026");
   });
 
   it("is blank for nothing or nonsense", () => {

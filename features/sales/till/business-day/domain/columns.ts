@@ -10,6 +10,7 @@
  * Treatment, Cash, Status — take the colours every session grid shares (Qt
  * c77f3f1 `tillSessionBadges`, `../../shared/session-badges.ts`).
  */
+import { displayText } from "../../shared/format";
 import { isSessionBadgeColumn, sessionBadgeBucket, type SessionBadgeBucket } from "../../shared/session-badges";
 import { formatMoney, formatSignedMoney, signOf, toPaise } from "./decimal";
 import { text, type GridRow } from "./wire";
@@ -188,5 +189,5 @@ export function cellOf(field: string, row: GridRow): Cell {
       ? { kind: "pill", text: value.replace(/_/g, " "), tone: statusTone(value) }
       : { kind: "text", text: "", tone: "" };
   }
-  return { kind: "text", text: text(raw), tone: "" };
+  return { kind: "text", text: displayText(text(raw)), tone: "" };
 }

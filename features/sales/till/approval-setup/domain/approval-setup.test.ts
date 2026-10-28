@@ -169,7 +169,7 @@ describe("scope rows and layers", () => {
 
 describe("summaries and the matrix", () => {
   it("summarises a rule the Qt way", () => {
-    expect(ruleSummary(BRANCH)).toBe("OVER 50.00 · EITHER · SUPERVISOR · exp 30 · from 09-10-2026");
+    expect(ruleSummary(BRANCH)).toBe("OVER 50.00 · EITHER · SUPERVISOR · exp 30 · from 09/10/2026");
     expect(ruleSummary(SHIPPED)).toBe("OVER 10.00 · EITHER · SUPERVISOR");
     expect(ruleSummary(rule({ tar_mode: "NEVER", tar_two_person: true }))).toBe("NEVER · two-person");
     expect(ruleSummary(null)).toBe("— none —");
@@ -197,7 +197,7 @@ describe("summaries and the matrix", () => {
       threshold: "50.00",
       channel: "EITHER",
       expires: "30",
-      from: "09-10-2026",
+      from: "09/10/2026",
       effective: "BRANCH  overrides",
       effectiveTone: "branch",
       blocks: true,
@@ -304,7 +304,7 @@ describe("the rule form", () => {
       excludeId: "b1",
     });
     expect(removeRowMessage(BR, "CASH_VARIANCE", below)).toBe(
-      "Remove this branch row for CASH_VARIANCE? Then in force: OVER 25.00 · EITHER · SUPERVISOR · from 01-10-2026 (COMPANY).",
+      "Remove this branch row for CASH_VARIANCE? Then in force: OVER 25.00 · EITHER · SUPERVISOR · from 01/10/2026 (COMPANY).",
     );
   });
 });

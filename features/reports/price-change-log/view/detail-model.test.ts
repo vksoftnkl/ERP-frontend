@@ -11,7 +11,7 @@ describe("the detail dialog", () => {
 
   it("says who, which device, which screen", () => {
     const parts = detailMetaParts(detailOf(priceA));
-    expect(parts[0]).toMatch(/^Fri 23-10-2026 \d{2}:\d{2}:07 (AM|PM)$/);
+    expect(parts[0]).toMatch(/^Fri 23\/10\/2026 \d{2}:\d{2}:07 (AM|PM)$/);
     expect(parts.slice(1)).toEqual(["VKPOS", "dbg (192.168.0.103)", "Desktop", "Change selling (menu 30)", "Changed", "MRP 150"]);
     expect(detailMetaParts(detailOf(priceB)).slice(1, 3)).toEqual(["VKPOS", "(no device) 192.168.0.103"]);
   });

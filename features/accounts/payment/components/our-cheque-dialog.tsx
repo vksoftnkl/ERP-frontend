@@ -14,6 +14,7 @@
  * Mounted only for the row being edited, keyed on it, so its local copy starts
  * from the row by construction.
  */
+import { DateInput } from "@/components/design-system/ui/date-input";
 import { useMemo, useState } from "react";
 import { ModalShell } from "@/features/sales/quotation/components/modal-shell";
 import { toDisplayDate } from "@/features/sales/quotation/quotation.utils";
@@ -175,14 +176,13 @@ export function OurChequeDialog(props: OurChequeDialogProps) {
           </label>
           <label className={styles.field}>
             <span className={styles.fieldLabel}>Cheque date *</span>
-            <input
+            <DateInput block
               className={styles.input}
-              type="date"
               value={chequeDate}
               min={paymentDate || undefined}
               disabled={!editable}
-              onChange={(event) => {
-                setChequeDate(event.target.value);
+              onChange={(value) => {
+                setChequeDate(value);
                 setError(null);
               }}
             />

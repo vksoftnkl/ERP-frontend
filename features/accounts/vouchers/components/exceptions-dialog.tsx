@@ -11,6 +11,7 @@
  * double-click on a row opens its voucher — on a type's own menu only that
  * type's (another is said), on the register any.
  */
+import { DateInput } from "@/components/design-system/ui/date-input";
 import { useMemo, useState } from "react";
 import { ModalShell } from "@/features/sales/quotation/components/modal-shell";
 import { useGridId } from "@/lib/configured-grids";
@@ -46,7 +47,7 @@ function text(value: unknown): string {
 function cellText(field: string, value: unknown): string {
   if (field === "avh_voucher_date") {
     const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(text(value));
-    return match ? `${match[3]}-${match[2]}-${match[1]}` : text(value);
+    return match ? `${match[3]}/${match[2]}/${match[1]}` : text(value);
   }
   if (field === "abj_amount") {
     const amount = Number(value);
@@ -156,22 +157,20 @@ export function ExceptionsDialog(props: ExceptionsDialogProps) {
           <label className={styles.formLabel} htmlFor="exc-from">
             From
           </label>
-          <input
+          <DateInput
             id="exc-from"
-            type="date"
             className={receiptStyles.input}
             value={fromDate}
-            onChange={(event) => setFromDate(event.target.value)}
+            onChange={(value) => setFromDate(value)}
           />
           <label className={styles.formLabel} htmlFor="exc-to">
             To
           </label>
-          <input
+          <DateInput
             id="exc-to"
-            type="date"
             className={receiptStyles.input}
             value={toDate}
-            onChange={(event) => setToDate(event.target.value)}
+            onChange={(value) => setToDate(value)}
           />
           <button
             type="button"

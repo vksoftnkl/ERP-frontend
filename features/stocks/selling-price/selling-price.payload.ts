@@ -11,7 +11,8 @@
  * Notes 140 A — a save may start on a later day (`effectiveFrom`): the server
  * then SCHEDULES the new prices and today's stay on the shelf till that day.
  */
-import { todayIso, toDisplayDate } from "@/features/sales/quotation/quotation.utils";
+import { todayIso } from "@/features/sales/quotation/quotation.utils";
+import { isoToDisplayDate } from "@/lib/date-format";
 import { LEVEL_COUNT, NOTES_76_FILTER_KEYS } from "./selling-price.constants";
 import { exclusiveOfTax, markupOf, rawNum, round2 } from "./selling-price.math";
 import { isChanged, type PriceGridRow } from "./selling-price.state";
@@ -181,7 +182,7 @@ export function savedMessage(
   const saved = Number(result.saved) || 0;
   const scheduledFrom = scheduledDayOf(result, today);
   let message = scheduledFrom
-    ? `${saved === 1 ? "1 row scheduled" : `${saved} rows scheduled`} — the new prices start ${toDisplayDate(
+    ? `${saved === 1 ? "1 row scheduled" : `${saved} rows scheduled`} — the new prices start ${isoToDisplayDate(
         scheduledFrom,
       )}; today's prices stay till then (F9 lists them).`
     : saved === 1

@@ -233,10 +233,10 @@ describe("the saved toast", () => {
   it("says a scheduled save is scheduled, and from when (notes 140 A)", () => {
     const today = "2026-10-23";
     expect(savedMessage(result({ saved: 1, effectiveFrom: "2026-10-24" }), false, today)).toBe(
-      "1 row scheduled — the new prices start 24-10-2026; today's prices stay till then (F9 lists them).",
+      "1 row scheduled — the new prices start 24/10/2026; today's prices stay till then (F9 lists them).",
     );
     expect(savedMessage(result({ saved: 3, effectiveFrom: "2026-11-01" }), false, today)).toBe(
-      "3 rows scheduled — the new prices start 01-11-2026; today's prices stay till then (F9 lists them).",
+      "3 rows scheduled — the new prices start 01/11/2026; today's prices stay till then (F9 lists them).",
     );
     // The server answers today's day for a save from today: plain "saved".
     expect(savedMessage(result({ saved: 1, effectiveFrom: today }), false, today)).toBe("1 row saved");
@@ -331,7 +331,7 @@ describe("server refusals", () => {
           {
             field: "effectiveFrom",
             code: "STOCK_PRICE_FROM_TOO_FAR",
-            message: "24-11-2027 is more than a year ahead (latest 23-10-2027). Check the year.",
+            message: "24/11/2027 is more than a year ahead (latest 23/10/2027). Check the year.",
           },
         ],
       },

@@ -1,6 +1,6 @@
 /**
  * Small readers shared by both screens: a refusal's text and code, and the
- * dd-mm-yyyy hh:mm AM stamps the Qt panels show.
+ * dd/mm/yyyy hh:mm AM stamps the Qt panels show.
  */
 import { joinServerErrorBody } from "@/features/masters/shared/server-error-text";
 import { formatClock12 } from "@/lib/time-format";
@@ -51,7 +51,7 @@ export function gstFirstErrorMessage(error: unknown): string {
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/** `dd-MM-yyyy hh:mm AM` in local time, or "—". */
+/** `dd/MM/yyyy hh:mm AM` in local time, or "—". */
 export function formatStamp(value: unknown): string {
   if (typeof value !== "string" || !value.trim()) {
     return "—";
@@ -60,10 +60,10 @@ export function formatStamp(value: unknown): string {
   if (Number.isNaN(date.getTime())) {
     return "—";
   }
-  return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()} ${formatClock12(date)}`;
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${formatClock12(date)}`;
 }
 
-/** `dd-MM hh:mm AM` — the credential list's short Verified column. */
+/** `dd/MM hh:mm AM` — the credential list's short Verified column. */
 export function formatShortStamp(value: unknown): string {
   if (typeof value !== "string" || !value.trim()) {
     return "";
@@ -72,7 +72,7 @@ export function formatShortStamp(value: unknown): string {
   if (Number.isNaN(date.getTime())) {
     return "";
   }
-  return `${pad(date.getDate())}-${pad(date.getMonth() + 1)} ${formatClock12(date)}`;
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)} ${formatClock12(date)}`;
 }
 
 /** Today, as the date field edits it. */

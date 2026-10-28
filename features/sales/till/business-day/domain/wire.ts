@@ -487,10 +487,10 @@ export function addDaysIso(iso: string, days: number): string {
   return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
 }
 
-/** `2026-10-07` → `07-10-2026`; anything else as it came. */
+/** `2026-10-07` → `07/10/2026`; anything else as it came. */
 export function displayDate(iso: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
-  return match ? `${match[3]}-${match[2]}-${match[1]}` : iso;
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : iso;
 }
 
 /**

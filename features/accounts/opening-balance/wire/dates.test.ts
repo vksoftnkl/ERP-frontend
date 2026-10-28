@@ -47,8 +47,13 @@ describe("toDateInput", () => {
 });
 
 describe("toDisplayDate", () => {
-  it("writes dd-MM-yyyy", () => {
-    expect(toDisplayDate("2026-01-12")).toBe("12-01-2026");
+  it("writes dd/MM/yyyy", () => {
+    expect(toDisplayDate("2026-01-12")).toBe("12/01/2026");
+  });
+
+  it("uses slashes, never dashes", () => {
+    expect(toDisplayDate("2026-12-01")).not.toContain("-");
+    expect(toDisplayDate("2026-12-01T00:00:00Z")).toBe("01/12/2026");
   });
 
   it("leaves empty and invalid input empty", () => {

@@ -55,14 +55,14 @@ export function istClock(value: string | null | undefined): string {
   return p ? clock12FromHhmm(`${pad(p.hh)}:${pad(p.mi)}`) : "";
 }
 
-/** "dd-MM-yyyy hh:mm AM" on the IST clock. */
+/** "dd/MM/yyyy hh:mm AM" on the IST clock. */
 export function istDateTime(value: string | null | undefined): string {
   const p = istParts(value);
-  return p ? `${pad(p.d)}-${pad(p.m)}-${p.y} ${clock12FromHhmm(`${pad(p.hh)}:${pad(p.mi)}`)}` : "";
+  return p ? `${pad(p.d)}/${pad(p.m)}/${p.y} ${clock12FromHhmm(`${pad(p.hh)}:${pad(p.mi)}`)}` : "";
 }
 
 /**
- * Qt `shortDate()`: a calendar day "dd-MM-yyyy". A full timestamp is read for
+ * Qt `shortDate()`: a calendar day "dd/MM/yyyy". A full timestamp is read for
  * its IST day; anything unreadable is shown as sent.
  */
 export function shortDate(value: string | null | undefined): string {
@@ -70,10 +70,10 @@ export function shortDate(value: string | null | undefined): string {
   if (!text) return "";
   if (STAMP.test(text)) {
     const p = istParts(text);
-    return p ? `${pad(p.d)}-${pad(p.m)}-${p.y}` : text;
+    return p ? `${pad(p.d)}/${pad(p.m)}/${p.y}` : text;
   }
   const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text.slice(0, 10));
-  return day ? `${day[3]}-${day[2]}-${day[1]}` : text;
+  return day ? `${day[3]}/${day[2]}/${day[1]}` : text;
 }
 
 /** Today's IST calendar day, "YYYY-MM-DD". */

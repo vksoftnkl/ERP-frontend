@@ -7,6 +7,7 @@
  * Each returns ROWS, not a panel: the dialog lays them into its own
  * label | field grid, with the summary and the live reason beneath.
  */
+import { DateInput as SharedDateInput } from "@/components/design-system/ui/date-input";
 import type { ReactNode } from "react";
 import { NexDropdownSingle } from "@/components/design-system/dropdown";
 import { useDropdownId } from "@/lib/configured-dropdowns";
@@ -52,13 +53,12 @@ function DateInput({
   autoFocus?: boolean;
 }) {
   return (
-    <input
-      type="date"
+    <SharedDateInput
       className={styles.input}
       value={value}
       max={max}
       autoFocus={autoFocus}
-      onChange={(event) => onChange(event.target.value)}
+      onChange={(value) => onChange(value)}
     />
   );
 }

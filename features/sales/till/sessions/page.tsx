@@ -76,6 +76,7 @@ import {
   type SessionRow,
 } from "./session-list";
 import { useApprovalCount } from "./use-approval-count";
+import { DateInput } from "@/components/design-system/ui/date-input";
 
 const API_ENDPOINTS = {
   // The shell's own form and delete never run here (no Add, no Edit, no
@@ -330,14 +331,13 @@ export default function TillSessionsScreen() {
           <label className={masterStyles.filterLabel} htmlFor="till-sessions-from">
             From
           </label>
-          <input
+          <DateInput
             id="till-sessions-from"
-            type="date"
             className={receiptStyles.input}
             value={fromDate}
             max={toDate || undefined}
-            onChange={(event) => {
-              setFromDate(event.target.value);
+            onChange={(value) => {
+              setFromDate(value);
               setPeriod("custom");
             }}
           />
@@ -346,14 +346,13 @@ export default function TillSessionsScreen() {
           <label className={masterStyles.filterLabel} htmlFor="till-sessions-to">
             To
           </label>
-          <input
+          <DateInput
             id="till-sessions-to"
-            type="date"
             className={receiptStyles.input}
             value={toDate}
             min={fromDate || undefined}
-            onChange={(event) => {
-              setToDate(event.target.value);
+            onChange={(value) => {
+              setToDate(value);
               setPeriod("custom");
             }}
           />

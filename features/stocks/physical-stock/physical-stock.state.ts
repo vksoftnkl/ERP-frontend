@@ -389,7 +389,7 @@ export function auditStampsOf(
   };
 }
 
-/** "Created 24-10-2026 02:05 PM by Ravi" — blank when neither half is known. */
+/** "Created 24/10/2026 02:05 PM by Ravi" — blank when neither half is known. */
 function auditLine(verb: string, on: string, by: string): string {
   const when = dateTime12Of(on);
   const who = by.trim();

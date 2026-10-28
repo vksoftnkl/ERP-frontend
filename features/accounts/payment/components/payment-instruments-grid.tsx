@@ -18,6 +18,7 @@
  *    round-up are worked out from the grids, and the server would refuse a
  *    typed figure.
  */
+import { DateInput } from "@/components/design-system/ui/date-input";
 import { useMemo, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import type { TenderMasterRow } from "@/features/sales/sale-order/sale-order.types";
 import { toast } from "@/lib/notify";
@@ -272,15 +273,14 @@ export function PaymentInstrumentsGrid(props: PaymentInstrumentsGridProps) {
           return disabledCell("Only a cheque carries a date of its own.");
         }
         return (
-          <input
+          <DateInput arrowStep={false} noPicker
             className={styles.cellInput}
-            type="date"
             value={row.instrumentDate}
             min={paymentDate || undefined}
             disabled={!editable}
             title="The date written on the cheque. Later than the payment makes it post-dated — a voucher of its own."
             onFocus={() => onFocusRow(row.key)}
-            onChange={(event) => onSetTender(row.key, { instrumentDate: event.target.value })}
+            onChange={(value) => onSetTender(row.key, { instrumentDate: value })}
             onKeyDown={(event) => onRowKeyDown(event, row.key, row)}
           />
         );

@@ -123,10 +123,10 @@ describe("the day read and the tokens", () => {
   it("the subtitle: live for today, at the end of a past day", () => {
     const at = new Date(2026, 9, 17, 14, 5);
     expect(subtitleText(true, TODAY, at)).toBe(
-      "Every store, live from the server · as on 17-10-2026 02:05 PM · read-only except HO reviews",
+      "Every store, live from the server · as on 17/10/2026 02:05 PM · read-only except HO reviews",
     );
     expect(subtitleText(false, "2026-10-16", at)).toBe(
-      "Every store at the end of 16-10-2026 · cash in tills is shown for today only",
+      "Every store at the end of 16/10/2026 · cash in tills is shown for today only",
     );
   });
 
@@ -181,14 +181,14 @@ describe("the derived cells", () => {
 
   it("an older day still open replaces the status", () => {
     expect(dayStatusText(store())).toBe("OPEN");
-    expect(dayStatusText(store({ old_open_day: "16-10" }))).toBe("16-10 OPEN");
+    expect(dayStatusText(store({ old_open_day: "16-10" }))).toBe("16/10 OPEN");
   });
 
   it("the day pill's tone", () => {
     expect(dayStatusTone("CLOSED")).toBe("green");
     expect(dayStatusTone("OPEN")).toBe("blue");
     expect(dayStatusTone("NOT OPEN")).toBe("grey");
-    expect(dayStatusTone("16-10 OPEN")).toBe("red");
+    expect(dayStatusTone("16/10 OPEN")).toBe("red");
   });
 
   it("the safe count pill", () => {
@@ -269,7 +269,7 @@ describe("the stores table", () => {
 
   it("pills: the day, the safe count, the HO review", () => {
     const table = storesTable([store({ old_open_day: "16-10" }), madurai()], NO_TILL_CASH, true);
-    expect(cellAt(table, 0, "day_status")).toMatchObject({ pills: [{ text: "16-10 OPEN", tone: "red" }] });
+    expect(cellAt(table, 0, "day_status")).toMatchObject({ pills: [{ text: "16/10 OPEN", tone: "red" }] });
     expect(cellAt(table, 0, "safe_count")).toMatchObject({ pills: [{ text: "never", tone: "red" }] });
     expect(cellAt(table, 1, "day_status")).toMatchObject({ pills: [{ text: "CLOSED", tone: "green" }] });
     expect(cellAt(table, 1, "safe_count")).toMatchObject({ pills: [{ text: "✓ TODAY", tone: "green" }] });
@@ -433,8 +433,8 @@ describe("drill and the buttons", () => {
 
 describe("print and export", () => {
   it("the title and the file name", () => {
-    expect(printTitle(TODAY, "")).toBe("Cash Position — 17-10-2026 · every branch");
-    expect(printTitle(TODAY, "Acme Foods - Madurai")).toBe("Cash Position — 17-10-2026 · Acme Foods - Madurai");
+    expect(printTitle(TODAY, "")).toBe("Cash Position — 17/10/2026 · every branch");
+    expect(printTitle(TODAY, "Acme Foods - Madurai")).toBe("Cash Position — 17/10/2026 · Acme Foods - Madurai");
     expect(exportFileName(TODAY)).toBe("cash-position-2026-10-17.csv");
   });
 
@@ -448,7 +448,7 @@ describe("print and export", () => {
       events: eventsTable([{ at_text: "02:10 PM", branch_name: "Acme <b>", what: "x" }]),
       cashiers: cashiersTable([]),
     });
-    expect(page).toContain("<h2>Cash Position — 17-10-2026 · every branch</h2>");
+    expect(page).toContain("<h2>Cash Position — 17/10/2026 · every branch</h2>");
     expect(page).toContain("STORES: <b>2 · 1 day-closed</b> · LIVE SESSIONS: <b>1</b>");
     expect(page).toContain("<h3>Stores</h3>");
     expect(page).toContain('<td class="r">1,500.00</td>');

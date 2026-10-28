@@ -97,7 +97,7 @@ describe("buildLines", () => {
 
   it("sends identity columns only when the item tracks them", () => {
     const untracked = buildLines([
-      line({ batchNo: "B1", mfgDate: "01-01-2026", expiryDate: "31-12-2027", serialNo: "S1", mrp: 30, supplierId: "sup-1" }),
+      line({ batchNo: "B1", mfgDate: "01/01/2026", expiryDate: "31/12/2027", serialNo: "S1", mrp: 30, supplierId: "sup-1" }),
     ])[0];
     expect(untracked.batchNo).toBeUndefined();
     expect(untracked.expiryDate).toBeUndefined();
@@ -109,8 +109,8 @@ describe("buildLines", () => {
       line({
         trackSignature: "BMSERP",
         batchNo: " B1 ",
-        mfgDate: "01-01-2026",
-        expiryDate: "31-12-2027",
+        mfgDate: "01/01/2026",
+        expiryDate: "31/12/2027",
         serialNo: "S1",
         mrp: 30,
         salePrice: 28,
@@ -289,7 +289,7 @@ describe("reading the stored document", () => {
     expect(row.costPerUnit).toBe(240);
     expect(row.costRate).toBe(20);
     expect(row.value).toBe(2400);
-    expect(row.expiryDate).toBe("31-03-2027");
+    expect(row.expiryDate).toBe("31/03/2027");
     expect(row.trackSignature).toBe("N");
     expect(row.splitNo).toBe(1);
   });

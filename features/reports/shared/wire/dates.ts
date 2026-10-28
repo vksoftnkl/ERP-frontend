@@ -1,6 +1,6 @@
 /**
  * Dates stay strings end to end (plan §4.3): ISO `YYYY-MM-DD` on the wire,
- * `dd-MM-yyyy` on screen. The only `Date` built here is a UTC one, and only
+ * `dd/MM/yyyy` on screen. The only `Date` built here is a UTC one, and only
  * for day arithmetic, so no timezone can move a day.
  */
 
@@ -16,11 +16,11 @@ export function isIsoDate(value: string): boolean {
   return utc.getUTCFullYear() === y && utc.getUTCMonth() === m - 1 && utc.getUTCDate() === d;
 }
 
-/** `2026-09-25` (or an ISO timestamp) → `25-09-2026`. Anything else is returned as is. */
+/** `2026-09-25` (or an ISO timestamp) → `25/09/2026`. Anything else is returned as is. */
 export function displayDate(iso: string | null | undefined): string {
   if (!iso) return "";
   const match = ISO_DATE.exec(iso);
-  return match ? `${match[3]}-${match[2]}-${match[1]}` : iso;
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : iso;
 }
 
 /** First ten characters of an ISO date or timestamp: the day, as the wire means it. */

@@ -412,7 +412,7 @@ describe("the live panel", () => {
 describe("a session of an earlier business date", () => {
   const today = check({ deviceSession: live() }); // business date 2026-10-09
   const ENDED =
-    "Session C01-261009-01 belongs to business date 08-10-2026 — today is 09-10-2026. It cannot take bills any " +
+    "Session C01-261009-01 belongs to business date 08/10/2026 — today is 09/10/2026. It cannot take bills any " +
     "more.\n\nEnd shift: count the drawer and close it, then open a session for today.";
 
   it("reads the date off sessions/get", () => {

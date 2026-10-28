@@ -17,6 +17,7 @@
  *  3. Only a DRAFT may be deleted. A posted payment is CANCELLED from inside,
  *     which writes a reversal.
  */
+import { DateInput } from "@/components/design-system/ui/date-input";
 import { useCallback, useMemo, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import type { MasterTableRow } from "@/components/master/crud-master-page.types";
@@ -192,14 +193,13 @@ export function PaymentListView({ onCreate, onOpen }: PaymentListViewProps) {
           <label className={masterStyles.filterLabel} htmlFor="payment-from">
             From
           </label>
-          <input
+          <DateInput
             id="payment-from"
-            type="date"
             className={styles.input}
             value={fromDate}
             max={toDate || undefined}
-            onChange={(event) => {
-              setFromDate(event.target.value);
+            onChange={(value) => {
+              setFromDate(value);
               setPeriod("custom");
             }}
           />
@@ -208,14 +208,13 @@ export function PaymentListView({ onCreate, onOpen }: PaymentListViewProps) {
           <label className={masterStyles.filterLabel} htmlFor="payment-to">
             To
           </label>
-          <input
+          <DateInput
             id="payment-to"
-            type="date"
             className={styles.input}
             value={toDate}
             min={fromDate || undefined}
-            onChange={(event) => {
-              setToDate(event.target.value);
+            onChange={(value) => {
+              setToDate(value);
               setPeriod("custom");
             }}
           />

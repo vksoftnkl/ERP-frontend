@@ -16,6 +16,7 @@ import { useApi } from "@/hooks/useApi";
 import { ModalShell } from "@/features/sales/quotation/components/modal-shell";
 import quotationStyles from "@/features/sales/quotation/page.module.scss";
 import { getGridId, useGridId } from "@/lib/configured-grids";
+import { normalizeDateText } from "@/lib/date-format";
 import { useGetGridColumnsQuery } from "@/store/api/metadataApi";
 import {
   TXN_HISTORY_FALLBACK_COLUMNS,
@@ -257,7 +258,8 @@ export function TxnHistoryDialog({ target, docLabel, onClose }: TxnHistoryDialog
                       {column.field === TXN_HISTORY_FIELDS.event && value ? (
                         <span className={`${PILL_CLASS} ${TONE_CLASS[txnEventTone(value)]}`}>{value}</span>
                       ) : (
-                        value
+                        // Grid 126 writes its stamps `DD-MM-YYYY hh:mm AM`.
+                        normalizeDateText(value)
                       )}
                     </td>
                   );

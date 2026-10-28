@@ -121,13 +121,13 @@ export function isoDateOf(value: string | null | undefined): string {
   return ISO_DATE.test(head) ? head : text;
 }
 
-/** `dd-MM-yyyy` — the grid's date format. Anything unparseable is shown as it came. */
+/** `dd/MM/yyyy` — the grid's date format. Anything unparseable is shown as it came. */
 export function displayDate(value: string): string {
   const match = ISO_DATE.exec((value ?? "").trim());
   if (!match) {
     return value ?? "";
   }
-  return `${match[3]}-${match[2]}-${match[1]}`;
+  return `${match[3]}/${match[2]}/${match[1]}`;
 }
 
 function pad(value: number): string {
@@ -172,13 +172,13 @@ export function addHoursLocal(value: string, hours: number): string {
   return toLocalDateTime(new Date(date.getTime() + hours * 60 * 60 * 1000));
 }
 
-/** `dd-MM-yyyy hh:mm AM` — the freeze fields' display format (Qt `dd-MM-yyyy hh:mm AP`). */
+/** `dd/MM/yyyy hh:mm AM` — the freeze fields' display format (Qt `dd-MM-yyyy hh:mm AP`, slashed on the web). */
 export function displayDateTime(value: string): string {
   const match = LOCAL_DATE_TIME.exec((value ?? "").trim());
   if (!match) {
     return "";
   }
-  return `${match[3]}-${match[2]}-${match[1]} ${clock12FromHhmm(`${match[4]}:${match[5]}`)}`;
+  return `${match[3]}/${match[2]}/${match[1]} ${clock12FromHhmm(`${match[4]}:${match[5]}`)}`;
 }
 
 /** A trailing AM / PM marker — `PM`, `pm`, `p.m.`, or just `p`. */

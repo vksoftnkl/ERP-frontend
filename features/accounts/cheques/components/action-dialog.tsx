@@ -90,7 +90,7 @@ export function ActionDialog(props: ActionDialogProps) {
         {rows.map((row) => (
           <li key={row.apdId}>
             <span>{describe(row)}</span>
-            <span>{row.instrumentDate ? row.instrumentDate.split("-").reverse().join("-") : ""}</span>
+            <span>{row.instrumentDate ? row.instrumentDate.split("-").reverse().join("/") : ""}</span>
           </li>
         ))}
       </ul>

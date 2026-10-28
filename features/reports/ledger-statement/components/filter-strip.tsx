@@ -15,6 +15,7 @@ import type { LedgerStatementClient } from "../api/ledger-statement";
 import type { ErrorField } from "../wire/errors";
 import type { LedgerPickItem } from "../wire/types";
 import { LedgerPicker } from "./ledger-picker";
+import { DateInput } from "@/components/design-system/ui/date-input";
 
 export type Draft = {
   ledger: { id: string; text: string } | null;
@@ -86,24 +87,24 @@ export function FilterStrip({
 
       <label className={cx(styles.field, styles.fieldDate, flagged === "dates" && styles.fieldFlagged)}>
         <span className={styles.fieldLabel}>From</span>
-        <input
-          type="date"
+        <DateInput
+          block
           className={styles.input}
           value={draft.fromDate}
           min={yearBegin ?? undefined}
           max={yearEnd ?? undefined}
-          onChange={(event) => onDraft({ fromDate: event.target.value })}
+          onChange={(value) => onDraft({ fromDate: value })}
         />
       </label>
       <label className={cx(styles.field, styles.fieldDate, flagged === "dates" && styles.fieldFlagged)}>
         <span className={styles.fieldLabel}>To</span>
-        <input
-          type="date"
+        <DateInput
+          block
           className={styles.input}
           value={draft.toDate}
           min={yearBegin ?? undefined}
           max={yearEnd ?? undefined}
-          onChange={(event) => onDraft({ toDate: event.target.value })}
+          onChange={(value) => onDraft({ toDate: value })}
         />
       </label>
 

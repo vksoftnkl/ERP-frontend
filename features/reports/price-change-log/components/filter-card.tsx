@@ -25,6 +25,7 @@ import {
   type PriceTableFilter,
 } from "../wire/types";
 import { actionLabel, sourceLabel } from "../view/words";
+import { DateInput } from "@/components/design-system/ui/date-input";
 
 export type FilterPick = { id: string; text: string } | null;
 
@@ -77,14 +78,13 @@ function DateBox({
   // The box's own text while it is being keyed; the applied value otherwise.
   const [draft, setDraft] = useState<string | null>(null);
   return (
-    <input
+    <DateInput
       id={id}
-      type="date"
+      block
       className={styles.input}
       aria-label={label}
       value={draft ?? value}
-      onChange={(event) => {
-        const next = event.target.value;
+      onChange={(next) => {
         if (plausibleDay(next)) {
           setDraft(null);
           if (next !== value) onCommit(next);

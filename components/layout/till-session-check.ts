@@ -36,7 +36,7 @@ export type TillCheckOutcome =
   | { kind: "open" }
   | { kind: "info"; text: string };
 
-/** An ISO instant as the local `dd-MM hh:mm AM` (Qt c77f3f1 `dd-MM hh:mm AP`); blank when it is not one. */
+/** An ISO instant as the local `dd/MM hh:mm AM` (the house date, Qt c77f3f1 `dd-MM hh:mm AP`); blank when it is not one. */
 export function openedAtText(iso: string | null | undefined): string {
   return dayMonthTime12Of(iso);
 }

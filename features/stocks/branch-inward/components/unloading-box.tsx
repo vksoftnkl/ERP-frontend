@@ -7,6 +7,7 @@
  * posts it with the receipt, at this (the receiving) branch. A reopened receipt
  * shows the charge it posted.
  */
+import { DateTimeInput } from "@/components/design-system/ui/date-input";
 import { useMemo } from "react";
 import { NexDropdownMulti, NexDropdownSingle } from "@/components/design-system/dropdown";
 import { useDropdownId } from "@/lib/configured-dropdowns";
@@ -60,13 +61,12 @@ export function UnloadingBox({
         <label className={quotationStyles.label} htmlFor="branch-inward-unload-at">
           On
         </label>
-        <input
+        <DateTimeInput
           id="branch-inward-unload-at"
-          type="datetime-local"
           className={quotationStyles.input}
           value={draft.unloadAt}
           disabled={fieldsOff}
-          onChange={(event) => patch({ unloadAt: event.target.value })}
+          onChange={(value) => patch({ unloadAt: value })}
         />
         <label className={quotationStyles.label} htmlFor="branch-inward-unloadman">
           Unloadman

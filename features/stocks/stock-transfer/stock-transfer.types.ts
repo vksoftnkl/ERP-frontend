@@ -250,7 +250,7 @@ export type TransferLine = {
   lotId: string;
   bucket: string;
   batchNo: string;
-  /** dd-MM-yyyy on screen. */
+  /** dd/MM/yyyy on screen. */
   expiryDate: string;
   mrp: number | null;
   /** An iuc_id, never a unit_id. */

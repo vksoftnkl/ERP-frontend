@@ -695,7 +695,7 @@ export function AdjustmentLineGrid(props: AdjustmentLineGridProps) {
               stop={stop}
               value={value}
               align="center"
-              placeholder="dd-MM-yyyy"
+              placeholder="dd/MM/yyyy"
               onActive={active}
               onCommit={commit}
             />

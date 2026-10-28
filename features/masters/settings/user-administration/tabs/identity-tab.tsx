@@ -21,6 +21,7 @@ import { cx } from "@/components/design-system/cx";
 import { NexDropdownSingle } from "@/components/design-system/dropdown";
 import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 import { useDropdownId } from "@/lib/configured-dropdowns";
+import { formatLocalDate } from "@/lib/date-format";
 import { formatClock12 } from "@/lib/time-format";
 import { useGetBranchesByCompanyQuery } from "@/store/api/businessContextApi";
 import type { EntryMode } from "../domain/entryModel";
@@ -102,7 +103,7 @@ function Check({
 function when(iso: string | null): string {
   if (!iso) return "—";
   const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? iso : `${date.toLocaleDateString()}, ${formatClock12(date)}`;
+  return Number.isNaN(date.getTime()) ? iso : `${formatLocalDate(date)}, ${formatClock12(date)}`;
 }
 
 export function IdentityTab({

@@ -1,6 +1,7 @@
 "use client";
 
 import type { ChangeEvent } from "react";
+import { DateInput } from "@/components/design-system/ui/date-input";
 import { valueSourceFor } from "../lib/value-sources";
 import { parseBool } from "../lib/value-text";
 import type { SettingRow } from "../use-app-settings";
@@ -117,14 +118,14 @@ export default function SettingControl({
 
   if (row.asdDataType === "DATE") {
     return (
-      <input
+      <DateInput
+        block
         id={controlId}
-        type="date"
         className={`${styles.control} ${invalid ? styles.controlInvalid : ""}`}
         value={row.draft}
         disabled={disabled}
         aria-describedby={describedBy}
-        onChange={handle}
+        onChange={onChange}
       />
     );
   }

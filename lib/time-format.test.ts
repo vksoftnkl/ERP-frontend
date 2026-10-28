@@ -43,8 +43,8 @@ describe("clock12FromHhmm", () => {
 describe("dateTime12Of / dayMonthTime12Of", () => {
   it("prefixes the local date", () => {
     const at = new Date(2026, 0, 3, 8, 15);
-    expect(dateTime12Of(at)).toBe("03-01-2026 08:15 AM");
-    expect(dayMonthTime12Of(at.toISOString())).toBe("03-01 08:15 AM");
+    expect(dateTime12Of(at)).toBe("03/01/2026 08:15 AM");
+    expect(dayMonthTime12Of(at.toISOString())).toBe("03/01 08:15 AM");
     expect(dateTime12Of("x")).toBe("");
   });
 });

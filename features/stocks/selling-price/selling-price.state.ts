@@ -14,7 +14,8 @@
  * The blank row Qt keeps at the bottom of the grid is NOT a row here: the grid
  * renders it after the last one. Row N on screen is `rows[N - 1]`.
  */
-import { isRealDate, toDisplayDate } from "@/features/sales/quotation/quotation.utils";
+import { isRealDate } from "@/features/sales/quotation/quotation.utils";
+import { isoToDisplayDate } from "@/lib/date-format";
 import {
   ALL_LEVELS_ON,
   LEVEL_COUNT,
@@ -703,7 +704,7 @@ export function isSchedulingDay(value: string, today: string): boolean {
 /** The line beside the field (Qt `refreshPriceFrom`) — "" unless it schedules. */
 export function priceFromNote(value: string, today: string): string {
   return isSchedulingDay(value, today)
-    ? `new prices start ${toDisplayDate(priceFromDay(value, today))} — today's stay till then`
+    ? `new prices start ${isoToDisplayDate(priceFromDay(value, today))} — today's stay till then`
     : "";
 }
 

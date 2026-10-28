@@ -76,7 +76,7 @@ const daySession = (patch: GridRow = {}): GridRow => ({
   ...patch,
 });
 
-const dayTarget: ReviewTarget = { kind: "day", id: "day-1", year: "2026-2027", text: "The business day 17-10" };
+const dayTarget: ReviewTarget = { kind: "day", id: "day-1", year: "2026-2027", text: "The business day 17/10" };
 const sessionTarget: ReviewTarget = { kind: "session", id: "s-live", year: "2026-2027", text: "ZT2-261017-01 · Kavi · OPEN" };
 
 const form = (patch: Partial<ReviewForm> = {}): ReviewForm => ({ ...EMPTY_REVIEW_FORM, target: dayTarget, ...patch });
@@ -125,7 +125,7 @@ describe("outcomes", () => {
 
 describe("the title and the facts", () => {
   it("names the store and the day", () => {
-    expect(reviewTitle("Acme Foods - Coimbatore Branch", AS_ON)).toBe("Add HO review — Acme Foods - Coimbatore Branch · 17-10-2026");
+    expect(reviewTitle("Acme Foods - Coimbatore Branch", AS_ON)).toBe("Add HO review — Acme Foods - Coimbatore Branch · 17/10/2026");
   });
 
   it("the live session fact names the oldest live session with its hours", () => {
@@ -163,7 +163,7 @@ describe("the title and the facts", () => {
         NOW,
       ).map((fact) => [fact.key, fact]),
     );
-    expect(byKey.day).toMatchObject({ value: "16-10 OPEN", tone: "red" });
+    expect(byKey.day).toMatchObject({ value: "16/10 OPEN", tone: "red" });
     expect(byKey.live.tone).toBe("red");
     expect(byKey.safeCount).toMatchObject({ value: "today", tone: "green" });
     expect(byKey.transit).toMatchObject({ value: "12,000.00 · 2 d", tone: "red" });
@@ -202,7 +202,7 @@ describe("what is reviewed", () => {
       [daySession(), daySession({ tss_id: "s-live", tss_session_no: "ZT2-261017-01", status_text: "OPEN" })],
     );
     expect(targets.map((target) => target.text)).toEqual([
-      "The business day 17-10",
+      "The business day 17/10",
       "ZT2-261017-01 · Kavi · OPEN",
       "ZT1-261017-01 · Mani · CLOSED",
     ]);
@@ -276,8 +276,8 @@ describe("the journal", () => {
       },
     ]);
     expect(options).toEqual([
-      { id: "v1", year: "2026-2027", text: "JV/0012 · 10-10-2026 · 8,000.00 · Coimbatore safe short written off after " },
-      { id: "v3", year: "2026-2027", text: "JV/0014 · 12-10-2026 · 250.50" },
+      { id: "v1", year: "2026-2027", text: "JV/0012 · 10/10/2026 · 8,000.00 · Coimbatore safe short written off after " },
+      { id: "v3", year: "2026-2027", text: "JV/0014 · 12/10/2026 · 250.50" },
     ]);
   });
 });
@@ -342,11 +342,11 @@ describe("earlier reviews", () => {
   it("On · Reviewing · Outcome (a pill) · By · Note", () => {
     expect(HISTORY_COLUMNS.map((column) => column.title)).toEqual(["On", "Reviewing", "Outcome", "By", "Note"]);
     const table = historyTable([
-      { tsr_id: "r1", on_text: "17-10 01:00 PM", reviewing: "day 17-10", tsr_outcome: "ESCALATED", reviewer: "HO", note: "n" },
+      { tsr_id: "r1", on_text: "17/10 01:00 PM", reviewing: "day 17-10", tsr_outcome: "ESCALATED", reviewer: "HO", note: "n" },
     ]);
     expect(table.rows[0].key).toBe("r1");
     expect(table.rows[0].cells[2].pills).toEqual([{ text: "ESCALATED", tone: "red" }]);
-    expect(table.rows[0].cells.map((cell) => cell.text)).toEqual(["17-10 01:00 PM", "day 17-10", "ESCALATED", "HO", "n"]);
+    expect(table.rows[0].cells.map((cell) => cell.text)).toEqual(["17/10 01:00 PM", "day 17-10", "ESCALATED", "HO", "n"]);
   });
 
   it("the head: newest first, or none yet", () => {

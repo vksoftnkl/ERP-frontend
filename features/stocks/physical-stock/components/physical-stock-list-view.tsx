@@ -14,6 +14,7 @@
  *    it. Cancel (F3) is live on a DRAFT and on a POSTED row, asks why, and
  *    says what it is about to do.
  */
+import { DateInput } from "@/components/design-system/ui/date-input";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import type { MasterTableRow } from "@/components/master/crud-master-page.types";
@@ -333,14 +334,13 @@ export function PhysicalStockListView({
           <label className={masterStyles.filterLabel} htmlFor="physical-stock-from">
             From
           </label>
-          <input
+          <DateInput
             id="physical-stock-from"
-            type="date"
             className={styles.filterDateInput}
             value={fromDate}
             max={toDate || undefined}
-            onChange={(event) => {
-              setFromDate(event.target.value);
+            onChange={(value) => {
+              setFromDate(value);
               setPeriod("custom");
             }}
           />
@@ -349,14 +349,13 @@ export function PhysicalStockListView({
           <label className={masterStyles.filterLabel} htmlFor="physical-stock-to">
             To
           </label>
-          <input
+          <DateInput
             id="physical-stock-to"
-            type="date"
             className={styles.filterDateInput}
             value={toDate}
             min={fromDate || undefined}
-            onChange={(event) => {
-              setToDate(event.target.value);
+            onChange={(value) => {
+              setToDate(value);
               setPeriod("custom");
             }}
           />

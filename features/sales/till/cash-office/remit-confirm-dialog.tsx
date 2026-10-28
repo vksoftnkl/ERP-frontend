@@ -31,6 +31,7 @@ import {
   type RemitConfirmRequest,
 } from "./remit-confirm";
 import local from "./cash-office.module.scss";
+import { DateInput } from "@/components/design-system/ui/date-input";
 
 export type RemitConfirmDialogProps = {
   request: RemitConfirmRequest | null;
@@ -126,14 +127,14 @@ function RemitConfirmBody({ request, onClose, onConfirmed }: RemitConfirmDialogP
         <label className={styles.formLabel} htmlFor="till-remit-confirm-date">
           Bank date
         </label>
-        <input
+        <DateInput
+          block
           id="till-remit-confirm-date"
-          type="date"
           className={styles.input}
           min={remit.docDate.slice(0, 10) || undefined}
           max={request.businessDate.slice(0, 10) || undefined}
           value={form.bankDate}
-          onChange={(event) => patch({ bankDate: event.target.value })}
+          onChange={(value) => patch({ bankDate: value })}
         />
 
         <label className={styles.formLabel} htmlFor="till-remit-confirm-ref">

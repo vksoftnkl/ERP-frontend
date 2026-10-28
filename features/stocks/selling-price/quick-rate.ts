@@ -80,10 +80,10 @@ export function figureText(value: unknown): string {
   return formatCurrency(n, whole ? 0 : 2, true);
 }
 
-/** `YYYY-MM-DD…` → `dd-MM-yyyy`; anything else as it came. */
+/** `YYYY-MM-DD…` → `dd/MM/yyyy`; anything else as it came. */
 export function ddmmyyyy(iso: string | null | undefined): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(text(iso));
-  return match ? `${match[3]}-${match[2]}-${match[1]}` : text(iso);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : text(iso);
 }
 
 // ---------------------------------------------------------------------------

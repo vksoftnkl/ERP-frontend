@@ -392,7 +392,7 @@ export const TRANSFORM_SIGNATURES: ReadonlyArray<{
 }> = [
   { name: "fmt", signature: "fmt(value, pattern)", description: "Number/date mask, e.g. '#,##0.00'." },
   { name: "fmtIntl", signature: "fmtIntl(value, locale)", description: "Locale-aware number format." },
-  { name: "date", signature: "date(value, pattern)", description: "Date format, e.g. 'dd-MM-yyyy'." },
+  { name: "date", signature: "date(value, pattern)", description: "Date format, e.g. 'dd/MM/yyyy'." },
   { name: "numToWords", signature: "numToWords(value)", description: "Amount in words, Indian system." },
   { name: "intToWords", signature: "intToWords(value)", description: "Whole number in words." },
   { name: "gstSplit", signature: "gstSplit(amount, rate)", description: "CGST/SGST halves of a tax amount." },
@@ -452,10 +452,11 @@ export const NUMBER_FORMAT_PRESETS = [
 ] as const;
 
 export const DATE_FORMAT_PRESETS = [
-  { pattern: "dd-MM-yyyy", label: "24-08-2026" },
   { pattern: "dd/MM/yyyy", label: "24/08/2026" },
+  { pattern: "dd-MM-yyyy", label: "24-08-2026" },
   { pattern: "dd-MMM-yyyy", label: "24-Aug-2026" },
   { pattern: "yyyy-MM-dd", label: "2026-08-24" },
+  { pattern: "dd/MM/yyyy HH:mm", label: "24/08/2026 14:30" },
   { pattern: "dd-MM-yyyy HH:mm", label: "24-08-2026 14:30" },
 ] as const;
 

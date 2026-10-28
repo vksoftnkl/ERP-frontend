@@ -11,6 +11,7 @@
  * store's terminal and a tender with no map or no settlement ledger, each with
  * its code.
  */
+import { DateInput } from "@/components/design-system/ui/date-input";
 import { useRef, useState } from "react";
 import { toast } from "@/lib/notify";
 import { cx } from "@/components/design-system/cx";
@@ -222,14 +223,13 @@ export function ImportDialog({
             aria-label="Give the payout date"
             onChange={(event) => setPayoutDateOn(event.target.checked)}
           />
-          <input
-            type="date"
+          <DateInput
             className={styles.input}
             style={{ width: "auto" }}
             value={payoutDate}
             disabled={busy || !payoutDateOn}
             aria-label="Payout date"
-            onChange={(event) => setPayoutDate(event.target.value)}
+            onChange={(value) => setPayoutDate(value)}
           />
           <span className={styles.muted}>only when the file has no payout column</span>
         </div>

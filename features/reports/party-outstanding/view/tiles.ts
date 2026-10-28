@@ -24,7 +24,7 @@ export type Tile = {
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-/** `2026-09-26` → `26-09`. */
+/** `2026-09-26` → `26/09`. */
 function dayMonth(iso: string): string {
   return displayDate(iso).slice(0, 5);
 }

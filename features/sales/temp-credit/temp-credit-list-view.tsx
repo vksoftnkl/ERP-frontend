@@ -53,6 +53,7 @@ import {
   tempCreditOf,
   type TempCreditRow,
 } from "./row";
+import { DateInput } from "@/components/design-system/ui/date-input";
 
 /** The window the register opens on: a year — a promise can be an old one. */
 const DEFAULT_WINDOW_DAYS = 365;
@@ -388,14 +389,13 @@ export function TempCreditListView({ onOpenBill, onCreateBill }: TempCreditListV
           <label className={masterStyles.filterLabel} htmlFor="tc-from">
             From
           </label>
-          <input
+          <DateInput
             id="tc-from"
-            type="date"
             className={receiptStyles.input}
             value={fromDate}
             max={toDate || undefined}
-            onChange={(event) => {
-              setFromDate(event.target.value);
+            onChange={(value) => {
+              setFromDate(value);
               setPeriod("custom");
             }}
           />
@@ -404,14 +404,13 @@ export function TempCreditListView({ onOpenBill, onCreateBill }: TempCreditListV
           <label className={masterStyles.filterLabel} htmlFor="tc-to">
             To
           </label>
-          <input
+          <DateInput
             id="tc-to"
-            type="date"
             className={receiptStyles.input}
             value={toDate}
             min={fromDate || undefined}
-            onChange={(event) => {
-              setToDate(event.target.value);
+            onChange={(value) => {
+              setToDate(value);
               setPeriod("custom");
             }}
           />

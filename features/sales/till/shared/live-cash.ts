@@ -57,7 +57,7 @@ export function liveGridParams(scope: LiveScope, status: string): Record<string,
 
 /** "13-10-2026" → "2026-10-13"; anything else → "". */
 function isoOfDisplayDate(value: string): string {
-  const match = /^(\d{2})-(\d{2})-(\d{4})$/.exec(value.trim());
+  const match = /^(\d{2})[-/](\d{2})[-/](\d{4})$/.exec(value.trim());
   return match ? `${match[3]}-${match[2]}-${match[1]}` : "";
 }
 

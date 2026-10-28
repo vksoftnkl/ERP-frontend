@@ -46,7 +46,7 @@ describe("scheduled prices list", () => {
   it("shows 'before → after' where a level changes and the plain price where it does not", () => {
     const cells = scheduleCells(row(), [0, 1], "Coimbatore");
     expect(cells.prices).toEqual(["110.00 → 118.00", "120.00"]);
-    expect(cells.from).toBe("24-10-2026");
+    expect(cells.from).toBe("24/10/2026");
     expect(cells.branch).toBe("Coimbatore");
   });
 
@@ -67,7 +67,7 @@ describe("scheduled prices list", () => {
   });
 
   it("formats an ISO day as dd-MM-yyyy", () => {
-    expect(scheduleDateText("2026-10-24T00:00:00.000Z")).toBe("24-10-2026");
+    expect(scheduleDateText("2026-10-24T00:00:00.000Z")).toBe("24/10/2026");
     expect(scheduleDateText("")).toBe("");
   });
 });

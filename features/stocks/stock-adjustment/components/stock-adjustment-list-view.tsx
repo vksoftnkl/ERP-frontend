@@ -17,6 +17,8 @@
  * with the same reason and question the entry asks. The legacy keys are the
  * list's own: F1 add, Enter / F2 edit, Ctrl+Enter view, F3 cancel, F5 refresh.
  */
+import { isoToDisplayDate } from "@/lib/date-format";
+import { DateInput } from "@/components/design-system/ui/date-input";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import type { MasterTableRow } from "@/components/master/crud-master-page.types";
@@ -27,7 +29,7 @@ import { ErpActionIcon } from "@/components/design-system/icons/erp-action-icons
 import { formatCurrency } from "@/domain/pricing";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { documentRights } from "@/lib/permissions/document-rights";
-import { accountingYearOf, addDays, toDisplayDate, todayIso, toNumber } from "@/features/sales/quotation/quotation.utils";
+import { accountingYearOf, addDays, todayIso, toNumber } from "@/features/sales/quotation/quotation.utils";
 import { useCancelStockAdjustmentMutation, useDeleteStockAdjustmentMutation } from "../stock-adjustment.api";
 import {
   LIST_DEFAULT_DAYS_BACK,
@@ -120,7 +122,7 @@ const STATUS_PILL: Record<string, string> = {
 };
 
 const COLUMN_RENDER_OVERRIDES = {
-  svh_doc_date: (row: MasterTableRow) => toDisplayDate(asText(sourceValue(row, "svh_doc_date")).slice(0, 10)),
+  svh_doc_date: (row: MasterTableRow) => isoToDisplayDate(asText(sourceValue(row, "svh_doc_date")).slice(0, 10)),
   svh_total_qty: (row: MasterTableRow) => qtyCell(toNumber(asText(sourceValue(row, "svh_total_qty")))),
   svh_total_value: (row: MasterTableRow) =>
     formatCurrency(toNumber(asText(sourceValue(row, "svh_total_value"))), 2, true),
@@ -358,14 +360,13 @@ export function StockAdjustmentListView({ onCreate, onOpen }: StockAdjustmentLis
           <label className={masterStyles.filterLabel} htmlFor="stock-adjustment-from">
             From
           </label>
-          <input
+          <DateInput
             id="stock-adjustment-from"
-            type="date"
             className={styles.filterDate}
             value={fromDate}
             max={toDate || undefined}
-            onChange={(event) => {
-              setFromDate(event.target.value);
+            onChange={(value) => {
+              setFromDate(value);
               setPeriod("custom");
             }}
           />
@@ -374,14 +375,13 @@ export function StockAdjustmentListView({ onCreate, onOpen }: StockAdjustmentLis
           <label className={masterStyles.filterLabel} htmlFor="stock-adjustment-to">
             To
           </label>
-          <input
+          <DateInput
             id="stock-adjustment-to"
-            type="date"
             className={styles.filterDate}
             value={toDate}
             min={fromDate || undefined}
-            onChange={(event) => {
-              setToDate(event.target.value);
+            onChange={(value) => {
+              setToDate(value);
               setPeriod("custom");
             }}
           />

@@ -17,6 +17,8 @@
  * read-only. The list's own keys: F1 add, Enter / F2 edit, Ctrl+Enter view,
  * F3 cancel (godown), F5 refresh.
  */
+import { isoToDisplayDate } from "@/lib/date-format";
+import { DateInput } from "@/components/design-system/ui/date-input";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import type { MasterTableRow } from "@/components/master/crud-master-page.types";
@@ -27,7 +29,7 @@ import { ErpActionIcon } from "@/components/design-system/icons/erp-action-icons
 import { formatCurrency } from "@/domain/pricing";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { documentRights } from "@/lib/permissions/document-rights";
-import { accountingYearOf, addDays, toDisplayDate, todayIso, toNumber } from "@/features/sales/quotation/quotation.utils";
+import { accountingYearOf, addDays, todayIso, toNumber } from "@/features/sales/quotation/quotation.utils";
 import { qtyCell } from "@/features/stocks/stock-adjustment/stock-adjustment.format";
 import { useCancelStockTransferMutation, useDeleteStockTransferMutation } from "../stock-transfer.api";
 import {
@@ -363,7 +365,7 @@ export function StockTransferListView({ mode, onCreate, onOpen }: StockTransferL
       ) : null;
     };
     return {
-      svh_doc_date: (row: MasterTableRow) => toDisplayDate(asText(sourceValue(row, "svh_doc_date")).slice(0, 10)),
+      svh_doc_date: (row: MasterTableRow) => isoToDisplayDate(asText(sourceValue(row, "svh_doc_date")).slice(0, 10)),
       svh_total_qty: (row: MasterTableRow) => qtyCell(toNumber(asText(sourceValue(row, "svh_total_qty")))),
       in_transit_qty: (row: MasterTableRow) => qtyCell(toNumber(asText(sourceValue(row, "in_transit_qty")))),
       svh_total_value: (row: MasterTableRow) =>
@@ -381,14 +383,13 @@ export function StockTransferListView({ mode, onCreate, onOpen }: StockTransferL
           <label className={masterStyles.filterLabel} htmlFor={`st-${mode}-from`}>
             From
           </label>
-          <input
+          <DateInput
             id={`st-${mode}-from`}
-            type="date"
             className={styles.filterDate}
             value={fromDate}
             max={toDate || undefined}
-            onChange={(event) => {
-              setFromDate(event.target.value);
+            onChange={(value) => {
+              setFromDate(value);
               setPeriod("custom");
             }}
           />
@@ -397,14 +398,13 @@ export function StockTransferListView({ mode, onCreate, onOpen }: StockTransferL
           <label className={masterStyles.filterLabel} htmlFor={`st-${mode}-to`}>
             To
           </label>
-          <input
+          <DateInput
             id={`st-${mode}-to`}
-            type="date"
             className={styles.filterDate}
             value={toDate}
             min={fromDate || undefined}
-            onChange={(event) => {
-              setToDate(event.target.value);
+            onChange={(value) => {
+              setToDate(value);
               setPeriod("custom");
             }}
           />

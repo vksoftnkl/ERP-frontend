@@ -113,10 +113,10 @@ export function collectArgsOf(row: TempCreditRow | null): TempCreditCollect | nu
   };
 }
 
-/** `dd-mm-yyyy` out of a date or timestamp; blank when there is none. */
+/** `dd/mm/yyyy` out of a date or timestamp; blank when there is none. */
 export function displayDate(value: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value.trim());
-  return match ? `${match[3]}-${match[2]}-${match[1]}` : "";
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : "";
 }
 
 /** The Qt dialog's title line: who, mobile, bill, balance, due. */

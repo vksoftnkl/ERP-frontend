@@ -152,7 +152,7 @@ describe("grn.state — the lines", () => {
     let draft = createDraft(SCOPE, "2026-10-28");
     const key = draft.lines[0].key;
     draft = applyItem(draft, key, { itemId: "i", itemName: "I", uomId: "u", unitName: "Nos", mrp: 0 });
-    draft = editCell(draft, key, COL.Expiry, "31-12-2027");
+    draft = editCell(draft, key, COL.Expiry, "31/12/2027");
     expect(draft.lines[0].expiry).toBe("31/12/2027");
     draft = editCell(draft, key, COL.Expiry, "31/13/2027");
     expect(draft.hint).toBe("Line 1: expiry must be dd/MM/yyyy.");

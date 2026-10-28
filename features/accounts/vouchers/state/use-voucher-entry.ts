@@ -308,7 +308,7 @@ function timeNow(): string {
 
 function dayMonth(iso: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
-  return match ? `${match[3]}-${match[2]}` : iso;
+  return match ? `${match[3]}/${match[2]}` : iso;
 }
 
 const opposite = (side: DrCr): DrCr => (side === "DR" ? "CR" : "DR");
@@ -795,7 +795,7 @@ export function useVoucherEntry(options: UseVoucherEntryOptions) {
     return shownAnswer ? generatedFromDerived(shownAnswer.derived.legs) : [];
   }, [doc.posted, readOnly, shownAnswer]);
 
-  /** "Post-dated, own voucher on dd-MM: party amount (cheque n)". */
+  /** "Post-dated, own voucher on dd/MM: party amount (cheque n)". */
   const postDatedNotes = useMemo(() => {
     const notes: PostDatedNote[] = readOnly
       ? (doc.posted?.postDated ?? [])

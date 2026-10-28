@@ -27,7 +27,7 @@ describe("the grid lines (Qt PriceLogView::fill)", () => {
 
   it("takes the header counts from /days, else from the rows", () => {
     const withDays = buildLines(QT_ROWS, DAYS);
-    expect(dayHeaderText(withDays[0] as DayLine)).toBe("Fri 23-10-2026 · 2 changes · 2 items · 1 user");
+    expect(dayHeaderText(withDays[0] as DayLine)).toBe("Fri 23/10/2026 · 2 changes · 2 items · 1 user");
     const counted = buildLines(QT_ROWS, null);
     expect((counted[3] as DayLine).counts).toBe("4 changes · 2 items · 2 users");
   });

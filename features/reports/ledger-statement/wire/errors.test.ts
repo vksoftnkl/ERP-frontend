@@ -9,7 +9,7 @@ describe("toLedgerError", () => {
     [{ code: "LEDGER_NOT_IN_COMPANY" }, "This ledger belongs to another company.", "ledger"],
     [{ error: { code: "BRANCH_NOT_IN_COMPANY" } }, "That branch is not part of this company.", "branch"],
     [{ errors: [{ code: "RANGE_REVERSED" }] }, "From is after To.", "dates"],
-    [{ message: "RANGE_OUTSIDE_YEAR: fromDate before books" }, "Both dates must fall inside 01-04-2026 – 31-03-2027.", "dates"],
+    [{ message: "RANGE_OUTSIDE_YEAR: fromDate before books" }, "Both dates must fall inside 01/04/2026 – 31/03/2027.", "dates"],
     [{ message: "YEAR_UNKNOWN" }, "The year 2026-2027 is not set up for this company.", null],
   ])("maps %j to a sentence", (data, message, field) => {
     const result = toLedgerError({ status: 422, data }, ctx);

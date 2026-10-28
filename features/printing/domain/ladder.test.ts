@@ -59,7 +59,7 @@ describe("the rung comes from the scope columns, not from ptaSpecificity", () =>
   it("gives the same answer whatever ptaSpecificity happens to say", () => {
     // The first migration generated 2 for a counter; the correction generates
     // 3. Both rows classify identically here, which is the point — and this is
-    // not hypothetical, it is what actually happened on 27-08-2026.
+    // not hypothetical, it is what actually happened on 27/08/2026.
     const applied = assignment({ ptaBranchId: "b1", ptaDeviceId: "d1", ptaSpecificity: 2 });
     const corrected = assignment({ ptaBranchId: "b1", ptaDeviceId: "d1", ptaSpecificity: 3 });
 

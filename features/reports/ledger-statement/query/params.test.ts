@@ -125,7 +125,7 @@ describe("defaults and the client check", () => {
       "From is after To.",
     );
     expect(checkFilters({ ...f, fromDate: "2026-03-01" }, session)?.message).toBe(
-      "Both dates must fall inside 01-04-2026 – 31-03-2027.",
+      "Both dates must fall inside 01/04/2026 – 31/03/2027.",
     );
   });
 });

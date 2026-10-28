@@ -116,7 +116,7 @@ export function buildLines(
     if (tracks(signature, TRACK.Batch) && trimmed(line.batchNo)) {
       dto.batchNo = trimmed(line.batchNo);
     }
-    // Keyed dd-mm-yyyy and held that way in the cell; the engine wants ISO.
+    // Keyed dd/mm/yyyy and held that way in the cell; the engine wants ISO.
     if (tracks(signature, TRACK.Expiry)) {
       const mfg = dateToWire(line.mfgDate);
       if (mfg) {
@@ -296,7 +296,7 @@ export function lineFromPayload(line: OpeningStockLinePayload, key?: string): Op
     bucket: line.bucket ?? "",
     barcode: line.barcode ?? "",
     batchNo: line.batchNo ?? "",
-    // Painted dd-mm-yyyy, the way they were keyed; the response carries ISO.
+    // Painted dd/mm/yyyy, the way they were keyed; the response carries ISO.
     mfgDate: dateFromWire(line.mfgDate),
     expiryDate: dateFromWire(line.expiryDate),
     mrp: toNumber(line.mrp ?? undefined),

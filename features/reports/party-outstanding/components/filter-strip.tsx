@@ -18,6 +18,7 @@ import styles from "../page.module.scss";
 import type { ReportFilters } from "../query/params";
 import type { ErrorField } from "../wire/errors";
 import type { OptionsPayload, OutstandingSide } from "../wire/types";
+import { DateInput } from "@/components/design-system/ui/date-input";
 
 /** What the strip edits: the report filters, with Buckets as typed. */
 export type Draft = Omit<ReportFilters, "buckets"> & { bucketsText: string };
@@ -145,12 +146,11 @@ export function FilterStrip({
 
         <label className={cx(styles.field, flagged === "asOn" && styles.fieldFlagged)} title={AS_ON_TIP}>
           <span className={styles.fieldLabel}>As on</span>
-          <input
+          <DateInput
             ref={asOnRef}
-            type="date"
             className={cx(styles.input, styles.inputDate)}
             value={draft.asOn}
-            onChange={(event) => onDraft({ asOn: event.target.value })}
+            onChange={(value) => onDraft({ asOn: value })}
           />
         </label>
 

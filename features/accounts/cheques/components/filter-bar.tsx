@@ -8,6 +8,7 @@
  * race each other to paint the grid. It lands in `isearch` (see
  * `domain/filters.ts`), never in the runner's own `search`.
  */
+import { DateInput } from "@/components/design-system/ui/date-input";
 import { useEffect, useRef, useState } from "react";
 import { NexDropdownSingle } from "@/components/design-system/dropdown";
 import { useDropdownId } from "@/lib/configured-dropdowns";
@@ -92,22 +93,20 @@ export function FilterBar({ filters, onChange, onClear }: FilterBarProps) {
 
       <label className={styles.field}>
         <span className={styles.fieldLabel}>Dated from</span>
-        <input
-          type="date"
+        <DateInput
           className={`${styles.input} ${styles.dateInput}`}
           value={filters.from}
           max={filters.to || undefined}
-          onChange={(event) => onChange({ from: event.target.value })}
+          onChange={(value) => onChange({ from: value })}
         />
       </label>
       <label className={styles.field}>
         <span className={styles.fieldLabel}>To</span>
-        <input
-          type="date"
+        <DateInput
           className={`${styles.input} ${styles.dateInput}`}
           value={filters.to}
           min={filters.from || undefined}
-          onChange={(event) => onChange({ to: event.target.value })}
+          onChange={(value) => onChange({ to: value })}
         />
       </label>
 

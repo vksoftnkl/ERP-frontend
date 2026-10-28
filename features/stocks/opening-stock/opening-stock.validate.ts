@@ -74,7 +74,7 @@ export function validateBeforeSave(draft: OpeningStockDraft): OpeningStockViolat
       }
       return {
         title: "Date not understood",
-        message: `Line ${row} has "${line[field].trim()}" where a date belongs. Dates are keyed dd-MM-yyyy — 31-03-2027.`,
+        message: `Line ${row} has "${line[field].trim()}" where a date belongs. Dates are keyed dd/MM/yyyy — 31/03/2027.`,
         focus: { kind: "cell", rowKey: line.key, field },
       };
     }

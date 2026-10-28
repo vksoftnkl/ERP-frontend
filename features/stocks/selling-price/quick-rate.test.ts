@@ -341,7 +341,7 @@ describe("the save payload (Q2, Q7)", () => {
     );
     expect(fromDayRefusal("2026-10-24", "2026-10-24")).toBeNull();
     expect(scheduledNotice("2026-10-30", "2026-10-24")).toBe(
-      "The new rates start 30-10-2026; today's rates stay till then.",
+      "The new rates start 30/10/2026; today's rates stay till then.",
     );
     expect(scheduledNotice("2026-10-24", "2026-10-24")).toBeNull();
     expect(scheduledNotice("", "2026-10-24")).toBeNull();
@@ -465,7 +465,7 @@ describe("the headline and the two panels", () => {
       batchNo: null,
     };
     expect(inwardCells(row)).toEqual([
-      "23-10-2026",
+      "23/10/2026",
       "Opening · OPN0006",
       "—",
       "24 PCS",

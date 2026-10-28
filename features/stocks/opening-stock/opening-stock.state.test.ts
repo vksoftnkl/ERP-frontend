@@ -645,8 +645,8 @@ describe("loading a document", () => {
     });
     expect(draft.notice).toBe("");
     expect(auditLinesOf(draft)).toEqual([
-      "Created 23-10-2026 10:15 AM by VKPOS",
-      "Posted 23-10-2026 10:18 PM by VKPOS",
+      "Created 23/10/2026 10:15 AM by VKPOS",
+      "Posted 23/10/2026 10:18 PM by VKPOS",
     ]);
   });
 

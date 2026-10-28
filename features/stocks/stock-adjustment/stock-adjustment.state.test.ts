@@ -302,7 +302,7 @@ describe("picking a holding", () => {
       itemId: "item-1",
       lotId: "lot-1",
       batchNo: "B-0917",
-      expiryDate: "30-09-2026",
+      expiryDate: "30/09/2026",
       supplierName: "Acme Foods",
       bucket: "SALEABLE",
       toBaseFactor: 1,
@@ -353,12 +353,12 @@ describe("edits", () => {
     expect(next.lines[0].baseQty).toBe(-2);
   });
 
-  it("a date is shown dd-MM-yyyy, and a non-date says so", () => {
+  it("a date is shown dd/MM/yyyy, and a non-date says so", () => {
     const line = itemLine({ direction: "IN" });
     const draft = withLines(draftOf("Adjustment"), [line]);
-    expect(editCell(draft, line.key, COL.ExpiryDate, "2027-03-31").draft.lines[0].expiryDate).toBe("31-03-2027");
+    expect(editCell(draft, line.key, COL.ExpiryDate, "2027-03-31").draft.lines[0].expiryDate).toBe("31/03/2027");
     const bad = editCell(draft, line.key, COL.ExpiryDate, "31/02/2027").draft;
-    expect(bad.hint).toBe('Line 1: "31/02/2027" is not a date — key dd-MM-yyyy.');
+    expect(bad.hint).toBe('Line 1: "31/02/2027" is not a date — key dd/MM/yyyy.');
   });
 
   it("a move into the bucket it is in is pointed out", () => {

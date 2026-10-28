@@ -258,7 +258,7 @@ describe("the title block", () => {
 
   it("a loaded one says who created and posted it, in the 12-hour house format", () => {
     const draft = draftFromPayload(SCOPE, { header: header(), lines: [], kind: "ADJUSTMENT" }, false, "2026-10-26");
-    expect(auditLines(draft)).toEqual(["Created 24-10-2026 09:05 AM by Ravi", "Posted 24-10-2026 02:30 PM by Priya"]);
+    expect(auditLines(draft)).toEqual(["Created 24/10/2026 09:05 AM by Ravi", "Posted 24/10/2026 02:30 PM by Priya"]);
     expect(draft.notice).toBe("");
   });
 
@@ -266,7 +266,7 @@ describe("the title block", () => {
     expect(stampsFromHeader(header({ createdByName: null })).createdBy).toBe("");
     expect(stampsFromHeader(header({ createdByName: null, createdBy: "Tally import" })).createdBy).toBe("Tally import");
     const cancelled = stampsFromHeader(header({ cancelledOn: "2026-10-25T18:00:00" }));
-    expect(auditLines({ svhId: "svh-1", stamps: cancelled })).toContain("Cancelled 25-10-2026 06:00 PM");
+    expect(auditLines({ svhId: "svh-1", stamps: cancelled })).toContain("Cancelled 25/10/2026 06:00 PM");
   });
 
   it("a draft saved just now already says who created it", () => {
@@ -277,7 +277,7 @@ describe("the title block", () => {
       { header: header({ status: "DRAFT", postedOn: null, postedByName: null }), lines: [linePayload()], rowsPosted: null },
       [line.key],
     );
-    expect(auditLines(saved)).toEqual(["Created 24-10-2026 09:05 AM by Ravi"]);
+    expect(auditLines(saved)).toEqual(["Created 24/10/2026 09:05 AM by Ravi"]);
   });
 
   it("the scope line is the godown alone — the voucher number carries the year", () => {

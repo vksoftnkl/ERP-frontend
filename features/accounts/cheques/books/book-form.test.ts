@@ -82,6 +82,6 @@ describe("the cheque-book form", () => {
     expect(bookFigures(aBook())).toBe("ACTIVE · 26 used · 24 left · next 000127");
     expect(
       bookFigures(aBook({ status: "CLOSED", nextLeaf: null, closedOn: "2026-10-01T10:00:00Z", closeReason: "Book lost" })),
-    ).toBe("CLOSED · 26 used · 24 left · closed 01-10-2026 — Book lost");
+    ).toBe("CLOSED · 26 used · 24 left · closed 01/10/2026 — Book lost");
   });
 });

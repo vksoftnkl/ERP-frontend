@@ -8,7 +8,8 @@
  */
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { cx } from "@/components/design-system/cx";
-import { toNumber, toDisplayDate } from "@/features/sales/quotation/quotation.utils";
+import { toNumber } from "@/features/sales/quotation/quotation.utils";
+import { isoToDisplayDate } from "@/lib/date-format";
 import quotationStyles from "@/features/sales/quotation/page.module.scss";
 import { money, qtyCell } from "../../stock-adjustment/stock-adjustment.format";
 import { WORKLIST_HINT } from "../branch-inward.constants";
@@ -35,7 +36,7 @@ const NUMERIC = new Set([5, 6, 7, 11]);
 function cells(row: InboundRow): string[] {
   return [
     row.out_refno ?? "",
-    toDisplayDate((row.out_date ?? "").slice(0, 10)),
+    isoToDisplayDate((row.out_date ?? "").slice(0, 10)),
     row.from_branch ?? "",
     row.from_godown ?? "",
     row.to_godown ?? "",

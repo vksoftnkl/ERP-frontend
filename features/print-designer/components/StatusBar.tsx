@@ -34,8 +34,8 @@ import {
   selectView,
 } from "@/features/print-designer/store/selectors";
 import styles from "@/features/print-designer/components/designer.module.scss";
+import { formatLocalDateTime } from "@/lib/date-format";
 
-const CLOCK = new Intl.DateTimeFormat("en-IN", { timeStyle: "short", dateStyle: "medium" });
 
 export function StatusBar() {
   const dispatch = useAppDispatch();
@@ -90,7 +90,7 @@ export function StatusBar() {
       return "Not saved";
     }
     const parsed = new Date(lastSavedAt);
-    return Number.isNaN(parsed.getTime()) ? "Saved" : `Saved ${CLOCK.format(parsed)}`;
+    return Number.isNaN(parsed.getTime()) ? "Saved" : `Saved ${formatLocalDateTime(parsed)}`;
   })();
 
   return (

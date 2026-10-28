@@ -279,7 +279,7 @@ $tint-strong: color-mix(in srgb, var(--primary, #7b1515) 14%, #ffffff);
   border-radius: u(0.25);
 }
 
-/* A dd-mm-yyyy box with its drop-down segment (Qt `QDateEdit`). */
+/* A dd/mm/yyyy box with its drop-down segment (Qt `QDateEdit`). */
 .dateBox {
   display: flex;
   align-items: stretch;

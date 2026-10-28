@@ -40,7 +40,7 @@ const STYLES_XML =
   '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
   '<numFmts count="2">' +
   '<numFmt numFmtId="164" formatCode="#,##,##0.00"/>' +
-  '<numFmt numFmtId="165" formatCode="dd-mm-yyyy"/>' +
+  '<numFmt numFmtId="165" formatCode="dd/mm/yyyy"/>' +
   "</numFmts>" +
   '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font>' +
   '<font><b/><sz val="11"/><name val="Calibri"/></font></fonts>' +

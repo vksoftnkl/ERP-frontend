@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { formatLocalDate } from "@/lib/date-format";
 import { layoutRect } from "@/lib/ui-scale";
 import styles from "./erp-header.module.css";
 import { clearAuthSession } from "@/lib/auth/session";
@@ -21,7 +22,6 @@ import {
   ARIA_LABELS,
   DEFAULT_BRANCH_OPTIONS,
   DEFAULT_COMPANY_OPTIONS,
-  DEFAULT_DATE_FORMAT_OPTIONS,
   DEFAULT_FISCAL_YEAR_OPTIONS,
 } from "./constants";
 import type {
@@ -46,9 +46,7 @@ import UserMenu from "./user-menu";
 export type { ErpHeaderItem, ErpHeaderProps } from "./types";
 // ─── Utility functions ────────────────────────────────────────────────────────
 function formatDateLabel(date: Date): string {
-  return new Intl.DateTimeFormat("en-GB", DEFAULT_DATE_FORMAT_OPTIONS)
-    .format(date)
-    .replaceAll("/", "-");
+  return formatLocalDate(date);
 }
 function cx(...tokens: Array<string | false | undefined>): string {
   return tokens.filter(Boolean).join(" ");

@@ -227,7 +227,7 @@ export function toDateInput(value: string | null | undefined): string {
   return `${parsed.getUTCFullYear()}-${month}-${day}`;
 }
 /**
- * `yyyy-mm-dd` (what the draft and the wire use) → `dd-mm-yyyy` (what the screen
+ * `yyyy-mm-dd` (what the draft and the wire use) → `dd/mm/yyyy` (what the screen
  * shows). A native `<input type="date">` renders in the BROWSER's locale, which
  * is why the date fields are text inputs with their own formatting.
  */
@@ -237,7 +237,7 @@ export function toDisplayDate(value: string): string {
     return "";
   }
   const [, year, month, day] = match;
-  return `${day}-${month}-${year}`;
+  return `${day}/${month}/${year}`;
 }
 /**
  * The inverse, tolerant of what an operator actually types: `-`, `/` or `.` as
@@ -299,7 +299,7 @@ export function daysBetween(from: string, to: string): number | null {
 /**
  * The Indian accounting year a date falls in — 1 April to 31 March, named
  * `yyyy-(yyyy+1)`. Takes `yyyy-mm-dd` (with or without a time) or the
- * operator's `dd-mm-yyyy` / `dd/mm/yyyy`; null when it is neither.
+ * operator's `dd/mm/yyyy` / `dd-mm-yyyy`; null when it is neither.
  */
 export function formatAccountingYear(referenceDate: string | null | undefined): string | null {
   const text = (referenceDate ?? "").trim();

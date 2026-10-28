@@ -16,9 +16,9 @@ import {
 } from "./dates";
 
 describe("dates", () => {
-  it("shows ISO as dd-MM-yyyy", () => {
-    expect(displayDate("2026-09-25")).toBe("25-09-2026");
-    expect(displayDate("2026-09-25T00:00:00.000Z")).toBe("25-09-2026");
+  it("shows ISO as dd/MM/yyyy", () => {
+    expect(displayDate("2026-09-25")).toBe("25/09/2026");
+    expect(displayDate("2026-09-25T00:00:00.000Z")).toBe("25/09/2026");
     expect(displayDate(null)).toBe("");
   });
 
@@ -26,7 +26,7 @@ describe("dates", () => {
     expect(isIsoDate("2026-02-28")).toBe(true);
     expect(isIsoDate("2026-02-29")).toBe(false);
     expect(isIsoDate("2028-02-29")).toBe(true);
-    expect(isIsoDate("25-09-2026")).toBe(false);
+    expect(isIsoDate("25/09/2026")).toBe(false);
   });
 
   it("steps back a day across month and year ends", () => {

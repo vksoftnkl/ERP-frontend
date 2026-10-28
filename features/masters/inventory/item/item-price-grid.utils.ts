@@ -707,7 +707,7 @@ export function describeScheduledItemPrice(row: LinkedRecordRow, levels: ItemPri
   if (changes.length === 0 || !year || !month || !day) {
     return "";
   }
-  return `From ${day}-${month}: ${changes.join(" · ")}`;
+  return `From ${day}/${month}: ${changes.join(" · ")}`;
 }
 
 /**

@@ -535,13 +535,13 @@ describe("the audit lines under the title (Qt showAudit)", () => {
           cancelledOn: "",
         },
       }),
-    ).toEqual(["Created 24-10-2026 08:05 AM by Ravi", "Posted 24-10-2026 02:30 PM by Meena"]);
+    ).toEqual(["Created 24/10/2026 08:05 AM by Ravi", "Posted 24/10/2026 02:30 PM by Meena"]);
     expect(
       auditLinesOf({
         svhId: "svh-1",
         stamps: { createdOn: at(9, 0), createdBy: "", postedOn: "", postedBy: "", cancelledOn: at(12, 0) },
       }),
-    ).toEqual(["Created 24-10-2026 09:00 AM", "Cancelled 24-10-2026 12:00 PM"]);
+    ).toEqual(["Created 24/10/2026 09:00 AM", "Cancelled 24/10/2026 12:00 PM"]);
   });
 
   it("names the creator by createdByName whenever the header carries it — the stored id only without it", () => {

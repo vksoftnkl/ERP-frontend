@@ -47,6 +47,7 @@ import {
   type GrantForm,
 } from "../domain/approval-authority";
 import { PopupFrame, popupStyles as styles } from "./popup-frame";
+import { DateInput } from "@/components/design-system/ui/date-input";
 
 const EVERY = "*";
 const OWN_COMPANY = "own";
@@ -300,25 +301,25 @@ export function GrantDialog({ row, readOnlyReason, companyId, companyName, today
         <SectionHeading>Validity</SectionHeading>
         <div className={styles.fieldGrid}>
           <Field id={fieldId("validFrom")} label="Valid From" required>
-            <input
+            <DateInput
+              block
               id={fieldId("validFrom")}
-              type="date"
               className={styles.textInput}
               data-required="true"
               value={form.validFrom}
               disabled={off("validFrom")}
-              onChange={(event) => update({ validFrom: event.target.value })}
+              onChange={(value) => update({ validFrom: value })}
             />
           </Field>
           <Field id={fieldId("validTo")} label="Valid To">
-            <input
+            <DateInput
+              block
               id={fieldId("validTo")}
-              type="date"
               className={styles.textInput}
               title="blank = no end"
               value={form.validTo}
               disabled={off("validTo")}
-              onChange={(event) => update({ validTo: event.target.value })}
+              onChange={(value) => update({ validTo: value })}
             />
           </Field>
           <Check

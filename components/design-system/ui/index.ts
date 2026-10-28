@@ -45,6 +45,13 @@ export {
 } from "@/components/design-system/ui/color-picker";
 
 export {
+  DateInput,
+  DateTimeInput,
+  type DateInputProps,
+  type DateTimeInputProps,
+} from "@/components/design-system/ui/date-input";
+
+export {
   SearchableMultiSelect,
   type SearchableMultiSelectProps,
 } from "@/components/design-system/ui/searchable-multi-select";

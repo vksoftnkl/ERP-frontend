@@ -37,7 +37,7 @@ export function text(value: unknown): string {
 
 /**
  * A typed date → ISO `yyyy-MM-dd`; "" when it does not parse. Takes
- * dd/MM/yyyy, d/M/yyyy and ISO (Qt `isoFromTyped`).
+ * dd/MM/yyyy (or with - / . separators), d/M/yyyy and ISO (Qt `isoFromTyped`).
  */
 export function isoFromTyped(typed: string): string {
   const value = typed.trim();
@@ -48,7 +48,7 @@ export function isoFromTyped(typed: string): string {
   if (iso) {
     return validIso(Number(iso[1]), Number(iso[2]), Number(iso[3]));
   }
-  const dmy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(value);
+  const dmy = /^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/.exec(value);
   if (dmy) {
     return validIso(Number(dmy[3]), Number(dmy[2]), Number(dmy[1]));
   }

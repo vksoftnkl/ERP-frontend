@@ -13,6 +13,7 @@
  * the screen: a click or ↑ / ↓ moves the highlight, Enter or a double-click
  * opens. The caret starts in Search, and ↑ / ↓ / Enter work from there too.
  */
+import { DateInput } from "@/components/design-system/ui/date-input";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useState } from "react";
 import { ModalShell } from "@/features/sales/quotation/components/modal-shell";
 import { toDisplayDate } from "@/features/sales/quotation/quotation.utils";
@@ -139,22 +140,20 @@ export function ExpenseRegisterModal({ scope, filters, onFiltersChange, onClose,
         </label>
         <label className={styles.field}>
           <span className={styles.fieldLabel}>From</span>
-          <input
+          <DateInput block
             className={styles.input}
-            type="date"
             value={filters.fromDate}
             max={filters.toDate || undefined}
-            onChange={(event) => changeFilters({ ...filters, fromDate: event.target.value })}
+            onChange={(value) => changeFilters({ ...filters, fromDate: value })}
           />
         </label>
         <label className={styles.field}>
           <span className={styles.fieldLabel}>To</span>
-          <input
+          <DateInput block
             className={styles.input}
-            type="date"
             value={filters.toDate}
             min={filters.fromDate || undefined}
-            onChange={(event) => changeFilters({ ...filters, toDate: event.target.value })}
+            onChange={(value) => changeFilters({ ...filters, toDate: value })}
           />
         </label>
       </div>

@@ -374,7 +374,7 @@ function ddMMyyyy(iso: string | null): string {
   if (!iso || iso.length < 10) {
     return "";
   }
-  return `${iso.slice(8, 10)}-${iso.slice(5, 7)}-${iso.slice(0, 4)}`;
+  return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
 }
 
 /**

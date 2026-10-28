@@ -186,7 +186,7 @@ describe("factsLine (§7.5)", () => {
 
   it("shows Form 60 with its date, and 'none' in amber when there is neither", () => {
     const form60 = factsLine({ ...context, party: { ...context.party, panNo: null, form60On: "2026-02-03" } }, fallback, false);
-    expect(form60[1].text).toBe("Form 60 · 03-02-2026");
+    expect(form60[1].text).toBe("Form 60 · 03/02/2026");
     const none = factsLine({ ...context, party: { ...context.party, panNo: null } }, fallback, false);
     expect(none[1].text).toBe("PAN / Form 60: none");
     expect(none[1].tone).toBe("amber");

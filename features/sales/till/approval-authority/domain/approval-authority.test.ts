@@ -52,7 +52,7 @@ function grant(over: Partial<Record<string, unknown>> = {}): GridRow {
     taa_can_remote: true,
     taa_valid_from: "2026-10-01",
     taa_valid_to: "",
-    valid_from_label: "01-10-2026",
+    valid_from_label: "01/10/2026",
     valid_to_label: "",
     taa_remarks: "",
     taa_is_active: true,
@@ -96,11 +96,11 @@ describe("the list", () => {
   it("says what happens to the highlighted grant", () => {
     expect(grantRowHint(null)).toBe("");
     expect(grantRowHint(grant())).toBe("");
-    expect(grantRowHint(grant({ grant_status: "ENDED", valid_to_label: "05-10-2026" }))).toBe(
-      "Ended 05-10-2026 — Active on reopens it with no end date",
+    expect(grantRowHint(grant({ grant_status: "ENDED", valid_to_label: "05/10/2026" }))).toBe(
+      "Ended 05/10/2026 — Active on reopens it with no end date",
     );
-    expect(grantRowHint(grant({ valid_to_label: "31-12-2026", pin_set: false }))).toBe(
-      "Ends on its own 31-12-2026 · Ravi has no till PIN — remote approvals only",
+    expect(grantRowHint(grant({ valid_to_label: "31/12/2026", pin_set: false }))).toBe(
+      "Ends on its own 31/12/2026 · Ravi has no till PIN — remote approvals only",
     );
     expect(grantRowHint(grant({ grant_status: "OFF" }))).toBe("Switched off — Active on reopens it");
   });
@@ -145,14 +145,14 @@ describe("Active on / off", () => {
   });
 
   it("reopens an ended grant with no end date, and keeps a future end", () => {
-    const ended = grant({ taa_valid_to: "2026-10-05", grant_open: false, grant_status: "ENDED", valid_to_label: "05-10-2026" });
+    const ended = grant({ taa_valid_to: "2026-10-05", grant_open: false, grant_status: "ENDED", valid_to_label: "05/10/2026" });
     expect(toggleGrantBody(ended, true, TODAY)).toMatchObject({ taaIsActive: true, taaValidTo: null });
     const off = grant({ taa_is_active: false, taa_valid_to: "2026-12-31", grant_open: false, grant_status: "OFF" });
     expect(toggleGrantBody(off, true, TODAY)).toMatchObject({ taaIsActive: true, taaValidTo: "2026-12-31" });
     expect(toggleGrantWords(ended, true, TODAY)).toEqual({
       title: "Reactivate",
       message: 'Reactivate grant "Ravi · STORE_MANAGER · CASH_VARIANCE"?',
-      note: "Its Valid To (05-10-2026) has passed: it reopens with no end date.",
+      note: "Its Valid To (05/10/2026) has passed: it reopens with no end date.",
       done: "Ravi's grant reactivated.",
     });
     expect(toggleGrantWords(off, true, TODAY).note).toBe("");

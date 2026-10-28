@@ -29,7 +29,7 @@ export function detailTitle(d: Pick<PriceLogDetail, "priceTable" | "itemName" | 
   ].join(" · ");
 }
 
-/** `Fri 23-10-2026 02:10:05 PM`, local — the detail shows the seconds. */
+/** `Fri 23/10/2026 02:10:05 PM`, local — the detail shows the seconds. */
 export function detailStamp(iso: string | null | undefined): string {
   const at = iso ? new Date(iso) : null;
   if (!at || Number.isNaN(at.getTime())) {
@@ -38,7 +38,7 @@ export function detailStamp(iso: string | null | undefined): string {
   const hours = at.getHours();
   const hour12 = hours % 12 === 0 ? 12 : hours % 12;
   return (
-    `${WEEKDAYS[at.getDay()]} ${pad(at.getDate())}-${pad(at.getMonth() + 1)}-${at.getFullYear()} ` +
+    `${WEEKDAYS[at.getDay()]} ${pad(at.getDate())}/${pad(at.getMonth() + 1)}/${at.getFullYear()} ` +
     `${pad(hour12)}:${pad(at.getMinutes())}:${pad(at.getSeconds())} ${hours < 12 ? "AM" : "PM"}`
   );
 }

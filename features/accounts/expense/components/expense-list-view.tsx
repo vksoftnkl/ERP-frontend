@@ -20,6 +20,7 @@
  *    number, so it does not print.
  * History (Ctrl+H) is the document's status trail (`txn_status_log`, EXPENSE).
  */
+import { DateInput } from "@/components/design-system/ui/date-input";
 import { useCallback, useMemo, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import type { MasterTableRow } from "@/components/master/crud-master-page.types";
@@ -188,14 +189,13 @@ export function ExpenseListView({ onCreate, onOpen }: ExpenseListViewProps) {
           <label className={masterStyles.filterLabel} htmlFor="expense-from">
             From
           </label>
-          <input
+          <DateInput
             id="expense-from"
-            type="date"
             className={styles.input}
             value={fromDate}
             max={toDate || undefined}
-            onChange={(event) => {
-              setFromDate(event.target.value);
+            onChange={(value) => {
+              setFromDate(value);
               setPeriod("custom");
             }}
           />
@@ -204,14 +204,13 @@ export function ExpenseListView({ onCreate, onOpen }: ExpenseListViewProps) {
           <label className={masterStyles.filterLabel} htmlFor="expense-to">
             To
           </label>
-          <input
+          <DateInput
             id="expense-to"
-            type="date"
             className={styles.input}
             value={toDate}
             min={fromDate || undefined}
-            onChange={(event) => {
-              setToDate(event.target.value);
+            onChange={(value) => {
+              setToDate(value);
               setPeriod("custom");
             }}
           />

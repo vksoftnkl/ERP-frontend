@@ -485,7 +485,7 @@ export function createFieldElement(options: {
 
   const mask =
     field.format ??
-    (numeric ? "#,##0.00" : dateLike ? "dd-MM-yyyy" : undefined);
+    (numeric ? "#,##0.00" : dateLike ? "dd/MM/yyyy" : undefined);
 
   const value = mask
     ? `{{ ${numeric ? "fmt" : "date"}(${path}, '${mask}') }}`

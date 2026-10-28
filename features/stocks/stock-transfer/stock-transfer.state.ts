@@ -154,7 +154,7 @@ export function freeAvailable(line: TransferLine): number {
   return (line.freeAvailableBase ?? 0) / Math.max(0.000001, line.toBaseFactor);
 }
 
-/** "B-2604 · 30-06-2026", "B-2604", "— · 30-06-2026", or "" for a plain lot. */
+/** "B-2604 · 30/06/2026", "B-2604", "— · 30/06/2026", or "" for a plain lot. */
 export function batchExpiryText(line: Pick<TransferLine, "batchNo" | "expiryDate">): string {
   if (!line.batchNo && !line.expiryDate) {
     return "";
@@ -749,7 +749,7 @@ export function scopeLabel(draft: TransferDraft, companyName: string, branchName
   return [companyName, place].filter(Boolean).join(" · ");
 }
 
-/** "Created 26-10-2026 09:14 AM by ravi", "Posted …", "Cancelled …", "Reason: …". */
+/** "Created 26/10/2026 09:14 AM by ravi", "Posted …", "Cancelled …", "Reason: …". */
 export function auditLines(draft: TransferDraft): string[] {
   const stamps: AuditStamps | null = draft.stamps;
   if (!stamps) {
@@ -772,7 +772,7 @@ export function auditLines(draft: TransferDraft): string[] {
   return lines;
 }
 
-/** dd-MM-yyyy hh:mm AM/PM, local — the house format for a shown time. */
+/** dd/MM/yyyy hh:mm AM/PM, local — the house format for a shown time. */
 export function stampText(iso: string | null | undefined): string {
   const at = iso ? new Date(iso) : null;
   if (!at || Number.isNaN(at.getTime())) {
@@ -780,7 +780,7 @@ export function stampText(iso: string | null | undefined): string {
   }
   const hours = at.getHours();
   const hh = two(hours % 12 === 0 ? 12 : hours % 12);
-  return `${two(at.getDate())}-${two(at.getMonth() + 1)}-${at.getFullYear()} ${hh}:${two(at.getMinutes())} ${hours < 12 ? "AM" : "PM"}`;
+  return `${two(at.getDate())}/${two(at.getMonth() + 1)}/${at.getFullYear()} ${hh}:${two(at.getMinutes())} ${hours < 12 ? "AM" : "PM"}`;
 }
 
 export function stampsOf(header: TransferHeaderPayload): AuditStamps {

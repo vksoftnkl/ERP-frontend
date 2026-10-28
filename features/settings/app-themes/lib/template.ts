@@ -118,7 +118,7 @@ export function templateFigures(qss: string): TemplateFigures {
   };
 }
 
-/** `dd-MM-yyyy hh:mm AM` in local time; the raw text when it is not a date. */
+/** `dd/MM/yyyy hh:mm AM` in local time; the raw text when it is not a date. */
 export function formatSavedOn(iso: string | null | undefined): string {
   if (!iso) return "";
   return dateTime12Of(iso) || iso;

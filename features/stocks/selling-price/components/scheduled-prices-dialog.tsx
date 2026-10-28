@@ -63,10 +63,10 @@ function levelPrice(levels: readonly SellingPriceLevelValue[] | undefined, level
   return 0;
 }
 
-/** `YYYY-MM-DD` → `dd-MM-yyyy`; anything else as it came. */
+/** `YYYY-MM-DD` → `dd/MM/yyyy`; anything else as it came. */
 export function scheduleDateText(iso: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
-  return match ? `${match[3]}-${match[2]}-${match[1]}` : (iso ?? "");
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : (iso ?? "");
 }
 
 /** One list row's cells, as the Qt dialog fills them. `levels` = the active level indexes (0-based). */

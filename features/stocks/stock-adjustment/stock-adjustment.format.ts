@@ -4,7 +4,7 @@
  * `stock_adjustment_entity.h`. Pure.
  */
 import { formatCurrency } from "@/domain/pricing";
-import { fromDisplayDate, toDisplayDate } from "@/features/sales/quotation/quotation.utils";
+import { isoToDisplayDate, parseDisplayDate } from "@/lib/date-format";
 
 /** A cell's number: grouping commas and a leading "+" dropped; anything else is 0. */
 export function cellNumber(text: string | number | null | undefined): number {
@@ -48,36 +48,36 @@ export function pickQtyText(value: number): string {
     : formatCurrency(value, 3, true);
 }
 
-// ── Dates: dd-MM-yyyy on screen, ISO on the wire ──────────────────────────
+// ── Dates: dd/MM/yyyy on screen, ISO on the wire ──────────────────────────
 
 const ISO_PREFIX = /^(\d{4}-\d{2}-\d{2})/;
 
-/** The screen's dd-MM-yyyy (or an ISO date) to yyyy-MM-dd; "" when it is not a date. */
+/** The screen's dd/MM/yyyy (or an ISO date) to yyyy-MM-dd; "" when it is not a date. */
 export function dateToWire(shown: string | null | undefined): string {
   const text = (shown ?? "").trim();
   if (!text) {
     return "";
   }
-  // dd-MM-yyyy as the Qt cell takes it (any of - / . as the separator, or the
+  // dd/MM/yyyy as the Qt cell takes it (any of / - . as the separator, or the
   // eight digits bare); ISO is the second chance, as in StockAdjustmentCols.
-  const fromDisplay = /^\d{2}[-/.]?\d{2}[-/.]?\d{4}$/.test(text) ? fromDisplayDate(text) : null;
+  const fromDisplay = /^\d{2}[-/.]?\d{2}[-/.]?\d{4}$/.test(text) ? parseDisplayDate(text) : null;
   if (fromDisplay) {
     return fromDisplay;
   }
   const iso = ISO_PREFIX.exec(text);
-  if (iso && toDisplayDate(iso[1])) {
+  if (iso && isoToDisplayDate(iso[1])) {
     return iso[1];
   }
   return "";
 }
 
-/** yyyy-MM-dd (or a timestamp) to dd-MM-yyyy; an unreadable value is shown as it came. */
+/** yyyy-MM-dd (or a timestamp) to dd/MM/yyyy; an unreadable value is shown as it came. */
 export function dateFromWire(iso: string | null | undefined): string {
   const text = (iso ?? "").trim();
   if (!text) {
     return "";
   }
   const match = ISO_PREFIX.exec(text);
-  const shown = match ? toDisplayDate(match[1]) : "";
+  const shown = match ? isoToDisplayDate(match[1]) : "";
   return shown || text;
 }

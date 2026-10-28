@@ -476,12 +476,12 @@ export function ratePrecision(value: number): number {
 // Dates — what is SHOWN is not what goes on the WIRE
 // ---------------------------------------------------------------------------
 
-const GRID_DATE = /^(\d{2})-(\d{2})-(\d{4})$/;
+const GRID_DATE = /^(\d{2})[-/.](\d{2})[-/.](\d{4})$/;
 const ISO_PREFIX = /^(\d{4})-(\d{2})-(\d{2})/;
 
 /**
  * Cell text → ISO for the payload. Empty for anything that is not a real date,
- * so a half-typed "31-03-20" is dropped rather than sent — the validation
+ * so a half-typed "31/03/20" is dropped rather than sent — the validation
  * refuses it by name before that can happen (`isUnparsableDate`).
  */
 export function dateToWire(shown: string | null | undefined): string {
@@ -503,7 +503,7 @@ export function dateToWire(shown: string | null | undefined): string {
   return "";
 }
 
-/** ISO (or a timestamp) → the cell's dd-mm-yyyy. Text that is not a date is shown as it came. */
+/** ISO (or a timestamp) → the cell's dd/mm/yyyy. Text that is not a date is shown as it came. */
 export function dateFromWire(iso: string | null | undefined): string {
   const text = (iso ?? "").trim();
   if (!text) {
@@ -514,7 +514,7 @@ export function dateFromWire(iso: string | null | undefined): string {
     return text;
   }
   const candidate = `${match[1]}-${match[2]}-${match[3]}`;
-  return isRealDate(candidate) ? `${match[3]}-${match[2]}-${match[1]}` : text;
+  return isRealDate(candidate) ? `${match[3]}/${match[2]}/${match[1]}` : text;
 }
 
 /** Neither blank nor a real date — a typo the operator has to be told about. */
@@ -524,9 +524,9 @@ export function isUnparsableDate(shown: string | null | undefined): boolean {
 
 /**
  * What a committed date cell holds. NexDateEdit's mask turned "31032027" into
- * "31-03-2027" as it was typed; the web cell has no mask, so the same tolerance
+ * "31/03/2027" as it was typed; the web cell has no mask, so the same tolerance
  * is applied on commit — any real date in dd mm yyyy order, with `-`, `/`, `.`
- * or no separator, is written back as dd-mm-yyyy. Anything else is kept as
+ * or no separator, is written back as dd/mm/yyyy. Anything else is kept as
  * typed, for the validation to name.
  */
 export function normalizeGridDate(raw: string): string {
@@ -549,7 +549,7 @@ export function normalizeGridDate(raw: string): string {
     year = digits.slice(4);
   }
   if (day && month && year && isRealDate(`${year}-${month}-${day}`)) {
-    return `${day}-${month}-${year}`;
+    return `${day}/${month}/${year}`;
   }
   return text;
 }

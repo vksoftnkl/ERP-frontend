@@ -11,7 +11,7 @@ import type {
   ERPDynamicSelectOption,
 } from "@/components/design-system/ui/dynamic-modal-form";
 import type { MasterTableRow } from "@/components/master/crud-master-page.types";
-import { toDisplayDate } from "@/features/sales/quotation/quotation.utils";
+import { isoToDisplayDate } from "@/lib/date-format";
 import styles from "@/app/master/state-master/page.module.scss";
 import {
   buildLookupOptions,
@@ -79,7 +79,7 @@ const EMPLOYEE_COLUMN_RENDER_OVERRIDES = {
       </span>
     );
   },
-  emp_joined_on: (row: MasterTableRow) => toDisplayDate(sourceText(row, "emp_joined_on").slice(0, 10)),
+  emp_joined_on: (row: MasterTableRow) => isoToDisplayDate(sourceText(row, "emp_joined_on").slice(0, 10)),
 };
 const API_ENDPOINTS = {
   getById: "/employee-masters/get",

@@ -22,7 +22,7 @@
  * `till_approval_logic`) — stays in `approval-setup/domain/approval-setup`.
  *
  * Grid 152 rows: dates as `YYYY-MM-DD` (`taa_valid_to` "" when none) plus
- * `*_label` copies as `DD-MM-YYYY`, `taa_max_amount` a numeric string or null,
+ * `*_label` copies as `DD-MM-YYYY` (shown as `DD/MM/YYYY`), `taa_max_amount` a numeric string or null,
  * `grant_open` = active and not past valid-to, `grant_status` OFF / FUTURE /
  * ENDED / ACTIVE.
  */
@@ -46,6 +46,7 @@ import {
   type WhoLine,
 } from "@/features/sales/till/approval-setup/domain/approval-setup";
 import { levelForUserRole } from "@/features/sales/till/shared/approval-gate";
+import { displayText } from "@/features/sales/till/shared/format";
 
 // ── The screen ──────────────────────────────────────────────────────────────
 
@@ -127,7 +128,7 @@ export const GRANT_TEXT_COLUMNS: readonly string[] = [
 
 export function grantCellText(key: string, row: GridRow | null | undefined): string {
   if (TICK_COLUMNS.includes(key)) return flag(row, key) ? "✓" : "";
-  return text(row, key);
+  return displayText(text(row, key));
 }
 
 export function grantStatusTone(row: GridRow | null | undefined): Tone {
@@ -143,9 +144,9 @@ export function grantRowHint(row: GridRow | null | undefined): string {
   const lines: string[] = [];
   const status = text(row, "grant_status");
   if (status === "OFF") lines.push("Switched off — Active on reopens it");
-  else if (status === "ENDED") lines.push(`Ended ${text(row, "valid_to_label")} — Active on reopens it with no end date`);
-  else if (status === "FUTURE") lines.push(`Starts ${text(row, "valid_from_label")}`);
-  else if (has(row, "valid_to_label")) lines.push(`Ends on its own ${text(row, "valid_to_label")}`);
+  else if (status === "ENDED") lines.push(`Ended ${displayText(text(row, "valid_to_label"))} — Active on reopens it with no end date`);
+  else if (status === "FUTURE") lines.push(`Starts ${displayText(text(row, "valid_from_label"))}`);
+  else if (has(row, "valid_to_label")) lines.push(`Ends on its own ${displayText(text(row, "valid_to_label"))}`);
   if (!flag(row, "pin_set")) lines.push(`${text(row, "approver")} has no till PIN — remote approvals only`);
   return lines.join(" · ");
 }
@@ -211,7 +212,7 @@ export function toggleGrantWords(row: GridRow, active: boolean, today: string): 
     return {
       title: "Reactivate",
       message: `Reactivate grant "${label}"?`,
-      note: to && to < today ? `Its Valid To (${text(row, "valid_to_label")}) has passed: it reopens with no end date.` : "",
+      note: to && to < today ? `Its Valid To (${displayText(text(row, "valid_to_label"))}) has passed: it reopens with no end date.` : "",
       done: `${name}'s grant reactivated.`,
     };
   }

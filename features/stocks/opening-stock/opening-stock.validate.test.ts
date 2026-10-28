@@ -78,7 +78,7 @@ describe("validateBeforeSave", () => {
     const violation = validateBeforeSave(draft([line({ expiryDate: "31-03-20" })]));
     expect(violation?.title).toBe("Date not understood");
     expect(violation?.message).toBe(
-      'Line 1 has "31-03-20" where a date belongs. Dates are keyed dd-MM-yyyy — 31-03-2027.',
+      'Line 1 has "31-03-20" where a date belongs. Dates are keyed dd/MM/yyyy — 31/03/2027.',
     );
   });
 
@@ -104,7 +104,7 @@ describe("missingIdentityLines", () => {
   it("lists what each line's item is tracked by and lacks — the four the pre-post check refuses on", () => {
     const notices = missingIdentityLines([
       line({ itemName: "A", trackSignature: "BME" }),
-      line({ itemName: "B", trackSignature: "BMEP", batchNo: "x", expiryDate: "31-03-2027", mrp: 10 }),
+      line({ itemName: "B", trackSignature: "BMEP", batchNo: "x", expiryDate: "31/03/2027", mrp: 10 }),
       line({ itemName: "C", trackSignature: "RS" }),
       blankLine(),
     ]);

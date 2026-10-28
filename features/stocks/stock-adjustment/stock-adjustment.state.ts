@@ -292,7 +292,7 @@ function auditLine(verb: string, on: string, by: string): string {
  * The lines under the title (Qt `showAudit()` / `refreshAuditLabel()`): who
  * created the document and when, then who posted or cancelled it — "New — not
  * saved yet" on a document never saved. Times are the house 12-hour format
- * (dd-MM-yyyy hh:mm AM). The notice line is separate (`draft.notice`).
+ * (dd/MM/yyyy hh:mm AM). The notice line is separate (`draft.notice`).
  */
 export function auditLines(draft: Pick<AdjustmentDraft, "svhId" | "stamps">): string[] {
   const stamps = draft.stamps ?? null;
@@ -1011,7 +1011,7 @@ export function editCell(draft: AdjustmentDraft, key: string, column: number, ra
       const iso = dateToWire(shown);
       let value = shown;
       if (shown && !iso) {
-        next.hint = `Line ${index + 1}: "${shown}" is not a date — key dd-MM-yyyy.`;
+        next.hint = `Line ${index + 1}: "${shown}" is not a date — key dd/MM/yyyy.`;
       } else if (iso) {
         value = dateFromWire(iso);
       }

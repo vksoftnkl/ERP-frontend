@@ -8,7 +8,8 @@
  * Total are previews (qty × the bill's per-unit figures) until the server's
  * come back with the saved return.
  */
-import { toDateInput, toDisplayDate } from "@/features/sales/quotation/quotation.utils";
+import { toDateInput } from "@/features/sales/quotation/quotation.utils";
+import { isoToDisplayDate } from "@/lib/date-format";
 import { money, num, qtyText, text } from "../shared/purchase.format";
 import {
   BUCKET_SALEABLE,
@@ -203,7 +204,7 @@ export function createDraft(scope: DraftScope, docDate: string): ReturnDraft {
 
 /** "PUR/2026-2027/D14/00297 · INV-55 · 05/10/2026 · 2,360.00" — the Qt combo text. */
 export function sourceLabel(row: ReturnSourceRow): string {
-  const date = toDisplayDate(toDateInput(row.docDate)).replace(/-/g, "/");
+  const date = isoToDisplayDate(toDateInput(row.docDate));
   return [text(row.refno), text(row.supplierRef), date, money(num(row.amount))].join(" · ");
 }
 
@@ -638,7 +639,7 @@ export function claimRowsOf(rows: readonly OpenClaimWire[]): ClaimRow[] {
       accYear: text(row.accYear),
       lastSettlementId: text(row.lastSettlementId),
       refno: text(row.refno),
-      date: toDisplayDate(toDateInput(row.docDate)).replace(/-/g, "/"),
+      date: isoToDisplayDate(toDateInput(row.docDate)),
       lineNo: text(row.lineNo),
       itemName: text(row.itemName),
       claim: text(row.outcome) === "CLAIM_SENT" ? "Goods sent" : "Destroyed",

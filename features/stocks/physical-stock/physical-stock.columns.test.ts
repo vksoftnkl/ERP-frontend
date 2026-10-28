@@ -133,7 +133,7 @@ describe("the Enter walk — Qt setFocusStops + setFocusCellFilter", () => {
 describe("cellText", () => {
   it("paints each format the Qt grid's way", () => {
     expect(cellText(holding, Cols.Description)).toBe("MILK");
-    expect(cellText(holding, Cols.ExpiryDate)).toBe("31-12-2026");
+    expect(cellText(holding, Cols.ExpiryDate)).toBe("31/12/2026");
     expect(cellText(holding, Cols.Mrp)).toBe("1,234.50");
     expect(cellText(holding, Cols.BookQty)).toBe("10");
     expect(cellText(holding, Cols.CountedQty)).toBe("7");

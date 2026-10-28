@@ -22,6 +22,8 @@
  *    "no filter" (see `listGridParams`).
  *  - No print — there is no print pipeline for stock vouchers yet.
  */
+import { isoToDisplayDate } from "@/lib/date-format";
+import { DateInput } from "@/components/design-system/ui/date-input";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import type { MasterTableRow } from "@/components/master/crud-master-page.types";
@@ -32,7 +34,6 @@ import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { documentRights } from "@/lib/permissions/document-rights";
 import {
   accountingYearOf,
-  toDisplayDate,
   todayIso,
   toNumber,
 } from "@/features/sales/quotation/quotation.utils";
@@ -111,7 +112,7 @@ const STATUS_PILL: Record<string, string> = {
 
 /** Per-column formatting, keyed by grid 99's SQL field names. */
 const COLUMN_RENDER_OVERRIDES = {
-  svh_doc_date: (row: MasterTableRow) => toDisplayDate(asText(sourceOf(row).svh_doc_date).slice(0, 10)),
+  svh_doc_date: (row: MasterTableRow) => isoToDisplayDate(asText(sourceOf(row).svh_doc_date).slice(0, 10)),
   svh_total_qty: (row: MasterTableRow) =>
     formatCurrency(toNumber(asText(sourceOf(row).svh_total_qty)), 3, true),
   svh_total_value: (row: MasterTableRow) =>
@@ -209,14 +210,13 @@ export function OpeningStockListView({ onCreate, onOpen }: OpeningStockListViewP
           <label className={masterStyles.filterLabel} htmlFor="opening-stock-from">
             From :
           </label>
-          <input
+          <DateInput
             id="opening-stock-from"
-            type="date"
             className={styles.filterInput}
             value={fromDate}
             max={toDate || undefined}
-            onChange={(event) => {
-              setFromDate(event.target.value);
+            onChange={(value) => {
+              setFromDate(value);
               setPeriod("custom");
             }}
           />
@@ -225,14 +225,13 @@ export function OpeningStockListView({ onCreate, onOpen }: OpeningStockListViewP
           <label className={masterStyles.filterLabel} htmlFor="opening-stock-to">
             To :
           </label>
-          <input
+          <DateInput
             id="opening-stock-to"
-            type="date"
             className={styles.filterInput}
             value={toDate}
             min={fromDate || undefined}
-            onChange={(event) => {
-              setToDate(event.target.value);
+            onChange={(value) => {
+              setToDate(value);
               setPeriod("custom");
             }}
           />

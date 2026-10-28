@@ -19,7 +19,7 @@
  */
 import { buildTable, moneyText, type Pill, type ReportColumn, type TableView } from "../reports/till-reports";
 import type { TillReviewCreateBody } from "../shared/api/till-session-api";
-import { addDaysIso, ddmmyyyy, textOf } from "../shared/format";
+import { addDaysIso, ddmmyyyy, displayText, textOf } from "../shared/format";
 import { toPaise } from "../shared/money";
 import type { GridRow, TillReviewOutcome } from "../shared/wire/types";
 import { numberOf, reviewWord } from "./cash-position";
@@ -126,7 +126,7 @@ export function reviewFacts(store: GridRow, live: readonly GridRow[], now: Date)
     {
       key: "day",
       caption: "Day",
-      value: old ? `${old} OPEN` : status,
+      value: old ? `${displayText(old)} OPEN` : status,
       tone: old ? "red" : status === "CLOSED" ? "green" : "",
     },
     {

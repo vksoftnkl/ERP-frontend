@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * A `dd-mm-yyyy` date box with a drop-down segment — the Qt `QDateEdit` with
+ * A `dd/mm/yyyy` date box with a drop-down segment — the Qt `QDateEdit` with
  * its calendar popup, as the desktop screen shows its Date and Invoice date.
  *
  * Not a bare `<input type="date">`: that renders in the BROWSER's locale, so
@@ -55,7 +55,7 @@ export function DateInput({ value, disabled, title, fieldProps, onChange, ...res
         {...fieldProps}
         className={styles.dateText}
         value={text}
-        placeholder="dd-mm-yyyy"
+        placeholder="dd/mm/yyyy"
         inputMode="numeric"
         autoComplete="off"
         data-uppercase="off"

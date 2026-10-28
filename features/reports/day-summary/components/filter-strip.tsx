@@ -24,6 +24,7 @@ import styles from "../page.module.scss";
 import { parseTypeId, type Step } from "../query/params";
 import type { ErrorField } from "../wire/errors";
 import type { VoucherTypeOption } from "../wire/types";
+import { DateInput } from "@/components/design-system/ui/date-input";
 
 /** What the strip edits: the filters Show applies. */
 export type Draft = {
@@ -118,14 +119,13 @@ export function FilterStrip({
           >
             ◀
           </button>
-          <input
+          <DateInput
             ref={dateRef}
-            type="date"
             className={cx(styles.input, styles.inputDate)}
             value={draft.fromDate}
             min={yearBegin ?? undefined}
             max={yearEnd ?? undefined}
-            onChange={(event) => onDate(event.target.value)}
+            onChange={onDate}
             aria-label="Date"
           />
           <button
@@ -142,13 +142,12 @@ export function FilterStrip({
 
         <label className={cx(styles.field, datesFlagged && styles.fieldFlagged)}>
           <span className={styles.fieldLabel}>To</span>
-          <input
-            type="date"
+          <DateInput
             className={cx(styles.input, styles.inputDate)}
             value={draft.toDate}
             min={draft.fromDate || yearBegin || undefined}
             max={yearEnd ?? undefined}
-            onChange={(event) => onDraft({ toDate: event.target.value })}
+            onChange={(value) => onDraft({ toDate: value })}
           />
         </label>
 

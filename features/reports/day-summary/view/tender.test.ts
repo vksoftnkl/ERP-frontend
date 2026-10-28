@@ -122,7 +122,7 @@ describe("No tender — the head, the tab and the list", () => {
   it("prints a line as the Qt list: zero side blank, a reversal mirror marked", () => {
     const [drop, mirror] = noTender().rows;
     expect(noTenderCells(drop)).toEqual({
-      date: "09-10-2026",
+      date: "09/10/2026",
       voucher: "tdr00007",
       kind: "TDrp",
       party: "",

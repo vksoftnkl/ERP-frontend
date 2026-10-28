@@ -10,6 +10,7 @@
  * every verb here but Presented writes a reversal voucher, and the React
  * register asks before every write.
  */
+import { DateInput as SharedDateInput } from "@/components/design-system/ui/date-input";
 import { useState, type ReactNode } from "react";
 import { ModalShell } from "@/features/sales/quotation/components/modal-shell";
 import { useRunChequeActionMutation } from "@/store/api/chequesApi";
@@ -45,14 +46,13 @@ function DateInput(props: {
   autoFocus?: boolean;
 }) {
   return (
-    <input
-      type="date"
+    <SharedDateInput
       className={styles.input}
       value={props.value}
       min={props.min}
       max={props.max}
       autoFocus={props.autoFocus}
-      onChange={(event) => props.onChange(event.target.value)}
+      onChange={(value) => props.onChange(value)}
     />
   );
 }

@@ -3,6 +3,7 @@ import {
   addDaysIso,
   cockpitHref,
   ddmmyyyy,
+  displayText,
   durationText,
   eventTone,
   flagOf,
@@ -42,7 +43,7 @@ describe("dates", () => {
     expect(todayIso(new Date(2026, 9, 9))).toBe("2026-10-09");
     expect(addDaysIso("2026-10-09", -7)).toBe("2026-10-02");
     expect(addDaysIso("2026-03-01", -1)).toBe("2026-02-28");
-    expect(ddmmyyyy("2026-10-09T00:00:00.000Z")).toBe("09-10-2026");
+    expect(ddmmyyyy("2026-10-09T00:00:00.000Z")).toBe("09/10/2026");
     expect(ddmmyyyy("")).toBe("");
   });
 
@@ -70,5 +71,15 @@ describe("routes and colours", () => {
     expect(statusTone("PENDING APPROVAL")).toBe("amber");
     expect(statusTone("CLOSED")).toBe("green");
     expect(statusTone("SUSPENDED")).toBe("grey");
+  });
+});
+
+describe("displayText", () => {
+  it("re-spells server day-first dates with slashes and leaves other text alone", () => {
+    expect(displayText("17-10-2026")).toBe("17/10/2026");
+    expect(displayText("17-10-2026 10:24 AM")).toBe("17/10/2026 10:24 AM");
+    expect(displayText("17-10 10:30 AM")).toBe("17/10 10:30 AM");
+    expect(displayText("ZT1-261017-01")).toBe("ZT1-261017-01");
+    expect(displayText("")).toBe("");
   });
 });

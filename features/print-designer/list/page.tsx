@@ -53,6 +53,7 @@ import { newPrintDesignerRoute, printDesignerRoute } from "@/features/print-desi
 import PaperSetupDialog from "@/features/print-designer/components/PaperSetupDialog";
 import styles from "./page.module.scss";
 import { confirm } from "@/lib/confirm";
+import { formatLocalDateTime } from "@/lib/date-format";
 
 const TEMPLATES_ENDPOINT = "/reports/templates";
 
@@ -95,7 +96,6 @@ const REQUEST_PAYLOAD_KEYS = {
   sort: "",
 } as const;
 
-const TIMESTAMP = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" });
 
 function sourceValue(row: MasterTableRow, key: string): unknown {
   return (row.__source ?? {})[key];
@@ -124,7 +124,7 @@ function formatTimestamp(value: string): string {
     return "—";
   }
   const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? value : TIMESTAMP.format(parsed);
+  return Number.isNaN(parsed.getTime()) ? value : formatLocalDateTime(parsed);
 }
 
 function updatedAt(row: MasterTableRow): string {

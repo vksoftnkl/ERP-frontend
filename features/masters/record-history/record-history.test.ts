@@ -91,8 +91,8 @@ describe("record history query", () => {
 describe("record history date and time text", () => {
   it("shows the date and a 12-hour clock", () => {
     const iso = localIso(2026, 10, 15, 14, 5);
-    expect(formatDateTime(iso)).toBe("15 Oct 2026, 02:05 PM");
-    expect(formatDateOnly(iso)).toBe("15 Oct 2026");
+    expect(formatDateTime(iso)).toBe("15/10/2026, 02:05 PM");
+    expect(formatDateOnly(iso)).toBe("15/10/2026");
     expect(formatTimeOnly(iso)).toBe("02:05 PM");
   });
 
@@ -157,7 +157,7 @@ describe("record history field labels and values", () => {
 
   it("formats ISO timestamps as dates but leaves other date-like text alone", () => {
     const iso = localIso(2026, 10, 15, 14, 5);
-    expect(formatAuditPrimitiveValue(iso)).toBe("15 Oct 2026, 02:05 PM");
+    expect(formatAuditPrimitiveValue(iso)).toBe("15/10/2026, 02:05 PM");
     expect(formatAuditPrimitiveValue("2026-10-15")).toBe("2026-10-15");
     expect(formatAuditPrimitiveValue("2026-13-45T99:99:99")).toBe("2026-13-45T99:99:99");
   });
@@ -358,7 +358,7 @@ describe("record history grouping", () => {
     const groups = buildHistoryGroups(logs, "Item Master", badge);
     expect(groups).toHaveLength(1);
     expect(groups[0]).toMatchObject({
-      dateLabel: "15 Oct 2026",
+      dateLabel: "15/10/2026",
       timeLabel: "02:05 PM",
       users: ["Asha"],
       actions: [{ label: "Update", badgeClass: "badge:update" }],

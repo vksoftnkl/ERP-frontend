@@ -8,6 +8,7 @@
  * `SaveDraftPaymentDto` has no field for one (`forbidNonWhitelisted` would
  * refuse it). The PAYEE is in the party panel, beside the facts it decides.
  */
+import { DateInput } from "@/components/design-system/ui/date-input";
 import { NexDropdownSingle } from "@/components/design-system/dropdown";
 import { useDropdownId } from "@/lib/configured-dropdowns";
 import { RECEIPT_FIELD_ATTR } from "@/features/accounts/receipt/focus-walk";
@@ -47,15 +48,14 @@ export function PaymentDocStrip(props: PaymentDocStripProps) {
 
       <label className={styles.field}>
         <span className={styles.fieldLabel}>Date</span>
-        <input
+        <DateInput block
           className={`${styles.input} ${invalid("voucherDate")}`}
           {...{ [RECEIPT_FIELD_ATTR]: "date" }}
-          type="date"
           value={header.voucherDate}
           disabled={!editable}
           // It decides the year, the tenders on offer, the cash discount still
           // open, and the TDS rate in force.
-          onChange={(event) => onChange({ voucherDate: event.target.value })}
+          onChange={(value) => onChange({ voucherDate: value })}
         />
       </label>
 
@@ -91,13 +91,12 @@ export function PaymentDocStrip(props: PaymentDocStripProps) {
 
       <label className={styles.field}>
         <span className={styles.fieldLabel}>Ref date</span>
-        <input
+        <DateInput block
           className={styles.input}
           {...{ [RECEIPT_FIELD_ATTR]: "refDate" }}
-          type="date"
           value={header.docDate}
           disabled={!editable}
-          onChange={(event) => onChange({ docDate: event.target.value })}
+          onChange={(value) => onChange({ docDate: value })}
         />
       </label>
 

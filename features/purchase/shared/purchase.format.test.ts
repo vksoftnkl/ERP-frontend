@@ -21,8 +21,10 @@ describe("purchase.format", () => {
     expect(num(null, 7)).toBe(7);
   });
 
-  it("isoFromTyped takes dd/MM/yyyy, d/M/yyyy and ISO", () => {
+  it("isoFromTyped takes dd/MM/yyyy (or - . separators), d/M/yyyy and ISO", () => {
     expect(isoFromTyped("05/03/2026")).toBe("2026-03-05");
+    expect(isoFromTyped("05-03-2026")).toBe("2026-03-05");
+    expect(isoFromTyped("5.3.2026")).toBe("2026-03-05");
     expect(isoFromTyped("5/3/2026")).toBe("2026-03-05");
     expect(isoFromTyped("2026-03-05")).toBe("2026-03-05");
     expect(isoFromTyped("31/02/2026")).toBe("");

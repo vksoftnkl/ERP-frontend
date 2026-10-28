@@ -73,6 +73,7 @@ import {
   BILL_SAVE_ENDPOINT,
 } from "@/features/sales/testbill/constants";
 import type { SaleBillDocKey } from "@/features/sales/testbill/types";
+import { DateInput } from "@/components/design-system/ui/date-input";
 
 
 const API_ENDPOINTS = {
@@ -287,14 +288,13 @@ export function BillListView({ onCreate, onOpen }: BillListViewProps) {
           <label className={masterStyles.filterLabel} htmlFor="sale-bill-from">
             From
           </label>
-          <input
+          <DateInput
             id="sale-bill-from"
-            type="date"
             className={orderStyles.filterDateInput}
             value={fromDate}
             max={toDate || undefined}
-            onChange={(event) => {
-              setFromDate(event.target.value);
+            onChange={(value) => {
+              setFromDate(value);
               setPeriod("custom");
             }}
           />
@@ -303,14 +303,13 @@ export function BillListView({ onCreate, onOpen }: BillListViewProps) {
           <label className={masterStyles.filterLabel} htmlFor="sale-bill-to">
             To
           </label>
-          <input
+          <DateInput
             id="sale-bill-to"
-            type="date"
             className={orderStyles.filterDateInput}
             value={toDate}
             min={fromDate || undefined}
-            onChange={(event) => {
-              setToDate(event.target.value);
+            onChange={(value) => {
+              setToDate(value);
               setPeriod("custom");
             }}
           />

@@ -78,28 +78,29 @@ describe("dates", () => {
   it("takes the date half of a wire timestamp and shows it dd-MM-yyyy", () => {
     expect(isoDateOf("2026-12-31T00:00:00.000Z")).toBe("2026-12-31");
     expect(isoDateOf(null)).toBe("");
-    expect(displayDate("2026-12-31")).toBe("31-12-2026");
+    expect(displayDate("2026-12-31")).toBe("31/12/2026");
     expect(displayDate("")).toBe("");
   });
 
   it("parses what an operator types into a freeze field", () => {
+    expect(fromDisplayDateTime("02/10/2026 14:30")).toBe("2026-10-02T14:30");
     expect(fromDisplayDateTime("02-10-2026 14:30")).toBe("2026-10-02T14:30");
     expect(fromDisplayDateTime("021020261430")).toBe("2026-10-02T14:30");
-    expect(fromDisplayDateTime("31-02-2026 10:00")).toBeNull();
-    expect(fromDisplayDateTime("02-10-2026")).toBeNull();
-    expect(displayDateTime("2026-10-02T14:30")).toBe("02-10-2026 02:30 PM");
-    expect(displayDateTime("2026-10-02T00:05")).toBe("02-10-2026 12:05 AM");
+    expect(fromDisplayDateTime("31/02/2026 10:00")).toBeNull();
+    expect(fromDisplayDateTime("02/10/2026")).toBeNull();
+    expect(displayDateTime("2026-10-02T14:30")).toBe("02/10/2026 02:30 PM");
+    expect(displayDateTime("2026-10-02T00:05")).toBe("02/10/2026 12:05 AM");
   });
 
   it("reads back the 12-hour text the freeze field shows", () => {
-    expect(fromDisplayDateTime("02-10-2026 02:30 PM")).toBe("2026-10-02T14:30");
-    expect(fromDisplayDateTime("02-10-2026 02:30 pm")).toBe("2026-10-02T14:30");
-    expect(fromDisplayDateTime("02-10-2026 02:30 p")).toBe("2026-10-02T14:30");
-    expect(fromDisplayDateTime("02-10-2026 12:05 AM")).toBe("2026-10-02T00:05");
-    expect(fromDisplayDateTime("02-10-2026 12:05 PM")).toBe("2026-10-02T12:05");
-    expect(fromDisplayDateTime("02-10-2026 09:15 a.m.")).toBe("2026-10-02T09:15");
-    expect(fromDisplayDateTime("02-10-2026 14:30 PM")).toBeNull();
-    expect(fromDisplayDateTime("02-10-2026 00:30 AM")).toBeNull();
+    expect(fromDisplayDateTime("02/10/2026 02:30 PM")).toBe("2026-10-02T14:30");
+    expect(fromDisplayDateTime("02/10/2026 02:30 pm")).toBe("2026-10-02T14:30");
+    expect(fromDisplayDateTime("02/10/2026 02:30 p")).toBe("2026-10-02T14:30");
+    expect(fromDisplayDateTime("02/10/2026 12:05 AM")).toBe("2026-10-02T00:05");
+    expect(fromDisplayDateTime("02/10/2026 12:05 PM")).toBe("2026-10-02T12:05");
+    expect(fromDisplayDateTime("02/10/2026 09:15 a.m.")).toBe("2026-10-02T09:15");
+    expect(fromDisplayDateTime("02/10/2026 14:30 PM")).toBeNull();
+    expect(fromDisplayDateTime("02/10/2026 00:30 AM")).toBeNull();
     for (const local of ["2026-10-02T00:05", "2026-10-02T11:59", "2026-10-02T12:00", "2026-10-02T23:45"]) {
       expect(fromDisplayDateTime(displayDateTime(local))).toBe(local);
     }

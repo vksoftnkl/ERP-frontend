@@ -398,7 +398,7 @@ describe("scheduled prices (notes 140 C)", () => {
       ...row({ ipm_id: "p1", ipm_sales_price_a: "117", ipm_sales_price_b: "130" }),
       ...buildItemPriceRowStoredFields(today, scheduled),
     };
-    expect(describeScheduledItemPrice(loaded, levels)).toBe("From 23-10: WS ₹120.00");
+    expect(describeScheduledItemPrice(loaded, levels)).toBe("From 23/10: WS ₹120.00");
   });
 
   it("says nothing once the row's key moved, or for a row that is not stored", () => {

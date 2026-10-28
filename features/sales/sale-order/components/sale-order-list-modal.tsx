@@ -56,6 +56,7 @@ import orderStyles from "../page.module.scss";
 import { useListSaleOrdersQuery, type SaleOrderListRow } from "@/store/api/saleOrderApi";
 import { SALE_ORDER_LIST_WINDOW_DAYS } from "../sale-order.constants";
 import type { SaleOrderDocKey } from "../sale-order.types";
+import { DateInput } from "@/components/design-system/ui/date-input";
 
 export type SaleOrderListPick = (key: SaleOrderDocKey, mode: "browse" | "entry") => void;
 
@@ -472,13 +473,12 @@ export function SaleOrderListModal({
         </label>
         <label className={styles.filterField}>
           <span>From:</span>
-          <input
-            type="date"
+          <DateInput
             className={styles.input}
             value={fromDate}
             max={toDate || undefined}
-            onChange={(event) => {
-              setFromDate(event.target.value);
+            onChange={(value) => {
+              setFromDate(value);
               setPeriod("custom");
               setLocalPage(1);
             }}
@@ -486,13 +486,12 @@ export function SaleOrderListModal({
         </label>
         <label className={styles.filterField}>
           <span>To:</span>
-          <input
-            type="date"
+          <DateInput
             className={styles.input}
             value={toDate}
             min={fromDate || undefined}
-            onChange={(event) => {
-              setToDate(event.target.value);
+            onChange={(value) => {
+              setToDate(value);
               setPeriod("custom");
               setLocalPage(1);
             }}

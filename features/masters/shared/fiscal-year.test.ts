@@ -35,8 +35,8 @@ describe("fiscalYearEndFor", () => {
     expect(fiscalYearEndFor("not a date")).toBeNull();
   });
 
-  it("formats as dd-MM-yyyy for the message", () => {
-    expect(formatIsoDateDmy("2027-03-31")).toBe("31-03-2027");
+  it("formats as dd/MM/yyyy for the message", () => {
+    expect(formatIsoDateDmy("2027-03-31")).toBe("31/03/2027");
     expect(formatIsoDateDmy("junk")).toBe("junk");
   });
 });
@@ -67,7 +67,7 @@ describe("validateFiscalYearFields", () => {
   it("insists To is the 31 March after From, naming the date", () => {
     expect(validateFiscalYearFields({ from: "2026-04-01", to: "2026-12-31", books: "" })).toEqual({
       field: "to",
-      message: "Financial Year To must be 31-03-2027.",
+      message: "Financial Year To must be 31/03/2027.",
     });
   });
 

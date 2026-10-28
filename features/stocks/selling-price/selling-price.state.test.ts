@@ -283,7 +283,7 @@ describe("Price from (notes 140 A)", () => {
 
   it("explains a later day beside the field, and says nothing for today", () => {
     expect(priceFromNote("2026-10-24", today)).toBe(
-      "new prices start 24-10-2026 — today's stay till then",
+      "new prices start 24/10/2026 — today's stay till then",
     );
     expect(priceFromNote(today, today)).toBe("");
     expect(priceFromNote("", today)).toBe("");

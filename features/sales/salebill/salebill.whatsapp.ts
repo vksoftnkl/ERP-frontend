@@ -214,14 +214,14 @@ export function buildBillWhatsappMessage(facts: BillMessageFacts): string {
   ].join("\n");
 }
 
-/** A link's expiry, as the operator reads dates: `27-11-2026`, in local time. */
+/** A link's expiry, as the operator reads dates: `27/11/2026`, in local time. */
 export function formatLinkExpiry(iso: string | null | undefined): string {
   const at = new Date(iso ?? "");
   if (Number.isNaN(at.getTime())) {
     return "";
   }
   const pad = (value: number) => String(value).padStart(2, "0");
-  return `${pad(at.getDate())}-${pad(at.getMonth() + 1)}-${at.getFullYear()}`;
+  return `${pad(at.getDate())}/${pad(at.getMonth() + 1)}/${at.getFullYear()}`;
 }
 
 /**

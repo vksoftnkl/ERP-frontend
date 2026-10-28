@@ -3,10 +3,24 @@
  * and flags, the session's clock and dates, a session-key route, the event
  * colours of the till journal.
  */
+import { normalizeDateText } from "@/lib/date-format";
 import { clock12Of } from "@/lib/time-format";
 import type { GridRow, TillSessionKey } from "./wire/types";
 
 // ─── row readers ─────────────────────────────────────────────────────────────
+
+/**
+ * A server-formatted text cell as the screen shows it: a day-first date or
+ * date-time (`17-10-2026 10:24 AM`) re-spelled with slashes, and the year-less
+ * `17-10 10:30 AM` stamp too. Anything else comes back as it was.
+ */
+export function displayText(value: string): string {
+  const short = /^(\d{2})-(\d{2})(\s.*)?$/.exec(value);
+  if (short && Number(short[1]) >= 1 && Number(short[1]) <= 31 && Number(short[2]) >= 1 && Number(short[2]) <= 12) {
+    return `${short[1]}/${short[2]}${short[3] ?? ""}`;
+  }
+  return normalizeDateText(value);
+}
 
 /** A field as text: strings as sent, numbers and booleans spelled, null blank. */
 export function textOf(row: Record<string, unknown> | null | undefined, key: string): string {
@@ -63,11 +77,11 @@ export function addDaysIso(iso: string, days: number): string {
   return todayIso(date);
 }
 
-/** `2026-10-09…` → `09-10-2026`; anything else as it came. */
+/** `2026-10-09…` → `09/10/2026`; anything else as it came. */
 export function ddmmyyyy(iso: string | null | undefined): string {
   const text = (iso ?? "").slice(0, 10);
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
-  return match ? `${match[3]}-${match[2]}-${match[1]}` : (iso ?? "");
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : (iso ?? "");
 }
 
 /** An ISO instant as the local `hh:mm AM` (Qt c77f3f1 `hh:mm AP`); blank when it is not one. */

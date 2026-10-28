@@ -381,11 +381,6 @@ export const DEFAULT_COMPANY_OPTIONS: ERPDynamicSelectOption[] = [
 export const DEFAULT_FISCAL_YEAR_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "", label: "Select Fiscal Year" },
 ];
-export const DEFAULT_DATE_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-};
 export const ARIA_LABELS = {
   MAIN_MENU: "Main ERP modules",
   RECENT_PAGES_SELECT: "Recent pages",

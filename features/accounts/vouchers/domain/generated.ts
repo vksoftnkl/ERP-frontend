@@ -46,7 +46,7 @@ export type GeneratedRow = {
 
 function dayMonth(iso: string | null | undefined): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
-  return match ? `${match[3]}-${match[2]}` : "";
+  return match ? `${match[3]}/${match[2]}` : "";
 }
 
 /** Where a generated leg came from — Qt `DerivedLeg::origin`. */

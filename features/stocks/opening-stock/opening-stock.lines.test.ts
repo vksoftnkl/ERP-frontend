@@ -189,26 +189,28 @@ describe("grid numbers", () => {
 });
 
 describe("dates", () => {
-  it("turns the cell's dd-mm-yyyy into ISO and back", () => {
+  it("turns the cell's dd/mm/yyyy into ISO and back", () => {
+    expect(dateToWire("31/03/2027")).toBe("2027-03-31");
     expect(dateToWire("31-03-2027")).toBe("2027-03-31");
     expect(dateToWire("2027-03-31T00:00:00.000Z")).toBe("2027-03-31");
-    expect(dateFromWire("2027-03-31T00:00:00")).toBe("31-03-2027");
+    expect(dateFromWire("2027-03-31T00:00:00")).toBe("31/03/2027");
     expect(dateFromWire("")).toBe("");
   });
 
   it("drops anything that is not a real date, and says so", () => {
-    expect(dateToWire("31-02-2027")).toBe("");
+    expect(dateToWire("31/02/2027")).toBe("");
     expect(dateToWire("31-03-20")).toBe("");
     expect(isUnparsableDate("31-03-20")).toBe(true);
     expect(isUnparsableDate("")).toBe(false);
-    expect(isUnparsableDate("31-03-2027")).toBe(false);
+    expect(isUnparsableDate("31/03/2027")).toBe(false);
   });
 
   it("normalises what the mask would have filled in", () => {
-    expect(normalizeGridDate("31032027")).toBe("31-03-2027");
-    expect(normalizeGridDate("1/3/2027")).toBe("01-03-2027");
-    expect(normalizeGridDate("31.03.2027")).toBe("31-03-2027");
-    expect(normalizeGridDate("31-13-2027")).toBe("31-13-2027");
+    expect(normalizeGridDate("31032027")).toBe("31/03/2027");
+    expect(normalizeGridDate("1/3/2027")).toBe("01/03/2027");
+    expect(normalizeGridDate("31.03.2027")).toBe("31/03/2027");
+    expect(normalizeGridDate("31-03-2027")).toBe("31/03/2027");
+    expect(normalizeGridDate("31/13/2027")).toBe("31/13/2027");
     expect(normalizeGridDate("  ")).toBe("");
   });
 });

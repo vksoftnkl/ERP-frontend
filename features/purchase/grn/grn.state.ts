@@ -7,7 +7,7 @@
  * (Received + Damaged) × the provisional rate (the server's
  * grnProvisionalValue is the figure that posts).
  */
-import { fromDisplayDate } from "@/features/sales/quotation/quotation.utils";
+import { parseDisplayDate } from "@/lib/date-format";
 import { isoFromTyped, money, num, qtyText, text } from "../shared/purchase.format";
 import { COL, ENTER_STOPS } from "./grn.constants";
 import type {
@@ -172,13 +172,13 @@ export function computeTotals(draft: GrnDraft): GrnTotals {
   return { lines, qty, value, short };
 }
 
-/** "dd/MM/yyyy", "dd-MM-yyyy", ISO or eight digits → ISO; "" when it is no date. */
+/** "dd/MM/yyyy" (or with - . separators), ISO or eight digits → ISO; "" when it is no date. */
 export function expiryIso(typed: string): string {
   const value = typed.trim();
   if (!value) {
     return "";
   }
-  return isoFromTyped(value) || fromDisplayDate(value) || "";
+  return isoFromTyped(value) || parseDisplayDate(value) || "";
 }
 
 /** ISO (or a timestamp) → dd/MM/yyyy, the way the Qt grid shows an expiry. */

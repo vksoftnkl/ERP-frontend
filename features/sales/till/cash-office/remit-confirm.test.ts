@@ -48,7 +48,7 @@ describe("remit confirm", () => {
 
   it("shows the remittance, its agency and bag, and what was sent", () => {
     expect(remitConfirmFacts(remit)).toEqual({
-      doc: "crm00012  ·  13-10-2026",
+      doc: "crm00012  ·  13/10/2026",
       agency: "CMS Info Systems · bag C-11920",
       sent: "1,50,000.00",
     });

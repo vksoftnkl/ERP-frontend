@@ -72,7 +72,7 @@ describe("words", () => {
     expect(numberText("1200.25")).toBe("1,200.25");
     expect(numberText(0)).toBe("0");
     expect(numberText(null)).toBe("—");
-    expect(dayText("2026-10-23")).toBe("Fri 23-10-2026");
+    expect(dayText("2026-10-23")).toBe("Fri 23/10/2026");
     expect(appliesText(row({ bucketMrp: 150, bucketSp: 140 }))).toBe("MRP 150 · SP 140");
     expect(
       appliesText(row({ priceTable: "IQP", slabFromQty: 10, slabToQty: null, priceLevelName: "Retail" })),
@@ -137,7 +137,7 @@ describe("the detail cells", () => {
   it("reads values and moves", () => {
     expect(valueText(true)).toBe("Yes");
     expect(valueText("9999-12-31")).toBe("open");
-    expect(valueText("2026-10-23")).toBe("23-10-2026");
+    expect(valueText("2026-10-23")).toBe("23/10/2026");
     expect(valueText(null)).toBe("—");
     expect(moveText(118, 119)).toEqual({ text: "+1  ▲0.8%", direction: 1 });
     expect(moveText(120, 76)).toEqual({ text: "−44  ▼36.7%", direction: -1 });

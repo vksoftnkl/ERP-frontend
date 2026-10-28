@@ -130,7 +130,7 @@ export function bookFigures(book: ChequeBookPayload): string {
   }
   if (String(book.status).toUpperCase() === "CLOSED") {
     parts.push(
-      `closed${book.closedOn ? ` ${book.closedOn.slice(0, 10).split("-").reverse().join("-")}` : ""}` +
+      `closed${book.closedOn ? ` ${book.closedOn.slice(0, 10).split("-").reverse().join("/")}` : ""}` +
         (book.closeReason ? ` — ${book.closeReason}` : ""),
     );
   }

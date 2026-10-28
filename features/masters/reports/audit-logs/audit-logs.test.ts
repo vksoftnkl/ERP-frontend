@@ -162,8 +162,8 @@ describe("audit log date presets", () => {
 describe("audit log date and time text", () => {
   it("shows the date and a 12-hour clock", () => {
     const iso = localIso(2026, 10, 15, 14, 5);
-    expect(formatDateTime(iso)).toBe("15 Oct 2026, 02:05 PM");
-    expect(formatDateOnly(iso)).toBe("15 Oct 2026");
+    expect(formatDateTime(iso)).toBe("15/10/2026, 02:05 PM");
+    expect(formatDateOnly(iso)).toBe("15/10/2026");
     expect(formatTimeOnly(iso)).toBe("02:05 PM");
   });
 
@@ -212,7 +212,7 @@ describe("audit log values", () => {
   });
 
   it("formats ISO timestamps as dates", () => {
-    expect(formatAuditPrimitiveValue(localIso(2026, 10, 15, 14, 5))).toBe("15 Oct 2026, 02:05 PM");
+    expect(formatAuditPrimitiveValue(localIso(2026, 10, 15, 14, 5))).toBe("15/10/2026, 02:05 PM");
     expect(formatAuditPrimitiveValue("2026-10-15")).toBe("2026-10-15");
   });
 
@@ -346,8 +346,8 @@ describe("audit log export", () => {
     ]);
     expect(lines).toEqual([
       "Log ID,Date,Action,User,Screen,Table,Entity,Changes,Notes",
-      'x1,"15 Oct 2026, 02:05 PM",New,Asha,Brand Master,brand_master,"Acme, Inc",1 field,first',
-      'x2,"15 Oct 2026, 02:05 PM",Update,u9,Brand Master,brand_master,pk-1,No diff,',
+      'x1,"15/10/2026, 02:05 PM",New,Asha,Brand Master,brand_master,"Acme, Inc",1 field,first',
+      'x2,"15/10/2026, 02:05 PM",Update,u9,Brand Master,brand_master,pk-1,No diff,',
     ]);
   });
 

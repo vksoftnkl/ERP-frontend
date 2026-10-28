@@ -465,7 +465,7 @@ export function LegsGrid(props: LegsGridProps) {
             data-col="instrument"
             title={
               ins && pdc
-                ? `Post-dated: its own voucher on ${ins.postsOn.split("-").reverse().join("-")}${
+                ? `Post-dated: its own voucher on ${ins.postsOn.split("-").reverse().join("/")}${
                     ins.voucherRefno ? ` (${ins.voucherRefno})` : ""
                   }`
                 : readOnly

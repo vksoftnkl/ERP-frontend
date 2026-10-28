@@ -45,6 +45,7 @@ import { addDays, buildPageList, toDateInput, todayIso, toNumber } from "../quot
 import { ModalShell } from "./modal-shell";
 import { useListKeyboardNav } from "./use-list-keyboard-nav";
 import styles from "../page.module.scss";
+import { DateInput } from "@/components/design-system/ui/date-input";
 
 export type QuotationListModalProps = {
   isOpen: boolean;
@@ -472,12 +473,11 @@ export function QuotationListModal(props: QuotationListModalProps) {
         </label>
         <label className={styles.filterField}>
           <span>From:</span>
-          <input
-            type="date"
+          <DateInput
             className={styles.input}
             value={fromDate}
-            onChange={(event) => {
-              setFromDate(event.target.value);
+            onChange={(value) => {
+              setFromDate(value);
               setPeriod("custom");
               setLocalPage(1);
             }}
@@ -485,12 +485,11 @@ export function QuotationListModal(props: QuotationListModalProps) {
         </label>
         <label className={styles.filterField}>
           <span>To:</span>
-          <input
-            type="date"
+          <DateInput
             className={styles.input}
             value={toDate}
-            onChange={(event) => {
-              setToDate(event.target.value);
+            onChange={(value) => {
+              setToDate(value);
               setPeriod("custom");
               setLocalPage(1);
             }}

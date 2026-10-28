@@ -15,6 +15,8 @@
  * back." — and Enter opens it read-only. A DRAFT opens for edit and may be
  * deleted. There is no Cancel and no Print on this register.
  */
+import { isoToDisplayDate } from "@/lib/date-format";
+import { DateInput } from "@/components/design-system/ui/date-input";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import type { MasterTableRow } from "@/components/master/crud-master-page.types";
@@ -23,7 +25,7 @@ import masterStyles from "@/app/master/state-master/page.module.scss";
 import { cx } from "@/components/design-system/cx";
 import { formatCurrency } from "@/domain/pricing";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
-import { accountingYearOf, addDays, toDisplayDate, todayIso, toNumber } from "@/features/sales/quotation/quotation.utils";
+import { accountingYearOf, addDays, todayIso, toNumber } from "@/features/sales/quotation/quotation.utils";
 import { notify } from "../../stock-adjustment/components/notify";
 import { qtyCell } from "../../stock-adjustment/stock-adjustment.format";
 import { apiErrorText } from "../../stock-adjustment/stock-adjustment.validate";
@@ -104,7 +106,7 @@ export function rowPolicy(status: string): { canEdit: boolean; canDelete: boolea
 }
 
 const COLUMN_RENDER_OVERRIDES = {
-  svh_doc_date: (row: MasterTableRow) => toDisplayDate(asText(sourceValue(row, "svh_doc_date")).slice(0, 10)),
+  svh_doc_date: (row: MasterTableRow) => isoToDisplayDate(asText(sourceValue(row, "svh_doc_date")).slice(0, 10)),
   svh_total_qty: (row: MasterTableRow) => qtyCell(toNumber(asText(sourceValue(row, "svh_total_qty")))),
   svh_total_value: (row: MasterTableRow) =>
     formatCurrency(toNumber(asText(sourceValue(row, "svh_total_value"))), 2, true),
@@ -292,13 +294,12 @@ export function BranchInwardListView({ onCreate, onOpen }: BranchInwardListViewP
           <label className={masterStyles.filterLabel} htmlFor="branch-inward-from">
             From
           </label>
-          <input
+          <DateInput
             id="branch-inward-from"
-            type="date"
             value={fromDate}
             max={toDate || undefined}
-            onChange={(event) => {
-              setFromDate(event.target.value);
+            onChange={(value) => {
+              setFromDate(value);
               setPeriod("custom");
             }}
           />
@@ -307,13 +308,12 @@ export function BranchInwardListView({ onCreate, onOpen }: BranchInwardListViewP
           <label className={masterStyles.filterLabel} htmlFor="branch-inward-to">
             To
           </label>
-          <input
+          <DateInput
             id="branch-inward-to"
-            type="date"
             value={toDate}
             min={fromDate || undefined}
-            onChange={(event) => {
-              setToDate(event.target.value);
+            onChange={(value) => {
+              setToDate(value);
               setPeriod("custom");
             }}
           />

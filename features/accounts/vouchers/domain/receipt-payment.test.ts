@@ -167,7 +167,7 @@ describe("instruments — what goes on the wire", () => {
       favouring: "Supplier A",
       acPayee: true,
     });
-    expect(instrumentSummary(ins)).toBe("Kvb Current A/c · book ZT-PAY-01 · leaf 94320010 (next) · 03-10");
+    expect(instrumentSummary(ins)).toBe("Kvb Current A/c · book ZT-PAY-01 · leaf 94320010 (next) · 03/10");
   });
 
   it("OUR cheque on a bank with no open book is refused in the dialog", () => {
@@ -416,7 +416,7 @@ describe("bill-wise", () => {
 describe("the server's own legs", () => {
   it("says where each came from", () => {
     expect(legOrigin("INSTRUMENT", [2], false, null)).toBe("from line 2");
-    expect(legOrigin("INSTRUMENT", [3], true, "2026-10-06")).toBe("from line 3 — its own voucher, dated 06-10");
+    expect(legOrigin("INSTRUMENT", [3], true, "2026-10-06")).toBe("from line 3 — its own voucher, dated 06/10");
     expect(legOrigin("TDS", [1], false, null)).toBe("from the party's TDS section");
     expect(legOrigin("TYPED", [], false, null)).toBe("");
   });

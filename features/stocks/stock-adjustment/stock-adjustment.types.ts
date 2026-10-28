@@ -355,9 +355,9 @@ export type AdjustmentLine = {
   itemName: string;
   /** Lot batch no — outward: from the pick; inward: keyed. */
   batchNo: string;
-  /** dd-MM-yyyy on screen (inward identity only). */
+  /** dd/MM/yyyy on screen (inward identity only). */
   mfgDate: string;
-  /** dd-MM-yyyy on screen. */
+  /** dd/MM/yyyy on screen. */
   expiryDate: string;
   mrp: number | null;
   supplierId: string;
