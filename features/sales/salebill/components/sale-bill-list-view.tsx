@@ -46,6 +46,8 @@
  *    The entry screen shows the chip.
  */
 import { useCallback, useMemo, useState } from "react";
+import { FiMessageCircle } from "react-icons/fi";
+import { toast } from "@/lib/notify";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import type { MasterTableRow } from "@/components/master/crud-master-page.types";
 import { useBusinessContext } from "@/components/layout/business-context";
@@ -53,6 +55,10 @@ import { TxnHistoryDialog, type TxnHistoryTarget } from "@/components/txn/txn-hi
 import { PURPOSE_CODE } from "@/features/printing/domain/documentPrint";
 import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
 import masterStyles from "@/app/master/state-master/page.module.scss";
+import { usePagePermissions } from "@/hooks/useMenuPermissions";
+import { getApiErrorMessage } from "@/store/api";
+import { saleBillApi } from "@/store/api/saleBillApi";
+import { useAppDispatch } from "@/store/hooks";
 import { formatCurrency } from "@/domain/pricing";
 import { CONFIGURED_GRID_RUN_ENDPOINT } from "@/features/sales/quotation/quotation.constants";
 import {
@@ -74,6 +80,13 @@ import {
   BILL_SAVE_ENDPOINT,
 } from "../salebill.constants";
 import type { SaleBillDocKey } from "../salebill.types";
+import {
+  WHATSAPP_ACTION_LABEL,
+  whatsappBlockedReason,
+  whatsappTargetOfBill,
+  type WhatsappBillTarget,
+} from "../salebill.whatsapp";
+import { WhatsappBillDialog } from "./whatsapp-bill-dialog";
 
 
 const API_ENDPOINTS = {
@@ -221,6 +234,83 @@ export function SaleBillListView({ onCreate, onOpen }: SaleBillListViewProps) {
   const [printRefno, setPrintRefno] = useState<string>("");
   /** The bill whose History is open, held for the same reason as the print target. */
   const [historyTarget, setHistoryTarget] = useState<TxnHistoryTarget | null>(null);
+
+  /*
+   * WhatsApp, on the highlighted bill. Grid 86 carries no customer id and no
+   * phone, so the bill is read first (`/bills/get`) — the same read opening it
+   * would make — and the dialog opens on what the server holds.
+   *
+   * A one-shot `initiate` with NO subscription, never the lazy hook: a lazy
+   * subscription stays live on this bill's cache key, the freshness bus
+   * refetches it when the dialog closes, and the entry screen's own load of the
+   * same bill (a double-click later) is then deduped onto that pending request —
+   * which dies with this list on unmount, and the bill opens blank.
+   */
+  const dispatch = useAppDispatch();
+  const { permissions: menuPermissions } = usePagePermissions();
+  const [whatsappTarget, setWhatsappTarget] = useState<WhatsappBillTarget | null>(null);
+  const [whatsappLoading, setWhatsappLoading] = useState(false);
+  const whatsappRowBlocked = useCallback(
+    (row: MasterTableRow | null): string | null =>
+      row
+        ? whatsappBlockedReason({
+            docId: asText(sourceValue(row, "sb_id")) || null,
+            isNewEntry: false,
+            isDirty: false,
+            status: asText(sourceValue(row, "sb_status")),
+            canPrint: menuPermissions.canPrint,
+          })
+        : "Highlight a bill first",
+    [menuPermissions.canPrint],
+  );
+  const sendOnWhatsapp = useCallback(
+    async (row: MasterTableRow | null) => {
+      const blocked = whatsappRowBlocked(row);
+      if (blocked || !row) {
+        toast.warn(blocked ?? "Highlight a bill first");
+        return;
+      }
+      setWhatsappLoading(true);
+      try {
+        const bill = await dispatch(
+          saleBillApi.endpoints.getBill.initiate(docKeyOf(row), {
+            subscribe: false,
+            forceRefetch: true,
+          }),
+        ).unwrap();
+        setWhatsappTarget(whatsappTargetOfBill(bill));
+      } catch (thrown) {
+        toast.error(getApiErrorMessage(thrown as never) ?? "The bill could not be read.");
+      } finally {
+        setWhatsappLoading(false);
+      }
+    },
+    [dispatch, whatsappRowBlocked],
+  );
+  const toolbarActions = useCallback(
+    (row: MasterTableRow | null) => {
+      const blocked = whatsappRowBlocked(row);
+      return (
+        <>
+          <span className="erp-ms-tsep" aria-hidden="true" />
+          {/* The green box (`iconBtnExcel` is only its colour) — WhatsApp's. */}
+          <button
+            type="button"
+            className={`${masterStyles.iconBtn} ${masterStyles.iconBtnExcel} erp-ms-tbtn`}
+            title={blocked ?? WHATSAPP_ACTION_LABEL}
+            disabled={blocked !== null || whatsappLoading}
+            onClick={() => void sendOnWhatsapp(row)}
+          >
+            <span className={`${masterStyles.iconBtnBox} erp-ms-tbtn-icon`}>
+              <FiMessageCircle />
+            </span>
+            <span>{whatsappLoading ? "Reading…" : "WhatsApp"}</span>
+          </button>
+        </>
+      );
+    },
+    [sendOnWhatsapp, whatsappLoading, whatsappRowBlocked],
+  );
 
   const [fromDate, setFromDate] = useState(() =>
     addDays(todayIso(), -BILL_LIST_WINDOW_DAYS),
@@ -370,6 +460,7 @@ export function SaleBillListView({ onCreate, onOpen }: SaleBillListViewProps) {
         enableGridSettingsContextMenu
         columnRenderOverrides={COLUMN_RENDER_OVERRIDES}
         toolbarContent={toolbarContent}
+        toolbarActions={toolbarActions}
         rowClassName={(row) =>
           isCancelledRow(row) ? orderStyles.cancelledRow : undefined
         }
@@ -454,6 +545,9 @@ export function SaleBillListView({ onCreate, onOpen }: SaleBillListViewProps) {
         docLabel="Sales Bill"
         onClose={() => setHistoryTarget(null)}
       />
+      {whatsappTarget ? (
+        <WhatsappBillDialog target={whatsappTarget} onClose={() => setWhatsappTarget(null)} />
+      ) : null}
       {printTargets.length > 0 ? (
         <PrintOptionsDialog
           open

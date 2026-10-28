@@ -536,3 +536,93 @@
   font-size: 11.5px;
   color: #7a4a00;
 }
+
+/* ------------------------------------------------- WhatsApp send dialog */
+
+.whatsappNumberNote {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.whatsappChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.whatsappChip {
+  padding: 1px 8px;
+  border: 1px solid var(--erp-border-color, #d7dce3);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--text-muted, #555555);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.whatsappChip:hover {
+  border-color: var(--primary, #7b1515);
+  color: var(--primary, #7b1515);
+}
+
+.whatsappChipActive {
+  border-color: #1f8f4e;
+  background: #e8f6ee;
+  color: #146c3a;
+  font-weight: 700;
+}
+
+.whatsappMessage {
+  min-height: 120px;
+  white-space: pre-wrap;
+}
+
+.whatsappOpenWith {
+  display: flex;
+  gap: 14px;
+  font-size: 12px;
+}
+
+.whatsappOpenWith label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.whatsappPdfStatus {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.whatsappStatusError {
+  color: #b3261e;
+  font-size: 11.5px;
+}
+
+.whatsappSent {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.whatsappLead {
+  margin: 0;
+}
+
+.whatsappSteps {
+  margin: 0;
+  padding-left: 20px;
+  /* The global reset strips list markers; these steps are an order. */
+  list-style: decimal;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

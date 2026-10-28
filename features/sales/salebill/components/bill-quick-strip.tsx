@@ -5,9 +5,9 @@
  *
  * Live: Quick add customer · Quote import (Ctrl+F3) · Order import (Ctrl+F4)
  * · Challan (Ctrl+F5) · Disc % All (Alt+D) · ± Price · Cost (Alt+O) · Shipping
- * · e-Inv · e-Way · Copy (Alt+Y). The "coming soon" ones render DISABLED, not
- * hidden, the same as the Qt strip: Cust. history, Check price, Last rates,
- * Split stock, Stock fix, Ledger, Receipt, Returns, Pick list, WhatsApp.
+ * · e-Inv · e-Way · Copy (Alt+Y) · WhatsApp. The "coming soon" ones render
+ * DISABLED, not hidden, the same as the Qt strip: Cust. history, Check price,
+ * Last rates, Split stock, Stock fix, Ledger, Receipt, Returns, Pick list.
  */
 import type { ReactNode } from "react";
 import {
@@ -61,6 +61,11 @@ export type BillQuickStripProps = {
   onEinvoice: () => void;
   onEwaybill: () => void;
   onCopyAsNew: () => void;
+  /** Send the saved bill's PDF to the customer on WhatsApp. */
+  onWhatsapp: () => void;
+  whatsappEnabled: boolean;
+  /** Why WhatsApp is off (unsaved, no print right), or what it does. */
+  whatsappTooltip: string;
   einvoiceLabel: string;
   ewaybillLabel: string;
   einvoiceEnabled: boolean;
@@ -84,6 +89,7 @@ export function BillQuickStrip(props: BillQuickStripProps) {
     { key: "einv", label: props.einvoiceTooltip ?? props.einvoiceLabel, icon: <FiShield />, onClick: props.onEinvoice, disabled: !props.einvoiceEnabled },
     { key: "eway", label: props.ewaybillLabel, icon: <FiZap />, onClick: props.onEwaybill, disabled: !props.ewaybillEnabled },
     { key: "copy", label: "Copy as a new bill (Alt+Y)", icon: <FiCopy />, onClick: props.onCopyAsNew, disabled: isNew },
+    { key: "whatsapp", label: props.whatsappTooltip, icon: <FiMessageCircle />, onClick: props.onWhatsapp, disabled: !props.whatsappEnabled },
   ];
   const soon: QuickAction[] = [
     { key: "history", label: "Customer history — coming soon", icon: <FiClock />, soon: true },
@@ -95,7 +101,6 @@ export function BillQuickStrip(props: BillQuickStripProps) {
     { key: "receipt", label: "Receipt — coming soon", icon: <FiList />, soon: true },
     { key: "returns", label: "Returns — coming soon", icon: <FiRotateCcw />, soon: true },
     { key: "pickList", label: "Pick list — coming soon", icon: <FiFileText />, soon: true },
-    { key: "whatsapp", label: "WhatsApp — coming soon", icon: <FiMessageCircle />, soon: true },
   ];
   void posted;
   return (

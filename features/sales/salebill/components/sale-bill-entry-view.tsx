@@ -137,6 +137,12 @@ import type { ScreenMemoryOption } from "@/lib/use-screen-memory";
 import { AdjustPanel } from "./adjust-panel";
 import { AskText } from "./ask-text";
 import { BillQuickStrip } from "./bill-quick-strip";
+import { WhatsappBillDialog } from "./whatsapp-bill-dialog";
+import {
+  WHATSAPP_ACTION_LABEL,
+  whatsappBlockedReason,
+  type WhatsappBillTarget,
+} from "../salebill.whatsapp";
 import { CustomerQuickAdd } from "./customer-quick-add";
 import { useBillVisibleSettings } from "./bill-visible-settings";
 import { BillListModal } from "./bill-list-modal";
@@ -334,6 +340,8 @@ export function SaleBillEntryView({
    * document that was posted.
    */
   const [printTarget, setPrintTarget] = useState<SavedBillRef | null>(null);
+  /** The quick strip's WhatsApp: the SAVED bill, snapshotted when it opened. */
+  const [whatsappTarget, setWhatsappTarget] = useState<WhatsappBillTarget | null>(null);
   /** A gate that asked a question (§14) — the message and the yes that answers it. */
   const [saveQuestion, setSaveQuestion] = useState<string | null>(null);
   /**
@@ -1129,6 +1137,51 @@ export function SaleBillEntryView({
     void api.refreshOpenCredits().finally(() => setCreditsLoading(false));
     setAdjustOpen(true);
   }, [api, draft.adjustments, draft.customer.custId, editable, pricing.totals.bill]);
+  /**
+   * The quick strip's WhatsApp: the bill AS SAVED — the PDF is rendered from
+   * the server's copy, which is why unsaved edits keep the button off.
+   */
+  const whatsappBlocked = whatsappBlockedReason({
+    docId: draft.docId,
+    isNewEntry: draft.isNewEntry,
+    isDirty: draft.isDirty,
+    status: draft.status,
+    canPrint: menuPermissions.canPrint,
+  });
+  const openWhatsapp = useCallback(() => {
+    if (whatsappBlocked || !draft.docId) {
+      toast.warn(whatsappBlocked ?? "Save the bill first.");
+      return;
+    }
+    setWhatsappTarget({
+      docKey: {
+        sbId: draft.docId,
+        sbCompanyId: draft.companyId,
+        sbBranchId: draft.branchId,
+        sbAccYear: draft.accYear,
+      },
+      billRefno: draft.billRefno,
+      custId: draft.customer.custId,
+      customerName: draft.customer.name,
+      billPhone: draft.customer.phone,
+      contactNo: draft.header.contactNo,
+      billDate: draft.header.billDate,
+      amount: pricing.totals.bill,
+    });
+  }, [
+    draft.accYear,
+    draft.billRefno,
+    draft.branchId,
+    draft.companyId,
+    draft.customer.custId,
+    draft.customer.name,
+    draft.customer.phone,
+    draft.docId,
+    draft.header.billDate,
+    draft.header.contactNo,
+    pricing.totals.bill,
+    whatsappBlocked,
+  ]);
   /** Alt+O (§6.2): the current line's cost. */
   const showLineCost = useCallback(() => {
     const text = api.lineCostText(activeRowKey);
@@ -1380,6 +1433,7 @@ export function SaleBillEntryView({
     heldOpen ||
     tenderOpen ||
     printTarget !== null ||
+    whatsappTarget !== null ||
     adjustOpen ||
     editConfirmOpen ||
     cancelBillOpen ||
@@ -1746,6 +1800,9 @@ export function SaleBillEntryView({
         onEinvoice={() => toast.info("e-Invoice actions arrive with the GST band.")}
         onEwaybill={() => toast.info("e-Way actions arrive with the GST band.")}
         onCopyAsNew={api.copyAsNew}
+        onWhatsapp={openWhatsapp}
+        whatsappEnabled={whatsappBlocked === null}
+        whatsappTooltip={whatsappBlocked ?? WHATSAPP_ACTION_LABEL}
         einvoiceLabel="e-Inv"
         ewaybillLabel="e-Way"
         einvoiceEnabled={false}
@@ -2276,6 +2333,10 @@ export function SaleBillEntryView({
             },
           ]}
         />
+      ) : null}
+
+      {whatsappTarget ? (
+        <WhatsappBillDialog target={whatsappTarget} onClose={() => setWhatsappTarget(null)} />
       ) : null}
 
       <DeleteConfirmModal

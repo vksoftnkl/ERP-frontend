@@ -66,6 +66,12 @@ export const BRANCH_GET_ENDPOINT = "/branch-masters/get";
  * its ledger in one call; a name clash is a 409 naming the ledger.
  */
 export const CUSTOMER_CREATE_ENDPOINT = "/customers/create";
+/**
+ * `GET /customers/get?cusId=` — the WhatsApp send reads the customer's own
+ * numbers here: `/master-lookups/customer-detail` carries `cust_phone1` only,
+ * and the bill snapshots nothing but that one phone.
+ */
+export const CUSTOMER_GET_ENDPOINT = "/customers/get";
 /** `GET /temp-credits/open` and `PUT /temp-credits/follow-up` (§24). */
 export const TEMP_CREDIT_OPEN_ENDPOINT = "/temp-credits/open";
 export const TEMP_CREDIT_FOLLOW_UP_ENDPOINT = "/temp-credits/follow-up";

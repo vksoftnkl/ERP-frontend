@@ -25,6 +25,10 @@ import type {
   QuickAddCustomerResult,
 } from "@/features/sales/salebill/salebill.quick-add";
 import {
+  customerContactsOf,
+  type CustomerContacts,
+} from "@/features/sales/salebill/salebill.whatsapp";
+import {
   BILL_AMEND_ENDPOINT,
   BILL_CANCEL_ENDPOINT,
   BILL_DELETE_ENDPOINT,
@@ -40,6 +44,7 @@ import {
   BILL_VALIDATE_ENDPOINT,
   BRANCH_GET_ENDPOINT,
   CUSTOMER_CREATE_ENDPOINT,
+  CUSTOMER_GET_ENDPOINT,
   GST_EINVOICE_GENERATE_ENDPOINT,
   GST_EWAYBILL_GENERATE_ENDPOINT,
   GST_EWAYBILL_VEHICLE_ENDPOINT,
@@ -500,6 +505,18 @@ export const saleBillApi = baseApi.injectEndpoints({
       transformResponse: (payload: ApiSuccessResponse<QuickAddCustomerResult>) => payload.data,
     }),
 
+    /**
+     * `GET /customers/get?cusId` — the customer's WhatsApp number and phones,
+     * for sending the bill on WhatsApp. Its own name, not `getCustomer`:
+     * `baseApi` injects with `overrideExisting`. Never cached — the number may
+     * have just been corrected on the customer master.
+     */
+    getBillCustomerContacts: builder.query<CustomerContacts, string>({
+      query: (cusId) => ({ url: CUSTOMER_GET_ENDPOINT, params: { cusId } }),
+      transformResponse: (payload: ApiSuccessResponse<unknown>) => customerContactsOf(payload.data),
+      keepUnusedDataFor: 0,
+    }),
+
     /** `GET /branch-masters/get?brId` (§20.2). */
     getBranchAddress: builder.query<BranchAddress, string>({
       query: (brId) => ({ url: BRANCH_GET_ENDPOINT, params: { brId } }),
@@ -584,6 +601,7 @@ export const {
   useFollowUpTempCreditMutation,
   useDeleteTempCreditMutation,
   useCreateQuickCustomerMutation,
+  useGetBillCustomerContactsQuery,
   useLazyGetBranchAddressQuery,
   useListPromotionSchemesQuery,
   useGenerateEinvoiceMutation,
