@@ -1,0 +1,185 @@
+/**
+ * GRN (menu 196) — the screen's own skin, on top of the quotation shell's page /
+ * title bar / fields / grid / buttons (imported where used). Lengths are `u(n)`
+ * off the fluid unit the transaction screens share. The top band and header card
+ * follow Godown Transfer's.
+ */
+@function u($n) {
+  @return calc(#{$n} * var(--erp-q-u, 1rem));
+}
+
+/* ------------------------------------------------------------- top band */
+.topBand {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: minmax(u(14), 1fr) minmax(0, 3.4fr);
+  gap: u(0.9);
+  align-items: start;
+  padding-bottom: u(0.35);
+  border-bottom: 3px solid var(--primary, #7b1515);
+}
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.25);
+  min-width: 0;
+}
+.titleLine {
+  display: flex;
+  gap: u(0.5);
+  align-items: baseline;
+}
+.docTitle {
+  color: var(--text-muted, #666666);
+  font-size: u(0.78);
+  font-weight: 600;
+}
+.statusLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.5);
+  align-items: center;
+  font-size: u(0.72);
+}
+.busy {
+  color: var(--text-muted, #666666);
+  font-size: u(0.72);
+}
+.statusPill {
+  padding: u(0.08) u(0.6);
+  border-radius: 999px;
+  font-size: u(0.7);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.statusDraft {
+  background: #fef3e2;
+  color: #b45309;
+}
+.statusPosted {
+  background: #e8f5ea;
+  color: #15803d;
+}
+.statusCancelled {
+  background: #fde8e8;
+  color: #b42318;
+}
+.billedPill {
+  padding: u(0.08) u(0.6);
+  border-radius: 999px;
+  background: #e6efff;
+  color: #1d4ed8;
+  font-size: u(0.7);
+  font-weight: 800;
+}
+
+/* ---------------------------------------------------- the header card */
+/*
+ * Four label / field pairs a row (Qt GrnEntry's grid: Supplier · Against PO ·
+ * GRN Date · GRN No / Godown · Challan No · Challan Date · Vehicle / Unloaded by
+ * · Remarks). DOM order is the reading order Enter and Tab follow.
+ */
+.headerCard {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: u(0.45) u(0.9);
+  align-items: center;
+  padding: u(0.55) u(0.75);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: var(--card-bg, #ffffff);
+}
+.pair {
+  display: grid;
+  grid-template-columns: u(6.5) minmax(0, 1fr);
+  gap: u(0.5);
+  align-items: center;
+  min-width: 0;
+}
+.pairWide {
+  grid-column: span 2;
+}
+/* Supplier / Godown: red until chosen, green once set (Qt NexStyle::tone). */
+.pair[data-tone="missing"] {
+  padding: u(0.15) u(0.3);
+  border-radius: var(--erp-radius, 4px);
+  outline: 2px solid var(--danger, #b3261e);
+  outline-offset: 0;
+  background: #fdecec;
+}
+.pair[data-tone="set"] {
+  padding: u(0.15) u(0.3);
+  border-radius: var(--erp-radius, 4px);
+  outline: 2px solid var(--success-text, #1c6b2e);
+  outline-offset: 0;
+  background: #eef7f0;
+}
+.fieldLabel {
+  font-size: u(0.74);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------ the grid */
+.gridShell {
+  flex: 1 1 auto;
+  min-height: u(12);
+}
+.gridViewport {
+  min-height: u(10);
+  max-height: calc(48vh / var(--erp-ui-scale, 1));
+}
+.gridViewport:focus {
+  outline: none;
+}
+.lineGrid {
+  width: 100%;
+  min-width: u(58);
+}
+.problemRow > td {
+  background: #fdf3d8;
+}
+.cellReadOnly {
+  cursor: default;
+}
+.cellPlaceholder::placeholder {
+  color: #9ca3af;
+}
+/* Qt delegate: a Short that is not zero is drawn red. */
+.shortQty {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+/* ------------------------------------------------- totals, strip, hint */
+.totals {
+  margin: 0;
+  font-size: u(0.78);
+}
+.totals strong {
+  font-weight: 800;
+}
+.shortTotal {
+  color: #b91c1c;
+  font-weight: 700;
+}
+.hintLine {
+  min-height: u(1);
+  margin: 0;
+  color: var(--text-muted, #555555);
+  font-size: u(0.72);
+  white-space: pre-line;
+}
+.buttonBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.35);
+  justify-content: flex-end;
+}
+.footerHint {
+  margin-right: auto;
+  align-self: center;
+  color: var(--text-muted, #666666);
+  font-size: u(0.7);
+  font-weight: 600;
+}

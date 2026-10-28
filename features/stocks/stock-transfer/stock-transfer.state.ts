@@ -725,9 +725,19 @@ export function postConfirm(draft: TransferDraft): { title: string; message: str
 // ---------------------------------------------------------------------------
 
 /** "Godown Transfer — new" / "Godown Transfer — TRF/…" (Qt `refreshTitle`). */
+/**
+ * TRF/2026-2027/44c01ccc-a162-8314-34b0-1dbf2f5c7bab/17 → TRF/2026-2027/44c01ccc/17.
+ * Older vouchers were numbered by the machine uuid (server notes 160 C); only
+ * its first block is shown. A device-code number (TRF/2026-2027/D14/00059)
+ * passes through unchanged. Qt `shortRefno` (NexERP 3ce8487).
+ */
+export function shortRefno(refno: string): string {
+  return refno.replace(/([0-9a-f]{8})-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "$1");
+}
+
 export function titleLine(draft: TransferDraft): string {
   const name = MODE_INFO[draft.mode].documentName;
-  return draft.refno ? `${name} — ${draft.refno}` : `${name} — new`;
+  return draft.refno ? `${name} — ${shortRefno(draft.refno)}` : `${name} — new`;
 }
 
 /** "Acme Foods · Coimbatore → Counter2" — no year: the voucher number has it. */

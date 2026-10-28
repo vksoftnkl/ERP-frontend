@@ -79,6 +79,12 @@ export const MENU_ROUTES: Readonly<Record<number, MenuRoute>> = {
   2: { iconKey: "purchase" },
   22: { href: "/master/suppliers" },
   27: { href: "/master/supplier-groups" },
+  // The purchase documents (Qt NexERP 3ce8487..b8f615e, plan-purchase-frontend F10).
+  24: { href: "/purchase/purchase-entry" },
+  23: { href: "/purchase/purchase-order" },
+  196: { href: "/purchase/grn" },
+  25: { href: "/purchase/purchase-return" },
+  195: { href: "/purchase/shortage-receipt" },
 
   // Inventory
   3: { iconKey: "inventory" },

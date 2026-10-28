@@ -76,6 +76,7 @@ import {
   rowHasItem,
   scopeLabel,
   settleShortOpen,
+  shortRefno,
   shortTotals,
   statusText,
   titleLine,
@@ -501,12 +502,12 @@ export function StockTransferEntryView({
       notify(
         "warn",
         "Cannot cancel a despatch",
-        `${current.refno} has left. Goods that left cannot be cancelled on paper — let ${current.toBranchName} receive them and transfer them back, or settle short what never arrives.`,
+        `${shortRefno(current.refno)} has left. Goods that left cannot be cancelled on paper — let ${current.toBranchName} receive them and transfer them back, or settle short what never arrives.`,
       );
       return;
     }
     if (current.status !== "POSTED") {
-      notify("warn", "Not posted", `${current.refno} is ${current.status}.`);
+      notify("warn", "Not posted", `${shortRefno(current.refno)} is ${current.status}.`);
       return;
     }
     setReasonAsk("cancel");
@@ -523,14 +524,14 @@ export function StockTransferEntryView({
       }
       if (kind === "recall") {
         ask({
-          title: `Recall ${current.refno}?`,
+          title: `Recall ${shortRefno(current.refno)}?`,
           message: `Nothing has been received at ${current.toBranchName}. The stock comes back into ${current.fromGodownName} and the loading charge is reversed.`,
           onConfirm: () => void api.recallDespatch(reason),
         });
         return;
       }
       ask({
-        title: `Cancel ${current.refno}?`,
+        title: `Cancel ${shortRefno(current.refno)}?`,
         message: `The stock goes back from ${current.toGodownName} to ${current.fromGodownName} — a mirror row for each row the transfer wrote. Nothing is deleted.\n\nIt is refused if the stock has since left ${current.fromGodownName === current.toGodownName ? "the To godown" : current.toGodownName}.`,
         onConfirm: () => void api.cancelDocument(reason),
       });
@@ -545,7 +546,7 @@ export function StockTransferEntryView({
       return;
     }
     ask({
-      title: `Delete ${current.refno}?`,
+      title: `Delete ${shortRefno(current.refno)}?`,
       message: "The draft moved no stock. Delete it?",
       onConfirm: () => void api.deleteDraft(),
     });
@@ -754,12 +755,12 @@ export function StockTransferEntryView({
             {draft.dirty ? <span className={quotationStyles.dirtyDot}>● unsaved</span> : null}
             {api.busy ? <span className={styles.scope}>{api.busy === "loading" ? "loading…" : "working…"}</span> : null}
           </div>
+          {/* Qt 3ce8487: who created / posted it, on ONE line under the status. */}
           <div className={styles.audit} title="Who created this document and when — and, once posted, who posted it">
-            {audit.map((line) => (
-              <span key={line}>{line}</span>
-            ))}
+            {audit.length > 0 ? <span>{audit.join(" · ")}</span> : null}
             {notice ? (
               <span className={styles.notice} role="status">
+                {audit.length > 0 ? " · " : ""}
                 {notice}
               </span>
             ) : null}
@@ -768,8 +769,8 @@ export function StockTransferEntryView({
 
         {/* ── the header: four columns, in tab order ──────────────────── */}
         <div className={styles.headerCard} onKeyDown={onHeaderKeyDown}>
-          <div className={styles.pair} style={at(1, 1)}>
-            <ReadOnlyInput id="stock-transfer-docno" label="Voucher No" value={draft.refno} placeholder="given on save" />
+          <div className={styles.pair} style={at(1, 1)} title={draft.refno || undefined}>
+            <ReadOnlyInput id="stock-transfer-docno" label="Voucher No" value={shortRefno(draft.refno)} placeholder="given on save" />
           </div>
           <div className={styles.pair} style={at(1, 2)}>
             <DateField
@@ -865,22 +866,7 @@ export function StockTransferEntryView({
         </div>
       </div>
 
-      <p className={styles.shapeNote}>{info.shapeNote}</p>
-
       <section className={cx(quotationStyles.gridShell, styles.gridShell)}>
-        <div className={quotationStyles.gridHead}>
-          <span className={quotationStyles.gridHeadTitle}>Lines</span>
-          <button
-            type="button"
-            className={cx(quotationStyles.button, quotationStyles.buttonPrimary)}
-            disabled={!editable || working}
-            title="Every line is a holding picked from the From godown's stock."
-            onClick={runPick}
-          >
-            Pick from stock · F12
-          </button>
-          <span className={quotationStyles.modalNote}>{GRID_NOTE}</span>
-        </div>
         {gridSettings.overlays}
         <TransferLineGrid
           draft={draft}
@@ -933,10 +919,19 @@ export function StockTransferEntryView({
       </div>
 
       {strip ? <p className={styles.validation}>{strip.text}</p> : null}
-      <p className={styles.hintLine}>{draft.hint}</p>
+      <p className={styles.hintLine}>{draft.hint || (editable ? GRID_NOTE : "")}</p>
 
       <div className={styles.buttonBar}>
         <span className={styles.footerHint}>F1 · keys on this screen · Alt+PgUp / Alt+PgDn previous / next transfer</span>
+        <button
+          type="button"
+          className={cx(quotationStyles.button, quotationStyles.buttonPrimary)}
+          disabled={!editable || working}
+          title="Every line is a holding picked from the From godown's stock."
+          onClick={runPick}
+        >
+          Pick from stock · F12
+        </button>
         <button
           type="button"
           className={quotationStyles.button}
@@ -1055,10 +1050,10 @@ export function StockTransferEntryView({
         isOpen={reasonAsk !== null}
         title={
           reasonAsk === "settle"
-            ? `Settle ${draft.refno} short`
+            ? `Settle ${shortRefno(draft.refno)} short`
             : reasonAsk === "recall"
-              ? `Recall ${draft.refno}`
-              : `Cancel ${draft.refno}`
+              ? `Recall ${shortRefno(draft.refno)}`
+              : `Cancel ${shortRefno(draft.refno)}`
         }
         prompt={
           reasonAsk === "settle"

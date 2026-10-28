@@ -46,10 +46,8 @@
   align-items: center;
   font-size: u(0.72);
 }
+/* One line (Qt 3ce8487): "Created … · Posted …", the notice after it. */
 .audit {
-  display: flex;
-  flex-direction: column;
-  gap: u(0.1);
   color: var(--text-muted, #666666);
   font-size: u(0.7);
 }
@@ -120,12 +118,6 @@
   outline-offset: 0;
   background: #eef7f0;
 }
-.shapeNote {
-  margin: 0;
-  color: var(--text-muted, #555555);
-  font-size: u(0.72);
-}
-
 /* ------------------------------------------------------------ the grid */
 .gridShell {
   flex: 1 1 auto;

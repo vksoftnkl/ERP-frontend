@@ -1,0 +1,180 @@
+/**
+ * Shortage Receipt — the screen's own skin, on top of the quotation shell's page /
+ * title bar / fields / grid / buttons (imported where used). Lengths are `u(n)`
+ * off the same fluid unit the transaction screens share. No viewport units: the
+ * page fills `.erp-app-content`, and the grid takes what the page leaves.
+ */
+@function u($n) {
+  @return calc(#{$n} * var(--erp-q-u, 1rem));
+}
+
+/* ------------------------------------------------------------- top band */
+.topBand {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: minmax(u(15), 1fr) minmax(0, 3fr);
+  gap: u(0.9);
+  align-items: start;
+  padding-bottom: u(0.35);
+  border-bottom: 3px solid var(--primary, #7b1515);
+}
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.25);
+  min-width: 0;
+}
+.titleLine {
+  display: flex;
+  gap: u(0.5);
+  align-items: baseline;
+}
+.docTitle {
+  font-size: u(0.8);
+  font-weight: 700;
+}
+.scope {
+  color: var(--text-muted, #666666);
+  font-size: u(0.72);
+}
+.statusLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.5);
+  align-items: center;
+  font-size: u(0.72);
+}
+.statusPill {
+  padding: u(0.08) u(0.6);
+  border-radius: 999px;
+  font-size: u(0.7);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.statusDraft {
+  background: #fef3e2;
+  color: #b45309;
+}
+.statusPosted {
+  background: #e8f5ea;
+  color: #15803d;
+}
+.statusCancelled {
+  background: #fde8e8;
+  color: #b42318;
+}
+
+/* ------------------------------------------------------ the header card */
+/*
+ * Supplier · Godown · Date · Receipt No on the first row; Challan No ·
+ * Unloaded by · Remarks on the second (the Qt card). DOM order is the Enter walk.
+ */
+.fieldsCard {
+  display: grid;
+  grid-template-columns:
+    auto minmax(0, 2fr)
+    auto minmax(0, 2fr)
+    auto minmax(0, 2fr)
+    auto minmax(0, 2fr);
+  gap: u(0.45) u(0.5);
+  align-items: center;
+  padding: u(0.55) u(0.75);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: var(--card-bg, #ffffff);
+}
+.remarksInput {
+  grid-column: span 3;
+}
+@container erp-txn-page (max-width: 1100px) {
+  .topBand {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@container erp-txn-page (max-width: 760px) {
+  .fieldsCard {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .remarksInput {
+    grid-column: auto;
+  }
+}
+
+/* ------------------------------------------------------------ the grid */
+.gridShell {
+  flex: 1 1 auto;
+  min-height: u(12);
+}
+.gridViewport {
+  flex: 1 1 auto;
+  min-height: u(10);
+}
+.lineGrid {
+  width: 100%;
+  min-width: u(56);
+}
+.num {
+  text-align: right !important;
+}
+.rowNo {
+  color: var(--text-muted, #666666);
+  text-align: center;
+}
+.activeRow > td {
+  background: #f6e3e3;
+}
+.problemRow > td {
+  background: #fdf3d8;
+}
+.shortText {
+  color: #b91c1c;
+  font-weight: 600;
+}
+.emptyRow {
+  padding: u(1) u(0.75) !important;
+  color: var(--text-muted, #666666);
+  text-align: center;
+}
+
+/* ------------------------------------------------------- notes, buttons */
+.totalsLine {
+  min-height: u(1);
+  margin: 0;
+  font-size: u(0.78);
+  font-weight: 600;
+  text-align: right;
+}
+.validation {
+  margin: 0;
+  padding: u(0.3) u(0.6);
+  border: 1px solid #e0b4b4;
+  background: #fdf3f3;
+  color: #b42318;
+  font-size: u(0.74);
+  font-weight: 600;
+}
+.hintLine {
+  min-height: u(1);
+  margin: 0;
+  color: var(--text-muted, #666666);
+  font-size: u(0.72);
+  white-space: pre-line;
+}
+.spacer {
+  flex: 0 0 auto;
+}
+.buttonBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.5);
+  align-items: center;
+  padding-top: u(0.4);
+  border-top: 1px solid var(--border, #c9c9c9);
+}
+.footerHint {
+  flex: 1 1 auto;
+  color: var(--text-muted, #666666);
+  font-size: u(0.7);
+  text-align: right;
+}

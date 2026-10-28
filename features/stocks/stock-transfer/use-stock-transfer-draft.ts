@@ -55,6 +55,7 @@ import {
   removeLine,
   requireGodowns,
   rowHasItem,
+  shortRefno,
   type Refusal,
 } from "./stock-transfer.state";
 import type {
@@ -448,7 +449,7 @@ export function useStockTransferDraft(opts: UseStockTransferDraftOptions) {
       notify(
         "warn",
         "Not a draft",
-        `${current.refno} is ${current.status}. A posted transfer cannot be edited — cancel it and key a new one.`,
+        `${shortRefno(current.refno)} is ${current.status}. A posted transfer cannot be edited — cancel it and key a new one.`,
       );
       return false;
     }
@@ -609,12 +610,12 @@ export function useStockTransferDraft(opts: UseStockTransferDraftOptions) {
         notify(
           "info",
           "Despatched",
-          `${current.refno} despatched — ${rows} line${rows === 1 ? "" : "s"} in transit to ${current.toBranchName}. ` +
+          `${shortRefno(current.refno)} despatched — ${rows} line${rows === 1 ? "" : "s"} in transit to ${current.toBranchName}. ` +
             `${current.toBranchName} receives it in Branch Inward.`,
         );
       } else {
         const rows = Number(result?.ledgerRows ?? 0);
-        notify("info", "Posted", `${current.refno} posted — the stock is in ${current.toGodownName} (${rows} ledger row${rows === 1 ? "" : "s"}).`);
+        notify("info", "Posted", `${shortRefno(current.refno)} posted — the stock is in ${current.toGodownName} (${rows} ledger row${rows === 1 ? "" : "s"}).`);
       }
       startNextDocument();
       return true;
@@ -623,7 +624,7 @@ export function useStockTransferDraft(opts: UseStockTransferDraftOptions) {
       showRefusal(error, sentKeys);
       commit({
         ...draftRef.current,
-        notice: `Saved as ${current.refno} (draft) — the stock has not moved.`,
+        notice: `Saved as ${shortRefno(current.refno)} (draft) — the stock has not moved.`,
       });
       return false;
     } finally {
@@ -655,7 +656,7 @@ export function useStockTransferDraft(opts: UseStockTransferDraftOptions) {
           setBusy(null);
           return await despatch();
         }
-        notify("info", "Saved", `${saved.refno} saved as a draft. No stock has moved — Post (Ctrl+Enter) moves it.`);
+        notify("info", "Saved", `${shortRefno(saved.refno)} saved as a draft. No stock has moved — Post (Ctrl+Enter) moves it.`);
         return true;
       } catch (error) {
         showRefusal(error, sentKeys);
@@ -680,7 +681,7 @@ export function useStockTransferDraft(opts: UseStockTransferDraftOptions) {
           branchId: current.branchId,
           reason: reason.trim(),
         }).unwrap();
-        notify("info", "Cancelled", `${current.refno} cancelled — the stock is back in ${current.fromGodownName}.`);
+        notify("info", "Cancelled", `${shortRefno(current.refno)} cancelled — the stock is back in ${current.fromGodownName}.`);
         startNextDocument();
         return true;
       } catch (error) {
@@ -706,7 +707,7 @@ export function useStockTransferDraft(opts: UseStockTransferDraftOptions) {
           branchId: current.branchId,
           reason: reason.trim(),
         }).unwrap();
-        notify("info", "Recalled", `${current.refno} recalled — the stock is back in ${current.fromGodownName}.`);
+        notify("info", "Recalled", `${shortRefno(current.refno)} recalled — the stock is back in ${current.fromGodownName}.`);
         startNextDocument();
         return true;
       } catch (error) {
@@ -729,7 +730,7 @@ export function useStockTransferDraft(opts: UseStockTransferDraftOptions) {
         companyId: current.companyId,
         branchId: current.branchId,
       }).unwrap();
-      notify("info", "Deleted", `${current.refno} deleted.`);
+      notify("info", "Deleted", `${shortRefno(current.refno)} deleted.`);
       startNextDocument();
       return true;
     } catch (error) {
@@ -760,7 +761,7 @@ export function useStockTransferDraft(opts: UseStockTransferDraftOptions) {
           reasonId: loss.srmId,
           remarks: remarks.trim(),
         }).unwrap();
-        notify("info", "Settled", answer?.message || `${current.refno} settled short.`);
+        notify("info", "Settled", answer?.message || `${shortRefno(current.refno)} settled short.`);
         await load(
           { svhId: current.svhId, companyId: current.companyId, branchId: current.branchId, accYear: current.accYear },
           false,

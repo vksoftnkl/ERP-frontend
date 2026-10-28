@@ -1,0 +1,43 @@
+/**
+ * The purchase documents' shared skin — the list's status pills and filters.
+ * Lengths are `u(n)` off the fluid unit the transaction screens share
+ * (`--erp-q-u`, set by the quotation shell's page).
+ */
+@function u($n) {
+  @return calc(#{$n} * var(--erp-q-u, 1rem));
+}
+
+.listPill {
+  padding: u(0.05) u(0.5);
+  border-radius: 999px;
+  font-size: u(0.66);
+  font-weight: 800;
+}
+.statusDraft {
+  background: #fef3e2;
+  color: #b45309;
+}
+.statusPosted {
+  background: #e8f5ea;
+  color: #15803d;
+}
+.statusCancelled {
+  background: #fde8e8;
+  color: #b42318;
+}
+.cancelledRow {
+  opacity: 0.7;
+}
+.filterSelect,
+.filterDate {
+  padding: u(0.15) u(0.3);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: #ffffff;
+  font: inherit;
+  font-size: u(0.74);
+}
+.rowReason {
+  margin-left: 1em;
+  color: #8b1a1a;
+}

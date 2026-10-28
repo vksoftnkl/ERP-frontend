@@ -1,0 +1,194 @@
+/**
+ * Purchase Entry — the screen's own skin, on top of the quotation shell's
+ * page / title / fields / grid / buttons (imported where used). Lengths are
+ * `u(n)` off the fluid unit the transaction screens share. The band and the
+ * four-pairs-a-row header card follow Godown Transfer's.
+ */
+@function u($n) {
+  @return calc(#{$n} * var(--erp-q-u, 1rem));
+}
+
+/* ------------------------------------------------------------- top band */
+.topBand {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: u(0.45);
+  padding-bottom: u(0.35);
+  border-bottom: 3px solid var(--primary, #7b1515);
+}
+.titleRow {
+  display: flex;
+  gap: u(0.6);
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.titleLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.5);
+  align-items: baseline;
+}
+.docTitle {
+  color: var(--text-muted, #666666);
+  font-size: u(0.78);
+  font-weight: 600;
+}
+.statusBlock {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.2);
+  align-items: flex-end;
+}
+.statusLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.5);
+  align-items: center;
+  justify-content: flex-end;
+  font-size: u(0.72);
+}
+.busy {
+  color: var(--text-muted, #666666);
+  font-size: u(0.72);
+}
+.statusPill {
+  padding: u(0.08) u(0.6);
+  border-radius: 999px;
+  font-size: u(0.7);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.statusDraft {
+  background: #fef3e2;
+  color: #b45309;
+}
+.statusPosted {
+  background: #e8f5ea;
+  color: #15803d;
+}
+.statusCancelled {
+  background: #fde8e8;
+  color: #b42318;
+}
+
+/* ---------------------------------------------------- the header card */
+/* Four label / field pairs a row (Qt grid: columns 1, 4, 7, 10). DOM order is the tab order. */
+.headerCard {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: u(0.45) u(0.9);
+  align-items: center;
+  padding: u(0.55) u(0.75);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: var(--card-bg, #ffffff);
+}
+.pair {
+  display: grid;
+  grid-template-columns: u(6.5) minmax(0, 1fr);
+  gap: u(0.5);
+  align-items: center;
+  min-width: 0;
+}
+.amountInput {
+  text-align: right;
+}
+
+/* ------------------------------------------------------------ the grid */
+.gridShell {
+  flex: 1 1 auto;
+  min-height: u(12);
+}
+.gridViewport {
+  min-height: u(10);
+  max-height: calc(46vh / var(--erp-ui-scale, 1));
+}
+.gridViewport:focus {
+  outline: none;
+}
+.lineGrid {
+  width: 100%;
+  min-width: u(64);
+}
+.cellReadOnly {
+  cursor: default;
+}
+.cellPlaceholder::placeholder {
+  color: #9ca3af;
+}
+.upperCell {
+  text-transform: uppercase;
+}
+.toneBad {
+  color: #b91c1c;
+  font-weight: 700;
+}
+.toneGood {
+  color: #15803d;
+  font-weight: 700;
+}
+
+/* -------------------------------------------------------- totals strip */
+/* Qt lblTotals: Taxable · GST · Round off · Net payable · Invoice amount · Difference [· Short parked]. */
+.totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.25) u(1.1);
+  align-items: baseline;
+  margin: 0;
+  padding: u(0.35) u(0.7);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: var(--card-bg, #ffffff);
+  font-size: u(0.76);
+}
+.totals > div {
+  display: flex;
+  gap: u(0.35);
+  align-items: baseline;
+}
+.totals dt {
+  color: var(--text-muted, #555555);
+  font-weight: 600;
+}
+.totals dd {
+  margin: 0;
+  font-weight: 800;
+}
+.totalsNet dd {
+  font-size: u(0.86);
+}
+.diffOk {
+  color: #15803d;
+}
+.diffBad {
+  color: #b91c1c;
+}
+.totalsEmpty {
+  color: var(--text-muted, #666666);
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------- hint and buttons */
+.hintLine {
+  min-height: u(1);
+  margin: 0;
+  color: #8b1a1a;
+  font-size: u(0.72);
+  white-space: pre-line;
+}
+.buttonBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.35);
+  justify-content: flex-end;
+}
+.footerHint {
+  margin-right: auto;
+  align-self: center;
+  color: var(--text-muted, #666666);
+  font-size: u(0.7);
+  font-weight: 600;
+}

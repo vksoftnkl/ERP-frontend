@@ -82,7 +82,6 @@ export type ModeInfo = {
   searchHint: string;
   /** The Post button: a godown transfer posts, a branch one despatches. */
   postLabel: string;
-  shapeNote: string;
 };
 
 export const MODE_INFO: Record<TransferMode, ModeInfo> = {
@@ -96,7 +95,6 @@ export const MODE_INFO: Record<TransferMode, ModeInfo> = {
     listSubtitle: "Stock moved from one godown of this branch to another.",
     searchHint: "doc no, godown, reason or remarks",
     postLabel: "Post",
-    shapeNote: "Same branch: Post moves the stock out of From and into To in one step.",
   },
   branch: {
     title: "Branch Outward",
@@ -108,8 +106,6 @@ export const MODE_INFO: Record<TransferMode, ModeInfo> = {
     listSubtitle: "Stock despatched to another branch — in transit until that branch receives it.",
     searchHint: "doc no, branch, godown, LR or vehicle",
     postLabel: "Despatch",
-    shapeNote:
-      "Branch to branch: Despatch sends the stock into transit until the other branch receives it.",
   },
 };
 

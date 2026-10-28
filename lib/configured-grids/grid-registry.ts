@@ -119,6 +119,15 @@ export const CONFIGURED_GRIDS = {
    */
   stockReasonList: { name: "MAIN LIST - STOCK REASONS", fallbackId: "188", deletedParam: null },
   /**
+   * The purchase documents (Qt NexERP 3ce8487..b8f615e; `TxnDocTypes::purchase*`).
+   * Every one binds grid 183's six QUOTED tokens.
+   */
+  purchaseInvoiceList: { name: "MAIN LIST - PURCHASE INVOICE", fallbackId: "189", deletedParam: null },
+  purchaseOrderList: { name: "MAIN LIST - PURCHASE ORDER", fallbackId: "190", deletedParam: null },
+  grnList: { name: "MAIN LIST - GRN", fallbackId: "191", deletedParam: null },
+  purchaseReturnList: { name: "MAIN LIST - PURCHASE RETURN", fallbackId: "192", deletedParam: null },
+  shortageReceiptList: { name: "MAIN LIST - SHORTAGE RECEIPT", fallbackId: "193", deletedParam: null },
+  /**
    * Tracking Presets (menu 249; Qt d27045b) — shared presets plus the company's own, a company
    * row hiding the shared one of the same code. Binds `ispt_company_id` and `ispt_is_deleted`, both always sent.
    */

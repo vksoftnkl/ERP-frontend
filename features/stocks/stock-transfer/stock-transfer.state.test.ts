@@ -22,6 +22,7 @@ import {
   requireGodowns,
   rowHasItem,
   settleShortOpen,
+  shortRefno,
   shortTotals,
   whyNotEditable,
   wireFromLocalText,
@@ -306,5 +307,15 @@ describe("local datetime", () => {
     expect(text).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
     expect(new Date(wireFromLocalText(text)).getTime()).toBe(Math.floor(new Date(iso).getTime() / 60000) * 60000);
     expect(wireFromLocalText("")).toBe("");
+  });
+});
+
+describe("shortRefno (Qt 3ce8487)", () => {
+  it("keeps only the first block of a machine-uuid number", () => {
+    expect(shortRefno("TRF/2026-2027/44c01ccc-a162-8314-34b0-1dbf2f5c7bab/17")).toBe("TRF/2026-2027/44c01ccc/17");
+  });
+  it("leaves a device-code number alone", () => {
+    expect(shortRefno("TRF/2026-2027/D14/00059")).toBe("TRF/2026-2027/D14/00059");
+    expect(shortRefno("")).toBe("");
   });
 });

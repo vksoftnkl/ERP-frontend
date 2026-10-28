@@ -103,6 +103,14 @@ export const UI_TABLES = {
   godownTransferLines: { name: "GODOWN TRANSFER - LINES", fallbackId: "54" },
   /** Branch Inward (menu 193) — the receipt's line grid. */
   branchInwardLines: { name: "BRANCH INWARD - LINES", fallbackId: "55" },
+  /** The purchase documents' line grids (Qt NexERP 3ce8487..b8f615e). */
+  purchaseInvoiceLines: { name: "PURCHASE INVOICE - LINES", fallbackId: "56" },
+  purchaseOrderLines: { name: "PURCHASE ORDER - LINES", fallbackId: "57" },
+  grnLines: { name: "GRN - LINES", fallbackId: "58" },
+  purchaseReturnLines: { name: "PURCHASE RETURN - LINES", fallbackId: "59" },
+  /** Purchase Return's Claims… dialog — the open claim rows. */
+  purchaseClaimsOpen: { name: "PURCHASE CLAIMS - OPEN", fallbackId: "60" },
+  shortageReceiptLines: { name: "SHORTAGE RECEIPT - LINES", fallbackId: "61" },
 } as const;
 export type UiTableKey = keyof typeof UI_TABLES;
 const ID_KEYS = ["ui_tbl_id", "uiTblId", "uiTableId", "id"] as const;
