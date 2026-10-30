@@ -222,13 +222,20 @@ export function getFirstFocusableFieldTarget(
   root: HTMLElement,
   options?: { skipCustomFields?: boolean },
 ): FocusableFieldTarget | null {
+  // A locked field (the code on an edit, a GST No the type refuses) cannot take
+  // focus, so "the first field" is the first one that can.
+  const enabledTargets = getFocusableFieldTargets(root).filter(
+    (target) =>
+      !target.control.matches(":disabled") &&
+      target.control.getAttribute("aria-disabled") !== "true",
+  );
   const targets = options?.skipCustomFields
-    ? getFocusableFieldTargets(root).filter(
+    ? enabledTargets.filter(
         // Custom fields own their keyboard behaviour (grids, pickers), so an
         // automatic jump into one is left to the field itself.
         (target) => target.container.dataset.erpModalFieldType !== "custom",
       )
-    : getFocusableFieldTargets(root);
+    : enabledTargets;
   if (targets.length === 0) {
     return null;
   }

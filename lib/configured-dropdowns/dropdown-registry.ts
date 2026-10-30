@@ -127,6 +127,8 @@ export const CONFIGURED_DROPDOWNS = {
    * `'iemp_role'` ('' = no role filter), both always sent.
    */
   employeeByDesignation: { name: "EMPLOYEES BY DESIGNATION", fallbackId: "72", paramBound: true },
+  /** Purchase Order's Terms (purchase.pur_terms). Binds a QUOTED `'icompany_id'` (shared rows always show). */
+  poTerms: { name: "PO TERMS", fallbackId: "73", paramBound: true },
 } as const;
 export type ConfiguredDropdownKey = keyof typeof CONFIGURED_DROPDOWNS;
 const ID_KEYS = ["dropdown_id", "dropdownId", "id"] as const;

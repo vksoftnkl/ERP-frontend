@@ -31,6 +31,8 @@ export type LedgerPickItem = {
   isBillByBill: boolean;
   /** `led_company_id IS NULL`: the same ledger in every company. */
   isShared: boolean;
+  /** Party rules D1-7: a deleted ledger, listed only with `includeDeleted=true`. */
+  isDeleted: boolean;
 };
 
 export type LedgerPickPayload = { items: LedgerPickItem[] };
@@ -38,6 +40,8 @@ export type LedgerPickPayload = { items: LedgerPickItem[] };
 export type LedgerFacts = {
   ledgerId: string;
   name: string;
+  /** The ledger (its party too) is deleted: the statement is history, read-only. */
+  isDeleted: boolean;
   groupName: string | null;
   nature: string | null;
   isBillByBill: boolean;

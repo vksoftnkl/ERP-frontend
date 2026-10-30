@@ -26,12 +26,15 @@ import {
   SUPPLIER_GROUP_NAME_KEYS,
   SUPPLIER_COLLECTION_DAY_NAMES,
   SUPPLIER_GST_TYPE_OPTIONS,
+  SUPPLIER_MSME_ACTIVITY_OPTIONS,
+  SUPPLIER_MSME_CATEGORY_OPTIONS,
 } from "./constants";
 import {
   gstinLookupToValues,
   type GstinLookupFieldMap,
   type GstinLookupPayload,
 } from "@/features/masters/shared/gstin-lookup";
+import { normalizePartyGstType } from "@/features/masters/shared/party-master-rules";
 import type {
   SupplierFormValues,
   StateModalFormValues,
@@ -98,16 +101,11 @@ export function toNullableInteger(value: string): number | null {
 
 // GST Type Conversion
 /**
- * A stored GST type as the select's entry ("Regular", "SEZ", …), matched
- * without regard to case so the REGULAR / COMPOSITION / UNREGISTERED the web
- * form used to save still load; anything else is "".
+ * The code for a stored or looked-up type: case, spaces, '_' and '-' do not
+ * matter, and "SEZ Unit" is SEZ, as the server reads them (party-gst-type.ts).
  */
 export function toGstTypeValue(value: string): string {
-  const normalized = value.trim().toUpperCase();
-  return (
-    SUPPLIER_GST_TYPE_OPTIONS.find((option) => option.value.toUpperCase() === normalized)
-      ?.value ?? ""
-  );
+  return normalizePartyGstType(value);
 }
 
 /**
@@ -310,8 +308,8 @@ export function buildSupplierLookupValues(
     stateNameByCode,
     allowedRegTypes: SUPPLIER_GST_TYPE_OPTIONS.map((option) => option.value.toUpperCase()),
   });
-  // The lookup answers REGULAR / COMPOSITION / UNREGISTERED / SEZ; the select
-  // holds the Qt words.
+  // The lookup answers REGULAR / COMPOSITION / UNREGISTERED / SEZ: the codes
+  // the select holds.
   if (looked.supGstType) {
     looked.supGstType = toGstTypeValue(looked.supGstType);
   }
@@ -399,6 +397,40 @@ export function mapSupplierGroupDetailToFormValues(
       getFirstDefinedValue(source, SUPPLIER_GROUP_DETAIL_KEYS.active),
       "true",
     ),
+  };
+}
+
+/** A stored code as the select's value: one of the options, else "" (not recorded). */
+function toCodedValue(value: unknown, options: ReadonlyArray<{ value: string }>): string {
+  const normalized = toDisplayValue(value).trim().toUpperCase();
+  return options.some((option) => option.value === normalized) ? normalized : "";
+}
+
+/** MST-01 — the Purchase tab out of `/suppliers/get` (camelCase). */
+export function toSupplierPurchaseValues(rowSource: Record<string, unknown>): Pick<
+  SupplierFormValues,
+  | "supMsmeCategory"
+  | "supMsmeActivity"
+  | "supMsmeAgreement"
+  | "supMsmeAgreedDays"
+  | "supDrugLicenceExpiry"
+  | "supFssaiNo"
+  | "supFssaiValidTo"
+  | "supDefaultGodownId"
+  | "supShowNotesOnEntry"
+  | "supIsImport"
+> {
+  return {
+    supMsmeCategory: toCodedValue(rowSource.supMsmeCategory, SUPPLIER_MSME_CATEGORY_OPTIONS),
+    supMsmeActivity: toCodedValue(rowSource.supMsmeActivity, SUPPLIER_MSME_ACTIVITY_OPTIONS),
+    supMsmeAgreement: toSelectBoolean(rowSource.supMsmeAgreement, "false"),
+    supMsmeAgreedDays: toDisplayValue(rowSource.supMsmeAgreedDays),
+    supDrugLicenceExpiry: toDateInputValue(rowSource.supDrugLicenceExpiry),
+    supFssaiNo: toDisplayValue(rowSource.supFssaiNo),
+    supFssaiValidTo: toDateInputValue(rowSource.supFssaiValidTo),
+    supDefaultGodownId: toDisplayValue(rowSource.supDefaultGodownId),
+    supShowNotesOnEntry: toSelectBoolean(rowSource.supShowNotesOnEntry, "false"),
+    supIsImport: toSelectBoolean(rowSource.supIsImport, "false"),
   };
 }
 
@@ -504,5 +536,6 @@ export function toSupplierFormValues(
         ]),
       "true",
     ),
+    ...toSupplierPurchaseValues(rowSource),
   };
 }

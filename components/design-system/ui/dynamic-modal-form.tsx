@@ -113,6 +113,53 @@ function isTopmostOpenModal(token: symbol): boolean {
 }
 
 /**
+ * Surfaces that are not dynamic modals but stack over one: the app confirm
+ * (`confirm()` → DeleteConfirmModal), the message popup, and anything marked
+ * `data-erp-nested-surface` (see erp-nested-dialog-escape-race). While one is
+ * up, the form underneath keeps its hands off the keyboard — Escape used to
+ * close the whole form and leave the confirm hanging over the list, because
+ * both listen on `window` and the form's listener was registered first.
+ */
+const STACKED_SURFACE_SELECTOR =
+  '.erp-ms-confirm-overlay, [role="alertdialog"], [data-erp-nested-surface]';
+
+function stackedSurfaceAbove(own: HTMLElement | null): boolean {
+  if (typeof document === "undefined") {
+    return false;
+  }
+  for (const surface of document.querySelectorAll<HTMLElement>(STACKED_SURFACE_SELECTOR)) {
+    if (!own || !own.contains(surface)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** How long the open-time auto-focus waits for the portaled form to exist. */
+const MAX_AUTO_FOCUS_WAIT_FRAMES = 30;
+
+const TABBABLE_SELECTOR = [
+  "a[href]",
+  "button:not([disabled])",
+  'input:not([disabled]):not([type="hidden"])',
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  '[tabindex]:not([tabindex="-1"])',
+  '[contenteditable="true"]',
+].join(", ");
+
+/** The panel's Tab stops in document order — visible, enabled, tabIndex >= 0. */
+function tabbableElements(root: HTMLElement): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(TABBABLE_SELECTOR)).filter(
+    (element) =>
+      element.tabIndex >= 0 &&
+      !element.closest("[inert]") &&
+      element.getClientRects().length > 0 &&
+      getComputedStyle(element).visibility !== "hidden",
+  );
+}
+
+/**
  * The names of the options a draft chose, so its dropdowns read right on the
  * next open even before their options load. A name the field cannot supply now
  * (its lazy list was reloaded without it) is carried over from `previous`.
@@ -231,6 +278,7 @@ export function ERPDynamicModalForm({
     SEARCH_SELECT_LIST_MAX_HEIGHT,
   );
   const formRef = useRef<HTMLFormElement | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
   const modalStackTokenRef = useRef<symbol>(Symbol("erp-dynamic-modal"));
   const [sectionExpandedByVariant, setSectionExpandedByVariant] = useState<
     Record<string, Record<string, boolean>>
@@ -463,6 +511,51 @@ export function ERPDynamicModalForm({
       if (event.defaultPrevented || !isTopmostOpenModal(modalStackTokenRef.current)) {
         return;
       }
+      const panelElement = panelRef.current;
+      // A confirm or message over this form answers its own keys (Escape,
+      // Enter); the form must not close or save underneath it.
+      if (stackedSurfaceAbove(panelElement)) {
+        return;
+      }
+      if (event.key === "Tab" && !event.altKey && !event.ctrlKey && !event.metaKey) {
+        // Focus trap: Tab and Shift+Tab cycle inside the modal instead of
+        // walking off into the list behind it.
+        if (!panelElement) {
+          return;
+        }
+        const active = document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+        if (active && !panelElement.contains(active)) {
+          // A popup of this form (a portaled dropdown list) or another dialog
+          // runs its own Tab.
+          if (
+            active.closest('[data-erp-modal-search-dropdown="true"]') ||
+            active.closest('[role="dialog"], [aria-modal="true"]')
+          ) {
+            return;
+          }
+        }
+        const stops = tabbableElements(panelElement);
+        if (stops.length === 0) {
+          return;
+        }
+        const first = stops[0];
+        const last = stops[stops.length - 1];
+        if (!active || !panelElement.contains(active)) {
+          event.preventDefault();
+          (event.shiftKey ? last : first).focus();
+          return;
+        }
+        if (!event.shiftKey && active === last) {
+          event.preventDefault();
+          first.focus();
+        } else if (event.shiftKey && active === first) {
+          event.preventDefault();
+          last.focus();
+        }
+        return;
+      }
       if (event.key === "Escape") {
         // Marked as taken: React may commit this close (and pop the stack)
         // before a modal underneath runs its own listener, and that one must
@@ -577,28 +670,45 @@ export function ERPDynamicModalForm({
     if (!autoFocusFirstField || autoFocusAppliedRef.current) {
       return;
     }
-    const formElement = formRef.current;
-    if (!formElement) {
-      return;
-    }
-    autoFocusAppliedRef.current = true;
-    // Two frames: the first lets the opening layout settle (the scroll reset
-    // above runs in frame one), the second measures the fields in place.
-    let frameId = window.requestAnimationFrame(() => {
+    let frameId = 0;
+    let waitedFrames = 0;
+    const focusFirstField = () => {
+      const formElement = formRef.current;
+      if (!formElement) {
+        // ModalPortal renders nothing on the commit that opens the modal and
+        // portals the form one commit later, so on open the form is usually not
+        // there yet. Wait for it (a few frames at most) rather than give up —
+        // giving up left the caret in the list's search box behind the modal.
+        waitedFrames += 1;
+        if (waitedFrames <= MAX_AUTO_FOCUS_WAIT_FRAMES) {
+          frameId = window.requestAnimationFrame(focusFirstField);
+        }
+        return;
+      }
+      autoFocusAppliedRef.current = true;
+      // Two frames: the first lets the opening layout settle (the scroll reset
+      // above runs in frame one), the second measures the fields in place.
       frameId = window.requestAnimationFrame(() => {
-        const active = document.activeElement;
-        if (active instanceof HTMLElement && formElement.contains(active)) {
-          return;
-        }
-        const firstFieldTarget = getFirstFocusableFieldTarget(formElement, {
-          skipCustomFields: true,
+        frameId = window.requestAnimationFrame(() => {
+          const active = document.activeElement;
+          if (active instanceof HTMLElement && formElement.contains(active)) {
+            return;
+          }
+          // A surface stacked over the form (a confirm, a message) keeps focus.
+          if (stackedSurfaceAbove(formElement)) {
+            return;
+          }
+          const firstFieldTarget = getFirstFocusableFieldTarget(formElement, {
+            skipCustomFields: true,
+          });
+          if (!firstFieldTarget) {
+            return;
+          }
+          focusFieldControl(firstFieldTarget.control);
         });
-        if (!firstFieldTarget) {
-          return;
-        }
-        focusFieldControl(firstFieldTarget.control);
       });
-    });
+    };
+    focusFirstField();
     return () => window.cancelAnimationFrame(frameId);
     // activeVariantKey is a dependency so card-first modals focus their form as
     // soon as a variant is picked, not only at open time.
@@ -2487,6 +2597,7 @@ export function ERPDynamicModalForm({
             aria-hidden
           />
           <section
+            ref={panelRef}
             className={cx(styles.panel, "erp-ms-modal", panelClassName)}
             style={panelStyle}
             role="dialog"

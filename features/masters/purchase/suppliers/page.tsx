@@ -87,6 +87,15 @@ import { buildSupplierRequestPayload } from "./form-builder";
 import { resolveSupplierRecordId } from "./table-builder";
 import { useAlsoCustomer } from "./use-also-customer";
 import {
+  parsePartySync,
+  partyAlsoNote,
+  partySyncMessage,
+} from "@/features/masters/shared/party-master-rules";
+import { usePartyOtherRole } from "@/features/masters/shared/use-party-other-role";
+import { usePartyDeleteGuard } from "@/features/masters/shared/use-party-delete-guard";
+import type { MasterTableRow } from "@/components/master/crud-master-page.types";
+import { FieldHelp } from "@/components/design-system/ui";
+import {
   buildSupplierFormFields,
   buildStateModalFields,
   buildSupplierGroupModalFields,
@@ -103,6 +112,9 @@ import {
   withPinnedOption,
 } from "./dropdowns";
 import type { ERPDynamicModalField } from "@/components/design-system/ui/dynamic-modal-form";
+import { NexDropdownSingle, type DropdownSelection } from "@/components/design-system/dropdown";
+import { useBusinessContext } from "@/components/layout/business-context";
+import { useDropdownId } from "@/lib/configured-dropdowns";
 // The supplier shares its primary key with a linked account ledger, which owns the
 // bank-account rows. Reuse the ledger feature's editor + helpers so suppliers edit the
 // same nested `ledgerBankAccount` array the server accepts on create/update.
@@ -221,9 +233,27 @@ export default function SuppliersMasterPage() {
   // "Also a Customer" footer action (saved records being edited only).
   const [loadedSupplierId, setLoadedSupplierId] = useState<string | null>(null);
   const [openModalVariant, setOpenModalVariant] = useState<string | null>(null);
-  const alsoCustomer = useAlsoCustomer(
-    openModalVariant === "master-update" ? loadedSupplierId : null,
+  // ── Party rules (plan-party-master-rules §5/§6) ──────────────
+  // Also a customer: a save changes the customer's party details too (D4-7).
+  const probedSupplierId = openModalVariant === "master-update" ? loadedSupplierId : null;
+  const partyOther = usePartyOtherRole("supplier", probedSupplierId);
+  const { markLive: markCustomerLive } = partyOther;
+  const handleCustomerLinked = useCallback(
+    (customerId: string) => markCustomerLive(customerId, true),
+    [markCustomerLive],
   );
+  // The same probe answers the "Also a Customer" button: one /customers/get per edit.
+  const alsoCustomer = useAlsoCustomer(
+    probedSupplierId,
+    partyOther.otherRoleLive,
+    handleCustomerLinked,
+  );
+  const supplierIdOfRow = useCallback(
+    (row: MasterTableRow) =>
+      resolveSupplierRecordId(row.__source) ?? String(row.__recordId ?? "").trim(),
+    [],
+  );
+  const deleteGuard = usePartyDeleteGuard("supplier", supplierIdOfRow);
   const handleRemoveBankAccount = useCallback((rowKey: string) => {
     setBankAccounts((rows) => rows.filter((row) => row.rowKey !== rowKey));
   }, []);
@@ -830,6 +860,44 @@ export default function SuppliersMasterPage() {
     }),
     [bankAccounts, bankAccountValidationError, handleCommitBankAccount, handleRemoveBankAccount],
   );
+  // ── Purchase tab: Default Godown (MST-01) ──────────────────────
+  // Qt: dropdown 26 GODOWNS filtered to the session's branch. The form value is
+  // the id; the box shows its name from here (seeded from /get's supDefaultGodownName).
+  const { activeBranch } = useBusinessContext();
+  const godownDropdownId = useDropdownId("godown");
+  const godownParams = useMemo(() => ({ ibranch_id: activeBranch?.id ?? "" }), [activeBranch?.id]);
+  const [godownSelection, setGodownSelection] = useState<DropdownSelection | null>(null);
+  const defaultGodownField = useMemo<ERPDynamicModalField>(
+    () => ({
+      name: "supDefaultGodownId",
+      label: "Default Godown",
+      type: "custom",
+      fieldStyle: { gridColumn: "span 6" },
+      render: ({ value, setValue, disabled }) => (
+        <NexDropdownSingle
+          id={openModalVariant ? `erp-modal-form-${openModalVariant}-supDefaultGodownId` : undefined}
+          dropdownId={godownDropdownId}
+          params={godownParams}
+          clearOnParamsChange={false}
+          value={
+            value
+              ? godownSelection?.id === value
+                ? godownSelection
+                : { id: value, text: godownSelection?.text ?? "" }
+              : null
+          }
+          disabled={disabled}
+          placeholder="The bill's own choice"
+          aria-label="Default Godown"
+          onChange={(selection) => {
+            setGodownSelection(selection);
+            setValue(selection?.id ?? "");
+          }}
+        />
+      ),
+    }),
+    [godownDropdownId, godownParams, godownSelection, openModalVariant],
+  );
   // ── Widget-masters config (menu 22) ────────────────────────────
   // The modal's fields are shown/hidden (and optionally re-labelled) from the
   // backend config; a right-click inside the open modal edits it in a popup tree.
@@ -1103,11 +1171,13 @@ export default function SuppliersMasterPage() {
           bankAccountsField,
           purchaseTypeOptions,
           stateCodeByName,
+          defaultGodownField,
         ),
         widgetFieldConfig,
       ),
     [
       bankAccountsField,
+      defaultGodownField,
       purchaseTypeOptions,
       stateCodeByName,
       branchOptions,
@@ -1178,8 +1248,25 @@ export default function SuppliersMasterPage() {
         modalShowValidationErrorPopup
         modalEnableArrowKeyFieldNavigation
         modalFooterLeadingActions={({ variantKey }) =>
-          alsoCustomer.renderFooterAction(variantKey)
+          variantKey === "master-update" && partyOther.otherRoleLive ? (
+            <FieldHelp role="note">{partyAlsoNote("supplier")}</FieldHelp>
+          ) : (
+            alsoCustomer.renderFooterAction(variantKey)
+          )
         }
+        beforeDeleteConfirm={deleteGuard.beforeDeleteConfirm}
+        // F1 add · F2 / Enter edit · F3 delete (through the delete guard) · F5
+        // refresh, with the key legend under the grid.
+        enableListActionKeys
+        deleteConfirmNote={deleteGuard.deleteConfirmNote}
+        afterSubmitSuccess={({ response }) => {
+          // D4: the customer row of the same party changed too — say what.
+          const syncLine = partySyncMessage(parsePartySync(response));
+          if (syncLine) {
+            // Same key as the shell's "Saved successfully.", which it replaces.
+            toast.success(syncLine, { toastId: "success:Saved successfully.", autoClose: 5000 });
+          }
+        }}
         formTitle="Supplier Form"
         formDescription="Create and update suppliers."
         customFields={supplierFormFields}
@@ -1195,6 +1282,7 @@ export default function SuppliersMasterPage() {
           if (open && variantKey === "master-create") {
             resetDropdownSelections();
             setBankAccounts([]);
+            setGodownSelection(null);
             setStoredPurchaseType("");
             setLoadedSupplierId(null);
           }
@@ -1217,6 +1305,14 @@ export default function SuppliersMasterPage() {
           // Seed the lazy dropdowns with the saved selection so each trigger shows the
           // resolved name on edit/view before the field is opened (and lazily loaded).
           seedDropdownSelections(rowSource, values);
+          setGodownSelection(
+            values.supDefaultGodownId
+              ? {
+                  id: values.supDefaultGodownId,
+                  text: toDisplayValue(rowSource.supDefaultGodownName),
+                }
+              : null,
+          );
           // Seed the bank-accounts grid from the loaded record's nested ledgerBankAccount.
           setBankAccounts(extractLedgerBankAccountRows(rowSource));
           setStoredPurchaseType(

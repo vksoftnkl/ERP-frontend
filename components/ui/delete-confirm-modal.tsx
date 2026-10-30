@@ -60,6 +60,14 @@ export default function DeleteConfirmModal({
       return;
     }
 
+    // Where the operator was when the question came up (a form field, the
+    // list's search box) — focus goes back there when it closes, instead of
+    // falling to the page body behind a form that is still open.
+    const returnFocusTo =
+      document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+        ? document.activeElement
+        : null;
+
     // With a reason box the operator's first job is to type in it.
     const focusTimeout = window.setTimeout(() => {
       (reasonRef.current ?? modalRef.current)?.focus();
@@ -67,6 +75,20 @@ export default function DeleteConfirmModal({
 
     return () => {
       window.clearTimeout(focusTimeout);
+      if (!returnFocusTo) {
+        return;
+      }
+      // After the dialog has gone, and only if nothing else took focus (the
+      // answer may have opened or focused something of its own).
+      window.setTimeout(() => {
+        const active = document.activeElement;
+        if (active && active !== document.body && active.isConnected) {
+          return;
+        }
+        if (returnFocusTo.isConnected && !returnFocusTo.matches(":disabled")) {
+          returnFocusTo.focus({ preventScroll: true });
+        }
+      }, 0);
     };
   }, [isOpen]);
 

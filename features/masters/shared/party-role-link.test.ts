@@ -72,7 +72,7 @@ describe("prefillFromLedger", () => {
       supStateCode: "33",
       supStateName: "Tamil Nadu",
       // The supplier select holds the Qt words.
-      supGstType: "Composition",
+      supGstType: "COMPOSITION",
     });
     for (const key of Object.keys(values)) {
       expect(key.startsWith("sup")).toBe(true);
@@ -94,7 +94,13 @@ describe("prefillFromLedger", () => {
     const registered = { ...LEDGER, ledGstPartyRegType: null };
     expect(prefillFromLedger(registered, "customer").values.cusGstType).toBe("REGULAR");
     const unregistered = { ...registered, ledGstinNo: "" };
-    expect(prefillFromLedger(unregistered, "supplier").values.supGstType).toBe("Unregistered");
+    expect(prefillFromLedger(unregistered, "supplier").values.supGstType).toBe("UNREGISTERED");
+  });
+
+  it("prefills SEZ for a REGULAR ledger flagged SEZ (party rules D2)", () => {
+    const sez = { ...LEDGER, ledGstPartyRegType: "REGULAR", ledIsSez: true };
+    expect(prefillFromLedger(sez, "supplier").values.supGstType).toBe("SEZ");
+    expect(prefillFromLedger(sez, "customer").values.cusGstType).toBe("SEZ");
   });
 });
 

@@ -7,6 +7,7 @@ import {
 } from "@/features/masters/shared/apply-form-defaults";
 import { CUSTOMER_TEMPLATE_FIELD_SPECS } from "./template/field-specs";
 import type { ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
+import { normalizePartyGstType } from "@/features/masters/shared/party-master-rules";
 
 // Configured-dropdown endpoint (fixed.dropdown_details). Mirrors configured-grid-sql/run:
 // GET ?dropdown_id=<n>&page=1&limit=20&search=<q> -> { data: { items, meta } }.
@@ -195,7 +196,9 @@ export function parseCustomerFormDefaults(
   // ("Unregistered"). Upper-casing is the whole difference, and without it the GST Type
   // field silently comes up blank.
   if (fieldValues.cusGstType) {
-    fieldValues.cusGstType = fieldValues.cusGstType.toUpperCase();
+    // "SEZ Unit", "un registered": read as the server reads them (party rules D2).
+    fieldValues.cusGstType =
+      normalizePartyGstType(fieldValues.cusGstType) || fieldValues.cusGstType.toUpperCase();
   }
   const stateSeed = applied.seeds.cusStateCode;
   const state: CustomerTemplateStateDefault = stateSeed

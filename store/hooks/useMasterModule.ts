@@ -183,6 +183,17 @@ export function useMasterModule({
   const [saveLocalError, setSaveLocalError] = useState<string | null>(null);
   const [deleteLocalError, setDeleteLocalError] = useState<string | null>(null);
   function extractMsg(err: unknown): string {
+    // Notes 120: the server's own words ("A Regular customer must have a GST
+    // No.") beat the bare headline ("Validation failed") under the form.
+    const data = err && typeof err === "object" ? (err as { data?: unknown }).data : null;
+    const errors = data && typeof data === "object" ? (data as { errors?: unknown }).errors : null;
+    const user = Array.isArray(errors)
+      ? (errors[0] as { user?: { line?: unknown; todo?: unknown } } | undefined)?.user
+      : undefined;
+    if (typeof user?.line === "string" && user.line.trim()) {
+      const todo = typeof user.todo === "string" ? user.todo.trim() : "";
+      return todo ? `${user.line.trim()} ${todo}` : user.line.trim();
+    }
     if (err && typeof err === "object" && "message" in err) {
       const m = (err as { message?: unknown }).message;
       if (typeof m === "string" && m.trim()) return m.trim();

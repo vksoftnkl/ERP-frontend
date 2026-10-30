@@ -111,6 +111,12 @@ export const UI_TABLES = {
   /** Purchase Return's Claims… dialog — the open claim rows. */
   purchaseClaimsOpen: { name: "PURCHASE CLAIMS - OPEN", fallbackId: "60" },
   shortageReceiptLines: { name: "SHORTAGE RECEIPT - LINES", fallbackId: "61" },
+  /** Purchase Entry's charges grid (Qt 88cd3f2). */
+  purchaseInvoiceCharges: { name: "PURCHASE INVOICE - CHARGES", fallbackId: "62" },
+  /** F12 batches / serials of one purchase line — Purchase Entry and GRN (Qt 269da2d). */
+  purchaseAllocRows: { name: "PURCHASE - ALLOCATION ROWS", fallbackId: "63" },
+  /** Reorder → PO (menu 296; Qt 6c6b5c2). */
+  purchaseReorderLines: { name: "PURCHASE REORDER - LINES", fallbackId: "64" },
 } as const;
 export type UiTableKey = keyof typeof UI_TABLES;
 const ID_KEYS = ["ui_tbl_id", "uiTblId", "uiTableId", "id"] as const;

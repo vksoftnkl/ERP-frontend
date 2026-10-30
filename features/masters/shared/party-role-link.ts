@@ -92,11 +92,15 @@ const LEDGER_FIELD_MAP: ReadonlyArray<readonly [string, string, string]> = [
   ["ledRegionCountry", "cusRegionCountry", "supRegionCountry"],
 ];
 
-/** The ledger's registration type as each master's GST Type select values it. */
-const GST_TYPE_BY_LEDGER_REG_TYPE: Record<string, Record<PartyRole, string>> = {
-  REGULAR: { customer: "REGULAR", supplier: "Regular" },
-  COMPOSITION: { customer: "COMPOSITION", supplier: "Composition" },
-  UNREGISTERED: { customer: "UNREGISTERED", supplier: "Unregistered" },
+/**
+ * The ledger's registration type as both masters' GST Type code (party rules
+ * D2: one code list for customer and supplier). The ledger keeps three words
+ * plus `ledIsSez`; Overseas cannot be told from it and reads as Unregistered.
+ */
+const GST_TYPE_BY_LEDGER_REG_TYPE: Record<string, string> = {
+  REGULAR: "REGULAR",
+  COMPOSITION: "COMPOSITION",
+  UNREGISTERED: "UNREGISTERED",
 };
 
 export type LedgerPrefill = {
@@ -161,12 +165,14 @@ export function prefillFromLedger(
   }
 
   // The ledger CHECKs REGULAR | COMPOSITION | UNREGISTERED. Unset on the
-  // ledger: a GSTIN means registered.
+  // ledger: a GSTIN means registered. A REGULAR ledger flagged SEZ is SEZ.
   const regType = textOf(ledger.ledGstPartyRegType).toUpperCase();
   const known =
     GST_TYPE_BY_LEDGER_REG_TYPE[regType] ??
     GST_TYPE_BY_LEDGER_REG_TYPE[textOf(ledger.ledGstinNo) ? "REGULAR" : "UNREGISTERED"];
-  values[target === "customer" ? "cusGstType" : "supGstType"] = known[target];
+  const isSez = ledger.ledIsSez === true || textOf(ledger.ledIsSez).toLowerCase() === "true";
+  values[target === "customer" ? "cusGstType" : "supGstType"] =
+    known === "REGULAR" && isSez ? "SEZ" : known;
 
   return {
     values,

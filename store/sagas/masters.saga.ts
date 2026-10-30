@@ -71,11 +71,32 @@ function* handleDeleteSuccessWorker(action: {
   toast.success(extractMessage(action.payload, "Deleted successfully."));
 }
 
+/**
+ * Notes 120: a refusal the server words itself (`errors[].user {title, line,
+ * todo}`) is shown in those words, not as its bare headline ("Validation
+ * failed"). The party masters' GST-type / GSTIN / balance refusals need this;
+ * every other unworded failure keeps the one sentence it always had.
+ */
+function hasServerWording(payload: unknown): boolean {
+  const data = payload && typeof payload === "object" ? (payload as { data?: unknown }).data : null;
+  const errors = data && typeof data === "object" ? (data as { errors?: unknown }).errors : null;
+  const first = Array.isArray(errors) ? (errors[0] as { user?: { line?: unknown } } | undefined) : undefined;
+  return typeof first?.user?.line === "string" && first.user.line.trim().length > 0;
+}
+
 function* handleSaveFailureWorker(action: { payload?: unknown }): Generator {
+  if (hasServerWording(action.payload)) {
+    toast.apiError(action.payload);
+    return;
+  }
   toast.error(extractErrorMessage(action.payload));
 }
 
 function* handleDeleteFailureWorker(action: { payload?: unknown }): Generator {
+  if (hasServerWording(action.payload)) {
+    toast.apiError(action.payload, { refusedTitle: "Cannot delete" });
+    return;
+  }
   toast.error(extractErrorMessage(action.payload));
 }
 

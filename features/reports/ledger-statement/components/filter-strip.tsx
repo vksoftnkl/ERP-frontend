@@ -41,6 +41,9 @@ type Props = {
   draft: Draft;
   onDraft: (patch: Partial<Draft>) => void;
   onPickLedger: (item: LedgerPickItem) => void;
+  /** The picker's "Show deleted" tick (party rules D1-7). Picker only: not a report filter. */
+  showDeletedLedgers: boolean;
+  onShowDeletedLedgers: (value: boolean) => void;
   display: DisplaySwitches;
   onDisplay: (patch: Partial<DisplaySwitches>) => void;
   branches: Array<{ value: string; label: string }>;
@@ -57,6 +60,8 @@ export function FilterStrip({
   draft,
   onDraft,
   onPickLedger,
+  showDeletedLedgers,
+  onShowDeletedLedgers,
   display,
   onDisplay,
   branches,
@@ -70,15 +75,29 @@ export function FilterStrip({
     <div className={styles.strip} role="search" aria-label="Report filters">
       {/* A div, not a label: the picker holds a button, and a label would re-route its clicks. */}
       <div className={cx(styles.field, styles.fieldLedger, flagged === "ledger" && styles.fieldFlagged)}>
-        <span className={styles.fieldLabel}>
-          Ledger <span className={styles.required}>*</span>
-        </span>
+        <div className={styles.fieldLabelRow}>
+          <span className={styles.fieldLabel}>
+            Ledger <span className={styles.required}>*</span>
+          </span>
+          <label
+            className={cx(styles.check, styles.checkSmall)}
+            title="List deleted parties too, marked (deleted). Their statement opens read-only."
+          >
+            <input
+              type="checkbox"
+              checked={showDeletedLedgers}
+              onChange={(event) => onShowDeletedLedgers(event.target.checked)}
+            />
+            Show deleted
+          </label>
+        </div>
         <div className={styles.ledgerPicker}>
           <LedgerPicker
             client={client}
             companyId={companyId}
             value={draft.ledger}
             onPick={onPickLedger}
+            includeDeleted={showDeletedLedgers}
             invalid={flagged === "ledger"}
             inputRef={ledgerInputRef}
           />

@@ -244,6 +244,14 @@ export type CrudMasterPageProps = {
     context: { reason: string },
   ) => boolean | Promise<boolean>;
   /**
+   * Asked BEFORE the delete confirmation opens (Delete button, F3, row action).
+   * Answer false and no confirm opens: the page has already said why (the
+   * party masters' `GET …/delete-check`, plan-party-master-rules §5). True, and
+   * the shell's confirm opens as usual — `deleteConfirmNote` can then carry
+   * what the page learnt. A throw counts as false.
+   */
+  beforeDeleteConfirm?: (row: MasterTableRow) => boolean | Promise<boolean>;
+  /**
    * Ask WHY in the delete confirmation: a one-line reason box the confirm
    * button waits on, handed to `onDeleteAction` as `context.reason` (trimmed).
    * For a delete the server records a reason for. Needs `onDeleteAction` — the

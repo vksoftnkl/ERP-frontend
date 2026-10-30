@@ -64,7 +64,20 @@ import {
   toUpper,
 } from "@/features/masters/shared/value-mappers";
 import { COLLECTION_DAY_OPTIONS } from "@/utils/constant";
-import { validateGstin, validateOptionalGstin } from "@/utils/validation";
+import {
+  gstTypeNeedsGstin,
+  gstTypeRefusesGstin,
+  normalizePartyGstType,
+  partyAlsoNote,
+  partyGstRuleMessageFor,
+  partySyncMessage,
+  parsePartySync,
+  validatePartyGstinFormat,
+} from "@/features/masters/shared/party-master-rules";
+import { usePartyOtherRole } from "@/features/masters/shared/use-party-other-role";
+import { usePartyDeleteGuard } from "@/features/masters/shared/use-party-delete-guard";
+import type { MasterTableRow } from "@/components/master/crud-master-page.types";
+import { FieldHelp } from "@/components/design-system/ui";
 import {
   GSTIN_LOOKUP_ENDPOINT,
   fetchGstinDetails,
@@ -106,7 +119,6 @@ import {
   STATE_MODAL_PANEL_STYLE,
   GROUP_MODAL_PANEL_STYLE,
   GST_TYPE_OPTIONS,
-  GST_TYPE_VALUES,
   CUSTOMER_BOOLEAN_FIELD_NAMES,
   CUSTOMER_DATE_FIELD_NAMES,
   CUSTOMER_TEXT_FIELD_NAMES,
@@ -160,18 +172,28 @@ function withCustomerBasicValidation(field: ERPDynamicModalField): ERPDynamicMod
     },
   };
 }
+/**
+ * Party rules D2 (the server's resolvePartyGstType): REGULAR / COMPOSITION /
+ * SEZ need a GST No, UNREGISTERED / OVERSEAS refuse one; any GSTN shape
+ * (normal, TDS, UIN, OIDAR, NRTP) is accepted, and a normal one must start
+ * with the state's code.
+ */
+function customerGstRuleInput(values: Record<string, string>, gstin: string) {
+  return {
+    role: "customer" as const,
+    gstType: values.cusGstType ?? "",
+    gstin,
+    stateCode: (values.cusStateCode ?? "").trim().toUpperCase(),
+  };
+}
 function validateCustomerGstin(
   value: string,
   values: Record<string, string>,
 ): string | null {
-  const normalized = value.trim();
-  const gstType = toGstTypeValue(values.cusGstType ?? "");
-  if (!normalized) {
-    return gstType === "REGULAR"
-      ? "GST No is required when GST Type is Regular."
-      : null;
-  }
-  return validateGstin(normalized);
+  return partyGstRuleMessageFor("gstin", customerGstRuleInput(values, value));
+}
+function validateCustomerOverseasState(values: Record<string, string>): string | null {
+  return partyGstRuleMessageFor("state", customerGstRuleInput(values, values.cusGstNo ?? ""));
 }
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -195,7 +217,7 @@ const CUSTOMER_GSTIN_LOOKUP_FIELDS: GstinLookupFieldMap = {
   stateCode: "cusStateCode",
   pin: "cusPin",
 };
-/** The customer's GST Type list has no SEZ; a SEZ registration reads as REGULAR. */
+/** All five types (party rules D2); a SEZ registration from the lookup stays SEZ. */
 const CUSTOMER_LOOKUP_REG_TYPES = GST_TYPE_OPTIONS.map((option) => option.value);
 type LazyDropdownFieldHandlers = {
   onSearchOpenChange: (open: boolean) => void;
@@ -263,8 +285,14 @@ function buildCustomerFormFields(
       placeholder: "24ABCDE1234F1Z5",
       helperText: GST_LOOKUP_HELPER_TEXT,
       onValueChange: onCustomerGstinValueChange,
+      // Unregistered / Overseas have no GST No: the box is off while empty (an
+      // old row that still holds one stays open so it can be cleared).
+      requiredWhen: (values) => gstTypeNeedsGstin(values.cusGstType ?? ""),
+      disabledWhen: (values) =>
+        gstTypeRefusesGstin(values.cusGstType ?? "") && !(values.cusGstNo ?? "").trim(),
       ...span(4),
       validation: {
+        requiredMessage: "GST No is needed for this GST Type. Type it, or choose Unregistered.",
         custom: (value, values) => validateCustomerGstin(value, values),
       },
     },
@@ -340,6 +368,11 @@ function buildCustomerFormFields(
       searchable: true,
       required: true,
       options: GST_TYPE_OPTIONS,
+      // Unregistered / Overseas: the GST No is cleared (the server refuses one).
+      onValueChange: ({ value, values }) =>
+        gstTypeRefusesGstin(value) && (values.cusGstNo ?? "").trim()
+          ? { values: { cusGstNo: "" }, errors: { cusGstNo: null } }
+          : { errors: { cusGstNo: null, cusStateCode: null } },
       ...span(4),
       validation: {
         requiredMessage: "GST Type is required.",
@@ -371,7 +404,7 @@ function buildCustomerFormFields(
       label: "e-Commerce GSTIN",
       ...span(4),
       validation: {
-        custom: (value) => validateOptionalGstin(value),
+        custom: (value) => validatePartyGstinFormat(value),
       },
     },
     {
@@ -452,6 +485,8 @@ function buildCustomerFormFields(
       ...span(4),
       validation: {
         requiredMessage: "State is required.",
+        // Overseas = state 96 "Other Country" (party rules Q6).
+        custom: (_value, values) => validateCustomerOverseasState(values),
       },
     },
     {
@@ -569,22 +604,21 @@ function buildCustomerFormFields(
       name: "cusDebitBalance",
       label: "Debit Balance",
       type: "number",
-      min: 0,
+      // May be negative (the server's customer fixes, 2026-10-29).
       step: "0.01",
       ...span(3),
-      validation: {
-        minMessage: "Debit Balance must be 0 or greater.",
-      },
     },
     {
       name: "cusDiscPerc",
       label: "Discount %",
       type: "number",
       min: 0,
+      max: 100,
       step: "0.001",
       ...span(3),
       validation: {
         minMessage: "Discount % must be 0 or greater.",
+        maxMessage: "Discount % must be 100 or less.",
       },
     },
     // ── Attributes ────────────────────────────────────────────────
@@ -844,9 +878,15 @@ function toCollectionDaysInput(value: unknown): string {
     .map((entry) => String(entry));
   return Array.from(new Set(normalized)).join(",");
 }
+/** A number, negative allowed; blank or junk is `fallback`. */
+function toFiniteNumber(value: string, fallback: number): number {
+  const normalized = value.trim();
+  const parsed = normalized ? Number(normalized) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+/** The code for a stored or typed type; old spellings ("Regular", "SEZ Unit") read as the server reads them. */
 function toGstTypeValue(value: string): string {
-  const normalized = value.trim().toUpperCase();
-  return GST_TYPE_VALUES.has(normalized) ? normalized : "";
+  return normalizePartyGstType(value);
 }
 function removeEmptyOptions(
   options: ERPDynamicSelectOption[],
@@ -2505,10 +2545,24 @@ export default function CustomerPage({
   // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
   // can see soft-deleted customers. Lives beside the list search input.
   const [wantDelete, setWantDelete] = useState(false);
+  // ── Party rules (plan-party-master-rules §5/§6) ──────────────
+  // The saved customer open in the Edit form, for the "also a supplier" note.
+  const [openCustomer, setOpenCustomer] = useState<{ id: string; variant: string | null } | null>(null);
+  const partyOther = usePartyOtherRole(
+    "customer",
+    openCustomer?.variant === "master-update" ? openCustomer.id : null,
+  );
+  const customerIdOfRow = useCallback(
+    (row: MasterTableRow) =>
+      toDisplayValue(getFirstDefinedValue(row.__source ?? {}, LOOKUP_KEYS.id)) ||
+      String(row.__recordId ?? "").trim(),
+    [],
+  );
+  const deleteGuard = usePartyDeleteGuard("customer", customerIdOfRow);
   // Adds the `grid_param` payload to the default page/limit/search list query.
   // The server JSON-parses it and binds each key into the matching named token in
   // grid 8's stored SQL; keys with no matching token are ignored. `wantdelete` is
-  // driven by the "Show deleted records" checkbox beside the list search input.
+  // driven by the "Show only deleted" checkbox beside the list search input.
   const buildListQuery = useCallback(
     ({
       searchTerm,
@@ -2793,7 +2847,9 @@ export default function CustomerPage({
                 checked={wantDelete}
                 onChange={(event) => setWantDelete(event.target.checked)}
               />
-              Show deleted records
+              {/* Grid 65 binds `cus_is_deleted = icus_is_deleted`: ticked, the
+                  list holds the deleted customers alone, as the Qt label says. */}
+              Show only deleted
             </label>
           </div>
         }
@@ -2838,8 +2894,19 @@ export default function CustomerPage({
         modalHideFieldHelperText
         modalHideFieldErrorText
         modalFocusFirstInvalidFieldOnValidationError
+        // The Qt form explains a refused save ("GST No Required", "Wrong state")
+        // in a warning box; with the field error text hidden, this is where the
+        // party rules' reasons show (as on the Supplier form).
+        modalShowValidationErrorPopup
         modalEnableArrowKeyFieldNavigation
         modalFooterLeadingActions={({ variantKey, values }) => {
+          // A saved customer that is also a supplier: a save changes the
+          // supplier's party details too (D4-7).
+          if (variantKey === "master-update") {
+            return partyOther.otherRoleLive ? (
+              <FieldHelp role="note">{partyAlsoNote("customer")}</FieldHelp>
+            ) : null;
+          }
           // A new customer only (Qt 4ae6575, the user's call 2026-10-22): editing
           // one customer must not turn it into every new customer's starting
           // point. As the item card.
@@ -2866,6 +2933,11 @@ export default function CustomerPage({
           // Clear the lazy dropdowns when the create modal opens so no stale list
           // from a previously edited record lingers (they reload on open), then seed
           // the Company/Area/Customer Group defaults from the saved customer template.
+          setOpenCustomer((current) =>
+            open && variantKey !== "master-create" && current
+              ? { ...current, variant: variantKey }
+              : null,
+          );
           if (open && variantKey === "master-create") {
             resetDropdownSelections();
             seedTemplateDropdownDefaults();
@@ -2875,7 +2947,18 @@ export default function CustomerPage({
           }
           onModalOpenChange?.(open, variantKey);
         }}
+        beforeDeleteConfirm={deleteGuard.beforeDeleteConfirm}
+        // F1 add · F2 / Enter edit · F3 delete (through the delete guard) · F5
+        // refresh, with the key legend under the grid.
+        enableListActionKeys
+        deleteConfirmNote={deleteGuard.deleteConfirmNote}
         afterSubmitSuccess={async ({ response, payload, values, editingItemId, shouldUpdate }) => {
+          // D4: the supplier row of the same party changed too — say what.
+          const syncLine = partySyncMessage(parsePartySync(response));
+          if (syncLine) {
+            // Same key as the shell's "Saved successfully.", which it replaces.
+            toast.success(syncLine, { toastId: "success:Saved successfully.", autoClose: 5000 });
+          }
           if (!onCustomerSaved) {
             return;
           }
@@ -2991,6 +3074,8 @@ export default function CustomerPage({
           // Seed the lazy dropdowns with the saved selection so each trigger shows the
           // resolved name on edit/view before the field is opened (and lazily loaded).
           seedDropdownSelections(rowSource, mappedValues);
+          const loadedId = toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.id));
+          setOpenCustomer(source && loadedId ? { id: loadedId, variant: null } : null);
           return mappedValues;
         }}
         buildRequestPayload={({ values, shouldUpdate, editingItemId }) => {
@@ -3000,8 +3085,9 @@ export default function CustomerPage({
           const cusCreditBillLimit = toNonNegativeInteger(values.cusCreditBillLimit ?? "0", 0);
           const cusCreditAmtLimit = toNonNegativeNumber(values.cusCreditAmtLimit ?? "0", 0);
           const cusCreditDays = toNonNegativeInteger(values.cusCreditDays ?? "0", 0);
-          const cusDebitBalance = toNonNegativeNumber(values.cusDebitBalance ?? "0", 0);
-          const cusDiscPerc = toNonNegativeNumber(values.cusDiscPerc ?? "0", 0);
+          // Debit balance may be negative; discount is 0–100 (the server refuses more).
+          const cusDebitBalance = toFiniteNumber(values.cusDebitBalance ?? "0", 0);
+          const cusDiscPerc = Math.min(toNonNegativeNumber(values.cusDiscPerc ?? "0", 0), 100);
           const cusDebitGraceDays = toNonNegativeInteger(values.cusDebitGraceDays ?? "0", 0);
           // Honours the explicit "Credit Allowed" checkbox, but still falls back to
           // the derived value so records saved before the checkbox existed (or with
@@ -3073,8 +3159,8 @@ export default function CustomerPage({
             cusCollectionDays: parseCollectionDays(values.cusCollectionDays ?? ""),
             cusDefaultSalesman: toNullableString(values.cusDefaultSalesman ?? ""),
             cusPriceLevelId: toNonNegativeInteger(values.cusPriceLevelId ?? "0", 0),
-            cusBilledDate: toNullableDate(values.cusBilledDate ?? ""),
-            cusBilledCount: toNonNegativeInteger(values.cusBilledCount ?? "0", 0),
+            // cusBilledDate / cusBilledCount are not sent: the server reads them
+            // from the posted bills (party rules D3, Q9-B).
             cusNotes: toNullableString(values.cusNotes ?? ""),
             cusCompanyId: toNullableScopeId(
               values.cusCompanyId ?? "",

@@ -42,12 +42,24 @@ export type SupplierFormFieldName =
   | "supBilledDate"
   | "supSortOrder"
   | "supIsActive"
+  // MST-01 purchase tab (Qt 4c09536)
+  | "supMsmeCategory"
+  | "supMsmeActivity"
+  | "supMsmeAgreement"
+  | "supMsmeAgreedDays"
+  | "supDrugLicenceExpiry"
+  | "supFssaiNo"
+  | "supFssaiValidTo"
+  | "supDefaultGodownId"
+  | "supShowNotesOnEntry"
+  | "supIsImport"
   | "supCreatedBy"
   | "supModifiedBy";
 // Heading Field Names (tab headings + in-tab subheadings)
 export type SupplierHeadingFieldName =
   | "identitySection"
   | "notesSection"
+  | "purchaseSection"
   | "regionalSection"
   | "bankAccountsHeading"
   | "addressSubheading"
@@ -110,6 +122,16 @@ export interface SupplierFormValues extends Record<string, string> {
   supBilledDate: string;
   supSortOrder: string;
   supIsActive: string;
+  supMsmeCategory: string;
+  supMsmeActivity: string;
+  supMsmeAgreement: string;
+  supMsmeAgreedDays: string;
+  supDrugLicenceExpiry: string;
+  supFssaiNo: string;
+  supFssaiValidTo: string;
+  supDefaultGodownId: string;
+  supShowNotesOnEntry: string;
+  supIsImport: string;
   supCreatedBy: string;
   supModifiedBy: string;
 }

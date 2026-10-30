@@ -106,6 +106,13 @@ $row-h: 26px;
   text-transform: uppercase;
   color: var(--text-muted, #6d6d6d);
 }
+/* The Ledger label with the picker's "Show deleted" tick at its right. */
+.fieldLabelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: u(0.5);
+}
 .required {
   color: var(--danger, #b3261e);
 }
@@ -162,6 +169,9 @@ $row-h: 26px;
   font-size: u(0.72);
   white-space: nowrap;
   cursor: pointer;
+}
+.checkSmall {
+  font-size: u(0.62);
 }
 .checkKind {
   font-size: u(0.58);
@@ -326,6 +336,13 @@ $row-h: 26px;
   flex: 1 1 auto;
   min-height: 0;
   padding: u(0.35) u(0.5) u(0.4);
+}
+.ledgerDeleted {
+  display: flex;
+  align-items: center;
+  gap: u(0.4);
+  margin: 0 0 u(0.3);
+  font-size: u(0.68);
 }
 .ledgerName {
   margin: 0 0 u(0.3);

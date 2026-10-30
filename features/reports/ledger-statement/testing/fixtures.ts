@@ -16,6 +16,8 @@ export const FY = { accYear: "2026-2027", begin: "2026-04-01", end: "2027-03-31"
 export const COMPANY_ID = "11111111-1111-4111-8111-111111111111";
 export const BRANCH_MAIN = "22222222-2222-4222-8222-222222222222";
 export const LEDGER_SKT = "33333333-3333-4333-8333-333333333333";
+/** A deleted party: listed by `/ledgers` only with `includeDeleted=true` (party rules D1-7). */
+export const LEDGER_DELETED = "33333333-3333-4333-8333-3333333333dd";
 export const LEDGER_OTHERS = [
   "33333333-3333-4333-8333-333333333334",
   "33333333-3333-4333-8333-333333333335",
@@ -266,7 +268,13 @@ export function headerFixture(q: FixtureQuery = {}, count?: number) {
   return envelope({
     ledger: {
       ledgerId: q.ledgerId ?? LEDGER_SKT,
-      name: ledgerIndex >= 0 ? `Party ${ledgerIndex + 2}` : "Sri Krishna Traders",
+      name:
+        q.ledgerId === LEDGER_DELETED
+          ? "Old Party"
+          : ledgerIndex >= 0
+            ? `Party ${ledgerIndex + 2}`
+            : "Sri Krishna Traders",
+      isDeleted: q.ledgerId === LEDGER_DELETED,
       groupName: "Sundry Debtors",
       nature: "ASSETS",
       isBillByBill: true,
@@ -371,13 +379,17 @@ export function ledgersFixture(q: FixtureQuery = {}) {
   const all = [
     { ledgerId: LEDGER_SKT, name: "Sri Krishna Traders" },
     ...LEDGER_OTHERS.map((ledgerId, i) => ({ ledgerId, name: `Party ${i + 2}` })),
-  ].map((item) => ({
-    ...item,
-    groupId: GROUP_DEBTORS,
-    groupName: "Sundry Debtors",
-    isBillByBill: true,
-    isShared: false,
-  }));
+    { ledgerId: LEDGER_DELETED, name: "Old Party" },
+  ]
+    .map((item) => ({
+      ...item,
+      groupId: GROUP_DEBTORS,
+      groupName: "Sundry Debtors",
+      isBillByBill: true,
+      isShared: false,
+      isDeleted: item.ledgerId === LEDGER_DELETED,
+    }))
+    .filter((item) => !item.isDeleted || q.includeDeleted === "true");
   const search = (q.search ?? "").toLowerCase();
   const items = all
     .filter((item) => !search || item.name.toLowerCase().includes(search))

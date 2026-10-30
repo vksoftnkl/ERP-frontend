@@ -128,6 +128,16 @@ export const CONFIGURED_GRIDS = {
   purchaseReturnList: { name: "MAIN LIST - PURCHASE RETURN", fallbackId: "192", deletedParam: null },
   shortageReceiptList: { name: "MAIN LIST - SHORTAGE RECEIPT", fallbackId: "193", deletedParam: null },
   /**
+   * Agents Master (menu 28; Qt 97a5b48). Binds QUOTED `'icompany_id'` and
+   * `'iinactive'`, both always sent.
+   */
+  purchaseAgentList: { name: "MAIN LIST - PURCHASE AGENTS", fallbackId: "194", deletedParam: null },
+  /**
+   * Supplier–Item Map (menu 295; Qt 97a5b48). Binds QUOTED `'icompany_id'`,
+   * `'isupplier_id'` ('' = all suppliers) and `'iinactive'`, all always sent.
+   */
+  supplierItemList: { name: "MAIN LIST - SUPPLIER ITEMS", fallbackId: "195", deletedParam: null },
+  /**
    * Tracking Presets (menu 249; Qt d27045b) — shared presets plus the company's own, a company
    * row hiding the shared one of the same code. Binds `ispt_company_id` and `ispt_is_deleted`, both always sent.
    */

@@ -4,6 +4,7 @@ import type {
   ERPDynamicSelectOption,
 } from "@/components/design-system/ui/dynamic-modal-form";
 import { DEFAULT_LOOKUP_ARRAY_KEYS } from "@/features/masters/shared/normalizers";
+import { PARTY_GST_TYPE_OPTIONS } from "@/features/masters/shared/party-master-rules";
 import type { ConfiguredGridKey } from "@/lib/configured-grids";
 
 /**
@@ -176,12 +177,10 @@ export const GROUP_MODAL_PANEL_STYLE: CSSProperties = {
   width: "min(calc(42vw/var(--erp-ui-scale)), 42rem)",
   maxHeight: "calc(75vh/var(--erp-ui-scale))",
 };
-export const GST_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
-  { value: "REGULAR", label: "Regular" },
-  { value: "COMPOSITION", label: "Composition" },
-  { value: "UNREGISTERED", label: "Unregistered" },
-];
-export const GST_TYPE_VALUES = new Set(GST_TYPE_OPTIONS.map((option) => option.value));
+// Party rules D2: the five codes, words shown (plan §6; the server's PARTY_GST_TYPES).
+export const GST_TYPE_OPTIONS: ERPDynamicSelectOption[] = PARTY_GST_TYPE_OPTIONS.map((option) => ({
+  ...option,
+}));
 export const CUSTOMER_BOOLEAN_FIELD_NAMES = [
   "cusCreditAllowed",
   "cusEnableSms",
@@ -382,33 +381,33 @@ export const CUSTOMER_BASIC_VALIDATIONS: Record<string, ERPDynamicFieldValidatio
     maxLengthMessage: "Short Name must be at most 50 characters.",
   },
   cusAddr1: {
-    maxLength: 250,
-    maxLengthMessage: "Address Line 1 must be at most 250 characters.",
+    maxLength: 200,
+    maxLengthMessage: "Address Line 1 must be at most 200 characters.",
   },
   cusAddr2: {
-    maxLength: 250,
-    maxLengthMessage: "Address Line 2 must be at most 250 characters.",
+    maxLength: 200,
+    maxLengthMessage: "Address Line 2 must be at most 200 characters.",
   },
   cusAddr3: {
-    maxLength: 250,
-    maxLengthMessage: "Address Line 3 must be at most 250 characters.",
+    maxLength: 200,
+    maxLengthMessage: "Address Line 3 must be at most 200 characters.",
   },
   cusCity: {
-    maxLength: 250,
-    maxLengthMessage: "City must be at most 250 characters.",
+    maxLength: 100,
+    maxLengthMessage: "City must be at most 100 characters.",
   },
   cusDistrict: {
-    maxLength: 250,
-    maxLengthMessage: "District must be at most 250 characters.",
+    maxLength: 100,
+    maxLengthMessage: "District must be at most 100 characters.",
   },
   cusLandmark: {
     maxLength: 200,
     maxLengthMessage: "Landmark must be at most 200 characters.",
   },
   cusPin: {
-    maxLength: 10,
-    maxLengthMessage: "PIN must be at most 10 digits.",
-    pattern: "^[0-9]{0,10}$",
+    maxLength: 6,
+    maxLengthMessage: "PIN must be at most 6 digits.",
+    pattern: "^[0-9]{0,6}$",
     patternMessage: "PIN can contain digits only.",
   },
   cusTel: {
@@ -448,24 +447,24 @@ export const CUSTOMER_BASIC_VALIDATIONS: Record<string, ERPDynamicFieldValidatio
     maxLengthMessage: "Region Name must be at most 200 characters.",
   },
   cusRegionAddr1: {
-    maxLength: 250,
-    maxLengthMessage: "Region Address 1 must be at most 250 characters.",
+    maxLength: 200,
+    maxLengthMessage: "Region Address 1 must be at most 200 characters.",
   },
   cusRegionAddr2: {
-    maxLength: 250,
-    maxLengthMessage: "Region Address 2 must be at most 250 characters.",
+    maxLength: 200,
+    maxLengthMessage: "Region Address 2 must be at most 200 characters.",
   },
   cusRegionAddr3: {
-    maxLength: 250,
-    maxLengthMessage: "Region Address 3 must be at most 250 characters.",
+    maxLength: 200,
+    maxLengthMessage: "Region Address 3 must be at most 200 characters.",
   },
   cusRegionCity: {
-    maxLength: 250,
-    maxLengthMessage: "Region City must be at most 250 characters.",
+    maxLength: 100,
+    maxLengthMessage: "Region City must be at most 100 characters.",
   },
   cusRegionDistrict: {
-    maxLength: 250,
-    maxLengthMessage: "Region District must be at most 250 characters.",
+    maxLength: 100,
+    maxLengthMessage: "Region District must be at most 100 characters.",
   },
   cusRegionCountry: {
     maxLength: 60,

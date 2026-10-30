@@ -43,7 +43,8 @@ export interface UseMasterListKeyboardOptions<Row extends MasterListKeyboardRow>
  *    it when a dialog over the list closes;
  * 2. clicking a row selects it without taking the caret — nor do the toolbar
  *    buttons, the pager or a checkbox. Only a control that takes typing (a
- *    date, a select) keeps the focus it is given;
+ *    date, a select) keeps the focus it is given. Tab / Shift+Tab still walk
+ *    out of the box to the toolbar, filters and pager;
  * 3. Up/Down walk the row highlight from inside the search box, PageUp/PageDown
  *    jump to the first/last row, Ctrl+Enter opens the selected row;
  * 4. if focus did fall out of the box (onto the page body), a printable key
@@ -277,10 +278,24 @@ export function useMasterListKeyboard<Row extends MasterListKeyboardRow>({
       !document.querySelector('[role="dialog"], [aria-modal="true"]') &&
       !isSuspendedRef.current?.();
 
+    // Tab / Shift+Tab is the keyboard user walking to the toolbar, the filters
+    // or the pager on purpose; handing that focus back trapped them in the
+    // search box (no way to reach Add / Edit / Delete without a mouse). Only
+    // focus a click gave away is returned, so the flag says "the last thing
+    // pressed was Tab" until the next key or press.
+    let tabNavigation = false;
+    const handleTabKey = (event: KeyboardEvent) => {
+      tabNavigation = event.key === "Tab" && !event.ctrlKey && !event.metaKey && !event.altKey;
+    };
+    const clearTabNavigation = () => {
+      tabNavigation = false;
+    };
+
     const handleFocusIn = (event: FocusEvent) => {
       const target = event.target as HTMLElement | null;
       const input = searchInputRef.current;
       if (!target || !input || target === input) return;
+      if (tabNavigation) return;
       if (!listRoot()?.contains(target) || target.closest(KEEPS_FOCUS_SELECTOR)) return;
       if (!listOwnsFocus()) return;
       input.focus({ preventScroll: true });
@@ -318,10 +333,14 @@ export function useMasterListKeyboard<Row extends MasterListKeyboardRow>({
 
     // Capture phase: the table stops mousedown propagation on some of its
     // buttons, and React's root listener sits below the document.
+    document.addEventListener("keydown", handleTabKey, true);
+    document.addEventListener("pointerdown", clearTabNavigation, true);
     document.addEventListener("focusin", handleFocusIn);
     document.addEventListener("mousedown", handleMouseDown, true);
     document.addEventListener("pointerdown", handlePointerDown, true);
     return () => {
+      document.removeEventListener("keydown", handleTabKey, true);
+      document.removeEventListener("pointerdown", clearTabNavigation, true);
       document.removeEventListener("focusin", handleFocusIn);
       document.removeEventListener("mousedown", handleMouseDown, true);
       document.removeEventListener("pointerdown", handlePointerDown, true);

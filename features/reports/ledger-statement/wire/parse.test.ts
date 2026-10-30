@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { toRow } from "../components/ledger-picker";
 import {
+  LEDGER_DELETED,
   dailyFixture,
   exportFixture,
   headerFixture,
@@ -41,6 +43,17 @@ describe("parse — the worked example", () => {
     expect(parseExport(exportFixture()).rows).toHaveLength(14);
     const legs = parseVoucherLegs(voucherLegsFixture({ voucherId: page.rows[1].voucherId }));
     expect(legs.legs.some((l) => l.isThisLedger)).toBe(true);
+  });
+
+  it("reads isDeleted on picker items and on the header ledger (party rules D1-7)", () => {
+    const live = parseLedgers(ledgersFixture());
+    expect(live.items.every((item) => item.isDeleted === false)).toBe(true);
+    const all = parseLedgers(ledgersFixture({ includeDeleted: "true" }));
+    const deleted = all.items.filter((item) => item.isDeleted);
+    expect(deleted.map((item) => item.ledgerId)).toEqual([LEDGER_DELETED]);
+    expect(toRow(deleted[0]).name).toBe("Old Party (deleted)");
+    expect(parseHeader(headerFixture({ ledgerId: LEDGER_DELETED })).ledger.isDeleted).toBe(true);
+    expect(parseHeader(headerFixture()).ledger.isDeleted).toBe(false);
   });
 
   it("keeps inline legs when the server sends them (withLegs)", () => {

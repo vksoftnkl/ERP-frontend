@@ -54,9 +54,13 @@ const CONFIG: DropdownConfig = {
   columns: COLUMNS,
 };
 
-function toRow(item: LedgerPickItem): DropdownRow {
+/** A deleted ledger reads "(deleted)" after its name (plan §5, "Show deleted"). */
+export const DELETED_LEDGER_SUFFIX = " (deleted)";
+
+export function toRow(item: LedgerPickItem): DropdownRow {
   return {
     ...item,
+    name: item.isDeleted ? `${item.name}${DELETED_LEDGER_SUFFIX}` : item.name,
     billWise: item.isBillByBill ? "Bill-wise" : "",
     shared: item.isShared ? "Shared" : "",
   };
@@ -67,11 +71,21 @@ export type LedgerPickerProps = {
   companyId: string;
   value: { id: string; text: string } | null;
   onPick: (item: LedgerPickItem) => void;
+  /** "Show deleted": list deleted ledgers too (`includeDeleted=true`). */
+  includeDeleted?: boolean;
   invalid?: boolean;
   inputRef?: MutableRefObject<HTMLInputElement | null>;
 };
 
-export function LedgerPicker({ client, companyId, value, onPick, invalid, inputRef }: LedgerPickerProps) {
+export function LedgerPicker({
+  client,
+  companyId,
+  value,
+  onPick,
+  includeDeleted = false,
+  invalid,
+  inputRef,
+}: LedgerPickerProps) {
   const controlId = useId();
   const listId = `${controlId}-list`;
   const fieldRef = useRef<HTMLDivElement | null>(null);
@@ -79,6 +93,8 @@ export function LedgerPicker({ client, companyId, value, onPick, invalid, inputR
   const popupRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState<string | null>(null);
+  /** What was last typed, kept past a blur until a ledger is picked. */
+  const typedRef = useRef<string | null>(null);
   const [items, setItems] = useState<LedgerPickItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,7 +109,15 @@ export function LedgerPicker({ client, companyId, value, onPick, invalid, inputR
       setLoading(true);
       setError(null);
       client
-        .searchLedgers({ companyId, search: search || undefined, limit: SEARCH_LIMIT }, controller.signal)
+        .searchLedgers(
+          {
+            companyId,
+            search: search || undefined,
+            limit: SEARCH_LIMIT,
+            ...(includeDeleted ? { includeDeleted: true } : {}),
+          },
+          controller.signal,
+        )
         .then((payload) => {
           setItems(payload.items);
           setLoading(false);
@@ -108,7 +132,7 @@ export function LedgerPicker({ client, companyId, value, onPick, invalid, inputR
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [client, companyId, open, search, retryTick]);
+  }, [client, companyId, includeDeleted, open, search, retryTick]);
 
   const rows = useMemo(() => items.map(toRow), [items]);
 
@@ -118,6 +142,7 @@ export function LedgerPicker({ client, companyId, value, onPick, invalid, inputR
       if (!item) return;
       setOpen(false);
       setQuery(null);
+      typedRef.current = null;
       onPick(item);
     },
     [items, onPick],
@@ -127,7 +152,7 @@ export function LedgerPicker({ client, companyId, value, onPick, invalid, inputR
     open,
     setOpen,
     rowCount: rows.length,
-    resetKey: `${companyId}|${search}`,
+    resetKey: `${companyId}|${search}|${includeDeleted ? "all" : "live"}`,
     onChoose: commit,
   });
 
@@ -135,6 +160,21 @@ export function LedgerPicker({ client, companyId, value, onPick, invalid, inputR
     keys.closeMenu();
     setQuery(null);
   }, [keys]);
+
+  // Ticking "Show deleted" beside the picker blurs it, which drops the typed
+  // search. The typed text is kept until a ledger is picked, and the tick
+  // reopens the list on it — now with (or without) the deleted parties.
+  const includeDeletedRef = useRef(includeDeleted);
+  const { openMenu } = keys;
+  useEffect(() => {
+    if (includeDeletedRef.current === includeDeleted) return;
+    includeDeletedRef.current = includeDeleted;
+    const typed = typedRef.current;
+    if (!typed || !typed.trim()) return;
+    setQuery(typed);
+    openMenu();
+    ownInputRef.current?.focus();
+  }, [includeDeleted, openMenu]);
 
   // The popup is portaled, so an outside-click test must look inside it too.
   useEffect(() => {
@@ -182,6 +222,7 @@ export function LedgerPicker({ client, companyId, value, onPick, invalid, inputR
         }
         onChange={(event) => {
           setQuery(event.target.value);
+          typedRef.current = event.target.value;
           keys.engage();
         }}
         onKeyDown={keys.handleKeyDown}

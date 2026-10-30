@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui/dynamic-modal-form";
 import type { ConfiguredGridKey } from "@/lib/configured-grids";
+import { PARTY_GST_TYPE_OPTIONS } from "@/features/masters/shared/party-master-rules";
 // API Endpoints
 /**
  * The Grid Master row this screen's list reads — "MAIN LIST - SUPPLIERS".
@@ -76,19 +77,14 @@ export const PURCHASE_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "LOCAL", label: "LOCAL" },
   { value: "IMPORT", label: "IMPORT" },
 ];
-// The Qt Supplier Entry's GST Type combo, saved in these words (sup_gst_type is
-// free text; nothing downstream compares it, and the supplier's GST type never
-// reaches its ledger, so SEZ and Overseas are safe here unlike on the customer).
-// Records the web form saved as REGULAR / COMPOSITION / UNREGISTERED load onto
-// the same entries, matched without regard to case.
-export const SUPPLIER_GST_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
-  { value: "Regular", label: "Regular" },
-  { value: "Composition", label: "Composition" },
-  { value: "SEZ", label: "SEZ" },
-  { value: "Overseas", label: "Overseas" },
-  { value: "Unregistered", label: "Unregistered" },
-];
-export const SUPPLIER_UNREGISTERED_GST_TYPE = "Unregistered";
+// Party rules D2 (plan-party-master-rules §6): the five codes the server takes,
+// words shown. The type now reaches the ledger (led_gst_party_reg_type +
+// led_is_sez). Older rows in Qt words ("Regular", "SEZ Unit") load onto the
+// same entries (transformers `toGstTypeValue`).
+export const SUPPLIER_GST_TYPE_OPTIONS: ERPDynamicSelectOption[] = PARTY_GST_TYPE_OPTIONS.map(
+  (option) => ({ ...option }),
+);
+export const SUPPLIER_UNREGISTERED_GST_TYPE = "UNREGISTERED";
 // Collection days travel as 0-based day indices, 0 = Mon … 6 = Sun, as the Qt
 // SupCollectionDaysWidget writes them (the shared COLLECTION_DAY_OPTIONS count
 // from 1, so the two clients would read each other's days one off).
@@ -224,6 +220,22 @@ export const SUPPLIER_GROUP_MODAL_INITIAL_VALUES = {
   spgDesc: "",
   spgIsActive: "true",
 } as const;
+// MST-01 — MSME (the 15 / 45-day payment rule). The server takes these codes or null.
+export const SUPPLIER_MSME_CATEGORY_OPTIONS = [
+  { value: "", label: "-- Not recorded --" },
+  { value: "MICRO", label: "Micro" },
+  { value: "SMALL", label: "Small" },
+  { value: "MEDIUM", label: "Medium" },
+  { value: "NONE", label: "Not MSME" },
+] as const;
+export const SUPPLIER_MSME_ACTIVITY_OPTIONS = [
+  { value: "", label: "-- Not recorded --" },
+  { value: "MANUFACTURER", label: "Manufacturer" },
+  { value: "SERVICE", label: "Service provider" },
+  { value: "TRADER", label: "Trader (rule does not apply)" },
+] as const;
+/** A written MSME agreement may agree at most 45 days. */
+export const SUPPLIER_MSME_MAX_AGREED_DAYS = 45;
 // Supplier Form Initial Values
 export const SUPPLIER_INITIAL_FORM_VALUES = {
   supCompanyId: "",
@@ -254,7 +266,7 @@ export const SUPPLIER_INITIAL_FORM_VALUES = {
   supStateCode: "",
   supPanNo: "",
   // The Qt combo has no blank entry, so a new supplier starts on its first item.
-  supGstType: "Regular",
+  supGstType: "REGULAR",
   supSupCst: "",
   supDrugLiscenceNo: "",
   supRegionName: "",
@@ -268,6 +280,17 @@ export const SUPPLIER_INITIAL_FORM_VALUES = {
   supBilledDate: "",
   supSortOrder: "0",
   supIsActive: "true",
+  // MST-01 purchase tab (Qt 4c09536): nothing recorded until the operator says.
+  supMsmeCategory: "",
+  supMsmeActivity: "",
+  supMsmeAgreement: "false",
+  supMsmeAgreedDays: "",
+  supDrugLicenceExpiry: "",
+  supFssaiNo: "",
+  supFssaiValidTo: "",
+  supDefaultGodownId: "",
+  supShowNotesOnEntry: "false",
+  supIsImport: "false",
   supCreatedBy: "",
   supModifiedBy: "",
   // Never shown: tells field handlers a saved record is open (see edit-mode-field).

@@ -7,6 +7,7 @@
  * the grid's Total and Closing rows are drawn from the same `header.period`.
  */
 import { cx } from "@/components/design-system/cx";
+import { Badge } from "@/components/design-system/ui";
 import styles from "../page.module.scss";
 import { displayDate, monthLabel } from "@/features/reports/shared/wire/dates";
 import { formatAmount, formatBal, isZeroAmount } from "@/features/reports/shared/wire/money";
@@ -36,6 +37,13 @@ export function LedgerDetailPanel({ ledger }: { ledger: LedgerFacts | null }) {
         <p className={styles.ledgerName} title={ledger?.name}>
           {ledger?.name ?? DASH}
         </p>
+        {ledger?.isDeleted ? (
+          // Party rules D1-7: the party was deleted; this is its history, read-only.
+          <p className={styles.ledgerDeleted} role="note">
+            <Badge variant="danger">Deleted</Badge>
+            <span className={styles.muted}>This party is deleted. Its statement is read-only.</span>
+          </p>
+        ) : null}
         <dl className={styles.facts}>
           <Fact label="Group">{ledger?.groupName ?? DASH}</Fact>
           <Fact label="Nature">{ledger?.nature ?? DASH}</Fact>

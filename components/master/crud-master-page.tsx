@@ -2415,6 +2415,7 @@ export default function CrudMasterPage({
   rowPrintDisabledReason,
   printBusy,
   onDeleteAction,
+  beforeDeleteConfirm,
   enableListActionKeys,
   listHintMessage,
   enableMultiSelect,
@@ -3720,15 +3721,35 @@ export default function CrudMasterPage({
     resetDetailsState();
     setEditingItemId(null);
   }, [resetDetailsState, resetSaveState, saveLoading]);
+  // One pre-confirm check at a time: a second F3 while it runs is ignored.
+  const deleteCheckBusyRef = useRef(false);
   const handleDeleteRow = useCallback(
     (row: MasterTableRow) => {
-      if (deleteLoading || saveLoading || detailsLoading) {
+      if (deleteLoading || saveLoading || detailsLoading || deleteCheckBusyRef.current) {
         return;
       }
-      setDeleteReason("");
-      setPendingDeleteRow(row);
+      if (!beforeDeleteConfirm) {
+        setDeleteReason("");
+        setPendingDeleteRow(row);
+        return;
+      }
+      deleteCheckBusyRef.current = true;
+      void (async () => {
+        let allowed = false;
+        try {
+          allowed = await beforeDeleteConfirm(row);
+        } catch {
+          allowed = false;
+        } finally {
+          deleteCheckBusyRef.current = false;
+        }
+        if (allowed) {
+          setDeleteReason("");
+          setPendingDeleteRow(row);
+        }
+      })();
     },
-    [deleteLoading, detailsLoading, saveLoading],
+    [beforeDeleteConfirm, deleteLoading, detailsLoading, saveLoading],
   );
   const handleDeleteCancel = useCallback(() => {
     if (deleteLoading) {
@@ -4116,6 +4137,16 @@ export default function CrudMasterPage({
       // A dialog over the list owns the keyboard: the grid settings modal
       // already answers to Esc and F5, and the delete confirmation to Enter.
       if (gridSettingsMode !== null || pendingDeleteRow !== null) {
+        return;
+      }
+      // So does the entry form (or any dialog / confirm / message) over it:
+      // F2 or F3 typed there must never edit or delete the row behind it.
+      // F5 / F1 are still swallowed there, so the browser does not reload the
+      // page (or open its help) under an open form.
+      if (document.querySelector('[role="dialog"], [role="alertdialog"], [aria-modal="true"]')) {
+        if ((event.key === "F5" || event.key === "F1") && !event.ctrlKey) {
+          event.preventDefault();
+        }
         return;
       }
       const key = event.key;

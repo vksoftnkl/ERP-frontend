@@ -2,8 +2,8 @@ import {
   toNullableString,
   toUpdateId,
 } from "@/app/master/_shared/crud-utils";
-import { validateGstinField } from "@/features/masters/shared/gst-registration";
-import { SUPPLIER_MAX_CREDIT_DAYS } from "./constants";
+import { partyGstRuleMessageFor } from "@/features/masters/shared/party-master-rules";
+import { SUPPLIER_MAX_CREDIT_DAYS, SUPPLIER_MSME_MAX_AGREED_DAYS } from "./constants";
 import type { SupplierFormValues } from "./types";
 import {
   toGstTypeValue,
@@ -12,26 +12,48 @@ import {
 } from "./transformers";
 
 // Validation Functions
+/** The picked state's code: the form stores the state NAME (the record's own code as fallback). */
+function supplierStateCodeOf(values: Record<string, string>, stateCodeByName: Record<string, string>): string {
+  const stateName = (values.supStateName ?? "").trim();
+  return stateName ? (stateCodeByName[stateName] ?? (values.supStateCode ?? "").trim()) : "";
+}
+
+function supplierGstRuleInput(
+  values: Record<string, string>,
+  gstin: string,
+  stateCodeByName: Record<string, string>,
+) {
+  return {
+    role: "supplier" as const,
+    gstType: values.supGstType ?? "",
+    gstin,
+    stateCode: supplierStateCodeOf(values, stateCodeByName),
+  };
+}
+
 /**
- * The Qt Supplier Entry's GSTIN rule: every GST type but Unregistered needs a
- * GSTIN; a GSTIN must pass the format and mod-36 checksum; and its first two
- * digits must be the code of the State picked (the form stores the state NAME,
- * so the code comes from `stateCodeByName`, falling back to the record's own).
+ * Party rules D2 (the server's resolvePartyGstType): REGULAR / COMPOSITION /
+ * SEZ need a GSTIN, UNREGISTERED / OVERSEAS refuse one; any GSTN shape is
+ * accepted (a normal one also passes the Qt mod-36 check); a normal GSTIN's
+ * first two digits must be the State's code (PURCHASE_SUPPLIER_GSTIN_STATE_MISMATCH).
  */
 export function validateSupplierGstin(
   value: string,
   values: Record<string, string>,
   stateCodeByName: Record<string, string>,
 ): string | null {
-  return validateGstinField(value, values, {
-    fields: { gstin: "supGstNo", regType: "supGstType", pan: "supPanNo" },
-    stateCodeOf: (current) => {
-      const stateName = (current.supStateName ?? "").trim();
-      return stateName
-        ? (stateCodeByName[stateName] ?? (current.supStateCode ?? "").trim())
-        : "";
-    },
-  });
+  return partyGstRuleMessageFor("gstin", supplierGstRuleInput(values, value, stateCodeByName));
+}
+
+/** OVERSEAS = state 96 "Other Country" (Q6, PURCHASE_SUPPLIER_OVERSEAS_STATE). */
+export function validateSupplierOverseasState(
+  values: Record<string, string>,
+  stateCodeByName: Record<string, string>,
+): string | null {
+  return partyGstRuleMessageFor(
+    "state",
+    supplierGstRuleInput(values, values.supGstNo ?? "", stateCodeByName),
+  );
 }
 
 export function validateSupplierPan(value: string): string | null {
@@ -101,9 +123,10 @@ export function buildSupplierRequestPayload(
     supRegionDistrict: toNullableString(values.supRegionDistrict ?? ""),
     supRegionStateName: toNullableString(resolvedRegionStateName),
     supRegionCountry: toNullableString(values.supRegionCountry ?? ""),
-    supBilledDate: toNullableDate(values.supBilledDate ?? ""),
+    // supBilledDate is not sent: no master save writes it (party rules D3-5, Q10).
     supSortOrder: toNullableInteger(values.supSortOrder ?? ""),
     supIsActive: (values.supIsActive ?? "true") === "true",
+    ...buildSupplierPurchasePayload(values),
     supCreatedBy: toNullableString(values.supCreatedBy ?? ""),
     supModifiedBy: toNullableString(values.supModifiedBy ?? ""),
   };
@@ -113,6 +136,47 @@ export function buildSupplierRequestPayload(
   }
 
   return payload;
+}
+
+/** "Agreed Days" is 0–45 or not given. */
+export function validateSupplierAgreedDays(value: string): string | null {
+  const normalized = value.trim();
+  if (!normalized) {
+    return null;
+  }
+  const days = Number(normalized);
+  return Number.isInteger(days) && days >= 0 && days <= SUPPLIER_MSME_MAX_AGREED_DAYS
+    ? null
+    : `Agreed Days is a whole number from 0 to ${SUPPLIER_MSME_MAX_AGREED_DAYS}.`;
+}
+
+/**
+ * MST-01 — the Purchase tab's keys (server 70b1901e). Every key is sent, so a
+ * cleared field clears the column: blank codes / dates / godown go as null.
+ */
+export function buildSupplierPurchasePayload(values: Partial<SupplierFormValues>): Record<string, unknown> {
+  const code = (raw: string | undefined) => {
+    const normalized = (raw ?? "").trim().toUpperCase();
+    return normalized ? normalized : null;
+  };
+  const date = (raw: string | undefined) => {
+    const normalized = (raw ?? "").trim().slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : null;
+  };
+  const days = toNullableInteger(values.supMsmeAgreedDays ?? "");
+  return {
+    supMsmeCategory: code(values.supMsmeCategory),
+    supMsmeActivity: code(values.supMsmeActivity),
+    supMsmeAgreement: values.supMsmeAgreement === "true",
+    supMsmeAgreedDays:
+      days === null ? null : Math.min(Math.max(days, 0), SUPPLIER_MSME_MAX_AGREED_DAYS),
+    supDrugLicenceExpiry: date(values.supDrugLicenceExpiry),
+    supFssaiNo: toNullableString(values.supFssaiNo ?? ""),
+    supFssaiValidTo: date(values.supFssaiValidTo),
+    supDefaultGodownId: toNullableString(values.supDefaultGodownId ?? ""),
+    supShowNotesOnEntry: values.supShowNotesOnEntry === "true",
+    supIsImport: values.supIsImport === "true",
+  };
 }
 
 // Helper Functions
@@ -126,15 +190,6 @@ function toNonNegativeNumber(value: string, fallback: number): number {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
-function toNullableDate(value: string): string | null {
-  const normalized = value.trim();
-  if (!normalized) {
-    return null;
-  }
-  // Basic validation for date format
-  const date = new Date(normalized);
-  return Number.isFinite(date.getTime()) ? normalized : null;
-}
 
 function parseCollectionDays(value: string): number[] {
   const normalized = value.trim();

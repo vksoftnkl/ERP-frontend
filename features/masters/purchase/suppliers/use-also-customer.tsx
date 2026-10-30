@@ -13,8 +13,7 @@
  * save. Once that save lands the button goes away.
  */
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
-import axios from "axios";
+import { useCallback, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 
 import { useApi } from "@/hooks/useApi";
@@ -54,55 +53,37 @@ export type UseAlsoCustomerResult = {
  * @param supplierId the supplier open in the update modal, or null when the
  *   modal is closed or on a new / viewed record.
  */
-export function useAlsoCustomer(supplierId: string | null): UseAlsoCustomerResult {
+export function useAlsoCustomer(
+  supplierId: string | null,
+  /**
+   * The shared "is it a customer too?" answer from `usePartyOtherRole` for
+   * `supplierId` (false = not a customer yet, true = already one, null =
+   * unknown). One probe of `/customers/get` serves both the button and the
+   * shared-party note; probing twice put two 404s in the console per edit.
+   */
+  isCustomer: boolean | null,
+  /** Called once the linked customer is saved, so the shared answer flips. */
+  onLinked: (customerId: string) => void,
+): UseAlsoCustomerResult {
   const { permissions } = usePagePermissions({ href: CUSTOMER.href });
   const canCreateCustomer = permissions.canCreate;
 
-  // Two hooks: useApi aborts its own previous request, and the probe of one
-  // supplier must not cancel the ledger read of another.
-  const { getAll: probeCustomer } = useApi<unknown>(CUSTOMER.getEndpoint, {
-    toast: { error: false, success: false },
-  });
   const { getAll: getLedger } = useApi<unknown>(LEDGER_GET_ENDPOINT, {
     toast: { success: false },
   });
 
-  // The answer is kept with the supplier it is about, so one about a supplier
-  // no longer open never shows the button for the next one.
-  const [probe, setProbe] = useState<{ supplierId: string; status: ProbeStatus } | null>(null);
-  const status =
-    supplierId && canCreateCustomer && probe?.supplierId === supplierId ? probe.status : null;
+  // 404 = not that role yet: offer the button. Any other failure says nothing
+  // either way, so the button stays away rather than offer a link that may 409.
+  const status: ProbeStatus | null =
+    supplierId && canCreateCustomer
+      ? isCustomer === false
+        ? "offer"
+        : isCustomer === true
+          ? "linked"
+          : "unknown"
+      : null;
   const [loadingLedger, setLoadingLedger] = useState(false);
   const [entry, setEntry] = useState<LinkedEntry | null>(null);
-
-  useEffect(() => {
-    if (!supplierId || !canCreateCustomer) {
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      let next: ProbeStatus;
-      try {
-        const response = await probeCustomer({ [CUSTOMER.idKey]: supplierId });
-        // undefined: superseded by a newer probe, which will answer instead.
-        if (response === undefined) {
-          return;
-        }
-        next = "linked";
-      } catch (error) {
-        // 404 = not that role yet. Any other failure says nothing either way,
-        // so the button stays away rather than offer a link that may 409.
-        next =
-          axios.isAxiosError(error) && error.response?.status === 404 ? "offer" : "unknown";
-      }
-      if (!cancelled) {
-        setProbe({ supplierId, status: next });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [canCreateCustomer, probeCustomer, supplierId]);
 
   const handleOpen = useCallback(async () => {
     if (!supplierId || loadingLedger) {
@@ -127,10 +108,13 @@ export function useAlsoCustomer(supplierId: string | null): UseAlsoCustomerResul
     }
   }, [getLedger, loadingLedger, supplierId]);
 
-  const handleSaved = useCallback((customerId: string) => {
-    setEntry(null);
-    setProbe({ supplierId: customerId, status: "linked" });
-  }, []);
+  const handleSaved = useCallback(
+    (customerId: string) => {
+      setEntry(null);
+      onLinked(customerId);
+    },
+    [onLinked],
+  );
   const handleClose = useCallback(() => {
     setEntry(null);
   }, []);

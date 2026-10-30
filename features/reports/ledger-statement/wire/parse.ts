@@ -237,6 +237,7 @@ function ledgerFacts(r: Reader): LedgerFacts {
   return {
     ledgerId: r.str("ledgerId"),
     name: r.str("name"),
+    isDeleted: r.flag("isDeleted"),
     groupName: r.optStr("groupName"),
     nature: r.optStr("nature"),
     isBillByBill: r.flag("isBillByBill"),
@@ -272,6 +273,7 @@ export function parseLedgers(raw: unknown): LedgerPickPayload {
       groupName: item.optStr("groupName"),
       isBillByBill: item.flag("isBillByBill"),
       isShared: item.flag("isShared"),
+      isDeleted: item.flag("isDeleted"),
     })),
   };
 }

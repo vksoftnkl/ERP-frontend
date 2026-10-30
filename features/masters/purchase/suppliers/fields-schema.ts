@@ -22,8 +22,21 @@ import {
   SUPPLIER_COLLECTION_DAY_SHORT_OPTIONS,
   SUPPLIER_GST_TYPE_OPTIONS,
   SUPPLIER_MAX_CREDIT_DAYS,
+  SUPPLIER_MSME_ACTIVITY_OPTIONS,
+  SUPPLIER_MSME_CATEGORY_OPTIONS,
+  SUPPLIER_MSME_MAX_AGREED_DAYS,
 } from "./constants";
-import { validateSupplierGstin, validateSupplierPan } from "./form-builder";
+import {
+  validateSupplierAgreedDays,
+  validateSupplierGstin,
+  validateSupplierOverseasState,
+  validateSupplierPan,
+} from "./form-builder";
+import {
+  countryForStateChange,
+  gstTypeNeedsGstin,
+  gstTypeRefusesGstin,
+} from "@/features/masters/shared/party-master-rules";
 
 // Build Supplier Form Fields
 export function buildSupplierFormFields(
@@ -52,6 +65,8 @@ export function buildSupplierFormFields(
   purchaseTypeOptions: ERPDynamicSelectOption[],
   // State name → 2-digit code, for the GSTIN's state-prefix check.
   stateCodeByName: Record<string, string>,
+  // The Purchase tab's Default Godown picker (GODOWNS of the session's branch).
+  defaultGodownField: ERPDynamicModalField,
 ): ERPDynamicModalField[] {
   // Every tab is a 12-column grid holding two label/control pairs per row, as in
   // the legacy Supplier Entry screen: normal inputs span 6, full-width fields use
@@ -75,8 +90,14 @@ export function buildSupplierFormFields(
       placeholder: "24ABCDE1234F1Z5",
       helperText: GST_LOOKUP_HELPER_TEXT,
       onValueChange: onSupplierGstinValueChange,
+      // Unregistered / Overseas have no GST No: the box is off while empty (an
+      // old row that still holds one stays open so it can be cleared).
+      requiredWhen: (values) => gstTypeNeedsGstin(values.supGstType ?? ""),
+      disabledWhen: (values) =>
+        gstTypeRefusesGstin(values.supGstType ?? "") && !(values.supGstNo ?? "").trim(),
       ...span(6),
       validation: {
+        requiredMessage: "GST No is needed for this GST Type. Type it, or choose Unregistered.",
         custom: (value, values) => validateSupplierGstin(value, values, stateCodeByName),
       },
     },
@@ -150,6 +171,11 @@ export function buildSupplierFormFields(
       searchable: true,
       options: SUPPLIER_GST_TYPE_OPTIONS,
       required: true,
+      // Unregistered / Overseas: the GST No is cleared (the server refuses one).
+      onValueChange: ({ value, values }) =>
+        gstTypeRefusesGstin(value) && (values.supGstNo ?? "").trim()
+          ? { values: { supGstNo: "" }, errors: { supGstNo: null } }
+          : { errors: { supGstNo: null, supStateName: null } },
       ...span(6),
       validation: {
         requiredMessage: "GST Type is required.",
@@ -252,12 +278,25 @@ export function buildSupplierFormFields(
       onSearchOpenChange: lazy.supStateName.onSearchOpenChange,
       onSearchQueryChange: lazy.supStateName.onSearchQueryChange,
       // Pins the selection and mirrors the name into supRegionStateName.
-      onValueChange: lazy.supStateName.onValueChange,
+      onValueChange: (payload) => {
+        const result = lazy.supStateName.onValueChange(payload);
+        // 96 Other Country: Country no longer says the "India" default.
+        const country = countryForStateChange(
+          stateCodeByName[payload.value.trim()],
+          payload.values.supCountry,
+        );
+        if (country === undefined || result instanceof Promise) {
+          return result;
+        }
+        return { ...result, values: { ...result?.values, supCountry: country } };
+      },
       onSearchCreateShortcut: onStateCreateShortcut,
       onSearchEditShortcut: onStateEditShortcut,
       ...span(6),
       validation: {
         requiredMessage: "State is required.",
+        // Overseas = state 96 "Other Country" (party rules Q6).
+        custom: (_value, values) => validateSupplierOverseasState(values, stateCodeByName),
       },
     },
     {
@@ -422,6 +461,98 @@ export function buildSupplierFormFields(
         maxLength: 250,
         maxLengthMessage: "Notes must be at most 250 characters.",
       },
+    },
+    // ── Purchase tab (MST-01, Qt 4c09536) ─────────────────────────
+    // MSME 15 / 45-day rule, licences, what a bill does when this supplier is picked.
+    {
+      name: "purchaseSection",
+      label: "Purchase",
+      type: "heading",
+      sectionGridColumns: 12,
+    },
+    {
+      name: "msmeSubheading",
+      label: "MSME",
+      type: "subheading",
+    },
+    {
+      name: "supMsmeCategory",
+      label: "MSME Category",
+      type: "select",
+      options: SUPPLIER_MSME_CATEGORY_OPTIONS.map((option) => ({ ...option })),
+      placeholder: "-- Not recorded --",
+      ...span(6),
+    },
+    {
+      name: "supMsmeActivity",
+      label: "MSME Activity",
+      type: "select",
+      options: SUPPLIER_MSME_ACTIVITY_OPTIONS.map((option) => ({ ...option })),
+      placeholder: "-- Not recorded --",
+      ...span(6),
+    },
+    {
+      name: "supMsmeAgreement",
+      label: `Written agreement (agreed days, max ${SUPPLIER_MSME_MAX_AGREED_DAYS})`,
+      type: "checkbox",
+      ...span(6),
+    },
+    {
+      name: "supMsmeAgreedDays",
+      label: "Agreed Days",
+      type: "number",
+      min: 0,
+      max: SUPPLIER_MSME_MAX_AGREED_DAYS,
+      step: 1,
+      helperText: "Without a written agreement the MSME pay-by is 15 days.",
+      ...span(6),
+      validation: {
+        custom: (value) => validateSupplierAgreedDays(value),
+      },
+    },
+    {
+      name: "licenceSubheading",
+      label: "Licences",
+      type: "subheading",
+    },
+    {
+      name: "supDrugLicenceExpiry",
+      label: "Drug Licence To",
+      type: "date",
+      ...span(6),
+    },
+    {
+      name: "supFssaiNo",
+      label: "FSSAI No",
+      ...span(6),
+      validation: {
+        maxLength: 20,
+        maxLengthMessage: "FSSAI No must be at most 20 characters.",
+      },
+    },
+    {
+      name: "supFssaiValidTo",
+      label: "FSSAI Valid To",
+      type: "date",
+      ...span(6),
+    },
+    {
+      name: "entrySubheading",
+      label: "On entry",
+      type: "subheading",
+    },
+    defaultGodownField,
+    {
+      name: "supShowNotesOnEntry",
+      label: "Show the notes when picked on a bill",
+      type: "checkbox",
+      ...span(6),
+    },
+    {
+      name: "supIsImport",
+      label: "Import / overseas supplier",
+      type: "checkbox",
+      ...span(6),
     },
     // ── Regional Details tab ──────────────────────────────────────
     {

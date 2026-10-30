@@ -113,7 +113,14 @@ export type ExportQuery = RangeQuery & {
   withLegs: boolean;
 };
 export type VouchersQuery = ExportQuery & { page: number; pageSize: number };
-export type LedgersQuery = { companyId: string; search?: string; groupId?: string; limit?: number };
+export type LedgersQuery = {
+  companyId: string;
+  search?: string;
+  groupId?: string;
+  limit?: number;
+  /** "Show deleted" (party rules D1-7): deleted ledgers too, each `isDeleted`. Absent = live only. */
+  includeDeleted?: boolean;
+};
 export type VoucherLegsQuery = { companyId: string; accYear: string; voucherId: string; ledgerId: string };
 
 function yearQuery(session: Session, filters: Filters): YearQuery {

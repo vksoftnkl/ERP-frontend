@@ -219,6 +219,9 @@ export default function LedgerStatementScreen() {
     });
   }, []);
 
+  /* ---- the picker's "Show deleted" tick (party rules D1-7): picker only, not in the URL */
+  const [showDeletedLedgers, setShowDeletedLedgers] = useState(false);
+
   /* ---- the ledger's group, for PgUp / PgDn */
   const groupRef = useRef<{ ledgerId: string; groupId: string | null } | null>(null);
   const onPickLedger = useCallback((item: LedgerPickItem) => {
@@ -255,7 +258,7 @@ export default function LedgerStatementScreen() {
     return () => window.clearTimeout(timer);
   }, [hint]);
 
-  const groupCache = useRef<{ groupId: string; items: LedgerPickItem[] } | null>(null);
+  const groupCache = useRef<{ groupId: string; withDeleted: boolean; items: LedgerPickItem[] } | null>(null);
   const walking = useRef(false);
   const walkLedger = useCallback(
     async (direction: 1 | -1) => {
@@ -266,11 +269,18 @@ export default function LedgerStatementScreen() {
         let groupId = groupRef.current?.ledgerId === ledgerId ? groupRef.current.groupId : undefined;
         if (groupId === undefined) {
           // Opened from a link: /header names the group but not its id, so ask /ledgers.
-          const name = header?.ledger.ledgerId === ledgerId ? header.ledger.name : "";
+          const shown = header?.ledger.ledgerId === ledgerId ? header.ledger : null;
+          const name = shown?.name ?? "";
+          // A deleted ledger is found only when deleted ones are asked for.
           const found = name
-            ? (await client.searchLedgers({ companyId: session.companyId, search: name, limit: 30 })).items.find(
-                (item) => item.ledgerId === ledgerId,
-              )
+            ? (
+                await client.searchLedgers({
+                  companyId: session.companyId,
+                  search: name,
+                  limit: 30,
+                  ...(shown?.isDeleted ? { includeDeleted: true } : {}),
+                })
+              ).items.find((item) => item.ledgerId === ledgerId)
             : undefined;
           groupId = found?.groupId ?? null;
           groupRef.current = { ledgerId, groupId };
@@ -279,9 +289,17 @@ export default function LedgerStatementScreen() {
           setHint("This ledger's group is not known, so PgUp / PgDn cannot walk it.");
           return;
         }
-        if (groupCache.current?.groupId !== groupId) {
-          const { items } = await client.searchLedgers({ companyId: session.companyId, groupId, limit: 100 });
-          groupCache.current = { groupId, items };
+        // With "Show deleted" ticked, or from a deleted ledger, the walk steps over deleted ones too.
+        const withDeleted =
+          showDeletedLedgers || (header?.ledger.ledgerId === ledgerId && header.ledger.isDeleted);
+        if (groupCache.current?.groupId !== groupId || groupCache.current.withDeleted !== withDeleted) {
+          const { items } = await client.searchLedgers({
+            companyId: session.companyId,
+            groupId,
+            limit: 100,
+            ...(withDeleted ? { includeDeleted: true } : {}),
+          });
+          groupCache.current = { groupId, withDeleted, items };
         }
         const list = groupCache.current.items;
         const at = list.findIndex((item) => item.ledgerId === ledgerId);
@@ -300,7 +318,7 @@ export default function LedgerStatementScreen() {
         walking.current = false;
       }
     },
-    [client, filters, header, session.companyId, writeUrl],
+    [client, filters, header, session.companyId, showDeletedLedgers, writeUrl],
   );
 
   /* ---- month / day drills */
@@ -587,6 +605,8 @@ export default function LedgerStatementScreen() {
           setCheckError(null);
         }}
         onPickLedger={onPickLedger}
+        showDeletedLedgers={showDeletedLedgers}
+        onShowDeletedLedgers={setShowDeletedLedgers}
         display={display}
         onDisplay={onDisplay}
         branches={branches}
