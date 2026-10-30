@@ -87,6 +87,7 @@ const CHG_TAX_ID_KEYS = ["chgTaxId", "chg_tax_id"] as const;
 const CHG_BEFORE_TAX_KEYS = ["chgBeforeTax", "chg_before_tax"] as const;
 const CHG_SEP_POST_KEYS = ["chgSepPost", "chg_sep_post"] as const;
 const CHG_MAN_PARTY_KEYS = ["chgManParty", "chg_man_party"] as const;
+const CHG_ON_BILL_KEYS = ["chgOnBill", "chg_on_bill"] as const;
 const CHG_DISP_ORDER_KEYS = ["chgDispOrder", "chg_disp_order"] as const;
 const CHG_AUTO_APPLY_KEYS = ["chgAutoApply", "chg_auto_apply"] as const;
 const CHG_IS_ACTIVE_KEYS = ["chgIsActive", "chg_is_active", "isActive", "is_active", "status"] as const;
@@ -160,6 +161,8 @@ const CHARGE_INITIAL_FORM_VALUES = {
   chgTaxId: "",
   chgSepPost: "false",
   chgManParty: "false",
+  // Qt MST-04: a new charge is on the supplier's bill unless unticked (DB default true).
+  chgOnBill: "true",
   chgAutoApply: "false",
   chgDispOrder: "0",
   chgIsActive: "true",
@@ -298,6 +301,14 @@ function buildChargeFormFields(
     },
     { name: "chgSepPost", label: "Post Separately", type: "checkbox" },
     { name: "chgManParty", label: "Party Mandatory", type: "checkbox" },
+    {
+      // MST-04 (Qt 4c09536): on the supplier's bill (payable to them), or our own
+      // cost owed to the row's party (Purchase Entry's Payees…).
+      name: "chgOnBill",
+      label: "On Supplier Bill (purchase)",
+      type: "checkbox",
+      helperText: "Unticked = our own cost (loading, freight we pay), owed to the payees named on the bill.",
+    },
     { name: "__subheading_landing_cost", label: "Landing Cost (Purchase)", type: "subheading" },
     { name: "chgLandingCost", label: "Include In Landing Cost", type: "checkbox" },
     {
@@ -450,6 +461,7 @@ export default function ChargeMasterPage() {
             getFirstDefinedValue(rowSource, CHG_MAN_PARTY_KEYS),
             "false",
           ),
+          chgOnBill: toSelectBoolean(getFirstDefinedValue(rowSource, CHG_ON_BILL_KEYS), "true"),
           chgAutoApply: toSelectBoolean(
             getFirstDefinedValue(rowSource, CHG_AUTO_APPLY_KEYS),
             "false",
@@ -482,6 +494,7 @@ export default function ChargeMasterPage() {
           chgTaxId: carriesOwnTax(values) ? toNullableString(values.chgTaxId ?? "") : null,
           chgSepPost: (values.chgSepPost ?? "false") === "true",
           chgManParty: (values.chgManParty ?? "false") === "true",
+          chgOnBill: (values.chgOnBill ?? "true") !== "false",
           chgDispOrder: toNullableInteger(values.chgDispOrder ?? ""),
           chgAutoApply: (values.chgAutoApply ?? "false") === "true",
           chgIsActive: (values.chgIsActive ?? "true") !== "false",

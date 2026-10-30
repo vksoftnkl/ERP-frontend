@@ -11,6 +11,8 @@ import { baseApi } from "@/store/api/baseApi";
 import type { ApiSuccessResponse } from "@/utils/types";
 import {
   GRN_CANCEL_ENDPOINT,
+  GRN_REASONS_ENDPOINT,
+  GRN_VALIDATE_ENDPOINT,
   GRN_GET_ENDPOINT,
   GRN_ITEM_BY_BARCODE_ENDPOINT,
   GRN_ITEM_LOOKUP_ENDPOINT,
@@ -20,6 +22,8 @@ import {
 } from "./grn.constants";
 import type {
   CancelGrnArgs,
+  GrnReasonRow,
+  GrnValidateAnswer,
   GrnBarcodeItem,
   GrnItemLookup,
   GrnPayload,
@@ -35,6 +39,18 @@ export const grnApi = baseApi.injectEndpoints({
     grnSave: builder.mutation<GrnPayload, SaveGrnDto>({
       query: (body) => ({ url: GRN_SAVE_ENDPOINT, method: "POST", body }),
       transformResponse: (payload: ApiSuccessResponse<GrnPayload>) => payload.data,
+    }),
+    /** POST — the server's figures for a GRN being keyed (lines, Check, charges, totals, strip). Writes nothing. */
+    grnValidate: builder.mutation<GrnValidateAnswer, SaveGrnDto>({
+      query: (body) => ({ url: GRN_VALIDATE_ENDPOINT, method: "POST", body }),
+      transformResponse: (payload: ApiSuccessResponse<GrnValidateAnswer>) => payload.data,
+    }),
+    /** GET — the damage reasons (Stock Reasons for voucher type DAMAGE); read once per company. */
+    grnDamageReasons: builder.query<GrnReasonRow[], { companyId: string }>({
+      query: ({ companyId }) => ({ url: GRN_REASONS_ENDPOINT, params: { voucherType: "DAMAGE", companyId } }),
+      transformResponse: (payload: ApiSuccessResponse<GrnReasonRow[]>) =>
+        (Array.isArray(payload?.data) ? payload.data : []).filter((row) => row.isActive !== false),
+      keepUnusedDataFor: 300,
     }),
     /** POST — post a saved draft as it stands (Post right only). */
     grnPost: builder.mutation<GrnPayload, GrnRefArgs>({
@@ -83,6 +99,8 @@ export const grnApi = baseApi.injectEndpoints({
 
 export const {
   useGrnSaveMutation,
+  useGrnValidateMutation,
+  useGrnDamageReasonsQuery,
   useGrnPostMutation,
   useGrnGetMutation,
   useGrnCancelMutation,

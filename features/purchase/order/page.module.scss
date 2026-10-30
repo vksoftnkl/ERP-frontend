@@ -9,12 +9,12 @@
 }
 
 /* ------------------------------------------------------------- top band */
+/* The rebuild (mockup): title band over THE HEADER, one column. */
 .topBand {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   flex: 0 0 auto;
-  grid-template-columns: minmax(u(15), 1fr) minmax(0, 3.2fr);
-  gap: u(0.9);
-  align-items: start;
+  gap: u(0.45);
   padding-bottom: u(0.35);
   border-bottom: 3px solid var(--primary, #7b1515);
 }
@@ -45,30 +45,7 @@
   align-items: center;
   font-size: u(0.72);
 }
-.statusPill {
-  padding: u(0.08) u(0.6);
-  border-radius: 999px;
-  font-size: u(0.7);
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.statusDraft {
-  background: #fef3e2;
-  color: #b45309;
-}
-.statusPosted {
-  background: #e8f5ea;
-  color: #15803d;
-}
-.statusClosed {
-  background: #eef2f8;
-  color: #1d4ed8;
-}
-.statusCancelled {
-  background: #fde8e8;
-  color: #b42318;
-}
+
 .approval {
   color: #a15c00;
   font-weight: 700;
@@ -167,11 +144,24 @@
   color: #1d4ed8;
   font-weight: 600;
 }
+.revisionNote {
+  color: var(--text-muted, #555555);
+  font-weight: 600;
+}
 .buttonBar {
   display: flex;
   flex-wrap: wrap;
   gap: u(0.35);
   justify-content: flex-end;
+}
+/* Amend / Clone / Merge… / Approve / Versions… — Qt puts them left of the TxnKeys row. */
+.docActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.35);
+  padding-right: u(0.5);
+  margin-right: u(0.15);
+  border-right: 1px solid var(--border, #c9c9c9);
 }
 .footerHint {
   margin-right: auto;
@@ -179,4 +169,44 @@
   color: var(--text-muted, #666666);
   font-size: u(0.7);
   font-weight: 600;
+}
+
+/* -------------------------------------------- 2026-10-29 rebuild frame */
+.titleRow {
+  display: flex;
+  gap: u(0.6);
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.creditPair {
+  display: flex;
+  gap: u(0.4);
+  align-items: center;
+  min-width: 0;
+}
+.creditInput {
+  flex: 0 0 u(4);
+  width: u(4);
+  text-align: right;
+}
+.clickable {
+  cursor: pointer;
+}
+.chargesBlock {
+  width: 60%;
+  min-width: u(30);
+}
+.chargesViewport {
+  max-height: calc(24vh / var(--erp-ui-scale, 1));
+}
+.chargesTable {
+  width: 100%;
+}
+.chargePick {
+  color: var(--ds-text-muted);
+}
+.buttonBarLeft {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.35);
 }

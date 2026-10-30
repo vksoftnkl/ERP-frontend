@@ -20,6 +20,7 @@ import { RESTORED_MESSAGE_OPTIONS, restoredMessage, screenMemory, type ScreenSco
 import { useForgetIfWritingOnUnmount, useRecalledOnce, type ScreenMemoryOption } from "@/lib/use-screen-memory";
 import { PURCHASE_DOC_TYPES } from "../shared/purchase.doc-types";
 import { purchaseRefusalText } from "../shared/purchase.format";
+import { refusalsOfError } from "./invoice-fidelity";
 import type { PurchaseDocKey } from "../shared/purchase.types";
 import { usePurchaseMemoryScope, usePurchaseScope } from "../shared/use-purchase-scope";
 import {
@@ -41,9 +42,12 @@ import {
   isEditable,
   isWorthRemembering,
   rowHasItem,
+  withHeaderDefaults,
+  withLineDefaults,
   type InvoiceAction,
 } from "./invoice.state";
 import type { InvoiceDraft, PurchaseInvoicePayload } from "./invoice.types";
+import { useInvoiceLineSupport } from "./use-invoice-lines";
 
 export type Busy = "loading" | "saving" | "posting" | "cancelling" | null;
 
@@ -64,7 +68,9 @@ export function usePurchaseInvoiceDraft(memory: ScreenMemoryOption | undefined) 
   const memoryScope = usePurchaseMemoryScope();
   const recalled = useRecalledOnce<InvoiceDraft>(memory, memoryScope);
   const resumed = recalled !== null;
-  const [draft, setDraft] = useState<InvoiceDraft>(() => recalled ?? createDraft(scope, todayIso()));
+  const [draft, setDraft] = useState<InvoiceDraft>(() =>
+    recalled ? withLineDefaults(withHeaderDefaults(recalled)) : createDraft(scope, todayIso()),
+  );
   const draftRef = useRef(draft);
   const [busy, setBusy] = useState<Busy>(null);
   const busyRef = useRef<Busy>(null);
@@ -173,6 +179,10 @@ export function usePurchaseInvoiceDraft(memory: ScreenMemoryOption | undefined) 
     [commit, scheduleRecalc],
   );
 
+  // PI-LINES: line rules, item context, scheme / defaults / EAN, From GRN / PO, F4, F12, textile.
+  const lineSupport = useInvoiceLineSupport({ draft, draftRef, run, requestFocus });
+  const { afterCellEdited, afterItemPicked, barcodeNotFound, forgetContext } = lineSupport;
+
   // ------------------------------------------------------------ the header
   const setHeader = useCallback(
     (patch: Extract<InvoiceAction, { type: "header" }>["patch"]) => run({ type: "header", patch }),
@@ -184,8 +194,11 @@ export function usePurchaseInvoiceDraft(memory: ScreenMemoryOption | undefined) 
 
   // ------------------------------------------------------------- the lines
   const editCell = useCallback(
-    (key: string, column: number, raw: string) => run({ type: "editCell", key, column, raw }),
-    [run],
+    (key: string, column: number, raw: string) => {
+      run({ type: "editCell", key, column, raw });
+      afterCellEdited(key, column);
+    },
+    [afterCellEdited, run],
   );
   const removeLine = useCallback((key: string) => run({ type: "removeLine", key }), [run]);
   const addLine = useCallback(() => run({ type: "addLine" }), [run]);
@@ -214,6 +227,7 @@ export function usePurchaseInvoiceDraft(memory: ScreenMemoryOption | undefined) 
         }
         run({ type: "applyItem", key, item, name: itemName });
         requestFocus({ target: "cell", key, column: COL.Billed });
+        afterItemPicked(key);
         return true;
       } catch (error) {
         if (gen === generation.current) {
@@ -222,7 +236,7 @@ export function usePurchaseInvoiceDraft(memory: ScreenMemoryOption | undefined) 
         return false;
       }
     },
-    [lookupMutation, requestFocus, run],
+    [afterItemPicked, lookupMutation, requestFocus, run],
   );
 
   /** Qt `resolveBarcode`: a scan → its item (and the unit the code belongs to). */
@@ -245,15 +259,20 @@ export function usePurchaseInvoiceDraft(memory: ScreenMemoryOption | undefined) 
           return false;
         }
         return await pickItem(key, found.itemId, found.itemName ?? "", found.unitId ?? undefined);
-      } catch {
+      } catch (error) {
         if (gen === generation.current) {
-          setHint(`Barcode ${barcode} not found.`);
-          requestFocus({ target: "cell", key, column: COL.Barcode });
+          if ((error as { status?: unknown } | null)?.status === 404) {
+            // Online, simply unknown: ENT-16 — pick its item and it is offered as a new EAN.
+            barcodeNotFound(key, barcode);
+          } else {
+            setHint(`Barcode ${barcode} not found.`);
+            requestFocus({ target: "cell", key, column: COL.Barcode });
+          }
         }
         return false;
       }
     },
-    [barcodeMutation, pickItem, requestFocus, setHint],
+    [barcodeMutation, barcodeNotFound, pickItem, requestFocus, setHint],
   );
 
   /** A loaded bill names no items: each line's names come from the lookup it was keyed with. */
@@ -286,12 +305,13 @@ export function usePurchaseInvoiceDraft(memory: ScreenMemoryOption | undefined) 
     (payload: PurchaseInvoicePayload, viewMode: "browse" | "entry") => {
       dropCalc();
       generation.current += 1;
+      forgetContext(); // a save / post / cancel moves stock and last purchases
       const next = invoiceReducer(draftRef.current, { type: "loaded", payload, viewMode });
       commit(next);
       fillNames(next);
       return next;
     },
-    [commit, dropCalc, fillNames],
+    [commit, dropCalc, fillNames, forgetContext],
   );
 
   // ------------------------------------------------------------ documents
@@ -318,7 +338,7 @@ export function usePurchaseInvoiceDraft(memory: ScreenMemoryOption | undefined) 
 
   /** Qt `saveDocument`: Save Draft, or Save & Post in one transaction. */
   const save = useCallback(
-    async (post: boolean): Promise<boolean> => {
+    async (post: boolean, override?: { reason: string }): Promise<boolean> => {
       if (busyRef.current !== null) {
         return false;
       }
@@ -333,23 +353,39 @@ export function usePurchaseInvoiceDraft(memory: ScreenMemoryOption | undefined) 
       }
       dropCalc();
       const { body } = buildPayload(current, post, todayIso());
+      // "override (logged)": post past the warnings that need the right, with the reason for the trail
+      if (post && override) {
+        body.header = { ...body.header, overrideWarnings: true, overrideReason: override.reason.trim().slice(0, 250) };
+      }
       setBusy(post ? "posting" : "saving");
       try {
         const result = await saveMutation(body).unwrap();
         const next = applyPayload(result.data, "entry");
         const refno = next.refno;
         const warnings = (result.data.warnings ?? []).map((warning) => warning.message).filter(Boolean);
+        const fromGrn = String(result.data.header?.piSourceKind ?? "").toUpperCase() === "GRN";
         const said = post
-          ? `${refno} posted — the stock is in and the supplier is credited.`
+          ? fromGrn
+            ? `${refno} posted — the GRN is billed and the supplier is credited.`
+            : `${refno} posted — the stock is in and the supplier is credited.`
           : `${refno} saved as a draft. Nothing has moved yet.`;
         if (warnings.length > 0) {
-          toast.warn([said, ...warnings].join("\n"), { title: post ? "Posted" : "Saved" });
+          // A WARN setting / a kept price: the server let it through and says why (Qt 9279283).
+          toast.warn([`${refno} ${post ? "is posted" : "is saved"}.`, "", ...warnings].join("\n"), {
+            title: post ? "Posted — please note" : "Saved — please note",
+          });
         } else {
           toast.success(said, { title: post ? "Posted" : "Saved" });
         }
         return true;
       } catch (error) {
-        commit(invoiceReducer(draftRef.current, { type: "hint", hint: purchaseRefusalText(error) }));
+        const refusals = refusalsOfError(error);
+        let next = invoiceReducer(draftRef.current, { type: "hint", hint: purchaseRefusalText(error) });
+        if (refusals.length > 0) {
+          // the strip shows the server's rows (Qt showRefusal → m_warn->setIssues)
+          next = invoiceReducer(next, { type: "issues", issues: { warnings: next.issues?.warnings ?? [], refusals } });
+        }
+        commit(next);
         toast.apiError(error, { title: "Not saved" });
         return false;
       } finally {
@@ -389,9 +425,10 @@ export function usePurchaseInvoiceDraft(memory: ScreenMemoryOption | undefined) 
     dropCalc();
     generation.current += 1;
     discarded.current = false;
-    commit(createDraft(scope, todayIso()));
+    commit(createDraft(scope, todayIso(), draftRef.current.lineSettings));
+    forgetContext();
     requestFocus({ target: "entryStart" });
-  }, [commit, dropCalc, requestFocus, scope]);
+  }, [commit, dropCalc, forgetContext, requestFocus, scope]);
 
   /** F2 on a draft opened read-only. */
   const beginEdit = useCallback(() => {
@@ -433,7 +470,7 @@ export function usePurchaseInvoiceDraft(memory: ScreenMemoryOption | undefined) 
     ) {
       return;
     }
-    commit(createDraft(scope, current.docDate || todayIso()));
+    commit(createDraft(scope, current.docDate || todayIso(), current.lineSettings));
   }, [commit, scope]);
 
   return {
@@ -460,6 +497,12 @@ export function usePurchaseInvoiceDraft(memory: ScreenMemoryOption | undefined) 
     beginEdit,
     forgetRemembered,
     finishResume,
+    // PI-HEADER: the header / side pieces drive the draft through the same funnel.
+    dispatch: run,
+    applyPayload,
+    fillNames,
+    // PI-LINES: From GRN / PO, item context, F4 / F12, textile picks.
+    lines: lineSupport,
   };
 }
 

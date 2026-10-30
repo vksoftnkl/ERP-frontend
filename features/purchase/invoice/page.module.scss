@@ -52,26 +52,6 @@
   color: var(--text-muted, #666666);
   font-size: u(0.72);
 }
-.statusPill {
-  padding: u(0.08) u(0.6);
-  border-radius: 999px;
-  font-size: u(0.7);
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.statusDraft {
-  background: #fef3e2;
-  color: #b45309;
-}
-.statusPosted {
-  background: #e8f5ea;
-  color: #15803d;
-}
-.statusCancelled {
-  background: #fde8e8;
-  color: #b42318;
-}
 
 /* ---------------------------------------------------- the header card */
 /* Four label / field pairs a row (Qt grid: columns 1, 4, 7, 10). DOM order is the tab order. */
@@ -122,53 +102,38 @@
   text-transform: uppercase;
 }
 .toneBad {
-  color: #b91c1c;
+  color: var(--ds-danger);
   font-weight: 700;
 }
 .toneGood {
-  color: #15803d;
+  color: var(--ds-success);
+  font-weight: 700;
+}
+/* REJECTED / PRICE KEPT in Check (Qt 0xB45309): a debit note follows / a newer price won. */
+.toneWarn {
+  color: var(--ds-warning);
   font-weight: 700;
 }
 
-/* -------------------------------------------------------- totals strip */
-/* Qt lblTotals: Taxable · GST · Round off · Net payable · Invoice amount · Difference [· Short parked]. */
-.totals {
-  display: flex;
-  flex-wrap: wrap;
-  gap: u(0.25) u(1.1);
-  align-items: baseline;
+/* ------------------------------------------- item strip (Qt lblItemContext) */
+.itemStrip {
   margin: 0;
-  padding: u(0.35) u(0.7);
+  padding: u(0.25) u(0.6);
+  overflow: hidden;
   border: 1px solid var(--border, #c9c9c9);
+  border-left: 3px solid var(--primary, #7b1515);
   border-radius: var(--erp-radius, 4px);
   background: var(--card-bg, #ffffff);
-  font-size: u(0.76);
-}
-.totals > div {
-  display: flex;
-  gap: u(0.35);
-  align-items: baseline;
-}
-.totals dt {
-  color: var(--text-muted, #555555);
+  font-size: u(0.72);
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
 }
-.totals dd {
-  margin: 0;
-  font-weight: 800;
-}
-.totalsNet dd {
-  font-size: u(0.86);
-}
-.diffOk {
-  color: #15803d;
-}
-.diffBad {
-  color: #b91c1c;
-}
-.totalsEmpty {
+.itemStripEmpty {
+  border-left-color: var(--border, #c9c9c9);
   color: var(--text-muted, #666666);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 /* ---------------------------------------------------- hint and buttons */
@@ -191,4 +156,77 @@
   color: var(--text-muted, #666666);
   font-size: u(0.7);
   font-weight: 600;
+}
+
+/* Check: the server's chips (callout 9) */
+.checkCell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  align-items: center;
+}
+
+/* -------------------------------------------- 2026-10-29 rebuild frame */
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.1);
+}
+.subtitle {
+  color: var(--ds-text-muted);
+  font-size: u(0.7);
+}
+.creditPair,
+.ewbPair,
+.irnPair {
+  display: flex;
+  gap: u(0.4);
+  align-items: center;
+  min-width: 0;
+}
+.creditInput {
+  flex: 0 0 u(4);
+  width: u(4);
+  text-align: right;
+}
+.dueText {
+  color: var(--ds-text);
+  font-size: u(0.72);
+  white-space: nowrap;
+}
+.ewbPair > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.irnPair > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.priceKept {
+  margin: 0;
+  color: var(--ds-warning);
+  font-size: u(0.72);
+}
+/* F12 — BATCHES (left) and SERIALS (right), inline, while one is open (Qt m_allocArea) */
+.allocArea {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: u(1.2);
+  align-items: start;
+  margin-top: u(0.4);
+}
+.sideBySide {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
+  gap: u(1.1);
+  align-items: start;
+}
+.chargesColumn,
+.totalsColumn {
+  min-width: 0;
+}
+.buttonBarLeft {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.35);
 }

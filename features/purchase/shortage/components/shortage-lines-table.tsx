@@ -1,72 +1,86 @@
 "use client";
 
 /**
- * The line grid — ui_table 61, the Qt `NexTable` + `PurchaseInvoiceDelegate`
- * with `ShortageReceiptCols`. One row = one open shortage (a new receipt) or
- * one saved line. Received, Batch, Expiry and MRP are keyed on a draft; the
- * rest is the shortage's own. Short is red while anything is short; Value is a
- * preview (Received × cost).
+ * The line grid — Qt `ShortageReceiptCols` (16 columns, laid out locally to the
+ * approved mockup; ui_table 61 is not loaded): ✓ · From · Date · Age · Item ·
+ * Why · Short · Recd · Closed · Open · Receive now · Batch / Serial · Expiry ·
+ * Cost · GST held · Outcome. One row = one open shortage (a new receipt) or one
+ * saved line.
  *
- * Keys: Enter walks the Focus columns (Received and Batch unless the layout
- * flags others) and steps to the next row; ↑ / ↓ keep the column and change the
- * row; Esc on a cell puts back what it held. A click or the cursor on a row
- * makes it the row Supplier CN… / Write off… / Undo close… act on.
+ * Keys: Space on the tick or in Receive now ticks / unticks the row (a tick
+ * receives the open qty); Enter walks Receive now → Batch → Expiry and on to the
+ * next row; ↑ / ↓ keep the column and change the row; Esc on a cell puts back
+ * what it held. A click or the cursor on a row makes it the current one (F12,
+ * Close row… with nothing ticked).
  */
-import { useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { cx } from "@/components/design-system/cx";
+import { DateInput } from "@/components/design-system/ui";
 import { moveCellFocus } from "@/features/sales/quotation/components/grid-focus";
-import {
-  GRID_FIELD_ATTR,
-  GRID_FOCUS_STOP_ATTR,
-  GRID_GRID_ATTR,
-  GRID_ROW_ATTR,
-} from "@/features/sales/quotation/quotation.constants";
+import { GRID_FIELD_ATTR, GRID_FOCUS_STOP_ATTR, GRID_GRID_ATTR, GRID_ROW_ATTR } from "@/features/sales/quotation/quotation.constants";
 import quotationStyles from "@/features/sales/quotation/page.module.scss";
-import { money, qtyText } from "../../shared/purchase.format";
-import { BATCH_MAX_LENGTH, COL, LINE_GRID_NAME, NUMBER_COLUMNS } from "../shortage.constants";
-import { lineValue, reasonText, type LineColumn, type LinePatch } from "../shortage.state";
+import { PurchaseCheckChip } from "../../shared/components/purchase-parts";
+import { money, qtyText, isoFromTyped } from "../../shared/purchase.format";
+import { BATCH_MAX_LENGTH, COL, COLUMNS, LINE_GRID_NAME, type ColumnNo } from "../shortage.constants";
+import { batchCellText, displayDate, isSerial, isSplit, outcomeChips, type LinePatch } from "../shortage.state";
 import type { ShortageLine } from "../shortage.types";
 import styles from "../page.module.scss";
 
 const QTY_PATTERN = /^\d*\.?\d{0,3}$/;
-const MRP_PATTERN = /^\d*\.?\d{0,2}$/;
-const DATE_PATTERN = /^[\d/-]{0,10}$/;
+const TOTAL_WEIGHT = COLUMNS.reduce((sum, column) => sum + column.weight, 0);
 
-type CellKind = { field: keyof LinePatch; pattern?: RegExp; upper?: boolean; maxLength?: number; placeholder?: string };
+function cellAttrs(lineKey: string, column: number) {
+  return {
+    [GRID_GRID_ATTR]: LINE_GRID_NAME,
+    [GRID_ROW_ATTR]: lineKey,
+    [GRID_FIELD_ATTR]: String(column),
+    [GRID_FOCUS_STOP_ATTR]: "",
+  };
+}
 
-const KEYED: Readonly<Partial<Record<number, CellKind>>> = {
-  [COL.Received]: { field: "received", pattern: QTY_PATTERN },
-  [COL.Batch]: { field: "batch", upper: true, maxLength: BATCH_MAX_LENGTH },
-  [COL.Expiry]: { field: "expiry", pattern: DATE_PATTERN, placeholder: "dd/MM/yyyy" },
-  [COL.Mrp]: { field: "mrp", pattern: MRP_PATTERN },
-};
+/** ↑ / ↓: the same column, the row above / below. */
+function stepRow(event: ReactKeyboardEvent<HTMLInputElement>, column: number): boolean {
+  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+    return false;
+  }
+  const cells = Array.from(
+    document.querySelectorAll<HTMLInputElement>(`[${GRID_GRID_ATTR}="${LINE_GRID_NAME}"][${GRID_FIELD_ATTR}="${column}"]`),
+  );
+  const target = cells[cells.indexOf(event.currentTarget) + (event.key === "ArrowDown" ? 1 : -1)];
+  if (target) {
+    event.preventDefault();
+    target.focus();
+    return true;
+  }
+  return false;
+}
 
 /**
- * One keyed cell: what is typed is held here and committed on blur or Enter.
- * Read through refs — Enter commits and moves focus, so this cell's blur runs
- * with the render's closure and must still see what was typed (the Enter
- * double-fire of Qt 74b755c's port).
+ * One typed cell (Receive now, Batch): held here, committed on blur or Enter.
+ * Read through refs — Enter commits and moves focus, so the blur runs with the
+ * render's closure and must still see what was typed.
  */
 function KeyedCell({
   lineKey,
   column,
-  kind,
   value,
-  focusStop,
   numeric,
+  upper,
+  boxTone,
   onCommit,
   onFocusRow,
+  onSpace,
 }: {
   lineKey: string;
   column: number;
-  kind: CellKind;
   value: string;
-  focusStop: boolean;
-  numeric: boolean;
+  numeric?: boolean;
+  upper?: boolean;
+  boxTone?: boolean;
   onCommit: (text: string) => void;
   onFocusRow: () => void;
+  onSpace?: () => void;
 }) {
-  // null = not being keyed: the cell shows the draft's value.
   const [text, setText] = useState<string | null>(null);
   const typed = useRef(value);
   const committed = useRef(value);
@@ -80,19 +94,13 @@ function KeyedCell({
 
   return (
     <input
-      {...{
-        [GRID_GRID_ATTR]: LINE_GRID_NAME,
-        [GRID_ROW_ATTR]: lineKey,
-        [GRID_FIELD_ATTR]: String(column),
-        ...(focusStop ? { [GRID_FOCUS_STOP_ATTR]: "" } : {}),
-      }}
-      className={cx(quotationStyles.cellInput, numeric && quotationStyles.alignRight)}
+      {...cellAttrs(lineKey, column)}
+      className={cx(quotationStyles.cellInput, styles.boxedCell, boxTone && styles.boxedCurrent, numeric && quotationStyles.alignRight)}
       value={text ?? value}
-      maxLength={kind.maxLength}
-      placeholder={kind.placeholder}
+      maxLength={upper ? BATCH_MAX_LENGTH : undefined}
       inputMode={numeric ? "decimal" : undefined}
       autoComplete="off"
-      data-uppercase={kind.upper || numeric || kind.pattern ? "off" : undefined}
+      data-uppercase="off"
       onFocus={(event) => {
         typed.current = value;
         committed.current = value;
@@ -105,14 +113,19 @@ function KeyedCell({
         setText(null);
       }}
       onChange={(event) => {
-        const next = kind.upper ? event.target.value.toUpperCase() : event.target.value;
-        if (!kind.pattern || kind.pattern.test(next)) {
+        const next = upper ? event.target.value.toUpperCase() : event.target.value;
+        if (!numeric || QTY_PATTERN.test(next)) {
           typed.current = next;
           setText(next);
         }
       }}
       onKeyDown={(event) => {
         if (event.altKey || event.ctrlKey || event.metaKey) {
+          return;
+        }
+        if (event.key === " " && onSpace) {
+          event.preventDefault();
+          onSpace();
           return;
         }
         if (event.key === "Escape" && typed.current !== committed.current) {
@@ -129,18 +142,8 @@ function KeyedCell({
           return;
         }
         if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-          event.preventDefault();
-          const cells = Array.from(
-            document.querySelectorAll<HTMLInputElement>(
-              `[${GRID_GRID_ATTR}="${LINE_GRID_NAME}"][${GRID_FIELD_ATTR}="${column}"]`,
-            ),
-          );
-          const at = cells.indexOf(event.currentTarget);
-          const target = cells[at + (event.key === "ArrowDown" ? 1 : -1)];
-          if (target) {
-            commit();
-            target.focus();
-          }
+          commit();
+          stepRow(event, column);
         }
       }}
     />
@@ -149,110 +152,186 @@ function KeyedCell({
 
 export type ShortageLinesTableProps = {
   lines: readonly ShortageLine[];
-  columns: readonly LineColumn[];
+  /** A DRAFT open for keying. */
   editable: boolean;
+  /** The receipt is a DRAFT (saved or new): ticks and the "serials — F12" text. */
+  isDraft: boolean;
   activeKey: string;
   problemKeys: ReadonlySet<string>;
   emptyText: string;
+  onTick: (key: string, on?: boolean) => void;
+  onReceive: (key: string, typed: string) => void;
   onEdit: (key: string, patch: LinePatch) => void;
   onSelect: (key: string) => void;
-  onContextMenu?: (event: ReactMouseEvent<HTMLElement>) => void;
 };
 
 export function ShortageLinesTable({
   lines,
-  columns,
   editable,
+  isDraft,
   activeKey,
   problemKeys,
   emptyText,
+  onTick,
+  onReceive,
   onEdit,
   onSelect,
-  onContextMenu,
 }: ShortageLinesTableProps) {
-  const renderCell = (line: ShortageLine, column: LineColumn) => {
-    const kind = KEYED[column.no];
-    const numeric = NUMBER_COLUMNS.has(column.no);
-    if (kind && editable && line.shortageId) {
-      return (
-        <KeyedCell
-          lineKey={line.key}
-          column={column.no}
-          kind={kind}
-          value={line[kind.field]}
-          focusStop={column.focus}
-          numeric={numeric}
-          onCommit={(value) => onEdit(line.key, { [kind.field]: value })}
-          onFocusRow={() => onSelect(line.key)}
-        />
-      );
+  const renderCell = (line: ShortageLine, no: ColumnNo) => {
+    const live = editable && line.shortageId !== "";
+    switch (no) {
+      case COL.Tick:
+        return (
+          <input
+            type="checkbox"
+            className={styles.tick}
+            checked={line.ticked}
+            disabled={!live}
+            aria-label={`Received: ${line.itemName}`}
+            onChange={(event) => onTick(line.key, event.target.checked)}
+            onFocus={() => onSelect(line.key)}
+          />
+        );
+      case COL.Receive:
+        return live ? (
+          <KeyedCell
+            lineKey={line.key}
+            column={no}
+            value={line.receive}
+            numeric
+            boxTone={line.key === activeKey}
+            onCommit={(value) => onReceive(line.key, value)}
+            onFocusRow={() => onSelect(line.key)}
+            onSpace={() => onTick(line.key)}
+          />
+        ) : (
+          <div className={cx(quotationStyles.cellText, quotationStyles.alignRight)}>{line.receive}</div>
+        );
+      case COL.Batch: {
+        if (live && line.ticked && !isSplit(line) && !isSerial(line)) {
+          return (
+            <KeyedCell
+              lineKey={line.key}
+              column={no}
+              value={line.batch}
+              upper
+              onCommit={(value) => onEdit(line.key, { batch: value })}
+              onFocusRow={() => onSelect(line.key)}
+            />
+          );
+        }
+        const shown = batchCellText(line, isDraft);
+        return (
+          <div className={cx(quotationStyles.cellText, (isSplit(line) || (isSerial(line) && isDraft)) && styles.infoText)} title={isSplit(line) ? "F12 shows the split" : undefined}>
+            {shown}
+          </div>
+        );
+      }
+      case COL.Expiry: {
+        if (live && line.ticked && !isSplit(line)) {
+          return (
+            <DateInput
+              {...cellAttrs(line.key, no)}
+              className={cx(quotationStyles.cellInput, styles.boxedCell)}
+              value={isoFromTyped(line.expiry)}
+              noPicker
+              arrowStep={false}
+              block
+              aria-label="Expiry"
+              onFocus={() => onSelect(line.key)}
+              onChange={(iso) => onEdit(line.key, { expiry: displayDate(iso) })}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.altKey && !event.ctrlKey && !event.metaKey) {
+                  event.preventDefault();
+                  moveCellFocus(LINE_GRID_NAME, event.currentTarget, event.shiftKey ? -1 : 1);
+                }
+              }}
+            />
+          );
+        }
+        return <div className={quotationStyles.cellText}>{isSplit(line) ? "—" : line.expiry}</div>;
+      }
+      case COL.Outcome:
+        return (
+          <div className={styles.chips}>
+            {outcomeChips(line).map((chip) => (
+              <PurchaseCheckChip key={chip.text} text={chip.text} tone={chip.tone} />
+            ))}
+          </div>
+        );
+      default:
+        break;
     }
     let shown = "";
-    switch (column.no) {
-      case COL.Source:
-        shown = line.source;
+    let title: string | undefined;
+    let tone: string | undefined;
+    switch (no) {
+      case COL.From:
+        shown = line.from;
+        title = line.fromTip;
         break;
-      case COL.Reason:
-        shown = reasonText(line.reason);
+      case COL.Date:
+        shown = line.srcDate;
+        break;
+      case COL.Age:
+        shown = line.ageDays === null ? "" : String(line.ageDays);
         break;
       case COL.Item:
         shown = line.itemName;
+        title = line.unitName ? `${line.itemName} — base unit ${line.unitName}` : undefined;
         break;
-      case COL.Unit:
-        shown = line.unitName;
+      case COL.Why:
+        shown = line.why;
         break;
       case COL.Short:
         shown = line.shortQty === null ? "" : qtyText(line.shortQty);
         break;
-      case COL.Received:
-        shown = line.received;
+      case COL.Recd:
+        shown = line.receivedSoFar === null ? "" : qtyText(line.receivedSoFar);
         break;
-      case COL.Batch:
-        shown = line.batch;
+      case COL.Closed:
+        shown = line.closedSoFar === null ? "" : qtyText(line.closedSoFar);
+        title = line.closedTip || undefined;
         break;
-      case COL.Expiry:
-        shown = line.expiry;
-        break;
-      case COL.Mrp:
-        shown = line.mrp;
+      case COL.Open:
+        shown = line.openQty === null ? "" : qtyText(line.openQty);
         break;
       case COL.Cost:
-        shown = line.cost.toFixed(2);
+        shown = money(line.cost);
+        title = line.openValue > 0 ? `Open value ${money(line.openValue)} at the original bill cost` : undefined;
         break;
-      case COL.Value: {
-        const value = lineValue(line);
-        shown = value === null ? "" : money(value);
+      case COL.GstHeld:
+        shown = line.gstHeld === null ? "—" : money(line.gstHeld);
+        tone = line.gstHeld === null ? styles.mutedText : undefined;
+        title =
+          line.gstHeld === null && isDraft && line.shortageId
+            ? "Its GST is still claimed (not parked) — nothing is released when it comes"
+            : undefined;
         break;
-      }
       default:
-        shown = "";
+        break;
     }
-    const short = column.no === COL.Short && line.shortQty !== null && line.shortQty > 0;
+    const numeric = COLUMNS.find((column) => column.no === no)?.number;
     return (
-      <div
-        className={cx(quotationStyles.cellText, numeric && quotationStyles.alignRight, short && styles.shortText)}
-        title={column.no === COL.Item && line.unitName ? `${line.itemName} · ${line.unitName}` : undefined}
-      >
+      <div className={cx(quotationStyles.cellText, numeric && quotationStyles.alignRight, tone)} title={title}>
         {shown}
       </div>
     );
   };
 
   return (
-    <div className={cx(quotationStyles.gridViewport, styles.gridViewport)} onContextMenu={onContextMenu}>
+    <div className={cx(quotationStyles.gridViewport, styles.gridViewport)}>
       <table className={cx(quotationStyles.grid, styles.lineGrid)}>
         <colgroup>
-          <col style={{ width: "3%" }} />
-          {columns.map((column) => (
-            <col key={column.no} style={{ width: `${column.widthPct * 0.97}%` }} />
+          {COLUMNS.map((column) => (
+            <col key={column.no} style={{ width: `${(column.weight / TOTAL_WEIGHT) * 100}%` }} />
           ))}
         </colgroup>
         <thead>
           <tr>
-            <th scope="col">#</th>
-            {columns.map((column) => (
-              <th key={column.no} scope="col" className={NUMBER_COLUMNS.has(column.no) ? styles.num : undefined}>
-                {column.header}
+            {COLUMNS.map((column) => (
+              <th key={column.no} scope="col" className={column.number ? styles.num : undefined}>
+                {column.title}
               </th>
             ))}
           </tr>
@@ -260,7 +339,7 @@ export function ShortageLinesTable({
         <tbody>
           {lines.length === 0 ? (
             <tr>
-              <td colSpan={columns.length + 1} className={styles.emptyRow}>
+              <td colSpan={COLUMNS.length} className={styles.emptyRow}>
                 {emptyText}
               </td>
             </tr>
@@ -274,11 +353,13 @@ export function ShortageLinesTable({
                   problemKeys.has(line.key) && styles.problemRow,
                 )}
                 aria-selected={line.key === activeKey}
+                data-shortage-id={line.shortageId}
                 onMouseDown={() => onSelect(line.key)}
               >
-                <td className={styles.rowNo}>{index + 1}</td>
-                {columns.map((column) => (
-                  <td key={column.no}>{renderCell(line, column)}</td>
+                {COLUMNS.map((column) => (
+                  <td key={column.no} className={column.no === COL.Tick ? styles.tickCell : undefined}>
+                    {renderCell(line, column.no)}
+                  </td>
                 ))}
               </tr>
             ))

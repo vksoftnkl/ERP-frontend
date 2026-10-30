@@ -1,0 +1,372 @@
+/**
+ * The parts every rebuilt purchase screen shares (Qt purchase_parts.*, theme
+ * v42/v43 blocks): section headings, the status pill, the six-cell totals
+ * strip, the boxed TOTALS panel, the WARN / REFUSE strip, check chips, the
+ * "more columns" chooser. Colours are design-system tokens only (`--ds-*`).
+ * Lengths are `u(n)` off the transaction screens' fluid unit (`--erp-q-u`).
+ */
+@function u($n) {
+  @return calc(#{$n} * var(--erp-q-u, 1rem));
+}
+
+/* ----------------------------------------------------- section heading */
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  gap: u(0.7);
+  margin: u(0.45) 0 u(0.3);
+  padding-bottom: u(0.2);
+  border-bottom: 1px solid var(--ds-border);
+}
+.sectionTitle {
+  margin: 0;
+  color: var(--ds-primary);
+  font-size: u(0.74);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.sectionHint {
+  color: var(--ds-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: u(0.64);
+}
+.sectionActions {
+  margin-left: auto;
+  display: flex;
+  gap: u(0.4);
+}
+
+/* --------------------------------------------------------- status pill */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: u(0.12) u(0.6);
+  border-radius: 999px;
+  font-size: u(0.66);
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+@mixin tone($token, $bg: 18%, $fg: 82%) {
+  background: color-mix(in srgb, var(#{$token}) $bg, transparent);
+  color: color-mix(in srgb, var(#{$token}) $fg, black);
+}
+.tone-neutral {
+  background: var(--ds-surface-muted);
+  color: var(--ds-text-muted);
+}
+/* the design system has no blue token: "info" is its Badge's info (the primary) */
+.tone-info {
+  @include tone(--ds-primary, 12%, 85%);
+}
+.tone-success {
+  @include tone(--ds-success);
+}
+.tone-warning {
+  @include tone(--ds-warning, 20%, 88%);
+}
+.tone-danger {
+  @include tone(--ds-danger, 16%, 86%);
+}
+
+
+/* ---------------------------------------------------------- check chip */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 u(0.4);
+  border-radius: 999px;
+  font-size: u(0.6);
+  font-weight: 800;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+/* -------------------------------------------------------- totals strip */
+.strip {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: u(1);
+  padding: u(0.5) u(0.85);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--erp-radius);
+  background: var(--ds-surface-muted);
+  color: var(--ds-text);
+}
+.stripCell {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.08);
+  min-width: 0;
+}
+.stripCap {
+  color: var(--ds-text-muted);
+  font-size: u(0.64);
+}
+/* figures inherit the strip's text colour so a tone class (text-good …) wins */
+.stripValue {
+  font-size: u(0.78);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stripValueStrong {
+  font-size: u(0.95);
+  font-weight: 800;
+}
+
+/* -------------------------------------------------------- totals panel */
+.panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: u(1);
+  row-gap: u(0.18);
+  align-items: center;
+  padding: u(0.55) u(0.85);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--erp-radius);
+  background: var(--ds-surface-muted);
+  color: var(--ds-text);
+}
+.panelCap {
+  color: var(--ds-text-muted);
+  font-size: u(0.7);
+}
+.panelValue {
+  justify-self: end;
+  font-size: u(0.72);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+.panelStrong {
+  font-weight: 800;
+}
+.panelRule {
+  grid-column: 1 / -1;
+  height: 0;
+  margin: u(0.25) 0;
+  border-top: 1px solid var(--ds-border);
+}
+
+/* ---------------------------------------------------------- warn strip */
+.warnStrip {
+  display: flex;
+  gap: u(0.75);
+  align-items: flex-start;
+  padding: u(0.45) u(0.75);
+  border: 1px solid color-mix(in srgb, var(--ds-warning) 45%, transparent);
+  border-radius: var(--erp-radius);
+  background: color-mix(in srgb, var(--ds-warning) 9%, var(--ds-surface));
+}
+.warnRows {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: u(0.2);
+  min-width: 0;
+}
+.warnRow {
+  display: grid;
+  grid-template-columns: u(3.6) u(11) minmax(0, 1fr);
+  gap: u(0.6);
+  align-items: baseline;
+}
+.warnRow .pill {
+  justify-content: center;
+}
+.warnCode {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: u(0.64);
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.warnText {
+  color: var(--ds-text);
+  font-size: u(0.7);
+  user-select: text;
+}
+.override {
+  display: inline-flex;
+  align-items: center;
+  gap: u(0.35);
+  flex: 0 0 auto;
+  color: var(--ds-text-muted);
+  font-size: u(0.7);
+  white-space: nowrap;
+}
+.override input {
+  margin: 0;
+}
+
+/* ------------------------------------------------- more columns chooser */
+.more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: u(0.3);
+  margin: u(0.3) 0;
+  color: var(--ds-text-muted);
+  font-size: u(0.66);
+}
+.moreChip {
+  padding: u(0.08) u(0.55);
+  border: 1px solid var(--ds-border);
+  border-radius: 999px;
+  background: var(--ds-surface-muted);
+  color: var(--ds-text-muted);
+  font: inherit;
+  font-size: u(0.62);
+  font-weight: 600;
+  cursor: pointer;
+}
+.moreChipOn {
+  border-color: var(--ds-text-muted);
+  background: var(--ds-surface);
+  color: var(--ds-text);
+  font-weight: 800;
+}
+
+/* ---------------------------------------------- transport / pickers */
+section.transportPanel {
+  width: min(u(36), 100%);
+}
+section.pickerPanel {
+  width: min(u(42), 100%);
+}
+.form {
+  display: grid;
+  grid-template-columns: u(9) minmax(0, 1fr);
+  gap: u(0.4) u(0.6);
+  align-items: center;
+}
+.formLabel {
+  color: var(--ds-text-muted);
+  font-size: u(0.72);
+}
+/* a control that brings its own (empty) Field label — one grid cell, the label dropped */
+.formCell {
+  min-width: 0;
+}
+.formCell > label:empty {
+  display: none;
+}
+.input {
+  width: 100%;
+  min-width: 0;
+  padding: u(0.25) u(0.4);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--erp-radius);
+  background: var(--ds-surface);
+  color: var(--ds-text);
+  font: inherit;
+  font-size: u(0.74);
+}
+.input:disabled {
+  background: var(--ds-surface-muted);
+  color: var(--ds-text-muted);
+}
+.hint {
+  margin: 0 0 u(0.4);
+  color: var(--ds-text-muted);
+  font-size: u(0.7);
+}
+.list {
+  display: flex;
+  flex-direction: column;
+  min-height: u(10);
+  max-height: u(22);
+  overflow-y: auto;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--erp-radius);
+  background: var(--ds-surface);
+}
+.listHeading {
+  padding: u(0.3) u(0.6) u(0.15);
+  color: var(--ds-primary);
+  font-size: u(0.64);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.listRow {
+  display: flex;
+  align-items: center;
+  gap: u(0.45);
+  padding: u(0.25) u(0.6) u(0.25) u(1.1);
+  border: 0;
+  background: transparent;
+  color: var(--ds-text);
+  font: inherit;
+  font-size: u(0.74);
+  text-align: left;
+  cursor: pointer;
+}
+.listRow:disabled {
+  color: var(--ds-text-muted);
+  cursor: default;
+}
+.listRowCurrent {
+  background: color-mix(in srgb, var(--ds-primary) 10%, transparent);
+}
+.listEmpty {
+  padding: u(0.8);
+  color: var(--ds-text-muted);
+  font-size: u(0.72);
+}
+.footerNote {
+  margin-right: auto;
+  align-self: center;
+  color: var(--ds-text-muted);
+  font-size: u(0.66);
+}
+.moreChip:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* ---------------------------------------------------------- picker box */
+.pickerBox {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+.pickerBox .input {
+  padding-right: u(1.6);
+  cursor: pointer;
+  caret-color: transparent;
+}
+.pickerButton {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: u(1.4);
+  border: 0;
+  background: transparent;
+  color: var(--ds-text-muted);
+  cursor: pointer;
+}
+
+/* the figure colours of the strip / panel / grid cells */
+.text-good {
+  color: var(--ds-success);
+}
+.text-warn {
+  color: var(--ds-warning);
+}
+.text-bad {
+  color: var(--ds-danger);
+}
+.text-muted {
+  color: var(--ds-text-muted);
+}
+/* "info" — the design system has no blue token; its Badge's info is the primary */
+.text-info {
+  color: var(--ds-primary);
+}

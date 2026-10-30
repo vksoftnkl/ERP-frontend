@@ -4,6 +4,7 @@ import { DEFAULT_LOOKUP_ARRAY_KEYS } from "@/features/masters/shared/normalizers
 import { toDisplayValue } from "@/features/masters/shared/value-mappers";
 import type { UiTableKey } from "@/lib/ui-tables";
 import type { ConfiguredGridKey } from "@/lib/configured-grids";
+import { ITEM_PURCHASE_INITIAL_VALUES } from "./item-purchase-fields";
 
 /**
  * The Grid Master row this screen's list reads — "MAIN LIST - ITEMS".
@@ -581,6 +582,8 @@ export const ITEM_INITIAL_FORM_VALUES: Record<string, string> = {
   item_is_expiry_item: "false",
   item_expiry_days: "",
   item_intimate_before_days: "",
+  // MST-03 purchase fields (Qt 4c09536) — blank = the item's default unit / the company setting.
+  ...ITEM_PURCHASE_INITIAL_VALUES,
   item_allow_sales: "true",
   item_allow_sales_return: "true",
   item_allow_purchase: "true",

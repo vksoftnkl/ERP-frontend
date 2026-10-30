@@ -10,10 +10,8 @@
 import { baseApi } from "@/store/api/baseApi";
 import type { ApiSuccessResponse } from "@/utils/types";
 import {
-  DROPDOWN_RUN_ENDPOINT,
   SHORTAGE_CLOSE_ENDPOINT,
-  SHORTAGE_CLOSE_UNDO_ENDPOINT,
-  SHORTAGE_CLOSES_ENDPOINT,
+  SHORTAGE_ITEM_LOOKUP_ENDPOINT,
   SHORTAGE_OPEN_ENDPOINT,
   SHORTAGE_RECEIPT_CANCEL_ENDPOINT,
   SHORTAGE_RECEIPT_GET_ENDPOINT,
@@ -24,13 +22,20 @@ import type {
   CloseShortageResult,
   OpenShortageRow,
   SaveShortageReceiptDto,
-  ShortageCloseRow,
+  ShortageItemLookup,
   ShortageReceiptPayload,
 } from "./shortage.types";
 
-export type OpenShortagesArgs = { companyId: string; branchId: string; supplierId: string };
+export type OpenShortagesArgs = { companyId: string; branchId: string; supplierId: string; all?: "true" };
 export type ShortageReceiptRef = { psrId: string; accYear: string };
-export type DropdownRowsArgs = { dropdownId: string; params: Record<string, string> };
+export type ShortageItemLookupArgs = {
+  companyId: string;
+  branchId: string;
+  itemId: string;
+  uomId?: string;
+  onDate: string;
+  godownId?: string;
+};
 
 /** A write's answer: the data and the server's own sentence. */
 export type WithMessage<T> = { data: T; message: string };
@@ -42,13 +47,13 @@ function withMessage<T>(payload: ApiSuccessResponse<T>): WithMessage<T> {
 export const shortageReceiptApi = baseApi.injectEndpoints({
   overrideExisting: true,
   endpoints: (builder) => ({
-    /** The supplier's shortages with qty still open. */
+    /** The supplier's shortages with qty still open (`all=true`: every one, for a reopened receipt's figures). */
     shortageReceiptOpen: builder.mutation<OpenShortageRow[], OpenShortagesArgs>({
       query: (params) => ({ url: SHORTAGE_OPEN_ENDPOINT, method: "GET", params }),
       transformResponse: (payload: ApiSuccessResponse<OpenShortageRow[]>) =>
         Array.isArray(payload?.data) ? payload.data : [],
     }),
-    /** One receipt with its lines. */
+    /** One receipt with its lines (godownName / receivedBy / supervisorName / allocs included). */
     shortageReceiptGet: builder.mutation<ShortageReceiptPayload, ShortageReceiptRef>({
       query: (params) => ({ url: SHORTAGE_RECEIPT_GET_ENDPOINT, method: "GET", params }),
       transformResponse: (payload: ApiSuccessResponse<ShortageReceiptPayload>) => payload.data,
@@ -66,40 +71,19 @@ export const shortageReceiptApi = baseApi.injectEndpoints({
       query: (body) => ({ url: SHORTAGE_RECEIPT_CANCEL_ENDPOINT, method: "POST", body }),
       transformResponse: withMessage<ShortageReceiptPayload>,
     }),
-    /** Close a shortage without goods — SUPPLIER_CN or WRITE_OFF; the whole open qty. */
+    /** Close a shortage without goods — SUPPLIER_CN, CLAIM (on a transporter / insurer) or WRITE_OFF. */
     shortageReceiptClose: builder.mutation<WithMessage<CloseShortageResult>, CloseShortageDto>({
       query: (body) => ({ url: SHORTAGE_CLOSE_ENDPOINT, method: "POST", body }),
       transformResponse: withMessage<CloseShortageResult>,
     }),
-    /** The shortage's closes that still stand, newest first. */
-    shortageReceiptCloses: builder.mutation<ShortageCloseRow[], { shortageId: string }>({
-      query: (params) => ({ url: SHORTAGE_CLOSES_ENDPOINT, method: "GET", params }),
-      transformResponse: (payload: ApiSuccessResponse<ShortageCloseRow[]>) =>
-        Array.isArray(payload?.data) ? payload.data : [],
-    }),
-    /** Undo one close: a reversing row, its voucher reversed. */
-    shortageReceiptCloseUndo: builder.mutation<
-      WithMessage<unknown>,
-      { closeId: string; accYear: string; reason: string }
-    >({
-      query: (body) => ({ url: SHORTAGE_CLOSE_UNDO_ENDPOINT, method: "POST", body }),
-      transformResponse: withMessage<unknown>,
-    }),
-    /**
-     * One page of a configured dropdown — the names a saved receipt does not
-     * carry (its godown, who unloaded it).
-     */
-    shortageReceiptDropdownRows: builder.mutation<Record<string, unknown>[], DropdownRowsArgs>({
-      query: ({ dropdownId, params }) => ({
-        url: DROPDOWN_RUN_ENDPOINT,
+    /** The item's tracking signature (R = serials) — F12 opens in serial mode. */
+    shortageReceiptItemLookup: builder.mutation<ShortageItemLookup, ShortageItemLookupArgs>({
+      query: ({ uomId, godownId, ...rest }) => ({
+        url: SHORTAGE_ITEM_LOOKUP_ENDPOINT,
         method: "GET",
-        params: { dropdown_id: dropdownId, page: 1, limit: 100, dropdown_param: JSON.stringify(params) },
+        params: { ...rest, ...(uomId ? { uomId } : {}), ...(godownId ? { godownId } : {}) },
       }),
-      transformResponse: (payload: ApiSuccessResponse<{ items?: unknown } | unknown[]>) => {
-        const data = payload?.data as { items?: unknown } | unknown[] | undefined;
-        const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
-        return items as Record<string, unknown>[];
-      },
+      transformResponse: (payload: ApiSuccessResponse<ShortageItemLookup>) => payload?.data ?? {},
     }),
   }),
 });
@@ -110,7 +94,5 @@ export const {
   useShortageReceiptSaveMutation,
   useShortageReceiptCancelMutation,
   useShortageReceiptCloseMutation,
-  useShortageReceiptClosesMutation,
-  useShortageReceiptCloseUndoMutation,
-  useShortageReceiptDropdownRowsMutation,
+  useShortageReceiptItemLookupMutation,
 } = shortageReceiptApi;

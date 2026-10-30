@@ -49,3 +49,13 @@ export function useTxnEntryFirst(companyId: string, branchId: string): { entryFi
   const { data, isSuccess, isError } = useGetEffectiveSettingsQuery({ companyId, branchId }, { skip: !companyId });
   return useMemo(() => ({ entryFirst: parseTxnEntryFirst(data), settled: isSuccess || isError }), [data, isError, isSuccess]);
 }
+
+/**
+ * "Acme Foods · Coimbatore" under a purchase screen's title (Qt
+ * `PurchaseUi::fillCompanySubtitle`). Qt prefers the branch's city; the web's
+ * business context carries the branch name only.
+ */
+export function usePurchaseCompanySubtitle(): string {
+  const { activeCompany, activeBranch } = useBusinessContext();
+  return [activeCompany?.name, activeBranch?.name].filter((part) => Boolean(part && String(part).trim())).join(" · ");
+}

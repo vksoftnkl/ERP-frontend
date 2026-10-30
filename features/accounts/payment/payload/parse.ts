@@ -21,6 +21,7 @@ import type { ReceiptLeg } from "@/features/accounts/receipt/receipt.types";
 import type {
   BillRow,
   CreditRow,
+  PayableBillRow,
   PayableBillWire,
   PaymentContextSummary,
   PaymentIssuedChequeWire,
@@ -40,8 +41,8 @@ import { isChequeType } from "../domain/tenders";
 export { nextRowKey, toDateInput };
 
 /** A bill we owe. The receipt's BillRow, with what a supplier's bill lacks zeroed. */
-export function parsePayableBills(rows: readonly PayableBillWire[] | undefined): BillRow[] {
-  return (rows ?? []).map((row) => ({
+export function parsePayableBills(rows: readonly PayableBillWire[] | undefined): PayableBillRow[] {
+  return (rows ?? []).map((row): PayableBillRow => ({
     billId: row.billId,
     billAccYear: row.billAccYear,
     billType: row.billType,
@@ -67,6 +68,7 @@ export function parsePayableBills(rows: readonly PayableBillWire[] | undefined):
     receiveTyped: false,
     writeoffApprovedBy: null,
     note: "",
+    paymentHold: row.paymentHold ? { reason: (row.paymentHold.reason ?? "").trim() } : null,
   }));
 }
 

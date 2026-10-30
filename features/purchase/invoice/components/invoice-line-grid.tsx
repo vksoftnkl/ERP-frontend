@@ -12,7 +12,14 @@
  * Keys: Enter walks Barcode, Item, Billed, Rate, Disc % (Qt `setFocusStops`),
  * then the next line. ↑ / ↓ keep the column and change the line; + / − add a
  * line / remove the current one on a cell that types neither (Alt+= / Alt+−
- * anywhere); Tab leaves the grid.
+ * anywhere); Tab leaves the grid; F12 opens the line's batches / serials, F4
+ * steps it to the item's next unit.
+ *
+ * Qt 0fbe19c..e0c56ef: a GRN line keys only the supplier's figures (its batch
+ * cell reads "from GRN"); Rate, Cost incl., Extra disc, MRP and Sell A–D take a
+ * little sum (12/2, 3*4.5) and Sell A–D also "10%" = MRP less 10 %; Size and
+ * Colour are pick-lists on a textile line; Check reads REJECTED / PRICE KEPT in
+ * amber; Markup's tooltip is the margin.
  */
 import {
   useEffect,
@@ -31,11 +38,25 @@ import {
   GRID_ROW_ATTR,
 } from "@/features/sales/quotation/quotation.constants";
 import quotationStyles from "@/features/sales/quotation/page.module.scss";
+import { ChoicePickerCell } from "@/features/stocks/opening-stock/components/choice-picker-cell";
+import type { BatchDetailChoice } from "@/features/stocks/opening-stock/opening-stock.types";
 import { money, qtyText } from "../../shared/purchase.format";
 import type { LineColumn } from "../invoice.columns";
-import { COL, LINE_GRID_NAME, NUMBER_COLUMNS } from "../invoice.constants";
-import { checkText, isEnterStop, rowHasItem, whyNotEditable } from "../invoice.state";
-import type { InvoiceLine } from "../invoice.types";
+import { COL, EXPRESSION_COLUMNS, LINE_GRID_NAME, NUMBER_COLUMNS } from "../invoice.constants";
+import {
+  checkText,
+  checkTone,
+  lineCheckChips,
+  DEFAULT_LINE_SETTINGS,
+  isEnterStop,
+  rowFromGrn,
+  rowHasItem,
+  textileOpen,
+  typedCell,
+  whyNotEditable,
+} from "../invoice.state";
+import type { InvoiceLine, LineSettings } from "../invoice.types";
+import { PurchaseCheckChip } from "../../shared/components/purchase-parts";
 import styles from "../page.module.scss";
 
 const QTY_PATTERN = /^\d*(\.\d{0,3})?$/;
@@ -43,6 +64,9 @@ const RATE_PATTERN = /^\d*(\.\d{0,4})?$/;
 const MONEY_PATTERN = /^\d*(\.\d{0,2})?$/;
 const DATE_PATTERN = /^[\d/]{0,10}$/;
 const ANY_PATTERN = /^.{0,100}$/;
+const MODEL_PATTERN = /^.{0,60}$/;
+/** ENT-05 / ENT-19: digits and + − * / % (worked out on commit). */
+const EXPRESSION_PATTERN = /^[\d.,+\-*/% ]{0,40}$/;
 
 /** The viewport's marker — what Tab leaves and what a read-only document focuses. */
 export const LINE_GRID_VIEWPORT_ATTR = "data-purchase-invoice-viewport";
@@ -104,6 +128,18 @@ export type InvoiceLineGridProps = {
   onAddLine: () => void;
   onRemoveLine: (key: string) => void;
   onContextMenu?: (event: ReactMouseEvent<HTMLElement>) => void;
+  /** The session's line rules — which textile cells open. */
+  rules?: LineSettings;
+  /** The Size / Colour pick-lists (dropdowns 70 / 71). */
+  sizes?: readonly BatchDetailChoice[];
+  colours?: readonly BatchDetailChoice[];
+  onPickChoice?: (key: string, field: "size" | "colour", choice: BatchDetailChoice) => void;
+  /** "+ Add new size…" — the screen says where sizes are added. */
+  onAddChoice?: (field: "size" | "colour") => void;
+  /** F12 on a line. */
+  onOpenAllocs?: (key: string) => void;
+  /** F4 on a line. */
+  onCycleUnit?: (key: string) => void;
 };
 
 function cellAttrs(line: InvoiceLine, column: number, stop: boolean) {
@@ -307,50 +343,37 @@ function BarcodeCell({
   );
 }
 
-/** What a typed number cell holds, by column. */
-function typedValue(line: InvoiceLine, column: number): string {
-  switch (column) {
-    case COL.Billed:
-      return line.billed;
-    case COL.Recd:
-      return line.recd;
-    case COL.Dmg:
-      return line.dmg;
-    case COL.Free:
-      return line.free;
-    case COL.Rate:
-      return line.rate;
-    case COL.DiscPct:
-      return line.discPct;
-    case COL.Mrp:
-      return line.mrp;
-    case COL.Batch:
-      return line.batch;
-    case COL.Expiry:
-      return line.expiry;
-    default:
-      return "";
-  }
-}
-
 function patternOf(column: number): RegExp {
+  if (EXPRESSION_COLUMNS.has(column)) {
+    return EXPRESSION_PATTERN;
+  }
   switch (column) {
-    case COL.Rate:
-      return RATE_PATTERN;
     case COL.DiscPct:
-    case COL.Mrp:
       return MONEY_PATTERN;
+    case COL.SchPct:
+    case COL.Markup:
+      return RATE_PATTERN;
     case COL.Expiry:
       return DATE_PATTERN;
     case COL.Batch:
       return ANY_PATTERN;
+    case COL.Model:
+      return MODEL_PATTERN;
     default:
       return QTY_PATTERN;
   }
 }
 
+function nameOf(choices: readonly BatchDetailChoice[] | undefined, id: string, name: string): string {
+  if (name || !id) {
+    return name;
+  }
+  // A bill loaded before the list arrived: named once it is here.
+  return choices?.find((choice) => choice.id === id)?.name ?? "…";
+}
+
 /** The server's figures and the screen's own read-outs, by column. */
-function shownValue(line: InvoiceLine, column: number): string {
+function shownValue(line: InvoiceLine, column: number, lists?: { sizes?: readonly BatchDetailChoice[]; colours?: readonly BatchDetailChoice[] }): string {
   const calc = line.calc;
   switch (column) {
     case COL.Barcode:
@@ -359,6 +382,8 @@ function shownValue(line: InvoiceLine, column: number): string {
       return line.itemName;
     case COL.Unit:
       return line.unitName;
+    case COL.Batch:
+      return rowFromGrn(line) ? "from GRN" : line.batch;
     case COL.Short:
       return calc && calc.shortQty > 0 ? qtyText(calc.shortQty) : "";
     case COL.Taxable:
@@ -373,8 +398,16 @@ function shownValue(line: InvoiceLine, column: number): string {
       return calc ? calc.costWot.toFixed(2) : "";
     case COL.Check:
       return checkText(line);
+    case COL.Grn:
+      return line.srcRefno;
+    case COL.Itc:
+      return calc?.itc ?? "";
+    case COL.Size:
+      return nameOf(lists?.sizes, line.sizeId, line.sizeName);
+    case COL.Colour:
+      return nameOf(lists?.colours, line.colourId, line.colourName);
     default:
-      return typedValue(line, column);
+      return typedCell(line, column);
   }
 }
 
@@ -382,8 +415,20 @@ function toneOf(line: InvoiceLine, column: number): string | undefined {
   if (column === COL.Short && line.calc && line.calc.shortQty > 0) {
     return styles.toneBad;
   }
-  if (column === COL.Check && line.calc) {
-    return line.calc.shortQty > 0 ? styles.toneBad : styles.toneGood;
+  if (column === COL.Check) {
+    const tone = checkTone(checkText(line));
+    return tone === "bad" ? styles.toneBad : tone === "warn" ? styles.toneWarn : tone === "good" ? styles.toneGood : undefined;
+  }
+  return undefined;
+}
+
+/** Hover text beyond the value: the margin on Markup (ENT-18), the source on PO / GRN. */
+function tipOf(line: InvoiceLine, column: number): string | undefined {
+  if (column === COL.Markup && line.marginPct) {
+    return `Margin on Sell A ${line.marginPct} %`;
+  }
+  if (column === COL.Grn && line.srcRefno) {
+    return line.grnItemId ? `GRN ${line.srcRefno}` : line.poItemId ? `PO ${line.srcRefno}` : line.srcRefno;
   }
   return undefined;
 }
@@ -402,8 +447,17 @@ export function InvoiceLineGrid(props: InvoiceLineGridProps) {
     onAddLine,
     onRemoveLine,
     onContextMenu,
+    rules = DEFAULT_LINE_SETTINGS,
+    sizes,
+    colours,
+    onPickChoice,
+    onAddChoice,
+    onOpenAllocs,
+    onCycleUnit,
   } = props;
   const lastKey = lines[lines.length - 1]?.key;
+  const lists = { sizes, colours };
+  const totalWeight = columns.reduce((sum, column) => sum + column.weight, 0);
 
   /** ↑ / ↓ — the same column one line up or down, else that line's entry cell. */
   const onRowArrow = (event: ReactKeyboardEvent<HTMLTableRowElement>, index: number): boolean => {
@@ -465,7 +519,19 @@ export function InvoiceLineGrid(props: InvoiceLineGridProps) {
 
   /** A cell the editor refuses: read-only, and an edit attempt SAYS why. */
   const refused = (line: InvoiceLine, column: number, why: string) => {
-    const text = shownValue(line, column);
+    if (column === COL.Check && rowHasItem(line)) {
+      // Callout 9: the server's judgement as chips (Qt checkChips)
+      const chips = lineCheckChips(line);
+      return (
+        <div className={cx(quotationStyles.cellText, styles.checkCell)} title={chips.map((chip) => chip.text).join(" · ") || undefined}>
+          {chips.map((chip) => (
+            <PurchaseCheckChip key={chip.text} text={chip.text} tone={chip.tone} />
+          ))}
+        </div>
+      );
+    }
+    const text = shownValue(line, column, lists);
+    const tip = tipOf(line, column);
     const className = cx(NUMBER_COLUMNS.has(column) && quotationStyles.alignRight, toneOf(line, column));
     if (editable && rowHasItem(line) && why) {
       return (
@@ -473,7 +539,7 @@ export function InvoiceLineGrid(props: InvoiceLineGridProps) {
           {...cellAttrs(line, column, false)}
           className={cx(quotationStyles.cellInput, styles.cellReadOnly, className)}
           value={text}
-          title={why}
+          title={tip ? `${tip}\n${why}` : why}
           readOnly
           tabIndex={-1}
           onFocus={() => onActiveRow(line.key)}
@@ -499,17 +565,17 @@ export function InvoiceLineGrid(props: InvoiceLineGridProps) {
       );
     }
     return (
-      <div className={cx(quotationStyles.cellText, className)} title={text || undefined}>
+      <div className={cx(quotationStyles.cellText, className)} title={tip ?? (text || undefined)}>
         {text || " "}
       </div>
     );
   };
 
-  const renderCell = (line: InvoiceLine, column: number) => {
+  const renderCell = (line: InvoiceLine, column: number, columnIndex: number) => {
     const hasItem = rowHasItem(line);
-    const why = editable ? whyNotEditable(line, column) : "";
+    const why = editable ? whyNotEditable(line, column, rules) : "";
     const open = editable && !why;
-    const stop = editable && isEnterStop(line, column);
+    const stop = editable && isEnterStop(line, column, rules);
     const active = () => onActiveRow(line.key);
     const spare = !hasItem && line.key === lastKey;
 
@@ -519,7 +585,7 @@ export function InvoiceLineGrid(props: InvoiceLineGridProps) {
           <BarcodeCell
             line={line}
             stop={stop}
-            placeholder={spare ? "Scan, or type + ↓" : ""}
+            placeholder={spare ? "scan barcode (supplier's code works too)" : ""}
             onActive={active}
             onScan={(code) => onScanBarcode(line.key, code)}
             onSearch={(typed) => onSearchItems(line.key, typed)}
@@ -538,7 +604,7 @@ export function InvoiceLineGrid(props: InvoiceLineGridProps) {
           {...{ [GRID_LOOKUP_ATTR]: "true" }}
           className={cx(quotationStyles.cellInput, styles.cellPlaceholder)}
           value={line.itemName}
-          placeholder={spare ? "Enter for the item list" : hasItem ? "…" : ""}
+          placeholder={spare ? "↓ item list · F12 batches / serials · F4 unit · + / − lines" : hasItem ? "…" : ""}
           readOnly
           title={hasItem ? `${line.itemCode ? `${line.itemCode} · ` : ""}${line.itemName} — type or double-click to change the item` : undefined}
           onFocus={active}
@@ -567,16 +633,36 @@ export function InvoiceLineGrid(props: InvoiceLineGridProps) {
         />
       );
     }
+    if (column === COL.Size || column === COL.Colour) {
+      const field = column === COL.Size ? "size" : "colour";
+      if (editable && hasItem && textileOpen(line, rules) && onPickChoice) {
+        return (
+          <ChoicePickerCell
+            word={field}
+            value={shownValue(line, column, lists)}
+            choices={(field === "size" ? sizes : colours) ?? []}
+            editable
+            gridName={LINE_GRID_NAME}
+            rowKey={line.key}
+            fieldKey={String(column)}
+            columnIndex={columnIndex}
+            onPick={(choice) => onPickChoice(line.key, field, choice)}
+            onAddNew={() => onAddChoice?.(field)}
+          />
+        );
+      }
+      return refused(line, column, why);
+    }
     if (open && column !== COL.Unit) {
       return (
         <TextCell
           line={line}
           column={column}
           stop={stop}
-          value={typedValue(line, column)}
+          value={typedCell(line, column)}
           pattern={patternOf(column)}
           align={NUMBER_COLUMNS.has(column) ? "right" : undefined}
-          numeric={NUMBER_COLUMNS.has(column)}
+          numeric={NUMBER_COLUMNS.has(column) && !EXPRESSION_COLUMNS.has(column)}
           upper={column === COL.Batch}
           placeholder={column === COL.Expiry ? "dd/MM/yyyy" : undefined}
           onActive={active}
@@ -595,7 +681,11 @@ export function InvoiceLineGrid(props: InvoiceLineGridProps) {
       tabIndex={-1}
       onContextMenu={onContextMenu}
     >
-      <table className={cx(quotationStyles.grid, styles.lineGrid)}>
+      <table
+        className={cx(quotationStyles.grid, styles.lineGrid)}
+        // Thirty-odd columns scroll sideways rather than squeeze (≈ the Qt widths).
+        style={{ minWidth: `calc(${Math.max(64, Math.round(totalWeight * 0.62))} * var(--erp-q-u, 1rem))` }}
+      >
         <colgroup>
           {columns.map((column) => (
             <col key={column.no} style={{ width: `${column.widthPct}%` }} />
@@ -615,8 +705,28 @@ export function InvoiceLineGrid(props: InvoiceLineGridProps) {
             <tr
               key={line.key}
               className={index % 2 === 0 ? quotationStyles.rowOdd : quotationStyles.rowEven}
-              onMouseDown={(event) => onBlankRowMouseDown(event, line)}
+              onMouseDown={(event) => {
+                // A read-only bill's cells take no focus: the click still makes it the current line (item strip, F12).
+                if (rowHasItem(line)) {
+                  onActiveRow(line.key);
+                }
+                onBlankRowMouseDown(event, line);
+              }}
               onKeyDown={(event) => {
+                const bare = !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey;
+                // F12 — the line's batches / serials (read-only on a stored bill); F4 — its next unit.
+                if (bare && (event.key === "F12" || event.key === "F4") && rowHasItem(line)) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (!event.repeat) {
+                    if (event.key === "F12") {
+                      onOpenAllocs?.(line.key);
+                    } else if (editable) {
+                      onCycleUnit?.(line.key);
+                    }
+                  }
+                  return;
+                }
                 if (event.key === "Tab" && !event.ctrlKey && !event.altKey && !event.metaKey) {
                   if (leaveGrid(event.target as HTMLElement, !event.shiftKey)) {
                     event.preventDefault();
@@ -629,9 +739,9 @@ export function InvoiceLineGrid(props: InvoiceLineGridProps) {
                 onRowLineKey(event, line);
               }}
             >
-              {columns.map((column) => (
+              {columns.map((column, columnIndex) => (
                 <td key={column.no} {...{ [CELL_COLUMN_ATTR]: String(column.no) }}>
-                  {renderCell(line, column.no)}
+                  {renderCell(line, column.no, columnIndex)}
                 </td>
               ))}
             </tr>

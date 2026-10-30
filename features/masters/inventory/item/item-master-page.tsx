@@ -234,6 +234,14 @@ import {
   type UiTableColumnLayoutItem,
   normalizeItemBatchConfigValue,
 } from "./item-master-page.constants";
+import {
+  ITEM_ITC_CLASS_OPTIONS,
+  ITEM_PERCENT_MAX,
+  itemPurchasePayload,
+  itemPurchaseValuesFromSource,
+  purchaseUnitChoices,
+  validateItemPercent,
+} from "./item-purchase-fields";
 import { useDataRefresh } from "@/lib/data-freshness";
 import { getUiTableId, useUiTableId } from "@/lib/ui-tables";
 import { buildGridDeletedParam } from "@/lib/configured-grids";
@@ -2597,6 +2605,8 @@ const ITEM_EAN_SECTION_REORDER_HEADING_ROW = 2;
 const ITEM_EAN_SECTION_REORDER_TABLE_ROW = 3;
 const ITEM_EAN_SECTION_RULES_HEADING_ROW = 4;
 const ITEM_EAN_SECTION_RULES_ROW_OFFSET = ITEM_EAN_SECTION_RULES_HEADING_ROW;
+/** The purchase fields' row, under the last rules row (Intimate Before Days, row 6). */
+const ITEM_RULES_PURCHASE_ROW = 7;
 const ITEM_RULES_AND_STATUS_FIELDS: (ERPDynamicModalField & {
   gridRowStart: number;
 })[] = [
@@ -4321,6 +4331,77 @@ function buildItemFormFields(
         ...field,
         gridRowStart: field.gridRowStart + ITEM_EAN_SECTION_RULES_ROW_OFFSET,
       })),
+      // MST-03 (Qt 4c09536 hboxPurchaseFields): one row under the rules.
+      {
+        name: "item_purchase_uom_id",
+        label: "Purchase Unit",
+        type: "custom",
+        title: "The unit a purchase line opens in (a saved unit of this item)",
+        gridRowStart: ITEM_RULES_PURCHASE_ROW + ITEM_EAN_SECTION_RULES_ROW_OFFSET,
+        gridColumnStart: 1,
+        render: ({ disabled, setValue, value, values }) => {
+          const choices = purchaseUnitChoices(
+            buildManagedItemUnitConversionRows(values),
+            (unitId) => unitOptions.find((option) => option.value === unitId)?.label ?? "",
+          );
+          // A stored unit whose row is not loaded yet keeps its id rather than reading as the default.
+          const known = !value || choices.some((choice) => choice.value === value);
+          return (
+            <select
+              className="erp-ms-modal-control"
+              data-erp-modal-field-control="true"
+              aria-label="Purchase Unit"
+              value={value}
+              disabled={disabled}
+              onChange={(event) => setValue(event.target.value)}
+            >
+              <option value="">Default unit</option>
+              {choices.map((choice) => (
+                <option key={choice.value} value={choice.value}>
+                  {choice.label}
+                </option>
+              ))}
+              {known ? null : <option value={value}>(unit not in the table)</option>}
+            </select>
+          );
+        },
+      },
+      {
+        name: "item_min_shelf_life_pct",
+        label: "Min Shelf Life %",
+        type: "number",
+        min: 0,
+        max: ITEM_PERCENT_MAX,
+        step: 0.01,
+        placeholder: "default",
+        title: "Shelf life left at receipt; blank = the company setting",
+        gridRowStart: ITEM_RULES_PURCHASE_ROW + ITEM_EAN_SECTION_RULES_ROW_OFFSET,
+        gridColumnStart: 2,
+        validation: { custom: (value) => validateItemPercent(value, "Min Shelf Life %") },
+      },
+      {
+        name: "item_itc_class",
+        label: "ITC",
+        type: "select",
+        options: ITEM_ITC_CLASS_OPTIONS.map((option) => ({ ...option })),
+        placeholder: "Eligible (default)",
+        title: "Input tax credit on purchase",
+        gridRowStart: ITEM_RULES_PURCHASE_ROW + ITEM_EAN_SECTION_RULES_ROW_OFFSET,
+        gridColumnStart: 3,
+      },
+      {
+        name: "item_shortage_pct",
+        label: "Normal Shortage %",
+        type: "number",
+        min: 0,
+        max: ITEM_PERCENT_MAX,
+        step: 0.01,
+        placeholder: "default",
+        title: "Transit loss accepted without a claim; blank = none",
+        gridRowStart: ITEM_RULES_PURCHASE_ROW + ITEM_EAN_SECTION_RULES_ROW_OFFSET,
+        gridColumnStart: 4,
+        validation: { custom: (value) => validateItemPercent(value, "Normal Shortage %") },
+      },
       {
         name: ITEM_INVENTORY_TAB_HEADING_FIELD_NAME,
         label: "Inventory & Notes",
@@ -4476,6 +4557,7 @@ function mapItemFormValues(
   mappedValues.item_intimate_before_days =
     toDisplayValue(getFieldValue(rowSource, "item_intimate_before_days")) ||
     ITEM_INITIAL_FORM_VALUES.item_intimate_before_days;
+  Object.assign(mappedValues, itemPurchaseValuesFromSource(rowSource));
   // The card's hidden values (base-unit lock, the stored default EAN row):
   // set by augmentItemDetailSource for a saved item, blank otherwise.
   for (const fieldName of Object.keys(ITEM_CARD_HIDDEN_INITIAL_VALUES)) {
@@ -4585,6 +4667,15 @@ async function buildItemRequestPayload({
       values.item_packing_item_ids ?? "",
     ),
     item_is_active: (values.item_is_active ?? "true") === "true",
+    // MST-03: every key sent (null = default); a purchase unit must still be a saved unit row.
+    ...itemPurchasePayload(
+      values,
+      new Set(
+        buildManagedItemUnitConversionRows(values)
+          .map((row) => String(row.iuc_id ?? "").trim())
+          .filter(Boolean),
+      ),
+    ),
     item_created_by: toNullableString(values.item_created_by ?? ""),
     item_modified_by: toNullableString(values.item_modified_by ?? ""),
   };

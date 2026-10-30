@@ -1,0 +1,143 @@
+/**
+ * Reorder → PO — the screen's own skin on top of the quotation shell's page /
+ * title / grid / buttons (imported where used). Lengths are `u(n)` off the
+ * fluid unit the transaction screens share.
+ */
+@function u($n) {
+  @return calc(#{$n} * var(--erp-q-u, 1rem));
+}
+
+/* ------------------------------------------------------------- top band */
+.topBand {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: u(0.4);
+  padding-bottom: u(0.35);
+  border-bottom: 3px solid var(--primary, #7b1515);
+}
+.titleLine {
+  display: flex;
+  gap: u(0.6);
+  align-items: baseline;
+}
+.scope {
+  color: var(--text-muted, #666666);
+  font-size: u(0.72);
+}
+.filterCard {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.5) u(0.9);
+  align-items: flex-end;
+  padding: u(0.45) u(0.7);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: var(--card-bg, #ffffff);
+}
+.filterSupplier {
+  flex: 0 1 u(22);
+  min-width: u(14);
+}
+.checkLabel {
+  display: inline-flex;
+  gap: u(0.35);
+  align-items: center;
+  font-size: u(0.74);
+  cursor: pointer;
+}
+.pushRight {
+  margin-left: auto;
+}
+
+/* ------------------------------------------------------------- the grid */
+.gridShell {
+  flex: 1 1 auto;
+  min-height: u(12);
+}
+.gridViewport {
+  min-height: u(10);
+}
+.grid {
+  width: 100%;
+  min-width: u(56);
+}
+.tickCell {
+  display: block;
+  width: 100%;
+  min-height: u(1.35);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #15803d;
+  font: inherit;
+  font-size: u(0.85);
+  font-weight: 800;
+  text-align: center;
+  cursor: pointer;
+}
+.tickCell:focus-visible {
+  outline: 2px solid var(--primary, #7b1515);
+  outline-offset: -2px;
+  background: #fffdf5;
+}
+.rowTicked {
+  background: #eef7f0 !important;
+}
+/* Shown with "every reorder item" on: above its level, nothing to buy yet. */
+.rowAbove {
+  color: var(--text-muted, #6b7280);
+}
+
+/* ----------------------------------------------------------- below the grid */
+.hintLine {
+  min-height: u(1);
+  margin: 0;
+  color: #8b1a1a;
+  font-size: u(0.72);
+  white-space: pre-line;
+}
+.supplierBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.5) u(0.9);
+  align-items: flex-end;
+}
+.summary {
+  margin-left: auto;
+  align-self: center;
+  font-size: u(0.76);
+}
+.warn {
+  color: #b91c1c;
+  font-weight: 700;
+}
+.buttonBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.35);
+  align-items: center;
+}
+.footerHint {
+  margin-right: auto;
+  margin-left: u(0.6);
+  color: var(--text-muted, #666666);
+  font-size: u(0.7);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------- made POs dialog */
+.dialogNote {
+  margin: 0 0 u(0.4);
+}
+.madeList {
+  margin: 0;
+  padding-left: u(1.1);
+  line-height: 1.6;
+}
+.dialogActions {
+  display: flex;
+  gap: u(0.5);
+  justify-content: flex-end;
+  width: 100%;
+}

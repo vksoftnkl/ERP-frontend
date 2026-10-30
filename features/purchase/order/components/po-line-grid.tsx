@@ -36,6 +36,8 @@ import type { PoGridColumn } from "../purchase-order.columns";
 import { COL, PO_LINE_GRID_NAME, PO_NUMBER_COLUMNS } from "../purchase-order.constants";
 import { cellPattern, isEnterStop, rowHasItem, whyNotEditable } from "../purchase-order.state";
 import type { PoDraft, PoLine } from "../purchase-order.types";
+import { PurchaseCheckChip, purchaseFigureClass } from "../../shared/components/purchase-parts";
+import { lineStatusChip, pendingTone } from "../po-fidelity";
 import styles from "../page.module.scss";
 
 /** The viewport's marker — what Tab leaves and what a read-only document focuses. */
@@ -427,7 +429,7 @@ export function PoLineGrid(props: PoLineGridProps) {
               line={line}
               column={column}
               stop={stop}
-              placeholder={spare ? "Scan, or type + ↓" : ""}
+              placeholder={spare ? "type item / scan" : ""}
               onActive={active}
               onScan={(code) => onScanBarcode(line.key, code)}
               onSearch={(typed) => onSearchItems(line.key, typed)}
@@ -445,7 +447,7 @@ export function PoLineGrid(props: PoLineGridProps) {
             {...{ [GRID_LOOKUP_ATTR]: "true" }}
             className={cx(quotationStyles.cellInput, styles.cellPlaceholder)}
             value={line.itemName}
-            placeholder={spare ? "Enter or type for the item list" : ""}
+            placeholder={spare ? "or Reorder suggestions (F7) · + / − lines" : ""}
             readOnly
             title={hasItem ? why : "Enter, a double-click or a letter opens the item list"}
             onFocus={active}
@@ -482,6 +484,7 @@ export function PoLineGrid(props: PoLineGridProps) {
       case COL.Free:
       case COL.Rate:
       case COL.DiscPct:
+      case COL.SchPct:
       case COL.Mrp: {
         const value =
           column.no === COL.Qty
@@ -492,7 +495,9 @@ export function PoLineGrid(props: PoLineGridProps) {
                 ? line.rate
                 : column.no === COL.DiscPct
                   ? line.discPct
-                  : line.mrp;
+                  : column.no === COL.SchPct
+                    ? (line.schPct ?? "")
+                    : line.mrp;
         return open ? (
           <NumberCell line={line} column={column} stop={stop} value={value} onActive={active} onCommit={commit} />
         ) : (
@@ -509,18 +514,39 @@ export function PoLineGrid(props: PoLineGridProps) {
         return refused(line, column, hasItem ? figure(line.total, true) : "", "");
       case COL.Recd:
         return refused(line, column, hasItem ? figure(line.received, false) : "", "");
-      case COL.Pending:
+      case COL.Pending: {
+        // Qt cols.tone: 0 green, > 0 orange, short closed grey (a stored, confirmed line)
+        const tone = pendingTone(line, draft.status);
         return (
-          <div
-            className={cx(
-              quotationStyles.cellText,
-              quotationStyles.alignRight,
-              (line.pending ?? 0) > 0 && (line.received ?? 0) > 0 && styles.pendingOpen,
-            )}
-          >
+          <div className={cx(quotationStyles.cellText, quotationStyles.alignRight, purchaseFigureClass(tone))}>
             {hasItem ? figure(line.pending, false) : ""}
           </div>
         );
+      }
+      case COL.ShortClosed:
+        return (
+          <div className={cx(quotationStyles.cellText, quotationStyles.alignRight, purchaseFigureClass("muted"))}>
+            {hasItem && line.shortClosedQty ? figure(line.shortClosedQty, false) : ""}
+          </div>
+        );
+      case COL.LastRate:
+        return (
+          <div className={cx(quotationStyles.cellText, quotationStyles.alignRight)} title={line.lastRateTip || undefined}>
+            {hasItem && line.lastRate ? figure(Number(line.lastRate), true) : ""}
+          </div>
+        );
+      case COL.Stock:
+        return <div className={cx(quotationStyles.cellText, quotationStyles.alignRight)}>{hasItem ? (line.stock ?? "") : ""}</div>;
+      case COL.Reorder:
+        return (
+          <div className={cx(quotationStyles.cellText, quotationStyles.alignRight)} title={line.reorderTip || undefined}>
+            {hasItem ? (line.reorder ?? "") : ""}
+          </div>
+        );
+      case COL.Status: {
+        const chip = hasItem ? lineStatusChip(line) : null;
+        return <div className={quotationStyles.cellText}>{chip ? <PurchaseCheckChip text={chip.text} tone={chip.tone} /> : " "}</div>;
+      }
       default:
         return null;
     }

@@ -1,46 +1,52 @@
 /**
  * Purchase Return — the screen's own skin, on top of the quotation shell's page
- * / title / fields / grid / buttons (imported where used). Lengths are `u(n)`
- * off the fluid unit the transaction screens share. The top band and the
- * four-column header card are Godown Transfer's.
+ * / fields / grid / buttons (imported where used) and the shared purchase parts
+ * (section headings, pill, totals strip, warn strip). Lengths are `u(n)` off the
+ * fluid unit the transaction screens share; colours are design-system tokens only.
+ *
+ * The page scrolls (title, header, rows, legend, strip); the foot (hint, warn
+ * strip, two button rows) stays in view — Qt `scrollBody` + `frameButtons`.
  */
 @function u($n) {
   @return calc(#{$n} * var(--erp-q-u, 1rem));
 }
 
 .page {
-  overflow: hidden;
-}
-
-/* ------------------------------------------------------------- top band */
-.topBand {
-  display: grid;
-  flex: 0 0 auto;
-  grid-template-columns: minmax(u(15), 1fr) minmax(0, 3.2fr);
-  gap: u(0.9);
-  align-items: start;
-  padding-bottom: u(0.35);
-  border-bottom: 3px solid var(--primary, #7b1515);
-}
-.titleBlock {
   display: flex;
   flex-direction: column;
-  gap: u(0.25);
+  overflow: hidden;
+}
+.body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: u(0.4);
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: u(0.3);
+}
+
+/* ------------------------------------------------------------ title band */
+.titleBand {
+  display: flex;
+  gap: u(1);
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.titles {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
 }
-.titleLine {
-  display: flex;
-  gap: u(0.5);
-  align-items: baseline;
+.formTitle {
+  margin: 0;
+  color: var(--ds-text);
+  font-size: u(1.15);
+  font-weight: 800;
 }
-.docTitle {
-  color: var(--text-muted, #666666);
-  font-size: u(0.78);
-  font-weight: 600;
-}
-.scope {
-  color: var(--text-muted, #666666);
-  font-size: u(0.72);
+.subtitle {
+  color: var(--ds-text-muted);
+  font-size: u(0.74);
 }
 .statusLine {
   display: flex;
@@ -49,26 +55,6 @@
   align-items: center;
   font-size: u(0.72);
 }
-.statusPill {
-  padding: u(0.08) u(0.6);
-  border-radius: 999px;
-  font-size: u(0.7);
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.statusDraft {
-  background: #fef3e2;
-  color: #b45309;
-}
-.statusPosted {
-  background: #e8f5ea;
-  color: #15803d;
-}
-.statusCancelled {
-  background: #fde8e8;
-  color: #b42318;
-}
 
 /* ---------------------------------------------------- the header card */
 .headerCard {
@@ -76,42 +62,50 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: u(0.45) u(0.9);
   align-items: center;
-  padding: u(0.55) u(0.75);
-  border: 1px solid var(--border, #c9c9c9);
-  border-radius: var(--erp-radius, 4px);
-  background: var(--card-bg, #ffffff);
 }
 /* One label / field pair, placed by the view (row, column, span); labels share one width. */
 .pair {
   display: grid;
-  grid-template-columns: u(6.5) minmax(0, 1fr);
+  grid-template-columns: u(6) minmax(0, 1fr);
   gap: u(0.5);
   align-items: center;
   min-width: 0;
 }
-/* Supplier / Bill: red until chosen, green once set (Qt NexStyle::tone). */
+/* Supplier / Bill on a new return: red until chosen, green once set (Qt NexStyle::tone). */
 .pair[data-tone="missing"] {
   padding: u(0.15) u(0.3);
   border-radius: var(--erp-radius, 4px);
-  outline: 2px solid var(--danger, #b3261e);
-  outline-offset: 0;
-  background: #fdecec;
+  outline: 2px solid var(--ds-danger);
+  background: color-mix(in srgb, var(--ds-danger) 7%, var(--ds-surface));
 }
 .pair[data-tone="set"] {
   padding: u(0.15) u(0.3);
   border-radius: var(--erp-radius, 4px);
-  outline: 2px solid var(--success-text, #1c6b2e);
-  outline-offset: 0;
-  background: #eef7f0;
+  outline: 2px solid var(--ds-success);
+  background: color-mix(in srgb, var(--ds-success) 7%, var(--ds-surface));
+}
+/* Two inputs in one field cell: number + date (3 : 2), vehicle + driver (1 : 1). */
+.duo {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: u(0.35);
+  min-width: 0;
+}
+.duoEven {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: u(0.35);
+  min-width: 0;
+}
+.clickable {
+  cursor: pointer;
 }
 
 /* ------------------------------------------------------------ the grid */
-.gridShell {
-  flex: 1 1 auto;
-  min-height: u(12);
-}
 .gridViewport {
-  min-height: u(10);
+  flex: 0 0 auto;
+  min-height: u(8);
+  max-height: u(26);
 }
 .gridViewport:focus {
   outline: none;
@@ -120,89 +114,92 @@
   width: 100%;
   min-width: u(52);
 }
-.problemRow > td {
-  background: #fdf3d8;
+.selectedRow > td {
+  background: color-mix(in srgb, var(--ds-primary) 8%, var(--ds-surface));
+}
+.emptyCell,
+.promptCell {
+  padding: u(0.45) u(0.6);
+  color: var(--ds-text-muted);
+  font-size: u(0.72);
 }
 .emptyCell {
-  padding: u(0.8) u(0.6);
-  color: var(--text-muted, #666666);
-  font-size: u(0.74);
   text-align: center;
 }
-.selectedRow > td {
-  background: var(--row-selected, #f6ecec);
+.promptRow > td {
+  background: var(--ds-surface);
+}
+/* The boxed cells of a draft (Qty / Outcome / Reason); Outcome's border is primary when not Return. */
+.boxed {
+  border: 1px solid var(--ds-border) !important;
+  border-radius: var(--erp-radius, 4px);
+  background: var(--ds-surface);
+}
+.boxedPrimary {
+  border-color: var(--ds-primary) !important;
+}
+/* "info" — the design system has no blue token: its Badge's info is the primary. */
+.toneInfo {
+  color: var(--ds-primary);
 }
 
-/* ---------------------------------------------- strip, hint and totals */
-.validation {
-  margin: 0;
-  padding: u(0.3) u(0.6);
-  border: 1px solid #f0c36d;
-  border-radius: var(--erp-radius, 4px);
-  background: #fdf3d8;
-  color: #7a4b00;
-  font-size: u(0.74);
+/* ------------------------------------------- THE FOUR OUTCOMES legend */
+.legend {
+  width: 100%;
+  border: 1px solid var(--ds-border);
+  border-collapse: collapse;
+  font-size: u(0.72);
+}
+.legend th,
+.legend td {
+  padding: u(0.25) u(0.45);
+  border: 1px solid var(--ds-border);
+  text-align: left;
+  vertical-align: top;
+}
+.legend thead th {
+  background: var(--ds-surface-muted);
+  color: var(--ds-text-muted);
+  font-weight: 700;
+}
+.legend tbody th {
+  color: var(--ds-text);
+  font-weight: 700;
+}
+.legend tbody td {
+  color: var(--ds-text-muted);
+}
+.stripWrap {
+  margin-top: u(0.2);
+}
+
+/* ------------------------------------------------ the foot, always in view */
+.foot {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: u(0.4);
+  padding-top: u(0.4);
+  border-top: 1px solid var(--ds-border);
 }
 .hintLine {
-  min-height: u(1);
   margin: 0;
-  color: var(--text-muted, #555555);
+  color: var(--ds-text-muted);
   font-size: u(0.72);
   white-space: pre-line;
 }
-.totalsLine {
-  min-height: u(1);
-  margin: 0;
-  font-size: u(0.78);
-}
-.buttonBar {
+.buttonRow {
   display: flex;
   flex-wrap: wrap;
   gap: u(0.35);
+  align-items: center;
+}
+.buttonRowEnd {
   justify-content: flex-end;
 }
 .footerHint {
-  margin-right: auto;
-  align-self: center;
-  color: var(--text-muted, #666666);
+  margin-left: auto;
+  color: var(--ds-text-muted);
   font-size: u(0.7);
   font-weight: 600;
-}
-
-/* ------------------------------------------------------------- dialogs */
-.dialogActions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: u(0.35);
-  justify-content: flex-end;
-}
-.dialogBody {
-  display: flex;
-  flex-direction: column;
-  gap: u(0.35);
-}
-.prompt {
-  margin: 0;
-  font-size: u(0.76);
-  white-space: pre-line;
-}
-.fieldProblem {
-  margin: 0;
-  color: var(--danger, #b3261e);
-  font-size: u(0.7);
-}
-.claimsBody {
-  display: flex;
-  flex-direction: column;
-  gap: u(0.4);
-  height: 100%;
-  min-height: 0;
-}
-.claimsViewport {
-  flex: 1 1 auto;
-  min-height: u(12);
-  border: 1px solid var(--border, #c9c9c9);
-}
-.claimsViewport:focus-visible {
-  outline: 2px solid var(--primary, #7b1515);
 }

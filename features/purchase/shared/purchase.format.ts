@@ -86,3 +86,13 @@ export function purchaseRefusalText(error: unknown): string {
 export function purchaseStatusText(status: string): string {
   return status.trim().toUpperCase().replace(/_/g, " ");
 }
+
+/**
+ * "PUR/2026-2027/D14/00012" → "PUR/…/00012" — the mockups' short refno (Qt `shortRef`
+ * on Shortage Receipt and Supplier Dues); the full one is the tooltip. A refno of
+ * fewer than four parts passes through.
+ */
+export function shortRef(refno: string): string {
+  const parts = refno.split("/");
+  return parts.length < 4 ? refno : `${parts[0]}/…/${parts.slice(3).join("/")}`;
+}

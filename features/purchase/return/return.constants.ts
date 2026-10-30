@@ -1,10 +1,10 @@
 /**
- * Purchase Return (menu 25) — the constants of the Qt `PurchaseReturnCols` /
- * `PurchaseClaimCols` (src/modules/purchase/return/purchase_return_cols.h, Qt
- * NexERP 8ca6ff3) and the routes the screen calls.
+ * Purchase Return (menu 25) — the constants of the Qt `PurchaseReturnCols`
+ * (src/modules/purchase/return/purchase_return_cols.h, the 2026-10-29 rebuild to
+ * purchase_return_ui_mockup.png) and the routes the screen calls. Claims are no
+ * longer settled here: they live on Supplier Dues (menu 297).
  */
 import type { ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
-import type { UiTableKey } from "@/lib/ui-tables";
 
 // ---------------------------------------------------------------------------
 // Routes — WITHOUT `/api/v1`, which the base query adds.
@@ -13,144 +13,84 @@ import type { UiTableKey } from "@/lib/ui-tables";
 export const PURCHASE_RETURN_SAVE_ENDPOINT = "/purchase/returns/save";
 /** A saved draft, posted as it stands — for a user who may post but not edit. */
 export const PURCHASE_RETURN_POST_ENDPOINT = "/purchase/returns/post";
+/** The rows' money, Credit to / Writes, the six totals and the strip — nothing saved. */
+export const PURCHASE_RETURN_VALIDATE_ENDPOINT = "/purchase/returns/validate";
 export const PURCHASE_RETURN_GET_ENDPOINT = "/purchase/returns/get";
 export const PURCHASE_RETURN_CANCEL_ENDPOINT = "/purchase/returns/cancel";
 export const PURCHASE_RETURN_SOURCES_ENDPOINT = "/purchase/returns/sources";
 export const PURCHASE_RETURN_SOURCE_LINES_ENDPOINT = "/purchase/returns/source-lines";
-export const PURCHASE_CLAIMS_OPEN_ENDPOINT = "/purchase/claims/open";
-export const PURCHASE_CLAIMS_SETTLE_ENDPOINT = "/purchase/claims/settle";
-export const PURCHASE_CLAIMS_SETTLE_UNDO_ENDPOINT = "/purchase/claims/settle-undo";
+/** Stock Reasons (menu 293): the PURCHASE_RETURN set (PRET_*) is the Reason pick-list. */
+export const STOCK_REASONS_LIST_ENDPOINT = "/stock/reasons/list";
+/** `?gdl_id=` — the name of a godown the server named (validate answers an id only). */
+export const GODOWN_GET_ENDPOINT = "/godowns/get";
+
+/** Supplier Dues (menu 297) — the claims, debit notes and replacements this supplier owes. */
+export const SUPPLIER_DUES_ROUTE = "/purchase/supplier-dues";
 
 // ---------------------------------------------------------------------------
 // Registries
 // ---------------------------------------------------------------------------
 
-/** ui_table 59 "PURCHASE RETURN - LINES". */
-export const LINE_GRID_UI_TABLE_KEY: UiTableKey = "purchaseReturnLines";
-/** ui_table 60 "PURCHASE CLAIMS - OPEN". */
-export const CLAIMS_GRID_UI_TABLE_KEY: UiTableKey = "purchaseClaimsOpen";
 /** Dropdown 35 SUPPLIERS: `sup_id` / `sup_name`. */
 export const SUPPLIER_DROPDOWN_KEY: ConfiguredDropdownKey = "supplier";
-/** Dropdown 43 LEDGERS - ALL: the transporter / insurer a TRANSPORTER or INSURER claim row is on. */
+/** Dropdown 26 GODOWNS: `gdl_id` / `gdl_name`, bound to `ibranch_id`. */
+export const GODOWN_DROPDOWN_KEY: ConfiguredDropdownKey = "godown";
+/** Dropdown 43 LEDGERS - ALL: the transporter / insurer a claim row is on. */
 export const CLAIM_PARTY_DROPDOWN_KEY: ConfiguredDropdownKey = "ledgerAll";
+
+/**
+ * The document keys every purchase screen shares (Qt `PurchaseDocNav`):
+ * `/txn/adjacent` docType, the print purpose (print_purpose.ppo_code) and the
+ * attachments' docType (/txn-attachments, Ctrl+A).
+ */
+export const ADJACENT_DOC_TYPE = "PURCHASE_RETURN" as const;
+export const PRINT_PURPOSE_CODE = "PURCHASE_RETURN";
+export const ATTACH_DOC_TYPE = "PURCHASE_RETURN" as const;
 
 /** The DOM name the line grid's cells carry for the shared Enter walk. */
 export const LINE_GRID_NAME = "purchase-return-lines";
-export const CLAIMS_GRID_NAME = "purchase-claims-open";
+
+/** /validate is asked this long after the last edit (Qt `m_recalc` 350 ms). */
+export const RECALC_DELAY_MS = 350;
 
 // ---------------------------------------------------------------------------
-// The line grid — ui_table 59, by column number
+// The line grid — the mockup's columns in its order (Qt `applyColumns`)
 // ---------------------------------------------------------------------------
 
-export const COL = {
-  SrcLine: 0,
-  Item: 1,
-  Unit: 2,
-  Batch: 3,
-  /** The holding the goods leave from (SALEABLE / DAMAGED) — "From". */
-  Bucket: 4,
-  Returnable: 5,
-  Qty: 6,
-  Outcome: 7,
-  ClaimOn: 8,
-  Rate: 9,
-  GstPct: 10,
-  Value: 11,
-  Tax: 12,
-  Total: 13,
-  // 14 SrcItemId, 15 LotId, 16 UnitTax, 17 LineId are the row's own fields here.
-} as const;
+export type ReturnColumn =
+  | "item"
+  | "batch"
+  | "bucket"
+  | "billed"
+  | "returned"
+  | "qty"
+  | "rate"
+  | "value"
+  | "gst"
+  | "outcome"
+  | "reason"
+  | "creditTo"
+  | "writes";
 
-/** The columns this screen draws; anything else ui_table 59 carries is not shown. */
-export const SHOWN_COLUMNS: readonly number[] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
+/** # Item Batch·Exp Bucket Billed Returned Qty Rate Value GST Outcome Reason Credit to Writes — and the Qt weights. */
+export const RETURN_COLUMNS: readonly { key: ReturnColumn; title: string; weight: number; align?: "right" }[] = [
+  { key: "item", title: "Item", weight: 15 },
+  { key: "batch", title: "Batch · Exp", weight: 9 },
+  { key: "bucket", title: "Bucket", weight: 7 },
+  { key: "billed", title: "Billed", weight: 5, align: "right" },
+  { key: "returned", title: "Returned", weight: 5, align: "right" },
+  { key: "qty", title: "Qty", weight: 5, align: "right" },
+  { key: "rate", title: "Rate", weight: 5, align: "right" },
+  { key: "value", title: "Value", weight: 6, align: "right" },
+  { key: "gst", title: "GST", weight: 5, align: "right" },
+  { key: "outcome", title: "Outcome", weight: 12 },
+  { key: "reason", title: "Reason", weight: 9 },
+  { key: "creditTo", title: "Credit to", weight: 10 },
+  { key: "writes", title: "Writes", weight: 9 },
+];
 
-export const FALLBACK_COLUMN_TITLES: Readonly<Record<number, string>> = {
-  0: "Bill Ln",
-  1: "Item",
-  2: "Unit",
-  3: "Batch",
-  4: "From",
-  5: "Can Return",
-  6: "Qty",
-  7: "Outcome",
-  8: "Claim On",
-  9: "Rate",
-  10: "GST %",
-  11: "Value",
-  12: "Tax",
-  13: "Total",
-  14: "SrcItemId",
-  15: "LotId",
-  16: "UnitTax",
-  17: "LineId",
-};
-
-/** Width shares when the layout has not arrived (or names no width). */
-export const FALLBACK_COLUMN_WIDTHS: Readonly<Record<number, number>> = {
-  0: 4,
-  1: 18,
-  2: 6,
-  3: 8,
-  4: 8,
-  5: 7,
-  6: 7,
-  7: 11,
-  8: 9,
-  9: 7,
-  10: 5,
-  11: 8,
-  12: 7,
-  13: 8,
-};
-
-/** Where Enter stops on a row (Qt `setFocusStops({ Qty, Outcome })`). */
-export const ENTER_STOPS: readonly number[] = [COL.Qty, COL.Outcome];
-
-// ---------------------------------------------------------------------------
-// The claims grid — ui_table 60
-// ---------------------------------------------------------------------------
-
-export const CLAIM_COL = {
-  Refno: 0,
-  Date: 1,
-  Line: 2,
-  Item: 3,
-  Claim: 4,
-  ClaimOn: 5,
-  Value: 6,
-  Settled: 7,
-  Open: 8,
-  // 9 ReturnItemId, 10 AccYear, 11 LastSettlementId are the row's own fields here.
-} as const;
-
-export const CLAIM_SHOWN_COLUMNS: readonly number[] = [0, 1, 2, 3, 4, 5, 6, 7, 8];
-
-export const CLAIM_FALLBACK_TITLES: Readonly<Record<number, string>> = {
-  0: "Return No",
-  1: "Date",
-  2: "Ln",
-  3: "Item",
-  4: "Claim",
-  5: "Claim On",
-  6: "Value",
-  7: "Settled",
-  8: "Open",
-  9: "ReturnItemId",
-  10: "AccYear",
-  11: "LastSettlementId",
-};
-
-export const CLAIM_FALLBACK_WIDTHS: Readonly<Record<number, number>> = {
-  0: 14,
-  1: 8,
-  2: 4,
-  3: 20,
-  4: 9,
-  5: 18,
-  6: 9,
-  7: 9,
-  8: 9,
-};
+/** Where Enter stops on a row (Qt `setFocusStops({ Qty, Outcome, Reason })`). */
+export const ENTER_STOPS: readonly ReturnColumn[] = ["qty", "outcome", "reason"];
 
 // ---------------------------------------------------------------------------
 // Words
@@ -158,19 +98,79 @@ export const CLAIM_FALLBACK_WIDTHS: Readonly<Record<number, number>> = {
 
 export type ReturnKind = "AGAINST_INVOICE" | "AGAINST_GRN";
 
-export const KIND_OPTIONS: readonly { value: ReturnKind; label: string }[] = [
-  { value: "AGAINST_INVOICE", label: "Bill" },
-  { value: "AGAINST_GRN", label: "GRN (not yet billed)" },
+/**
+ * How the Return (debit note) rows are settled (header.settlement). A new
+ * return takes purchase.return_settlement_default; CASH is settled by a
+ * Receipt, so the return itself is then set off (ADJUST), as the server does.
+ */
+export type ReturnSettlement = "ADJUST" | "ADVANCE";
+
+export const SETTLEMENT_OPTIONS: readonly { value: ReturnSettlement; label: string }[] = [
+  { value: "ADJUST", label: "Adjust in next bill / payment" },
+  { value: "ADVANCE", label: "Keep as an advance with the supplier" },
 ];
 
-/** The outcomes as the grid SHOWS them; the wire spells them with `_`. */
-export const OUTCOMES = ["RETURN", "CLAIM SENT", "CLAIM DESTROYED", "REPLACE"] as const;
-export type OutcomeText = (typeof OUTCOMES)[number];
+export const KIND_OPTIONS: readonly { value: ReturnKind; label: string }[] = [
+  { value: "AGAINST_INVOICE", label: "Invoice" },
+  { value: "AGAINST_GRN", label: "GRN (not billed yet)" },
+];
+
+/** The four outcomes, wire codes. */
+export const OUTCOME_CODES = ["RETURN", "CLAIM_SENT", "CLAIM_DESTROYED", "REPLACE"] as const;
+export type OutcomeCode = (typeof OUTCOME_CODES)[number];
+
+/** The outcome as the server words it (`outcomeText`) — what the cell shows. */
+export const OUTCOME_TEXT: Readonly<Record<OutcomeCode, string>> = {
+  RETURN: "Return (debit note)",
+  CLAIM_SENT: "Claim — goods sent",
+  CLAIM_DESTROYED: "Claim — destroyed here",
+  REPLACE: "Replace",
+};
 
 export const CLAIM_PARTIES = ["SUPPLIER", "TRANSPORTER", "INSURER"] as const;
 export type ClaimParty = (typeof CLAIM_PARTIES)[number];
 
-export const BUCKET_SALEABLE = "SALEABLE";
+/** Credit to on a claim row: who the claim is on (Qt `claimText`). */
+export const CLAIM_PARTY_TEXT: Readonly<Record<ClaimParty, string>> = {
+  SUPPLIER: "Claim receivable",
+  TRANSPORTER: "Claim receivable · transporter",
+  INSURER: "Claim receivable · insurer",
+};
 
-export const CLAIM_HINT =
-  "Credit = the party's credit note (part or whole) · Short-settle = write the rest off · Reject = write it off (GST on goods sent is re-availed)";
+export const BUCKET_SALEABLE = "SALEABLE";
+export const BUCKET_DAMAGED = "DAMAGED";
+
+/** The server's e-way bill warning code (the company's statutory limit). */
+export const EWB_NEEDED_CODE = "PUR_RETURN_EWB_NEEDED";
+
+/** THE FOUR OUTCOMES — Outcome · Goods · Money · ITC · Closes when (the mockup's words; D17 / D18). */
+export const OUTCOME_LEGEND_HEADS = ["Outcome", "Goods", "Money", "ITC", "Closes when"] as const;
+export const OUTCOME_LEGEND: readonly (readonly [string, string, string, string, string])[] = [
+  [
+    "Return (debit note)",
+    "Leave now (ISSUE)",
+    "Supplier balance reduced now (bill-wise PURCHASE_RETURN)",
+    "Reversed now",
+    "Posted — adjusted in a bill / Payment",
+  ],
+  [
+    "Claim — goods sent",
+    "Leave now (ISSUE)",
+    "CLAIM_RECEIVABLE (value + GST) — credit expected later",
+    "Reversed now",
+    "Supplier CN received (Supplier dues)",
+  ],
+  [
+    "Claim — destroyed here",
+    "Written off here",
+    "CLAIM_RECEIVABLE (value) — compensation expected",
+    "Reversed — sec 17(5)(h)",
+    "Compensation received / written off",
+  ],
+  ["Replace", "Leave now (ISSUE)", "None — no money moves", "Reversed now, re-claimed on arrival", "Shortage Receipt brings the replacement"],
+];
+/** The legend's column proportions (Qt `buildLegend`). */
+export const OUTCOME_LEGEND_WEIGHTS = [13, 14, 25, 19, 25] as const;
+
+export const PROMPT_ROW =
+  "pick rows from the bill (Ctrl+L)  ·  or start from the bill: Ctrl+F11 on Purchase Entry  ·  + splits a row into another outcome  ·  − drops it";

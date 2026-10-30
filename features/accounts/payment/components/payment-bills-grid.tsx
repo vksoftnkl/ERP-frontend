@@ -25,6 +25,7 @@ import { Chip } from "@/features/accounts/receipt/components/chip";
 import styles from "@/features/accounts/receipt/page.module.scss";
 import type { PaymentBillColumnKey } from "../columns";
 import type { PaymentBillColumn } from "../domain/bill-cells";
+import { heldTypeLabel, holdTooltip, paymentHoldOf } from "../domain/payment-hold";
 import { debitChipFor } from "../domain/roles";
 import type { BillRow, CreditRow } from "../payment.types";
 
@@ -168,8 +169,15 @@ export function PaymentBillsGrid(props: PaymentBillsGridProps) {
         return <span className={styles.cellText}>{row.docRefno}</span>;
       case "usrRefno":
         return <span className={styles.cellText}>{row.usrRefno}</span>;
-      case "billType":
-        return <Chip value={row.billType} />;
+      case "billType": {
+        // A purchase bill on payment hold: paying it needs the release right.
+        const hold = paymentHoldOf(row);
+        return hold ? (
+          <Chip value={row.billType} label={heldTypeLabel(row.billType)} tone="amber" title={holdTooltip(hold)} />
+        ) : (
+          <Chip value={row.billType} />
+        );
+      }
       case "dueDate":
         return <span className={styles.cellText}>{row.dueDate ?? ""}</span>;
       case "daysOverdue":

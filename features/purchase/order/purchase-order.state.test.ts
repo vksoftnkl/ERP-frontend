@@ -1,24 +1,40 @@
 import { describe, expect, it } from "vitest";
 import { resolvePoColumns } from "./purchase-order.columns";
-import { COL } from "./purchase-order.constants";
+import { COL, PO_COLUMN_NUMBERS } from "./purchase-order.constants";
 import {
+  amendProblem,
   applyCalc,
   applyItem,
+  awaitingApproval,
   buildPayload,
   canCalculate,
   cancellable,
   createPoDraft,
   draftFromPayload,
   editLine,
+  isEditable,
   isEnterStop,
+  isPoWorthRemembering,
+  mergeable,
+  mergeChoices,
+  pendingNote,
   removeLine,
+  revisionRows,
   rowHasItem,
   saveProblem,
   shortClosable,
+  startAmend,
   statusLabel,
+  supplierEditable,
+  totalsNotes,
   whyNotEditable,
 } from "./purchase-order.state";
-import type { PoDraft, PurchaseOrderItemLookup, PurchaseOrderPayload } from "./purchase-order.types";
+import type {
+  PoDraft,
+  PurchaseOrderItemLookup,
+  PurchaseOrderPayload,
+  PurchaseOrderPendingLine,
+} from "./purchase-order.types";
 
 const SCOPE = { companyId: "c1", branchId: "b1", accYear: "2026-2027", deviceId: "d1" };
 
@@ -230,7 +246,7 @@ describe("purchase order — a stored PO", () => {
 });
 
 describe("purchase order — columns", () => {
-  it("draws only the columns the screen knows, by the layout's order and visibility", () => {
+  it("draws only the columns the screen knows, in the mockup's order with its titles (Qt applyColumns)", () => {
     const rows = [
       { uiTblClmId: "1", uiTblClmNo: "1", uiTblClmName: "Item", uiTblClmColumnWidth: 22, uiTblClmColumnVisibility: true, uiTblClmColumnFocus: false, uiTblClmColumnPosition: 0, uiTblClmColumnNecessity: false },
       { uiTblClmId: "0", uiTblClmNo: "0", uiTblClmName: "Barcode", uiTblClmColumnWidth: 9, uiTblClmColumnVisibility: true, uiTblClmColumnFocus: false, uiTblClmColumnPosition: 1, uiTblClmColumnNecessity: false },
@@ -240,10 +256,214 @@ describe("purchase order — columns", () => {
     ];
     const columns = resolvePoColumns(rows);
     const numbers = columns.map((column) => column.no);
-    expect(numbers.slice(0, 2)).toEqual([COL.Item, COL.Barcode]);
-    expect(numbers).not.toContain(COL.Mrp);
+    expect(numbers).toEqual([...PO_COLUMN_NUMBERS]);
+    expect(columns.find((column) => column.no === COL.Qty)?.header).toBe("Ordered");
+    expect(numbers).not.toContain(COL.Taxable);
     expect(numbers).not.toContain(14);
     expect(numbers).not.toContain(40);
     expect(columns.reduce((sum, column) => sum + column.widthPct, 0)).toBeCloseTo(100);
+  });
+});
+
+describe("purchase order — DOC-01 amend", () => {
+  const confirmed: PurchaseOrderPayload = {
+    header: {
+      poId: "po9",
+      poCompanyId: "c1",
+      poBranchId: "b1",
+      poAccYear: "2026-2027",
+      poRefno: "PO/2026-2027/D14/00109",
+      poDocDate: "2026-10-28",
+      poSupplierId: "s1",
+      supplierName: "ZT",
+      poExpectedDate: null,
+      poDeliverGodownId: null,
+      poContact: null,
+      poRemarks: null,
+      poTaxableAmt: "1000",
+      poTaxAmt: "180",
+      poNetAmt: "1180",
+      poStatus: "POSTED",
+      poIsShortClosed: false,
+      poShortCloseReason: null,
+      poApprovalStatus: "APPROVED",
+      poRevisionNo: 2,
+      approvedBy: "admin",
+    },
+    lines: [
+      {
+        poiId: "l1",
+        poiLineNo: 1,
+        poiItemId: "a",
+        poiUomId: "u-a",
+        poiQty: "10",
+        poiFreeQty: "0",
+        poiRate: "100",
+        poiDiscPct: "0",
+        poiTaxableAmt: "1000",
+        poiGstPct: "18",
+        poiCgstAmt: "90",
+        poiSgstAmt: "90",
+        poiIgstAmt: "0",
+        poiCessAmt: "0",
+        poiTotalAmt: "1180",
+        poiMrp: null,
+        itemName: "A",
+        unitName: "PCS",
+        receivedQty: "4",
+        pendingQty: "6",
+      },
+      {
+        poiId: "l2",
+        poiLineNo: 2,
+        poiItemId: "b",
+        poiUomId: "u-b",
+        poiQty: "5",
+        poiFreeQty: "0",
+        poiRate: "20",
+        poiDiscPct: "0",
+        poiTaxableAmt: "100",
+        poiGstPct: "18",
+        poiCgstAmt: "9",
+        poiSgstAmt: "9",
+        poiIgstAmt: "0",
+        poiCessAmt: "0",
+        poiTotalAmt: "118",
+        poiMrp: null,
+        itemName: "B",
+        unitName: "PCS",
+        receivedQty: "0",
+        pendingQty: "5",
+      },
+    ],
+  };
+  const loaded = () => draftFromPayload(confirmed, { deviceId: "d1", godownId: "", godownName: "" }, "browse");
+
+  it("reads the revision and who approved it", () => {
+    const draft = loaded();
+    expect(draft.revisionNo).toBe(2);
+    expect(draft.approvalStatus).toBe("APPROVED");
+    expect(totalsNotes(draft)).toEqual(["Revision 2", "Approved by admin"]);
+    expect(totalsNotes({ ...draft, revisionNo: 1, approvedBy: "" })).toEqual([]);
+    expect(draft.amending).toBe(false);
+    expect(isEditable(draft)).toBe(false);
+  });
+
+  it("opens a confirmed PO for change: a blank line, editable, figures asked again", () => {
+    const draft = loaded();
+    expect(amendProblem(draft)).toBe("");
+    expect(amendProblem({ ...draft, shortClosed: true })).not.toBe("");
+    expect(amendProblem(createPoDraft(SCOPE, "2026-10-28"))).not.toBe("");
+    const amending = startAmend(draft);
+    expect(amending.amending).toBe(true);
+    expect(amending.viewMode).toBe("entry");
+    expect(isEditable(amending)).toBe(true);
+    expect(rowHasItem(amending.lines[amending.lines.length - 1])).toBe(false);
+    expect(amending.hint).toContain("goods came on it");
+    expect(canCalculate(amending)).toBe(true);
+    expect(statusLabel(amending)).toBe("AMENDING");
+    // Nothing else is offered mid-amendment.
+    expect(cancellable(amending)).toBe(false);
+    expect(shortClosable(amending)).toBe(false);
+    expect(mergeable(amending)).toBe(false);
+    // Goods came: the supplier is fixed, and the line goods came against cannot go.
+    expect(supplierEditable(amending)).toBe(false);
+    const refused = removeLine(amending, amending.lines[0].key);
+    expect(refused.lines).toHaveLength(amending.lines.length);
+    expect(refused.hint).toContain("Line 1");
+    const removed = removeLine(amending, amending.lines[1].key);
+    expect(removed.lines.some((line) => line.lineId === "l2")).toBe(false);
+    expect(isPoWorthRemembering(removed)).toBe(true);
+  });
+
+  it("the amendment's payload keeps line ids, confirms again and carries the reason", () => {
+    let draft = startAmend(loaded());
+    draft = editLine(draft, draft.lines[0].key, COL.Qty, "12");
+    draft = applyItem(draft, draft.lines[2].key, lookup("c"), "C");
+    const { body } = buildPayload(draft, false, " supplier revised the rate ");
+    expect(body.header.poId).toBe("po9");
+    expect(body.header.post).toBe(true);
+    expect(body.header.amendReason).toBe("supplier revised the rate");
+    expect(body.lines.map((line) => line.lineId)).toEqual(["l1", "l2", undefined]);
+    expect(body.lines[0].qty).toBe(12);
+    // A blank reason is left out; a draft never carries one.
+    expect(buildPayload(draft, true, "  ").body.header.amendReason).toBeUndefined();
+    expect(buildPayload(keyed(), false, "why").body.header.amendReason).toBeUndefined();
+  });
+
+  it("says AWAITING APPROVAL / NOT APPROVED on a confirmed PO", () => {
+    const draft = loaded();
+    const waiting = { ...draft, approvalStatus: "AWAITING" };
+    expect(statusLabel(waiting)).toBe("CONFIRMED · AWAITING APPROVAL");
+    expect(awaitingApproval(waiting)).toBe(true);
+    expect(awaitingApproval({ ...waiting, amending: true })).toBe(false);
+    expect(statusLabel({ ...draft, approvalStatus: "REJECTED" })).toBe("CONFIRMED · NOT APPROVED");
+    expect(statusLabel({ ...draft, approvalStatus: "NOT_REQUIRED" })).toBe("CONFIRMED");
+    expect(whyNotEditable(draft, draft.lines[0], COL.Qty)).toContain("Amend");
+  });
+});
+
+describe("purchase order — DOC-01 merge / pending / versions", () => {
+  const pending = (poId: string, refno: string, lineNo: number): PurchaseOrderPendingLine => ({
+    poId,
+    accYear: "2026-2027",
+    refno,
+    docDate: "2026-10-27T00:00:00.000Z",
+    poiId: `${poId}-${lineNo}`,
+    lineNo,
+    itemId: "a",
+    itemName: "A",
+    uomId: "u-a",
+    unitName: "PCS",
+    rate: "10",
+    pendingQty: "2",
+    orderedQty: "5",
+  });
+
+  it("one choice per PO, in the server's order, with its pending line count", () => {
+    const rows = [pending("p1", "PO/1", 1), pending("p1", "PO/1", 2), pending("p2", "PO/2", 1)];
+    const choices = mergeChoices(rows);
+    expect(choices.map((choice) => choice.key)).toEqual(["p1|2026-2027", "p2|2026-2027"]);
+    expect(choices[0].label).toBe("PO/1 · 27/10/2026 — 2 lines pending");
+    expect(choices[1].label).toBe("PO/2 · 27/10/2026 — 1 line pending");
+  });
+
+  it("a new PO says how many confirmed orders the supplier has pending", () => {
+    expect(pendingNote([])).toBe("");
+    expect(pendingNote([pending("p1", "PO/1", 1), pending("p1", "PO/1", 2)])).toContain("1 confirmed order pending");
+    expect(pendingNote([pending("p1", "PO/1", 1), pending("p2", "PO/2", 1)])).toContain("2 confirmed orders pending — Merge…");
+  });
+
+  it("Merge… is offered on a new draft with a supplier or on a confirmed PO", () => {
+    const fresh = { ...createPoDraft(SCOPE, "2026-10-28"), supplierId: "s1" };
+    expect(mergeable(fresh)).toBe(true);
+    expect(mergeable({ ...fresh, supplierId: "" })).toBe(false);
+    expect(mergeable({ ...fresh, poId: "saved" })).toBe(false);
+    expect(mergeable({ ...fresh, poId: "saved", status: "POSTED" })).toBe(true);
+    expect(mergeable({ ...fresh, poId: "saved", status: "CANCELLED" })).toBe(false);
+  });
+
+  it("versions read the value and lines the PO had after each save", () => {
+    const rows = revisionRows([
+      {
+        revNo: 3,
+        savedOn: "2026-10-28T10:00:00.000Z",
+        action: "update",
+        notes: "Amended (revision 2) — rate",
+        savedBy: "admin",
+        before: null,
+        after: { header: { poNetAmt: "2360.00" } as PurchaseOrderPayload["header"], lines: [{}, {}] as PurchaseOrderPayload["lines"] },
+      },
+      { revNo: "1", savedOn: null, action: null, notes: null, savedBy: null, before: null, after: null },
+    ]);
+    expect(rows[0]).toEqual({
+      revNo: 3,
+      savedOn: "2026-10-28T10:00:00.000Z",
+      by: "admin",
+      what: "Amended (revision 2) — rate",
+      lines: 2,
+      value: 2360,
+    });
+    expect(rows[1]).toMatchObject({ revNo: 1, lines: 0, value: 0 });
   });
 });

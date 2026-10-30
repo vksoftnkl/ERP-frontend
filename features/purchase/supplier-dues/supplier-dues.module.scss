@@ -1,0 +1,312 @@
+/**
+ * Supplier Dues (menu 297) — the page's own skin on top of the quotation
+ * shell's page / title / buttons and the shared purchase parts (section
+ * headings, pills, chips, totals strip). Lengths are `u(n)` off the fluid unit
+ * the transaction screens share; colours are theme tokens.
+ */
+@function u($n) {
+  @return calc(#{$n} * var(--erp-q-u, 1rem));
+}
+
+.page {
+  overflow-y: auto;
+}
+
+/* ------------------------------------------------------------- title band */
+.titleBand {
+  display: flex;
+  flex: 0 0 auto;
+  gap: u(0.8);
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.titles {
+  display: flex;
+  flex-direction: column;
+}
+.subtitle {
+  color: var(--text-muted, #666666);
+  font-size: u(0.72);
+}
+.filterBar {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: u(0.5) u(0.9);
+  align-items: center;
+}
+.filterSupplier {
+  flex: 0 1 u(26);
+  min-width: u(14);
+}
+.checkLabel {
+  display: inline-flex;
+  gap: u(0.35);
+  align-items: center;
+  font-size: u(0.74);
+  cursor: pointer;
+}
+.pushRight {
+  margin-left: auto;
+}
+
+/* ------------------------------------------------------------- the grids */
+.section {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: u(0.4);
+}
+.gridBox {
+  overflow-x: auto;
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: var(--card-bg, #ffffff);
+}
+.grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: u(0.74);
+  table-layout: fixed;
+
+  th {
+    padding: u(0.3) u(0.4);
+    border-bottom: 1px solid var(--border, #c9c9c9);
+    font-weight: 700;
+    text-align: center;
+    white-space: nowrap;
+  }
+  td {
+    overflow: hidden;
+    padding: u(0.25) u(0.4);
+    border-bottom: 1px solid var(--border-subtle, #ececec);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+.num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.row {
+  cursor: default;
+}
+.row:focus {
+  outline: none;
+}
+.rowCurrent td {
+  background: var(--row-current-bg, #f4dcdc);
+}
+.row:focus-visible td {
+  box-shadow: inset 0 1px 0 var(--primary, #7b1515), inset 0 -1px 0 var(--primary, #7b1515);
+}
+.tickCell {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: center;
+}
+.tickBox {
+  display: inline-block;
+  width: u(0.85);
+  height: u(0.85);
+  border: 1px solid var(--border-strong, #8a8a8a);
+  border-radius: 2px;
+  background: var(--card-bg, #ffffff);
+  line-height: u(0.8);
+  font-size: u(0.7);
+  font-weight: 800;
+}
+.amber {
+  color: var(--warning-text, #b45309);
+}
+.muted {
+  color: var(--text-muted, #6b7280);
+}
+.emptyRow td {
+  height: u(1.6);
+  color: var(--text-muted, #6b7280);
+  text-align: center;
+}
+
+/* ------------------------------------------------------- settle + preview */
+.panels {
+  display: grid;
+  grid-template-columns: 47fr 53fr;
+  gap: u(0.9);
+}
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.45);
+  padding: u(0.6) u(0.85);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: var(--card-bg, #ffffff);
+}
+.panelTitle {
+  margin: 0;
+  font-size: u(0.8);
+  font-weight: 700;
+}
+.formGrid {
+  display: grid;
+  grid-template-columns: u(6) 1fr;
+  gap: u(0.4) u(0.6);
+  align-items: center;
+}
+.cap {
+  color: var(--text-muted, #666666);
+  font-size: u(0.74);
+}
+.inline3 {
+  display: grid;
+  grid-template-columns: 3fr 3fr 2fr;
+  gap: u(0.35);
+}
+.inline2 {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: u(0.35);
+}
+.input {
+  width: 100%;
+  min-width: 0;
+  padding: u(0.25) u(0.4);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: var(--input-bg, #ffffff);
+  font: inherit;
+  font-size: u(0.76);
+}
+.input:disabled {
+  background: var(--input-disabled-bg, #f3f4f6);
+  color: var(--text-muted, #6b7280);
+}
+.input:focus {
+  outline: none;
+  border-color: var(--primary, #7b1515);
+}
+.inputNumber {
+  text-align: right;
+}
+.panelButtons {
+  display: flex;
+  gap: u(0.45);
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: auto;
+}
+.legs {
+  display: grid;
+  grid-template-columns: 5fr 5fr 2fr;
+  gap: u(0.3) u(0.9);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: u(0.72);
+}
+.legAmount {
+  font-weight: 700;
+  text-align: right;
+}
+.previewTotals {
+  font-size: u(0.76);
+  font-weight: 700;
+}
+.previewMsg {
+  margin: 0;
+  font-size: u(0.74);
+}
+.spacer {
+  flex: 1 1 auto;
+}
+.previewNote {
+  margin: 0;
+  color: var(--text-muted, #666666);
+  font-size: u(0.7);
+}
+.toneDanger {
+  color: var(--danger-text, #b42318);
+}
+.cashRow {
+  display: flex;
+  gap: u(0.6);
+  align-items: flex-start;
+  justify-content: space-between;
+  color: var(--info-text, #1d4ed8);
+  font-size: u(0.72);
+}
+.link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--link, #1d4ed8);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------- the foot */
+.sectionButtons {
+  display: flex;
+  gap: u(0.45);
+}
+.foot {
+  display: flex;
+  flex: 0 0 auto;
+  gap: u(0.6);
+  align-items: center;
+  margin-top: auto;
+  padding-top: u(0.4);
+  border-top: 1px solid var(--border, #c9c9c9);
+}
+.hint {
+  flex: 1 1 auto;
+  margin: 0;
+  color: var(--text-muted, #555555);
+  font-size: u(0.72);
+  white-space: pre-line;
+}
+
+/* ------------------------------------------------------------- dialogs */
+.dialogActions {
+  display: flex;
+  gap: u(0.5);
+  justify-content: flex-end;
+  width: 100%;
+}
+.dialogNote {
+  margin: 0;
+  white-space: pre-line;
+}
+.closeDialog {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.55);
+}
+.closeTitle {
+  margin: 0;
+  font-weight: 700;
+}
+.closeGrid {
+  display: grid;
+  grid-template-columns: u(5.5) 1fr;
+  gap: u(0.45) u(0.6);
+  align-items: center;
+}
+.cnRow {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: u(0.35);
+}
+.closeNote {
+  margin: 0;
+  color: var(--text-muted, #555555);
+  font-size: u(0.72);
+}
+.closeNoteBad {
+  color: var(--danger-text, #b42318);
+}

@@ -35,9 +35,16 @@ const RESUME_VIEW: View = { screen: "entry", mode: "entry", seq: 0, resume: true
 export type PurchaseDocumentPageProps = {
   docType: PurchaseDocType;
   EntryView: ComponentType<PurchaseEntryViewProps>;
+  /**
+   * "list" lands on the list whatever `system.txn_entry_first` says — the route
+   * was entered on a hand-off document (Purchase Entry's Ctrl+F11) and closing
+   * it goes back to the list, not to a blank new one. A remembered document
+   * still wins.
+   */
+  initialView?: "list";
 };
 
-export function PurchaseDocumentPage({ docType, EntryView }: PurchaseDocumentPageProps) {
+export function PurchaseDocumentPage({ docType, EntryView, initialView }: PurchaseDocumentPageProps) {
   const memoryKey = PURCHASE_DOC_TYPES[docType].memoryKey;
   const { activeCompany, activeBranch, loading } = useBusinessContext();
   const companyId = activeCompany?.compId ?? activeCompany?.id ?? "";
@@ -56,9 +63,9 @@ export function PurchaseDocumentPage({ docType, EntryView }: PurchaseDocumentPag
       return;
     }
     if (settled || (!companyId && !loading)) {
-      setView(entryFirst ? { screen: "entry", mode: "entry", seq: 0 } : { screen: "list" });
+      setView(entryFirst && initialView !== "list" ? { screen: "entry", mode: "entry", seq: 0 } : { screen: "list" });
     }
-  }, [companyId, entryFirst, loading, memoryKey, scope, settled, view]);
+  }, [companyId, entryFirst, initialView, loading, memoryKey, scope, settled, view]);
 
   const onOpen = useCallback((document: PurchaseDocKey, openMode: "browse" | "entry") => {
     setView((current) => ({

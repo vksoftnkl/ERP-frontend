@@ -81,7 +81,24 @@ export type PaymentRole =
 export type PayableBillWire = Omit<
   OpenBillWire,
   "billProfit" | "billProfitPreTax" | "tcsAmount" | "tcsPending"
->;
+> & {
+  /**
+   * Purchase R19 (server 3a637ba4, Qt 348957f): a purchase bill on payment
+   * hold — paying it needs Override on Purchase Entry (menu 24), else the
+   * post is refused 409 PUR_PAYMENT_HOLD. null on every other bill.
+   */
+  paymentHold?: { reason: string | null } | null;
+};
+
+/** A purchase bill's payment hold, as the screen keeps it. */
+export type PaymentHold = { reason: string };
+
+/**
+ * A bill we owe as the grid holds it: the receipt's row plus the payment-only
+ * hold. Optional so a row built anywhere else (a draft memo, an amend) is
+ * still a bill — it just reads as not held.
+ */
+export type PayableBillRow = BillRow & { paymentHold?: PaymentHold | null };
 
 /** A DEBIT we hold of theirs — an advance we paid, a debit note, an opening Dr. */
 export type HeldDebitWire = OpenCreditWire;

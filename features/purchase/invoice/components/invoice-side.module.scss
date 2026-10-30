@@ -1,0 +1,194 @@
+/**
+ * Purchase Entry — the header / side pieces (Qt NexERP 88cd3f2, 8f2a1f4,
+ * 4c09536): supplier chips, the charges grid, the payee and sister bill
+ * dialogs. Lengths are `u(n)` off the transaction screens' fluid unit.
+ */
+@function u($n) {
+  @return calc(#{$n} * var(--erp-q-u, 1rem));
+}
+
+/* ------------------------------------------------------- supplier chips */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.3);
+  align-items: center;
+}
+.chip {
+  padding: u(0.08) u(0.55);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: u(0.68);
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: default;
+}
+.toneNeutral {
+  border-color: #d4d4d8;
+  background: #f4f4f5;
+  color: #3f3f46;
+}
+.toneInfo {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.toneSuccess {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+.toneWarning {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+.toneDanger {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+/* --------------------------------------------------------- charges grid */
+.charges {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: u(0.25);
+}
+.chargesHead {
+  display: flex;
+  gap: u(0.5);
+  align-items: center;
+}
+.chargesTitle {
+  font-size: u(0.74);
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.chargesNote {
+  margin-right: auto;
+  color: var(--text-muted, #666666);
+  font-size: u(0.68);
+}
+.chargesViewport {
+  max-height: calc(18vh / var(--erp-ui-scale, 1));
+  overflow: auto;
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: var(--card-bg, #ffffff);
+}
+.chargesTable {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: u(0.74);
+}
+.chargesTable th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: u(0.2) u(0.4);
+  border-bottom: 1px solid var(--border, #c9c9c9);
+  background: var(--table-header-bg, #f3f3f3);
+  font-weight: 700;
+  text-align: left;
+}
+.chargesTable td {
+  padding: u(0.12) u(0.4);
+  border-bottom: 1px solid #eeeeee;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chargesTable tr.chargeActive td {
+  background: #fff7ed;
+}
+.num {
+  text-align: right !important;
+}
+.cellInput {
+  width: 100%;
+  padding: u(0.08) u(0.3);
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  font: inherit;
+  text-align: right;
+}
+.cellInput:focus {
+  border-color: var(--primary, #7b1515);
+  outline: none;
+  background: #ffffff;
+}
+.cellInput:disabled {
+  color: inherit;
+}
+.payeeCell {
+  cursor: pointer;
+}
+.payeeCellOff {
+  color: var(--text-muted, #666666);
+}
+.addRow td {
+  color: var(--text-muted, #666666);
+  font-style: italic;
+}
+.linkButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--primary, #7b1515);
+  font: inherit;
+  font-style: normal;
+  font-weight: 700;
+  cursor: pointer;
+}
+.linkButton:disabled {
+  color: var(--text-muted, #666666);
+  cursor: default;
+}
+
+/* -------------------------------------------------------------- dialogs */
+.dialogBody {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.5);
+  font-size: u(0.78);
+}
+.dialogHint {
+  margin: 0;
+  color: var(--text-muted, #555555);
+}
+.dialogError {
+  margin: 0;
+  color: #b91c1c;
+  white-space: pre-line;
+}
+.dialogTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: u(0.74);
+}
+.dialogTable th,
+.dialogTable td {
+  padding: u(0.2) u(0.45);
+  border-bottom: 1px solid #eeeeee;
+  text-align: left;
+  white-space: nowrap;
+}
+.dialogTable tbody tr {
+  cursor: pointer;
+}
+.dialogTable tbody tr.rowActive td {
+  background: #fff7ed;
+}
+.dialogTable tbody tr.rowBlocked td {
+  color: var(--text-muted, #777777);
+}
+.dialogFooter {
+  display: flex;
+  gap: u(0.35);
+  justify-content: flex-end;
+}

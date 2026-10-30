@@ -9,46 +9,54 @@
  * a receipt with unsaved keying survives a trip to another menu.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useDropdownId } from "@/lib/configured-dropdowns";
+import { useGetTxnAdjacentMutation, type TxnAdjacentDoc } from "@/components/txn/txn-adjacent";
 import { toast } from "@/lib/notify";
 import { RESTORED_MESSAGE_OPTIONS, restoredMessage, screenMemory, type ScreenScope } from "@/lib/screen-memory";
 import { useForgetIfWritingOnUnmount, useRecalledOnce, type ScreenMemoryOption } from "@/lib/use-screen-memory";
 import { todayIso } from "@/features/sales/quotation/quotation.utils";
+import type { ShortageCloseBody } from "@/features/purchase/supplier-dues/components/shortage-close-dialog";
+import type { PurchaseAllocEntry } from "../shared/purchase-dialogs.types";
+import type { PurchaseIssue } from "../shared/purchase-parts";
 import { purchaseRefusalText, text } from "../shared/purchase.format";
 import type { PurchaseDocKey } from "../shared/purchase.types";
 import { usePurchaseScope } from "../shared/use-purchase-scope";
 import {
   useShortageReceiptCancelMutation,
   useShortageReceiptCloseMutation,
-  useShortageReceiptCloseUndoMutation,
-  useShortageReceiptClosesMutation,
-  useShortageReceiptDropdownRowsMutation,
   useShortageReceiptGetMutation,
+  useShortageReceiptItemLookupMutation,
   useShortageReceiptOpenMutation,
   useShortageReceiptSaveMutation,
 } from "./shortage.api";
-import {
-  CREW_DROPDOWN_KEY,
-  GODOWN_DROPDOWN_KEY,
-  HINT_NOTHING_SHORT,
-  HINT_PICK_SUPPLIER,
-  HINT_TYPE_RECEIVED,
-} from "./shortage.constants";
+import { ADJACENT_DOC_TYPE, HINT_NOTHING_SHORT, HINT_PICK_SUPPLIER, HINT_TICK_ROWS } from "./shortage.constants";
 import {
   applyOpenRows,
   buildSavePayload,
+  clearTicks,
+  closedNotice,
+  closeTargets,
   createDraft,
   draftFromPayload,
   editLine,
   isFresh,
+  loadedHint,
+  mergeFacts,
+  refusalIssues,
   saveBlocker,
   setActive,
   setHeader,
+  setLineAllocs,
+  setReceive,
+  setReceivedAt,
+  setSignature,
   setSupplier,
+  setTicked,
+  stepEndNotice,
+  toggleTick,
   type HeaderPatch,
   type LinePatch,
 } from "./shortage.state";
-import type { CloseKind, ShortageCloseRow, ShortageDraft, ShortageReceiptPayload } from "./shortage.types";
+import type { ShortageDraft, ShortageReceiptPayload } from "./shortage.types";
 
 export type Busy = "loading" | "saving" | "posting" | "cancelling" | "closing" | null;
 
@@ -64,8 +72,6 @@ export function useShortageReceipt(memory: ScreenMemoryOption) {
   useLayoutEffect(() => {
     scopeRef.current = scope;
   });
-  const godownDropdownId = useDropdownId(GODOWN_DROPDOWN_KEY);
-  const crewDropdownId = useDropdownId(CREW_DROPDOWN_KEY);
 
   const recalled = useRecalledOnce<ShortageDraft>(memory, { companyId: scope.companyId, branchId: scope.branchId, accYear: scope.accYear });
   const [draft, setDraft] = useState<ShortageDraft>(() => recalled ?? createDraft(scope, todayIso()));
@@ -79,15 +85,16 @@ export function useShortageReceipt(memory: ScreenMemoryOption) {
   }, []);
 
   const [hint, setHint] = useState(HINT_PICK_SUPPLIER);
+  /** The WARN / REFUSE strip: a refused save's errors[] (no override on a shortage receipt). */
+  const [refusals, setRefusals] = useState<PurchaseIssue[]>([]);
 
   const [openMutation] = useShortageReceiptOpenMutation();
   const [getMutation] = useShortageReceiptGetMutation();
   const [saveMutation] = useShortageReceiptSaveMutation();
   const [cancelMutation] = useShortageReceiptCancelMutation();
   const [closeMutation] = useShortageReceiptCloseMutation();
-  const [closesMutation] = useShortageReceiptClosesMutation();
-  const [closeUndoMutation] = useShortageReceiptCloseUndoMutation();
-  const [dropdownRowsMutation] = useShortageReceiptDropdownRowsMutation();
+  const [lookupMutation] = useShortageReceiptItemLookupMutation();
+  const [adjacentMutation] = useGetTxnAdjacentMutation();
 
   // -------------------------------------------------------------- commit
   const discarded = useRef(false);
@@ -119,16 +126,56 @@ export function useShortageReceipt(memory: ScreenMemoryOption) {
     screenMemory.forget(memory.key, memoryScopeOf(draftRef.current));
   }, [memory.key]);
 
-  const refuse = useCallback((error: unknown, title = "Not done") => {
+  /** A refusal: plain words on the hint line, its errors[] on the strip, the popup. */
+  const refuse = useCallback((error: unknown, title = "Not done", strip = false) => {
     setHint(purchaseRefusalText(error));
+    if (strip) {
+      setRefusals(refusalIssues(error));
+    }
     toast.apiError(error, { refusedTitle: title });
   }, []);
 
+  /** An edit answers the refusal: the strip goes (Qt `onCellEdited`). */
+  const answered = useCallback(() => {
+    setRefusals((current) => (current.length > 0 ? [] : current));
+  }, []);
+
+  // ------------------------------------------------------- signatures
+  /**
+   * Each row's tracking signature (R = serials → F12 in serial mode, Batch is
+   * F12's). Unknown on a failure: F12 still opens, in batch mode.
+   */
+  const fetchSignatures = useCallback(async () => {
+    const current = draftRef.current;
+    const wanted = current.lines.filter((line) => line.itemId && !line.signature);
+    await Promise.all(
+      wanted.map(async (line) => {
+        try {
+          const found = await lookupMutation({
+            companyId: current.companyId,
+            branchId: current.branchId,
+            itemId: line.itemId,
+            ...(line.uomId ? { uomId: line.uomId } : {}),
+            onDate: current.receivedAt.slice(0, 10) || todayIso(),
+            ...(current.godownId ? { godownId: current.godownId } : {}),
+          }).unwrap();
+          const signature = text(found?.trackSignature);
+          if (signature) {
+            commit(setSignature(draftRef.current, line.key, signature));
+          }
+        } catch {
+          // unknown: F12 opens in batch mode
+        }
+      }),
+    );
+  }, [commit, lookupMutation]);
+
   // ------------------------------------------------------- the open list
   const openSeq = useRef(0);
+  const notice = useRef("");
   /**
-   * The supplier's open shortages → one row each, keeping what was typed on the
-   * rows still open (Qt `reloadOpen`). A saved receipt keeps its own lines.
+   * The supplier's open shortages → one row each, keeping what was ticked /
+   * typed on the rows still open (Qt `reloadOpen`). A saved receipt keeps its own lines.
    */
   const reloadOpen = useCallback(async () => {
     const current = draftRef.current;
@@ -149,7 +196,10 @@ export function useShortageReceipt(memory: ScreenMemoryOption) {
         return;
       }
       commit(applyOpenRows(now, rows));
-      setHint(rows.length === 0 ? HINT_NOTHING_SHORT : HINT_TYPE_RECEIVED);
+      const said = rows.length === 0 ? HINT_NOTHING_SHORT : HINT_TICK_ROWS;
+      setHint(notice.current ? `${notice.current} ${said}` : said);
+      notice.current = "";
+      void fetchSignatures();
     } catch (error) {
       if (seq === openSeq.current) {
         setHint(purchaseRefusalText(error));
@@ -160,7 +210,29 @@ export function useShortageReceipt(memory: ScreenMemoryOption) {
         setBusy(null);
       }
     }
-  }, [commit, openMutation, setBusy]);
+  }, [commit, fetchSignatures, openMutation, setBusy]);
+
+  /** A reopened receipt: Date / Age / Recd / Closed / GST held from /open?all=true (Qt `mergeFacts`). */
+  const mergeOpenFacts = useCallback(async () => {
+    const current = draftRef.current;
+    if (!current.supplierId || current.lines.length === 0) {
+      return;
+    }
+    const seq = openSeq.current;
+    try {
+      const rows = await openMutation({
+        companyId: current.companyId,
+        branchId: current.branchId,
+        supplierId: current.supplierId,
+        all: "true",
+      }).unwrap();
+      if (seq === openSeq.current && draftRef.current.psrId === current.psrId) {
+        commit(mergeFacts(draftRef.current, rows));
+      }
+    } catch {
+      // the figures stay blank; the lines are the receipt's own
+    }
+  }, [commit, openMutation]);
 
   // ------------------------------------------------------------ header
   const chooseSupplier = useCallback(
@@ -174,63 +246,60 @@ export function useShortageReceipt(memory: ScreenMemoryOption) {
     [reloadOpen, update],
   );
   const patchHeader = useCallback((patch: HeaderPatch) => update((current) => setHeader(current, patch)), [update]);
-  const patchLine = useCallback((key: string, patch: LinePatch) => update((current) => editLine(current, key, patch)), [update]);
-  const selectLine = useCallback((key: string) => update((current) => setActive(current, key)), [update]);
+  const patchReceivedAt = useCallback((value: string) => update((current) => setReceivedAt(current, value)), [update]);
 
-  // --------------------------------------------------------- the names
-  /**
-   * A saved receipt carries its godown's and loadmen's ids only: their names
-   * come from the dropdowns the header picks them from. A failure leaves them
-   * blank — the ids still save back unchanged.
-   */
-  const resolveNames = useCallback(
-    async (payload: ShortageReceiptPayload): Promise<{ godownName: string; receivedBy: ShortageDraft["receivedBy"] }> => {
-      const godownId = text(payload.header.psrGodownId);
-      const crewIds = (payload.header.psrReceivedBy ?? []).map(String);
-      const branchId = text(payload.header.psrBranchId);
-      const nameOf = async (dropdownId: string, params: Record<string, string>, idKey: string, nameKey: string) => {
-        if (!dropdownId) {
-          return new Map<string, string>();
-        }
-        try {
-          const rows = await dropdownRowsMutation({ dropdownId, params }).unwrap();
-          return new Map(rows.map((row) => [text(row[idKey]), text(row[nameKey])]));
-        } catch {
-          return new Map<string, string>();
-        }
-      };
-      const [godowns, crew] = await Promise.all([
-        godownId ? nameOf(godownDropdownId, { ibranch_id: branchId }, "gdl_id", "gdl_name") : Promise.resolve(new Map<string, string>()),
-        crewIds.length > 0
-          ? nameOf(crewDropdownId, { iemp_branch_id: branchId, iemp_role: "" }, "emp_id", "emp_name")
-          : Promise.resolve(new Map<string, string>()),
-      ]);
-      return {
-        godownName: godowns.get(godownId) ?? "",
-        receivedBy: crewIds.map((id) => ({ id, text: crew.get(id) ?? "" })),
-      };
+  // ------------------------------------------------------------ the rows
+  const patchLine = useCallback(
+    (key: string, patch: LinePatch) => {
+      answered();
+      update((current) => editLine(current, key, patch));
     },
-    [crewDropdownId, dropdownRowsMutation, godownDropdownId],
+    [answered, update],
   );
-
-  /** A saved receipt on screen, with its names. */
-  const showPayload = useCallback(
-    async (payload: ShortageReceiptPayload, mode: "browse" | "entry") => {
-      const names = await resolveNames(payload);
-      openSeq.current += 1; // an open list still on its way belongs to the receipt that was
-      commit(draftFromPayload(payload, scopeRef.current, mode, names));
+  const typeReceive = useCallback(
+    (key: string, typed: string) => {
+      answered();
+      update((current) => setReceive(current, key, typed));
     },
-    [commit, resolveNames],
+    [answered, update],
+  );
+  const tick = useCallback(
+    (key: string, on?: boolean) => {
+      answered();
+      update((current) => (on === undefined ? toggleTick(current, key) : setTicked(current, key, on)));
+    },
+    [answered, update],
+  );
+  const selectLine = useCallback((key: string) => update((current) => setActive(current, key)), [update]);
+  const applyAllocs = useCallback(
+    (key: string, allocs: PurchaseAllocEntry[]) => {
+      answered();
+      update((current) => setLineAllocs(current, key, allocs));
+    },
+    [answered, update],
   );
 
   // ------------------------------------------------------------ opening
+  /** A saved receipt on screen (get / save / cancel answer), then its shortages' figures. */
+  const showPayload = useCallback(
+    (payload: ShortageReceiptPayload, mode: "browse" | "entry") => {
+      openSeq.current += 1; // an open list still on its way belongs to the receipt that was
+      const next = draftFromPayload(payload, scopeRef.current, mode);
+      commit(next);
+      setHint(loadedHint(next));
+      void mergeOpenFacts();
+      void fetchSignatures();
+    },
+    [commit, fetchSignatures, mergeOpenFacts],
+  );
+
   const load = useCallback(
     async (key: PurchaseDocKey, forEdit: boolean): Promise<boolean> => {
       setBusy("loading");
       try {
         const payload = await getMutation({ psrId: key.id, accYear: key.accYear || scopeRef.current.accYear }).unwrap();
-        await showPayload(payload, forEdit ? "entry" : "browse");
-        setHint("");
+        setRefusals([]);
+        showPayload(payload, forEdit ? "entry" : "browse");
         return true;
       } catch (error) {
         refuse(error, "Cannot open the receipt");
@@ -246,9 +315,55 @@ export function useShortageReceipt(memory: ScreenMemoryOption) {
   const reset = useCallback(() => {
     openSeq.current += 1;
     discarded.current = false;
+    setRefusals([]);
     commit(createDraft(scopeRef.current, todayIso()));
     setHint(HINT_PICK_SUPPLIER);
   }, [commit]);
+
+  /**
+   * Previous / Next (Alt+PgUp / Alt+PgDn; Qt Ctrl+PgUp / Ctrl+PgDn) — `GET
+   * /txn/adjacent`, docType SHORTAGE_RECEIPT. The receipt opens read only.
+   */
+  const stepDocument = useCallback(
+    async (previous: boolean): Promise<boolean> => {
+      if (busyRef.current !== null) {
+        return false;
+      }
+      const current = draftRef.current;
+      if (!current.psrId && !previous) {
+        setHint(stepEndNotice(true, false));
+        return false;
+      }
+      setBusy("loading");
+      let doc: TxnAdjacentDoc | null = null;
+      try {
+        const answer = await adjacentMutation({
+          docType: ADJACENT_DOC_TYPE,
+          companyId: current.companyId,
+          branchId: current.branchId,
+          accYear: current.accYear,
+          ...(current.psrId ? { docId: current.psrId } : {}),
+          direction: previous ? "prev" : "next",
+        }).unwrap();
+        doc = answer.doc;
+      } catch (error) {
+        refuse(error, "Cannot step");
+        return false;
+      } finally {
+        setBusy(null);
+      }
+      if (!doc) {
+        setHint(stepEndNotice(!current.psrId, previous));
+        return false;
+      }
+      discarded.current = false;
+      return load(
+        { id: doc.docId, companyId: doc.companyId, branchId: doc.branchId, accYear: doc.accYear, refno: doc.refno ?? "", status: doc.status },
+        false,
+      );
+    },
+    [adjacentMutation, load, refuse, setBusy],
+  );
 
   /** F2 — a draft that was only looked at opens for keying. */
   const beginEdit = useCallback(() => {
@@ -256,7 +371,7 @@ export function useShortageReceipt(memory: ScreenMemoryOption) {
   }, [update]);
 
   // ------------------------------------------------------------ writing
-  /** Save Draft / Post (Qt `saveDocument`) — answers the receipt as the server now has it. */
+  /** Save Draft / Post receipt (Qt `saveDocument`) — answers the receipt as the server now has it. */
   const save = useCallback(
     async (post: boolean): Promise<boolean> => {
       const current = draftRef.current;
@@ -268,16 +383,17 @@ export function useShortageReceipt(memory: ScreenMemoryOption) {
       setBusy(post ? "posting" : "saving");
       try {
         const answer = await saveMutation(buildSavePayload(current, post)).unwrap();
-        await showPayload(answer.data, "entry");
+        setRefusals([]);
+        showPayload(answer.data, "entry");
         const refno = text(answer.data.header.psrRefno);
         const sentence = post
-          ? `${refno} posted — the goods are in and the shortage cleared.`
+          ? `${refno} posted — the goods are in at the bill cost, the shortage cleared, its GST released.`
           : `${refno} saved as a draft. Its qty is held against the shortages.`;
         setHint(sentence);
         toast.success(sentence, { title: post ? "Posted" : "Saved" });
         return true;
       } catch (error) {
-        refuse(error);
+        refuse(error, "Not saved", true);
         return false;
       } finally {
         setBusy(null);
@@ -297,13 +413,13 @@ export function useShortageReceipt(memory: ScreenMemoryOption) {
       setBusy("cancelling");
       try {
         const answer = await cancelMutation({ psrId: current.psrId, accYear: current.accYear, reason }).unwrap();
-        await showPayload(answer.data, "browse");
-        const sentence = `${current.refno} cancelled.`;
-        setHint(answer.message || sentence);
+        showPayload(answer.data, "browse");
+        const sentence = `${current.refno} cancelled — the goods went out again, the shortage is open again.`;
+        setHint(sentence);
         toast.success(sentence, { title: "Cancelled" });
         return true;
       } catch (error) {
-        refuse(error);
+        refuse(error, "Not cancelled");
         return false;
       } finally {
         setBusy(null);
@@ -312,81 +428,44 @@ export function useShortageReceipt(memory: ScreenMemoryOption) {
     [cancelMutation, refuse, setBusy, showPayload],
   );
 
-  /** Supplier CN… / Write off… — the whole open qty of the selected row, closed without goods. */
-  const closeShortage = useCallback(
-    async (key: string, kind: CloseKind, words: string): Promise<boolean> => {
+  /**
+   * Close row… — the ticked open rows (else the current one), one POST
+   * /purchase/shortages/close each with the dialog's keys (Qt `closeRows`). What
+   * closed before a refusal stays closed: the list is read again either way.
+   */
+  const closeRows = useCallback(
+    async (body: ShortageCloseBody): Promise<boolean> => {
       const current = draftRef.current;
-      const line = current.lines.find((candidate) => candidate.key === key);
-      if (!line || !isFresh(current)) {
+      const rows = closeTargets(current);
+      if (!isFresh(current) || rows.length === 0) {
         return false;
       }
       setBusy("closing");
+      let done = 0;
       try {
-        const answer = await closeMutation({
-          shortageId: line.shortageId,
-          accYear: line.shortageYear,
-          deviceId: current.deviceId,
-          kind,
-          ...(kind === "SUPPLIER_CN" ? (words ? { cnNo: words } : {}) : { reason: words }),
-        }).unwrap();
-        const sentence = answer.message || "Shortage closed.";
-        toast.success(sentence, { title: kind === "SUPPLIER_CN" ? "Supplier credit" : "Written off" });
+        for (const row of rows) {
+          await closeMutation({ ...body, shortageId: row.shortageId, accYear: row.shortageYear, deviceId: current.deviceId }).unwrap();
+          done += 1;
+        }
+      } catch (error) {
         setBusy(null);
         await reloadOpen();
-        setHint(sentence);
-        return true;
-      } catch (error) {
-        setBusy(null);
-        refuse(error);
+        refuse(error, done === 0 ? "Not closed" : `Closed ${done}, then refused`);
         return false;
       }
+      setBusy(null);
+      commit(clearTicks(draftRef.current));
+      notice.current = closedNotice(rows.length, body.kind);
+      setHint(notice.current);
+      await reloadOpen();
+      return true;
     },
-    [closeMutation, refuse, reloadOpen, setBusy],
-  );
-
-  /** The selected row's standing closes, newest first — what Undo close… takes back. */
-  const standingCloses = useCallback(
-    async (key: string): Promise<ShortageCloseRow[] | null> => {
-      const line = draftRef.current.lines.find((candidate) => candidate.key === key);
-      if (!line) {
-        return null;
-      }
-      setBusy("loading");
-      try {
-        return await closesMutation({ shortageId: line.shortageId }).unwrap();
-      } catch (error) {
-        refuse(error, "Cannot read the closes");
-        return null;
-      } finally {
-        setBusy(null);
-      }
-    },
-    [closesMutation, refuse, setBusy],
-  );
-
-  const undoClose = useCallback(
-    async (close: ShortageCloseRow, reason: string): Promise<boolean> => {
-      setBusy("closing");
-      try {
-        const answer = await closeUndoMutation({ closeId: close.closeId, accYear: close.accYear, reason }).unwrap();
-        const sentence = answer.message || "Close undone.";
-        toast.success(sentence, { title: "Undone" });
-        setBusy(null);
-        await reloadOpen();
-        setHint(sentence);
-        return true;
-      } catch (error) {
-        setBusy(null);
-        refuse(error);
-        return false;
-      }
-    },
-    [closeUndoMutation, refuse, reloadOpen, setBusy],
+    [closeMutation, commit, refuse, reloadOpen, setBusy],
   );
 
   // ------------------------------------------------------ screen memory
   // Back on a remembered receipt: say so once and read the open list again —
-  // it may have moved while the operator was away (what was typed is kept).
+  // it may have moved while the operator was away (what was ticked is kept).
   const resumed = useRef(recalled !== null);
   useEffect(() => {
     if (!resumed.current) {
@@ -396,7 +475,7 @@ export function useShortageReceipt(memory: ScreenMemoryOption) {
     // One tick first: a request fired from the mount effect is torn down by StrictMode's simulated unmount.
     const timer = window.setTimeout(() => {
       toast.info(restoredMessage("shortage receipt"), RESTORED_MESSAGE_OPTIONS);
-      setHint(HINT_TYPE_RECEIVED);
+      setHint(HINT_TICK_ROWS);
       void reloadOpen();
     }, 0);
     return () => window.clearTimeout(timer);
@@ -424,19 +503,23 @@ export function useShortageReceipt(memory: ScreenMemoryOption) {
     busy,
     hint,
     setHint,
+    refusals,
     chooseSupplier,
     patchHeader,
+    patchReceivedAt,
     patchLine,
+    typeReceive,
+    tick,
     selectLine,
+    applyAllocs,
     reloadOpen,
     load,
     reset,
     beginEdit,
+    stepDocument,
     save,
     cancel,
-    closeShortage,
-    standingCloses,
-    undoClose,
+    closeRows,
     forgetRemembered,
   };
 }

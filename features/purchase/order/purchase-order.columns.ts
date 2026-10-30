@@ -1,7 +1,8 @@
 /**
  * The line grid's columns — ui_table 57's layout over the columns this screen
- * draws (`PO_COLUMN_NUMBERS`). Pure. The layout supplies titles, widths, order
- * and visibility; a column number the screen does not know (one the layout
+ * draws (`PO_COLUMN_NUMBERS`). Pure. Since the 2026-10-29 rebuild Qt
+ * `applyColumns` sets every title, shows every mockup column and moves them to
+ * the mockup's order, whatever the layout says — so does this; a column number the screen does not know (one the layout
  * grows later) is never drawn, and the hidden carriers (14 ItemId, 15 UomId,
  * 16 LineId) are fields of the line, not columns.
  *
@@ -30,18 +31,16 @@ export function resolvePoColumns(rows: readonly UiTableColumnRow[] | undefined):
   for (const no of PO_COLUMN_NUMBERS) {
     const row = byNumber.get(no);
     const fallback = PO_FALLBACK_COLUMNS[no];
-    if (row && row.uiTblClmColumnVisibility === false) {
-      continue;
-    }
     const stored = row && typeof row.uiTblClmColumnWidth === "number" && row.uiTblClmColumnWidth > 0 ? row.uiTblClmColumnWidth : 0;
+    // Qt applyColumns: the mockup's titles, widths and order win over the layout's
     placed.push({
       no,
-      header: (row?.uiTblClmName ?? "").trim() || fallback?.title || "",
-      width: stored || fallback?.width || 6,
-      position: row && Number.isFinite(Number(row.uiTblClmColumnPosition)) ? Number(row.uiTblClmColumnPosition) : no,
+      header: fallback?.title || (row?.uiTblClmName ?? "").trim() || "",
+      width: fallback?.width || stored || 6,
+      position: PO_COLUMN_NUMBERS.indexOf(no),
     });
   }
-  placed.sort((left, right) => left.position - right.position || left.no - right.no);
+  placed.sort((left, right) => left.position - right.position);
   const total = placed.reduce((sum, column) => sum + column.width, 0) || 1;
   return placed.map((column) => ({ no: column.no, header: column.header, widthPct: (column.width / total) * 100 }));
 }

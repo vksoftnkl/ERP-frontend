@@ -85,6 +85,12 @@ export const MENU_ROUTES: Readonly<Record<number, MenuRoute>> = {
   196: { href: "/purchase/grn" },
   25: { href: "/purchase/purchase-return" },
   195: { href: "/purchase/shortage-receipt" },
+  // Qt NexERP 97a5b48 / 6c6b5c2: Agents, Supplier–Item Map, Reorder → PO.
+  28: { href: "/master/purchase-agents" },
+  295: { href: "/master/supplier-items" },
+  296: { href: "/purchase/reorder" },
+  // Qt NexERP 2026-10-29: Supplier Dues (claims + shortages on one page).
+  297: { href: "/purchase/supplier-dues" },
 
   // Inventory
   3: { iconKey: "inventory" },

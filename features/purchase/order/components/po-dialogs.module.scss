@@ -1,0 +1,119 @@
+/**
+ * The Purchase Order popups (Merge…, Versions…, the amendment's question) —
+ * inside the quotation ModalShell, whose header / footer / buttons they use.
+ */
+@function u($n) {
+  @return calc(#{$n} * var(--erp-q-u, 1rem));
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.5);
+  min-width: 0;
+}
+
+.note {
+  margin: 0;
+  color: var(--text-muted, #555555);
+  line-height: 1.4;
+}
+
+.empty {
+  margin: 0;
+  padding: u(0.6) 0;
+  color: var(--text-muted, #555555);
+  font-style: italic;
+}
+
+.input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: u(0.3) u(0.45);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, u(0.25));
+  font: inherit;
+}
+
+.input:focus {
+  outline: 2px solid var(--primary-soft, #e9b9b9);
+  outline-offset: 0;
+  border-color: var(--primary, #7b1515);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: u(0.5);
+  width: 100%;
+}
+
+.problem {
+  margin-right: auto;
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------- merge */
+.choiceList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: u(16);
+  overflow-y: auto;
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, u(0.25));
+}
+
+.choiceList li + li {
+  border-top: 1px solid var(--border-soft, #e6e6e6);
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: u(0.5);
+  padding: u(0.35) u(0.5);
+  cursor: pointer;
+}
+
+.choice:hover {
+  background: var(--surface-muted, #f6f6f6);
+}
+
+/* ---------------------------------------------------------- versions */
+.tableWrap {
+  max-height: u(20);
+  overflow: auto;
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, u(0.25));
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  padding: u(0.3) u(0.5);
+  border-bottom: 1px solid var(--border-soft, #e6e6e6);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--table-header-bg, #f2f2f2);
+}
+
+.table .num {
+  text-align: right;
+}
+
+.table .what {
+  width: 100%;
+  white-space: normal;
+}

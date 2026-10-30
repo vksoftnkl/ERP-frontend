@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { UiTableColumnRow } from "@/features/sales/quotation/quotation.types";
 import { resolveLineColumns } from "./invoice.columns";
-import { COL, SHOWN_COLUMNS } from "./invoice.constants";
+import { COL, MORE_COLUMN_NOS, SHOWN_COLUMNS } from "./invoice.constants";
 import {
   allocsOf,
   buildPayload,
@@ -332,7 +332,7 @@ describe("purchase invoice — a stored bill (Qt applyLoaded)", () => {
   it("keeps a line split into several batches as it was, and shuts its batch cells", () => {
     const draft = draftFromPayload(STORED, "entry");
     const split = draft.lines[2];
-    expect(split.batch).toBe("2 batches");
+    expect(split.batch).toBe("2 batches (F12)");
     expect(whyNotEditable(split, COL.Batch)).toContain("2 batches");
     expect(allocsOf(split)).toEqual([
       { godownId: "gd-1", bucket: "SALEABLE", batchNo: "B1", qty: 3 },
@@ -383,8 +383,13 @@ describe("purchase invoice — small rules", () => {
 });
 
 describe("purchase invoice — the line columns", () => {
-  it("falls back to the Qt 19 columns, and ignores the later ones", () => {
-    expect(resolveLineColumns(undefined).map((column) => column.no)).toEqual([...SHOWN_COLUMNS]);
+  it("falls back to the Qt columns, the price and textile ones only under their rules", () => {
+    const allRules = { priceUpdate: true, autoBatchNo: true };
+    expect(resolveLineColumns(undefined, allRules).map((column) => column.no)).toEqual(
+      SHOWN_COLUMNS.filter((no) => !MORE_COLUMN_NOS.has(no)),
+    );
+    const allMore = new Set(MORE_COLUMN_NOS);
+    expect(resolveLineColumns(undefined, allRules, allMore).map((column) => column.no)).toEqual([...SHOWN_COLUMNS]);
     const rows: UiTableColumnRow[] = [
       { uiTblClmId: "1", uiTblClmNo: "1", uiTblClmName: "Item", uiTblClmColumnWidth: 9, uiTblClmColumnVisibility: true, uiTblClmColumnFocus: false, uiTblClmColumnPosition: 10, uiTblClmColumnNecessity: false },
       { uiTblClmId: "2", uiTblClmNo: "0", uiTblClmName: "Barcode", uiTblClmColumnWidth: 4, uiTblClmColumnVisibility: true, uiTblClmColumnFocus: false, uiTblClmColumnPosition: 20, uiTblClmColumnNecessity: false },
@@ -392,10 +397,16 @@ describe("purchase invoice — the line columns", () => {
       { uiTblClmId: "4", uiTblClmNo: "2", uiTblClmName: "Unit", uiTblClmColumnWidth: 3, uiTblClmColumnVisibility: false, uiTblClmColumnFocus: false, uiTblClmColumnPosition: 30, uiTblClmColumnNecessity: false },
     ];
     const columns = resolveLineColumns(rows);
-    expect(columns[0].no).toBe(COL.Item);
-    expect(columns[1].no).toBe(COL.Barcode);
-    expect(columns.some((column) => column.no === 33)).toBe(false);
+    // The mockup's order wins over the layout's positions (Qt moveSection).
+    expect(columns[0].no).toBe(COL.Barcode);
+    expect(columns[1].no).toBe(COL.Item);
+    // Sell A only while the bill keys selling prices.
+    expect(columns.some((column) => column.no === COL.SellA)).toBe(false);
     expect(columns.some((column) => column.no === COL.Unit)).toBe(false);
+    const priced = resolveLineColumns(rows, { priceUpdate: true, autoBatchNo: false });
+    expect(priced.findIndex((column) => column.no === COL.SellA)).toBeGreaterThan(priced.findIndex((column) => column.no === COL.CostWot));
+    expect(priced.find((column) => column.no === COL.DiscPct)?.header).toBe("Disc");
+    expect(priced.some((column) => column.no === COL.Size)).toBe(false);
     const total = columns.reduce((sum, column) => sum + column.widthPct, 0);
     expect(Math.round(total)).toBe(100);
   });

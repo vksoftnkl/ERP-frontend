@@ -1,12 +1,13 @@
 /**
- * The line grid's columns — ui_table 58's layout (titles, widths, order,
- * visibility) over the columns this screen draws (`DRAWN_COLUMNS`, the Qt
- * `GrnCols`). Rows join on `ui_tbl_clm_no`, the number the Qt grid writes its
- * cells by. Later columns of the table (Size, Sell A, Excess …) are never drawn.
- * Pure.
+ * The line grid's columns — the Qt `GrnEntry::applyColumns` of the 2026-10-29
+ * rebuild: the mockup's order and titles, the `ColumnWeights` proportions (no
+ * sideways scroll at 1560 px), whatever ui_table 58 says. Qt renames and moves
+ * every section itself and shows the mockup's columns 32.. that ui_table 58 does
+ * not register yet, so the layout rows no longer decide anything here. Size /
+ * Colour / Model, Sell A–D and Excess show only under the screen's rule
+ * (`hidden`). Pure.
  */
-import type { UiTableColumnRow } from "@/features/sales/quotation/quotation.types";
-import { DRAWN_COLUMNS, FALLBACK_COLUMNS, type ColumnNo } from "./grn.constants";
+import { DRAWN_COLUMNS, FALLBACK_COLUMNS, TEXTILE_WEIGHTS, type ColumnNo } from "./grn.constants";
 
 export type GrnColumn = {
   no: ColumnNo;
@@ -15,30 +16,12 @@ export type GrnColumn = {
   widthPct: number;
 };
 
-export function resolveGrnColumns(rows: readonly UiTableColumnRow[] | undefined): GrnColumn[] {
-  const byNumber = new Map<number, UiTableColumnRow>();
-  for (const row of rows ?? []) {
-    const no = Number.parseInt(String(row.uiTblClmNo ?? ""), 10);
-    if (Number.isFinite(no) && !byNumber.has(no)) {
-      byNumber.set(no, row);
-    }
-  }
-  const placed = DRAWN_COLUMNS.filter((no) => byNumber.get(no)?.uiTblClmColumnVisibility !== false).map((no) => {
-    const row = byNumber.get(no);
-    const fallback = FALLBACK_COLUMNS[no];
-    const width =
-      row && typeof row.uiTblClmColumnWidth === "number" && row.uiTblClmColumnWidth > 0
-        ? row.uiTblClmColumnWidth
-        : fallback.width;
-    const position = row ? Number(row.uiTblClmColumnPosition) : Number.NaN;
-    return {
-      no,
-      header: (row?.uiTblClmName ?? "").trim() || fallback.title,
-      width,
-      position: Number.isFinite(position) ? position : no,
-    };
-  });
-  placed.sort((a, b) => a.position - b.position || a.no - b.no);
+export function resolveGrnColumns(hidden: ReadonlySet<number> = new Set(), textile = false): GrnColumn[] {
+  const placed = DRAWN_COLUMNS.filter((no) => !hidden.has(no)).map((no) => ({
+    no,
+    header: FALLBACK_COLUMNS[no].title,
+    width: (textile ? TEXTILE_WEIGHTS[no] : undefined) ?? FALLBACK_COLUMNS[no].width,
+  }));
   const total = placed.reduce((sum, column) => sum + column.width, 0) || 1;
   return placed.map((column) => ({ no: column.no, header: column.header, widthPct: (column.width / total) * 100 }));
 }

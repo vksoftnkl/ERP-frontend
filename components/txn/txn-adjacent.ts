@@ -37,7 +37,13 @@ export type TxnAdjacentDocType =
   | "SALE_RETURN"
   | "RECEIPT"
   | "PAYMENT"
-  | "VOUCHER";
+  | "VOUCHER"
+  // The purchase documents (server 2fa24c7b, Qt 7c809f9 PurchaseDocNav).
+  | "PURCHASE_ORDER"
+  | "GRN"
+  | "PURCHASE_BILL"
+  | "PURCHASE_RETURN"
+  | "SHORTAGE_RECEIPT";
 
 export type TxnAdjacentQuery = {
   docType: TxnAdjacentDocType;
