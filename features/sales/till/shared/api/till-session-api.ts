@@ -67,6 +67,7 @@ import type {
 type Params = Record<string, string | number | boolean | undefined>;
 
 export const tillSessionApi = baseApi.injectEndpoints({
+  overrideExisting: true,
   endpoints: (builder) => ({
     tillSessionScreenRead: builder.mutation<unknown, { url: string; params: Params }>({
       query: ({ url, params }) => ({ url, method: "GET", params }),

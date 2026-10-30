@@ -199,14 +199,19 @@ ssh root@<vps-host> 'cd /opt/erp-front && sudo -u erp-front HOME=/opt/erp-front 
 `deploy.sh` does the following:
 
 1. `git fetch` and `git reset --hard origin/dev`.
-2. `npm ci --omit=dev`, but only when `package.json` or the lockfile changed, or
-   when HEAD did not move (a forced redeploy).
+2. `npm ci --omit=dev`, but only when `package.json` or the lockfile changed,
+   when `node_modules` is missing, or when you pass `--clean`
+   (`deploy.sh dev --clean`).
 3. Refuses to build if `.env.production` has no `NEXT_PUBLIC_API_BASE`. Without
    it the bundle would point at localhost.
-4. Builds into `.next-build` with `ensure-build.js --strict`. A failed build
-   fails the deploy; it never falls back to the old bundle.
-5. Swaps `.next-build` into `.next` and keeps the previous build as `.next.previous`.
-6. Runs `pm2 reload` and `pm2 save`, then waits up to 90 s for a 200 on `:3001`.
+4. Builds into `.next-build` with `ensure-build.js --strict` and
+   `NEXT_SKIP_TYPECHECK=1`. A failed build fails the deploy; it never falls back
+   to the old bundle.
+5. Type-checks with `tsc --incremental`, caching in
+   `/opt/erp-front/cache/tsbuildinfo`. A type error fails the deploy before the
+   swap.
+6. Swaps `.next-build` into `.next` and keeps the previous build as `.next.previous`.
+7. Runs `pm2 reload` and `pm2 save`, then waits up to 90 s for a 200 on `:3001`.
 
 The old bundle keeps serving the site during the build, and a failed build
 changes nothing.
@@ -235,6 +240,12 @@ Traps:
   `npm start` runs the build gate.
 - `next build` peaks at about 1 GB of memory. `deploy.sh` sets
   `--max-old-space-size=2048`.
+- `next build`'s own type check is skipped on the VPS
+  (`NEXT_SKIP_TYPECHECK=1`, read in `next.config.mjs`). Next 16 writes its
+  incremental cache before computing the diagnostics, so that check never
+  reuses anything and took about 5.5 minutes per deploy. `tsc` caches correctly:
+  an unchanged tree checks in about 40 seconds. A cold run, after the cache file
+  is deleted, still takes about 6 minutes.
 
 ### Live config sync
 

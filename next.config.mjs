@@ -21,6 +21,11 @@ const nextConfig = {
   // (no devDependencies) can still typecheck and build.
   typescript: {
     tsconfigPath: "tsconfig.build.json",
+    // The VPS deploy type-checks with `tsc --incremental` instead: Next writes
+    // its incremental cache before computing the diagnostics, so its own check
+    // never reuses anything and cost ~5.5 min per deploy. Unset everywhere else,
+    // so local and CI builds still type-check here.
+    ignoreBuildErrors: process.env.NEXT_SKIP_TYPECHECK === "1",
   },
   // A deploy builds into a scratch directory and then swaps it into place, so
   // `next build` never rewrites the `.next` the running server is serving from
