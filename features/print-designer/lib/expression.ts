@@ -65,6 +65,15 @@ const TOKEN_PATTERN = /(\.)?\b([A-Za-z_][A-Za-z0-9_]*)\b\s*(\()?/g;
 /** jexl keywords and literals that look like identifiers but are not roots. */
 const RESERVED = new Set(["true", "false", "null", "undefined", "in", "and", "or", "not"]);
 
+/**
+ * Text that ends in a transform pipe -- a LONE `|`.
+ *
+ * The second bar of jexl's logical `||` is not a pipe. Reading it as one turned
+ * `{{ header.bag_no || header.seal_no }}` into "unknown transform 'header'", an
+ * error, and an error disables Save -- on a design the server accepts.
+ */
+const ENDS_IN_PIPE = /(?<!\|)\|\s*$/;
+
 function lintSpanSource(
   source: string,
   allowedRoots: ReadonlySet<string>,
@@ -94,7 +103,7 @@ function lintSpanSource(
   while (match !== null) {
     const [, dotPrefix, name, callSuffix] = match;
     const precedingText = code.slice(0, match.index);
-    const afterPipe = /\|\s*$/.test(precedingText);
+    const afterPipe = ENDS_IN_PIPE.test(precedingText);
 
     if (afterPipe) {
       if (!transforms.has(name)) {
@@ -142,7 +151,7 @@ export function templateRoots(template: string | undefined | null): Set<string> 
     let match = TOKEN_PATTERN.exec(code);
     while (match !== null) {
       const [, dotPrefix, name, callSuffix] = match;
-      const afterPipe = /\|\s*$/.test(code.slice(0, match.index));
+      const afterPipe = ENDS_IN_PIPE.test(code.slice(0, match.index));
       if (!dotPrefix && !callSuffix && !afterPipe && !RESERVED.has(name) && !/^\d/.test(name)) {
         roots.add(name);
       }
@@ -266,7 +275,7 @@ export function completionsAt(
   const spanText = before.slice(lastOpen + 2);
   const transforms = context.transforms ?? TRANSFORM_NAMES;
 
-  const pipeMatch = /\|\s*([A-Za-z_][A-Za-z0-9_]*)?$/.exec(spanText);
+  const pipeMatch = /(?<!\|)\|\s*([A-Za-z_][A-Za-z0-9_]*)?$/.exec(spanText);
   if (pipeMatch) {
     const prefix = (pipeMatch[1] ?? "").toLowerCase();
     return transforms

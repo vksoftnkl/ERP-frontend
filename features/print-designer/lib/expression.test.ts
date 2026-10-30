@@ -55,6 +55,17 @@ describe("lintTemplateString", () => {
     expect(lintTemplateString("{{ row.qty|round }}", [])).toEqual([]);
   });
 
+  it("reads a logical || as an operator, not a pipe", () => {
+    // TillRemitA5's visibility condition; it used to lint as
+    // "unknown transform 'header'", and that error kept Save disabled.
+    expect(
+      lintTemplateString("{{ header.bag_no || header.seal_no }}", ["header"]),
+    ).toEqual([]);
+    expect(lintTemplateString("{{ row.a || row.b|frobnicate }}", [])[0].message).toContain(
+      "unknown transform 'frobnicate'",
+    );
+  });
+
   it("does not read a string literal as code", () => {
     // '#,##0.00' contains no identifiers; a naive scanner would flag the mask.
     expect(lintTemplateString("{{ fmt(row.qty, '#,##0.00') }}", [])).toEqual([]);
@@ -80,6 +91,10 @@ describe("templateRoots", () => {
     ]);
     expect([...templateRoots("Tax Invoice")]).toEqual([]);
     expect([...templateRoots(undefined)]).toEqual([]);
+  });
+
+  it("keeps the root on the right of a logical ||", () => {
+    expect([...templateRoots("{{ row.qty || header.qty }}")].sort()).toEqual(["header", "row"]);
   });
 });
 
@@ -116,6 +131,13 @@ describe("completionsAt", () => {
     const template = "{{ row.qty|ro";
     const items = completionsAt(template, template.length, context);
     expect(items.map((item) => item.label)).toEqual(["round"]);
+  });
+
+  it("offers roots, not transforms, after a logical ||", () => {
+    const template = "{{ row.qty || p";
+    expect(completionsAt(template, template.length, context).map((item) => item.label)).toEqual([
+      "page",
+    ]);
   });
 
   it("offers roots at the start of a span", () => {
