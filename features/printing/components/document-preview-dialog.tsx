@@ -45,6 +45,7 @@ import {
   type RenderPreviewResult,
 } from "@/features/printing/api/render";
 import {
+  answersForRevision,
   buildDocumentPreviewRequest,
   revisionForPreview,
 } from "@/features/printing/domain/printOptions";
@@ -82,7 +83,7 @@ export type DocumentPreviewDialogProps = {
   /**
    * Answers to the revision's own prompts, by prompt name — a report's period
    * and switches (the Ledger Statement's from_date / to_date ...). Documents
-   * send none.
+   * send none. Only the names the rendered revision declares are sent.
    */
   params?: Record<string, unknown> | null;
   /** What the header calls this — "Quotation quo00034", or "3 Bills". */
@@ -143,11 +144,8 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
    * `docIds` is a fresh array on every parent render, so it cannot be a
    * dependency or the render-once guard below would fire forever. The joined
    * string is what actually changes when the operator ticks a different set.
-   * The prompt answers are the same kind of fresh object, so they travel as
-   * their JSON for the same reason.
    */
   const docKey = docIds.join(",");
-  const paramsKey = params && Object.keys(params).length > 0 ? JSON.stringify(params) : "";
 
   // `/print-template/get` — the revisions live on the template, and which one
   // to render is not something a print button can know.
@@ -192,6 +190,12 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
   }, []);
 
   const versionId = revisionForPreview(template.data, ptvId);
+
+  // Only the prompts THIS revision declares — see `answersForRevision`. The
+  // answers are a fresh object per parent render, so like `docIds` they travel
+  // as their JSON to keep the render-once guard stable.
+  const answers = answersForRevision(template.data, versionId, params);
+  const paramsKey = answers && Object.keys(answers).length > 0 ? JSON.stringify(answers) : "";
 
   /**
    * Put this in `print_log` — PREVIEW when the popup opens on the paper, PRINT

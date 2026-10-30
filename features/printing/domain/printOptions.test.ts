@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  answersForRevision,
   buildDocumentPreviewRequest,
   firstAssignment,
   printableAssignments,
@@ -185,6 +186,44 @@ describe("revisionForPreview", () => {
   it("is null when there is nothing to render", () => {
     expect(revisionForPreview(undefined)).toBeNull();
     expect(revisionForPreview(template({ versions: [] }))).toBeNull();
+  });
+});
+
+describe("answersForRevision", () => {
+  const ledgerAnswers = { from_date: "2026-04-01", to_date: "2027-03-31", show_legs: "false" };
+  const declaring = (ptvId: string, names: string[]) =>
+    ({
+      ...version(ptvId, 1),
+      ptvParams: names.map((name) => ({ name, type: "TEXT", required: false })),
+    }) as PrintTemplatePayload["versions"][number];
+
+  it("keeps only the prompts the revision declares", () => {
+    const payload = template({ versions: [declaring("rev-1", ["from_date", "to_date"])] });
+    expect(answersForRevision(payload, "rev-1", ledgerAnswers)).toEqual({
+      from_date: "2026-04-01",
+      to_date: "2027-03-31",
+    });
+  });
+
+  it("sends nothing to a revision that asks nothing (the live 'It asks for: nothing' refusal)", () => {
+    const payload = template({ versions: [declaring("rev-1", [])] });
+    expect(answersForRevision(payload, "rev-1", ledgerAnswers)).toEqual({});
+    const unset = template({ versions: [version("rev-1", 1)] });
+    expect(answersForRevision(unset, "rev-1", ledgerAnswers)).toEqual({});
+  });
+
+  it("reads the revision being rendered, not another one", () => {
+    const payload = template({
+      versions: [declaring("rev-1", []), declaring("rev-2", ["from_date"])],
+    });
+    expect(answersForRevision(payload, "rev-2", ledgerAnswers)).toEqual({ from_date: "2026-04-01" });
+  });
+
+  it("is undefined until there are answers and a known revision", () => {
+    const payload = template({ versions: [declaring("rev-1", ["from_date"])] });
+    expect(answersForRevision(payload, "rev-1", null)).toBeUndefined();
+    expect(answersForRevision(payload, null, ledgerAnswers)).toBeUndefined();
+    expect(answersForRevision(payload, "rev-x", ledgerAnswers)).toBeUndefined();
   });
 });
 

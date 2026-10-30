@@ -28,6 +28,7 @@
  * bill rather than an empty page asking for an id.
  */
 
+import { parseParams } from "./draft";
 import { RUNG_ORDER, rungOfServerScope } from "./ladder";
 import type { RenderPreviewRequest } from "../api/render";
 import type {
@@ -163,6 +164,33 @@ export function revisionForPreview(
     version.ptvRevNo > best.ptvRevNo ? version : best,
   );
   return newest.ptvId ?? null;
+}
+
+/**
+ * The screen's prompt answers that the revision being rendered actually asks for.
+ *
+ * A report screen (the Ledger Statement) answers the prompts of the design it
+ * was built against, but the design that prints is whatever the assignment
+ * ladder or the operator's Format choice lands on, which may declare fewer of
+ * them or none. The server refuses an answer to a prompt the revision lacks
+ * (it is usually a typo when typed by hand), so sending the screen's whole set
+ * would make every such design unprintable from the screen. Only the declared
+ * names go, which is exactly what that design can use anyway.
+ *
+ * Returns undefined when the revision is not known yet. The dialog renders only
+ * once a revision is chosen, so that state never reaches the wire.
+ */
+export function answersForRevision(
+  template: PrintTemplatePayload | undefined,
+  versionId: string | null,
+  answers: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | undefined {
+  if (!answers || !versionId) return undefined;
+  const version = (template?.versions ?? []).find((one) => one.ptvId === versionId);
+  if (!version) return undefined;
+
+  const declared = new Set(parseParams(version.ptvParams).map((param) => param.name));
+  return Object.fromEntries(Object.entries(answers).filter(([name]) => declared.has(name)));
 }
 
 export type DocumentPreviewInput = {
