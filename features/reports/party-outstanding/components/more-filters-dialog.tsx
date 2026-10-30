@@ -1,16 +1,13 @@
 "use client";
 /**
  * More filters (F8): the 3.0 filters the mockup's strip has no room for —
- * Salesman, Collection day, Party, Due days ≥ / ≤ (plan §6.1). A deliberate
+ * Salesman, Collection day, Due days ≥ / ≤ (plan §6.1). A deliberate
  * deviation from the mockup, named in the plan so it is not a surprise.
+ * Party moved to the strip (2026-10-29), where it can be searched.
  *
  * It edits a COPY. Cancel (or Esc, or the backdrop) drops the copy, so the
  * draft is exactly what it was. Reset clears the copy. Apply hands it back and
  * runs Show.
- *
- * Party: there is no party search among the report's routes, so the popup
- * offers the party focused in the grid (or the one already applied). Typing a
- * name to find a party is a server ask (`/parties` takes no search key yet).
  *
  * The overlay is the house three-part one (ModalPortal, an isolated overlay
  * with no background, its own backdrop, a pre-promoted panel), so the grid
@@ -26,7 +23,6 @@ import { COLLECTION_DAYS, type CollectionDay, type OptionsPayload, type Outstand
 export type MoreFilters = {
   salesmanId: string | null;
   collectionDay: CollectionDay | null;
-  partyId: string | null;
   minDueDays: number | null;
   maxDueDays: number | null;
 };
@@ -34,7 +30,6 @@ export type MoreFilters = {
 export const EMPTY_MORE: MoreFilters = {
   salesmanId: null,
   collectionDay: null,
-  partyId: null,
   minDueDays: null,
   maxDueDays: null,
 };
@@ -55,20 +50,16 @@ export function dayName(day: CollectionDay): string {
 
 /** How many of the popup's filters are set, for the button's badge. */
 export function moreCount(more: MoreFilters): number {
-  return [more.salesmanId, more.collectionDay, more.partyId, more.minDueDays, more.maxDueDays].filter(
+  return [more.salesmanId, more.collectionDay, more.minDueDays, more.maxDueDays].filter(
     (value) => value !== null,
   ).length;
 }
 
-/** "Salesman: Ravi · Collection: Thu · Party: … · Due days ≥ 10" — the line under the strip. */
-export function moreSummary(
-  more: MoreFilters,
-  names: { salesman: (id: string) => string | null; party: (id: string) => string | null },
-): string {
+/** "Salesman: Ravi · Collection: Thu · Due days ≥ 10" — the line under the strip. */
+export function moreSummary(more: MoreFilters, names: { salesman: (id: string) => string | null }): string {
   const parts: string[] = [];
   if (more.salesmanId) parts.push(`Salesman: ${names.salesman(more.salesmanId) ?? "(one salesman)"}`);
   if (more.collectionDay) parts.push(`Collection: ${dayName(more.collectionDay)}`);
-  if (more.partyId) parts.push(`Party: ${names.party(more.partyId) ?? "(one party)"}`);
   if (more.minDueDays !== null && more.maxDueDays !== null) {
     parts.push(`Due days ${more.minDueDays} – ${more.maxDueDays}`);
   } else if (more.minDueDays !== null) {
@@ -88,14 +79,11 @@ type Props = {
   side: OutstandingSide;
   value: MoreFilters;
   options: OptionsPayload | null;
-  /** The party focused in the grid, offered as the Party filter. */
-  focused: { partyId: string; name: string } | null;
-  partyName: (id: string) => string | null;
   onApply: (next: MoreFilters) => void;
   onCancel: () => void;
 };
 
-export function MoreFiltersDialog({ side, value, options, focused, partyName, onApply, onCancel }: Props) {
+export function MoreFiltersDialog({ side, value, options, onApply, onCancel }: Props) {
   const receivable = side === "RECEIVABLE";
   const [copy, setCopy] = useState<MoreFilters>(value);
   const [minText, setMinText] = useState(value.minDueDays === null ? "" : String(value.minDueDays));
@@ -119,11 +107,6 @@ export function MoreFiltersDialog({ side, value, options, focused, partyName, on
     setMinText("");
     setMaxText("");
   };
-
-  const partyChoice = copy.partyId ?? focused?.partyId ?? null;
-  const partyLabel = partyChoice
-    ? (partyName(partyChoice) ?? (focused?.partyId === partyChoice ? focused.name : "(the party in the link)"))
-    : null;
 
   return (
     <ModalPortal>
@@ -187,24 +170,11 @@ export function MoreFiltersDialog({ side, value, options, focused, partyName, on
               </>
             ) : null}
 
-            <span className={styles.fieldLabel}>Party</span>
-            <label className={styles.check}>
-              <input
-                type="checkbox"
-                autoFocus={!receivable}
-                disabled={!partyChoice}
-                checked={copy.partyId !== null}
-                onChange={(event) =>
-                  setCopy((c) => ({ ...c, partyId: event.target.checked ? partyChoice : null }))
-                }
-              />
-              {partyLabel ? `Only ${partyLabel}` : "Focus a party in the grid first"}
-            </label>
-
             <span className={styles.fieldLabel}>Due days</span>
             <span className={styles.field}>
               ≥
               <input
+                autoFocus={!receivable}
                 className={cx(styles.input, styles.inputDays)}
                 value={minText}
                 inputMode="numeric"

@@ -100,6 +100,14 @@ export type PrintOptionsDialogProps = {
   targets: DocumentPrintTarget[];
   /** Overrides the "Godown Delivery Chit" in the question. Defaults to the purpose's name. */
   documentLabel?: string;
+  /**
+   * A design CODE to start on, as if the operator had chosen it under Format —
+   * for a screen with two papers for one purpose (Party Outstanding: the
+   * party-wise list, or the bill-wise one from its Bill-wise tab). "use the
+   * default" still goes back to the configured design. A code that is not
+   * drawn here (or is withdrawn) is said so, and the default prints.
+   */
+  preferredTemplateCode?: string;
 };
 
 /** How many configured designs to offer before the list is a scrolling problem. */
@@ -108,7 +116,7 @@ const ASSIGNMENT_LIMIT = 100;
 const TEMPLATE_LIMIT = 100;
 
 export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
-  const { open, onClose, purposeCode, targets, documentLabel } = props;
+  const { open, onClose, purposeCode, targets, documentLabel, preferredTemplateCode } = props;
 
   /*
    * The documents, and the one that speaks for the batch's scope.
@@ -156,6 +164,8 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
   const [selectedFormat, setSelectedFormat] = useState<FormatOption | null>(
     null,
   );
+  /** The caller's preferred design stands until a choice replaces it. */
+  const [usePreferred, setUsePreferred] = useState(true);
   /** The design the popup is showing, once one of the three has picked it. */
   const [previewing, setPreviewing] = useState<{
     ptlId: string;
@@ -250,6 +260,30 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
     [templateList.data?.items],
   );
 
+  const preferredCode = preferredTemplateCode?.trim().toUpperCase() ?? "";
+  const preferredFormat = useMemo(() => {
+    if (!preferredCode) return null;
+    const template = (templateList.data?.items ?? []).find(
+      (item) =>
+        item.ptlIsActive !== false &&
+        item.ptlCode?.trim().toUpperCase() === preferredCode,
+    );
+    return template
+      ? (options.find((option) => option.ptlId === template.ptlId) ?? null)
+      : null;
+  }, [options, preferredCode, templateList.data?.items]);
+  /** The format the buttons act on: a chosen one, else the caller's preferred one. */
+  const format = selectedFormat ?? (usePreferred ? preferredFormat : null);
+  /** The preferred design is still being looked up: acting now would print the default. */
+  const preferredPending =
+    Boolean(preferredCode) && usePreferred && !selectedFormat && templateList.isLoading;
+  const preferredMissing =
+    Boolean(preferredCode) &&
+    usePreferred &&
+    !selectedFormat &&
+    !preferredFormat &&
+    Boolean(templateList.data);
+
   const hasAssignment = Boolean(
     firstAssignment(assignmentList.data?.items, purpose?.ppoId ?? ""),
   );
@@ -261,6 +295,7 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
       setStep("ask");
       setChosenPtlId("");
       setSelectedFormat(null);
+      setUsePreferred(true);
       setPreviewing(null);
     }
   }, [open]);
@@ -271,9 +306,9 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
   // of the list — otherwise OK would silently change the choice.
   useEffect(() => {
     if (step === "format" && !chosenPtlId && options[0]) {
-      setChosenPtlId(selectedFormat?.ptlId ?? options[0].ptlId);
+      setChosenPtlId(format?.ptlId ?? options[0].ptlId);
     }
-  }, [chosenPtlId, options, selectedFormat, step]);
+  }, [chosenPtlId, format, options, step]);
 
   if (!open || !primary) {
     // No targets is not an error state worth rendering a popup for — it means a
@@ -366,10 +401,13 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
    * chosen one. No revision is named with it, so the popup takes the design's
    * published revision, else its newest.
    */
-  const designForAction = (): { ptlId: string; ptvId: string | null } | null =>
-    selectedFormat
-      ? { ptlId: selectedFormat.ptlId, ptvId: null }
-      : resolveForViewing();
+  const designForAction = (): { ptlId: string; ptvId: string | null } | null => {
+    if (preferredPending) {
+      toast.info("Still loading the designs…");
+      return null;
+    }
+    return format ? { ptlId: format.ptlId, ptvId: null } : resolveForViewing();
+  };
 
   const onPreview = (): void => {
     const design = designForAction();
@@ -403,8 +441,12 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
   const onPdf = (): void => {
     // A chosen format wins here too; without one this is "the usual design,
     // without asking" — the first assignment.
-    if (selectedFormat) {
-      showPreview(selectedFormat.ptlId);
+    if (preferredPending) {
+      toast.info("Still loading the designs…");
+      return;
+    }
+    if (format) {
+      showPreview(format.ptlId);
       return;
     }
     const first = firstAssignment(
@@ -492,16 +534,23 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
                     been chosen: before that they use whatever this counter is
                     configured for, and naming that would be stating the
                     default as though it were a decision. */}
-                {selectedFormat ? (
+                {format ? (
                   <p className={styles.muted} style={{ margin: 0 }}>
-                    Format: <strong>{selectedFormat.label}</strong>{" "}
+                    Format: <strong>{format.label}</strong>{" "}
                     <button
                       type="button"
                       className={styles.link}
-                      onClick={() => setSelectedFormat(null)}
+                      onClick={() => {
+                        setSelectedFormat(null);
+                        setUsePreferred(false);
+                      }}
                     >
                       use the default
                     </button>
+                  </p>
+                ) : preferredMissing ? (
+                  <p className={styles.muted} style={{ margin: 0 }}>
+                    {`The design ${preferredCode} is not installed here, so the default design prints.`}
                   </p>
                 ) : null}
               </div>
@@ -533,7 +582,7 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
                   }
                   onClick={() => {
                     // Land on the format in force, not the top of the list.
-                    setChosenPtlId(selectedFormat?.ptlId ?? "");
+                    setChosenPtlId(format?.ptlId ?? "");
                     setStep("format");
                   }}
                 >
@@ -545,10 +594,10 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
                 <button
                   type="button"
                   className={styles.btn}
-                  disabled={!purpose || !(selectedFormat || hasAssignment)}
+                  disabled={!purpose || !(format || hasAssignment || preferredPending)}
                   title={
-                    selectedFormat
-                      ? `Open ${selectedFormat.label}`
+                    format
+                      ? `Open ${format.label}`
                       : hasAssignment
                         ? "Print the design configured for this counter"
                         : "No design is assigned to this counter yet"

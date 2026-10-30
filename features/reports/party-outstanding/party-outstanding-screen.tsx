@@ -36,7 +36,7 @@ import { BillHistoryPopover } from "./components/bill-history-popover";
 import { BillWiseTab } from "./components/bill-wise-tab";
 import { BillsGrid } from "./components/bills-grid";
 import { DueCalendarTab } from "./components/due-calendar-tab";
-import { FilterStrip, type Draft } from "./components/filter-strip";
+import { FilterStrip, type Draft, type PartyPicker } from "./components/filter-strip";
 import {
   moreCount,
   MoreFiltersDialog,
@@ -71,9 +71,11 @@ import {
   type Session,
   type Tab,
 } from "./query/params";
+import { partyChoiceFilters } from "./query/party-choices";
 import { useBillHistory } from "./query/use-bill-history";
 import { useOptions } from "./query/use-options";
 import { useOutstanding } from "./query/use-outstanding";
+import { usePartyChoices } from "./query/use-party-choices";
 import { useSelectedParty } from "./query/use-selected-party";
 import { type GridContext } from "./view/cells";
 import { bucketAfterEdge, buildTiles, type TileId } from "./view/tiles";
@@ -84,9 +86,11 @@ export const PARTY_OUTSTANDING_HREF = "/reports/party-outstanding";
 const LEDGER_STATEMENT_HREF = "/reports/ledger-statement";
 const RETURN_STORAGE_PREFIX = "erp.partyOutstanding.return:";
 const WHATSAPP_TIP = "Sending by WhatsApp is not available yet: one party's statement, to its phone";
-const FIND_HINT =
-  "Find needs a party search on the server (/parties takes no search key yet). " +
-  "Meanwhile, More filters (F8) › Party narrows the report to the focused party.";
+/** The bill-wise paper (docs/print-templates/party-outstanding-billwise-a5): same purpose, same prompts. */
+const BILL_WISE_PRINT_CODE = "PARTY_OUTSTANDING_BILLWISE_A5";
+
+/** Which paper Print makes: the party-wise list, or the bill-wise one. */
+type PrintKind = "parties" | "bills";
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: "parties", label: "Party-wise" },
@@ -147,7 +151,6 @@ function moreOf(d: Draft): MoreFilters {
   return {
     salesmanId: d.salesmanId,
     collectionDay: d.collectionDay,
-    partyId: d.partyId,
     minDueDays: d.minDueDays,
     maxDueDays: d.maxDueDays,
   };
@@ -253,7 +256,7 @@ export default function PartyOutstandingScreen() {
     if (first) selectParty(first.partyId);
   }, [parties, selectParty, selectedId, state.loading]);
 
-  /* ---- names, for the More-filters summary */
+  /* ---- names, for the Party combo before its list has loaded */
   const partyName = useCallback(
     (id: string): string | null => {
       if (sel.card?.party.partyId === id) return sel.card.party.name;
@@ -323,8 +326,35 @@ export default function PartyOutstandingScreen() {
   );
   const summaryText = moreSummary(appliedMore, {
     salesman: (id) => options.options?.salesmen.find((s) => s.salesmanId === id)?.name ?? null,
-    party: partyName,
   });
+
+  /* ---- Party (Ctrl+F): the strip's combo, listing the draft's parties; a pick runs Show */
+  const partyPickerRef = useRef<HTMLDivElement | null>(null);
+  const choiceFilters = useMemo(() => partyChoiceFilters(draft, filters.asOn), [draft, filters.asOn]);
+  const partyChoices = usePartyChoices(client, session, choiceFilters);
+  const onPickParty = useCallback(
+    (partyId: string | null) => {
+      const next = { ...draft, partyId };
+      setDraft(next);
+      runShow(next);
+    },
+    [draft, runShow],
+  );
+  const partyPicker: PartyPicker = {
+    choices: partyChoices.choices,
+    loading: partyChoices.loading,
+    error: partyChoices.error,
+    truncated: partyChoices.truncated,
+    currentName: draft.partyId ? partyName(draft.partyId) : null,
+    request: partyChoices.request,
+    onPick: onPickParty,
+  };
+  const findParty = useCallback(() => {
+    const trigger = partyPickerRef.current?.querySelector<HTMLButtonElement>('[role="combobox"]');
+    if (!trigger) return;
+    trigger.focus();
+    if (trigger.getAttribute("aria-expanded") !== "true") trigger.click();
+  }, []);
 
   /* ---- hints */
   const [hint, setHint] = useState<string | null>(null);
@@ -547,11 +577,16 @@ export default function PartyOutstandingScreen() {
     }
   }, [client, exporting, filters, session, sessionReady]);
 
-  /* ---- Print / PDF (Ctrl+P): the PARTY_OUTSTANDING design — the Party-wise
-   * list of the APPLIED filters, whatever the tab. It waits for that report's
-   * first page, so the paper never runs ahead of the screen. The report names
-   * no document: docId is the company, and the filters are the prompts. */
-  const [printOpen, setPrintOpen] = useState(false);
+  /* ---- Print / PDF (Ctrl+P): the PARTY_OUTSTANDING purpose, two papers. The
+   * Bill-wise tab prints the bill-wise design (BILL_WISE_PRINT_CODE, picked as
+   * the dialog's Format); every other tab prints the configured one — the
+   * party-wise list. "Print bill-wise" prints the bill-wise paper from any tab.
+   * Both read the APPLIED filters, and wait for that report's first page so the
+   * paper never runs ahead of the screen. The report names no document: docId
+   * is the company, and the filters are the prompts (the same 18 for both). */
+  const [printKind, setPrintKind] = useState<PrintKind | null>(null);
+  const printOpen = printKind !== null;
+  const tabPrintKind: PrintKind = filters.tab === "bills" ? "bills" : "parties";
   const printTarget = useMemo<DocumentPrintTarget | null>(() => {
     if (!sessionReady || !head) return null;
     return {
@@ -562,25 +597,32 @@ export default function PartyOutstandingScreen() {
     };
   }, [filters, head, session, sessionReady]);
   const canPrint = permissions.permissions.canPrint;
-  const openPrint = useCallback(() => {
-    if (printTarget && canPrint) setPrintOpen(true);
-  }, [canPrint, printTarget]);
-  const closePrint = useCallback(() => setPrintOpen(false), []);
+  const openPrint = useCallback(
+    (kind: PrintKind) => {
+      if (!printTarget || !canPrint) return;
+      if (kind === "bills" && filters.dueOn) {
+        setHint("The bill-wise print lists every due date: the calendar's day narrows the screen only.");
+      }
+      setPrintKind(kind);
+    },
+    [canPrint, filters.dueOn, printTarget],
+  );
+  const closePrint = useCallback(() => setPrintKind(null), []);
 
   const onClose = useCallback(() => router.push("/home"), [router]);
 
   /* ---- keys (the screen's own; the grids key their rows) */
   const openMore = useCallback(() => setMoreOpen(true), []);
-  const showHint = useCallback((text: string) => setHint(text), []);
   const keys = useRef({
     onShow,
     openLedger,
     openNewVoucher,
     onClose,
     openMore,
-    showHint,
+    findParty,
     openPrint,
     closePrint,
+    tabPrintKind,
     printOpen: false,
     overlayOpen: false,
   });
@@ -592,9 +634,10 @@ export default function PartyOutstandingScreen() {
       openNewVoucher,
       onClose,
       openMore,
-      showHint,
+      findParty,
       openPrint,
       closePrint,
+      tabPrintKind,
       printOpen,
       overlayOpen,
     };
@@ -630,12 +673,13 @@ export default function PartyOutstandingScreen() {
         event.preventDefault();
         k.openNewVoucher();
       } else if (ctrl && key === "f") {
+        // Never the browser's find: the strip's Party combo, open on its search.
         event.preventDefault();
-        k.showHint(FIND_HINT);
+        k.findParty();
       } else if (ctrl && key === "p") {
         // Never window.print() of the grid: the A5 design, through the print dialog.
         event.preventDefault();
-        k.openPrint();
+        k.openPrint(k.tabPrintKind);
       } else if (event.key === "Escape") {
         event.preventDefault();
         k.onClose();
@@ -710,6 +754,8 @@ export default function PartyOutstandingScreen() {
         onMoreFilters={openMore}
         moreCount={moreCount(moreOf(draft))}
         asOnRef={asOnRef}
+        party={partyPicker}
+        partyRef={partyPickerRef}
       />
 
       {summaryText ? <div className={styles.summaryLine}>More filters: {summaryText}</div> : null}
@@ -889,9 +935,9 @@ export default function PartyOutstandingScreen() {
 
       <footer className={styles.footer}>
         <div className={styles.footerHints}>
-          <kbd>F5</kbd> Show · <kbd>Enter</kbd> Open bill · <kbd>Alt+F1</kbd> What settled it · <kbd>Ctrl+L</kbd> Ledger
-          statement · <kbd>Ctrl+R</kbd> New {side === "PAYABLE" ? "payment" : "receipt"} · <kbd>F8</kbd> More filters ·{" "}
-          <kbd>Esc</kbd> Close
+          <kbd>F5</kbd> Show · <kbd>Enter</kbd> Open bill · <kbd>Alt+F1</kbd> What settled it · <kbd>Ctrl+F</kbd> Find
+          party · <kbd>Ctrl+L</kbd> Ledger statement · <kbd>Ctrl+R</kbd> New {side === "PAYABLE" ? "payment" : "receipt"}{" "}
+          · <kbd>F8</kbd> More filters · <kbd>Esc</kbd> Close
         </div>
         <div className={styles.footerActions}>
           <button type="button" className={styles.button} onClick={onClose}>
@@ -915,34 +961,62 @@ export default function PartyOutstandingScreen() {
           <button
             type="button"
             className={styles.button}
-            onClick={openPrint}
+            onClick={() => openPrint(tabPrintKind)}
             disabled={!printTarget || !canPrint}
-            title={canPrint ? "Preview or save the party-wise list as a PDF" : "You do not have print rights"}
+            title={
+              canPrint
+                ? `Preview or save the ${tabPrintKind === "bills" ? "bill-wise" : "party-wise"} list as a PDF`
+                : "You do not have print rights"
+            }
           >
             PDF
           </button>
           <button type="button" className={styles.button} disabled title={WHATSAPP_TIP}>
             WhatsApp reminder
           </button>
+          {tabPrintKind === "parties" ? (
+            <button
+              type="button"
+              className={styles.button}
+              onClick={() => openPrint("bills")}
+              disabled={!printTarget || !canPrint}
+              title={
+                canPrint
+                  ? "Print every pending bill, party by party, on A5 (the Bill-wise tab's list)"
+                  : "You do not have print rights"
+              }
+            >
+              Print bill-wise
+            </button>
+          ) : null}
           <button
             type="button"
             className={styles.primaryButton}
-            onClick={openPrint}
+            onClick={() => openPrint(tabPrintKind)}
             disabled={!printTarget || !canPrint}
-            title={canPrint ? "Print the party-wise list on A5" : "You do not have print rights"}
+            title={
+              canPrint
+                ? `Print the ${tabPrintKind === "bills" ? "bill-wise" : "party-wise"} list on A5`
+                : "You do not have print rights"
+            }
           >
             Print<span className={styles.key}>Ctrl+P</span>
           </button>
         </div>
       </footer>
 
-      {printOpen && printTarget ? (
+      {printKind && printTarget ? (
         <PrintOptionsDialog
           open
           onClose={closePrint}
           purposeCode={PURPOSE_CODE.PARTY_OUTSTANDING}
-          documentLabel={`Party-wise Outstanding (${filters.side === "PAYABLE" ? "Payable" : "Receivable"}) as on ${displayDate(filters.asOn)}`}
-          targets={[printTarget]}
+          preferredTemplateCode={printKind === "bills" ? BILL_WISE_PRINT_CODE : undefined}
+          documentLabel={`${printKind === "bills" ? "Bill-wise" : "Party-wise"} Outstanding (${filters.side === "PAYABLE" ? "Payable" : "Receivable"}) as on ${displayDate(filters.asOn)}`}
+          targets={[
+            printKind === "bills"
+              ? { ...printTarget, filename: `${exportFileStem(filters.side, filters.asOn)}_BillWise` }
+              : printTarget,
+          ]}
         />
       ) : null}
 
@@ -951,8 +1025,6 @@ export default function PartyOutstandingScreen() {
           side={draft.side}
           value={moreOf(draft)}
           options={options.options}
-          focused={focusedParty}
-          partyName={partyName}
           onApply={onApplyMore}
           onCancel={() => setMoreOpen(false)}
         />

@@ -177,6 +177,11 @@ export function parseFilters(search: URLSearchParams, defaults: FilterDefaults):
   const receivable = side === "RECEIVABLE";
   const branch = search.get("branch");
   const asOn = search.get("asOn");
+  // The grid opens on ledger name A→Z (user's call, 30/10/2026). A sort with no
+  // `dir` takes the direction a header click gives it first: names rise,
+  // amounts fall.
+  const sort = oneOf(search.get("sort"), PARTY_SORTS, "name");
+  const dir = search.get("dir");
   return {
     side,
     asOn: asOn && isIsoDate(asOn) ? asOn : defaults.asOn,
@@ -198,8 +203,8 @@ export function parseFilters(search: URLSearchParams, defaults: FilterDefaults):
     hideZero: flag(search.get("hz"), true),
 
     tab: oneOf(search.get("tab"), TABS, "parties"),
-    sort: oneOf(search.get("sort"), PARTY_SORTS, "net"),
-    dir: search.get("dir") === "asc" ? "asc" : "desc",
+    sort,
+    dir: dir === "asc" || dir === "desc" ? dir : sort === "name" ? "asc" : "desc",
     selected: uuid(search.get("party")),
     billSort: oneOf(search.get("bsort"), BILL_SORTS, "date"),
     billDir: search.get("bdir") === "desc" ? "desc" : "asc",

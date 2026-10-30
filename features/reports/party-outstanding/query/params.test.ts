@@ -73,10 +73,17 @@ describe("the URL round trip", () => {
       deductPdc: false,
       hideZero: true,
       tab: "parties",
-      sort: "net",
-      dir: "desc",
+      sort: "name",
+      dir: "asc",
     });
     expect(parseFilters(buildSearch(f), DEFAULTS)).toEqual(f);
+  });
+
+  it("gives a sort with no dir the direction its header gives it first", () => {
+    expect(parseFilters(new URLSearchParams("sort=name"), DEFAULTS).dir).toBe("asc");
+    expect(parseFilters(new URLSearchParams("sort=net"), DEFAULTS).dir).toBe("desc");
+    expect(parseFilters(new URLSearchParams("sort=name&dir=desc"), DEFAULTS).dir).toBe("desc");
+    expect(parseFilters(new URLSearchParams("sort=net&dir=asc"), DEFAULTS).dir).toBe("asc");
   });
 
   it("tells 'all branches' from 'no choice made'", () => {
@@ -150,8 +157,8 @@ describe("request queries", () => {
       includeOnAccount: true,
       deductPdc: false,
       hideZero: true,
-      sort: "net",
-      dir: "desc",
+      sort: "name",
+      dir: "asc",
       page: 1,
       pageSize: 200,
     });

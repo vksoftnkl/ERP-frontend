@@ -1,21 +1,27 @@
 "use client";
 /**
- * The filter strip (plan §6): Side, Group, Area, Branch, As on, Show (row 1);
- * Age by, Buckets, the four checkboxes, More filters (row 2).
+ * The filter strip (plan §6): Side, Group, Area, Ledger name, Branch, As on, Show
+ * (row 1); Age by, Buckets, the four checkboxes, More filters (row 2).
  *
  * Editing a filter does NOT fetch. Show writes the URL, and the URL change is
  * what fetches. Unlike the ledger statement there are no display-only
  * switches: each checkbox changes which rows exist or what the totals are, so
  * each waits for Show like any other filter.
  *
- * The combos are the house `SearchableSelect` over THIS feature's `/options`.
- * No dropdown id, no grid runner.
+ * Ledger name (the plan's Party) is the one exception: picking one runs Show
+ * at once (as More filters' Apply did when Party lived there), because it is a
+ * find — Ctrl+F, type, Enter.
+ *
+ * The combos are the house `SearchableSelect` over THIS feature's `/options`
+ * and, for Party, its own `/parties` (`query/party-choices.ts`). No dropdown
+ * id, no grid runner.
  */
 import { useMemo, type MutableRefObject } from "react";
 import { cx } from "@/components/design-system/cx";
 import { SearchableSelect } from "@/components/design-system/ui";
 import styles from "../page.module.scss";
 import type { ReportFilters } from "../query/params";
+import type { PartyChoice } from "../query/party-choices";
 import type { ErrorField } from "../wire/errors";
 import type { OptionsPayload, OutstandingSide } from "../wire/types";
 import { DateInput } from "@/components/design-system/ui/date-input";
@@ -29,6 +35,19 @@ export const AS_ON_TIP =
 
 const DEFAULT_GROUP = "";
 const ALL = "all";
+const ALL_PARTIES = "";
+
+/** The Party combo: its list (fetched on first open), and what picking does. */
+export type PartyPicker = {
+  choices: PartyChoice[] | null;
+  loading: boolean;
+  error: string | null;
+  truncated: boolean;
+  /** The picked party's name when the list has not been loaded (a link, a Back). */
+  currentName: string | null;
+  request: () => void;
+  onPick: (partyId: string | null) => void;
+};
 
 type Props = {
   draft: Draft;
@@ -42,6 +61,9 @@ type Props = {
   onMoreFilters: () => void;
   moreCount: number;
   asOnRef: MutableRefObject<HTMLInputElement | null>;
+  party: PartyPicker;
+  /** The Party combo's box, for Ctrl+F. */
+  partyRef: MutableRefObject<HTMLDivElement | null>;
 };
 
 export function FilterStrip({
@@ -55,6 +77,8 @@ export function FilterStrip({
   onMoreFilters,
   moreCount,
   asOnRef,
+  party,
+  partyRef,
 }: Props) {
   const receivable = draft.side === "RECEIVABLE";
 
@@ -76,6 +100,24 @@ export function FilterStrip({
     () => [{ value: "", label: "All areas" }, ...(options?.areas ?? []).map((a) => ({ value: a.areaId, label: a.name }))],
     [options],
   );
+  const partyOptions = useMemo(() => {
+    const list = party.choices ?? [];
+    const picked = draft.partyId;
+    const head = [{ value: ALL_PARTIES, label: "All ledgers" }];
+    if (picked && !list.some((choice) => choice.partyId === picked)) {
+      head.push({ value: picked, label: party.currentName || "(the ledger in the link)" });
+    }
+    return [...head, ...list.map((choice) => ({ value: choice.partyId, label: choice.name }))];
+  }, [draft.partyId, party.choices, party.currentName]);
+  const partyEmpty = party.error
+    ? `The ledgers could not be loaded: ${party.error}`
+    : party.loading || !party.choices
+      ? "Loading ledgers…"
+      : "No ledger matches.";
+  const partyTip = party.truncated
+    ? "Only the first ledgers A–Z are listed. Narrow Group, Area or Branch to find the rest. Ctrl+F opens it."
+    : "The ledgers of this report, by ledger name A–Z. Picking one shows the report for it at once. Ctrl+F opens it.";
+
   const branchOptions = useMemo(
     () =>
       options
@@ -127,6 +169,25 @@ export function FilterStrip({
             </div>
           </div>
         ) : null}
+
+        <div className={styles.field} title={partyTip}>
+          <span className={styles.fieldLabel}>Ledger name</span>
+          {/* Capture: the list is asked for on the first open, before the combo sees the click. */}
+          <div
+            ref={partyRef}
+            className={styles.comboWide}
+            onMouseDownCapture={party.request}
+            onFocusCapture={party.request}
+          >
+            <SearchableSelect
+              value={draft.partyId ?? ALL_PARTIES}
+              options={partyOptions}
+              onChange={(value) => party.onPick(value || null)}
+              searchPlaceholder="Find a ledger"
+              emptyText={partyEmpty}
+            />
+          </div>
+        </div>
 
         <label className={cx(styles.field, flagged === "branch" && styles.fieldFlagged)}>
           <span className={styles.fieldLabel}>Branch</span>
@@ -226,7 +287,7 @@ export function FilterStrip({
 
         <div className={styles.stripSpacer} />
         <span className={styles.stripHint}>
-          Ctrl+L ledger statement · Ctrl+R {receivable ? "receipt" : "payment"}
+          Ctrl+F find ledger · Ctrl+L ledger statement · Ctrl+R {receivable ? "receipt" : "payment"}
         </span>
       </div>
     </div>
