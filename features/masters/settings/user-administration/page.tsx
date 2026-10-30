@@ -7,9 +7,14 @@
  * `UserEntryDialog`, which owns the user AND the complete set of every menu
  * they may open. A save sends that whole set — any menu missing from it is
  * revoked — which is why the shell's generic modal is not used here.
+ *
+ * Copy (Qt 2026-10-30) sits after the shell's buttons: a NEW user that starts
+ * with the selected user's rights. It needs the Create right, a selected row,
+ * and a row that is not a SUPER ADMIN (`domain/copyUser.ts`).
  */
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
+import { ErpActionIcon } from "@/components/design-system/icons/erp-action-icons";
 import type { MasterTableRow } from "@/components/master/crud-master-page";
 import styles from "@/app/master/state-master/page.module.scss";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
@@ -21,6 +26,13 @@ import { baseApi } from "@/store/api/baseApi";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { selectAuthUserId } from "@/store/slices/authSlice";
 import { useDeleteUserAdminMutation, userAdminErrorText, type UserAdminPayload } from "./api/userAdmin";
+import {
+  COPY_ACTION_TOOLTIP,
+  COPY_REFUSAL_TITLE,
+  type CopySource,
+  isSuperAdminRole,
+  SUPER_ADMIN_COPY_REFUSAL,
+} from "./domain/copyUser";
 import type { EntryMode } from "./domain/entryModel";
 import { UserEntryDialog } from "./user-entry-dialog";
 
@@ -64,7 +76,7 @@ const REQUEST_PAYLOAD_KEYS = {
   sort: "position",
 } as const;
 
-type DialogState = { mode: EntryMode; usrId: string | null; readOnly: boolean };
+type DialogState = { mode: EntryMode; usrId: string | null; readOnly: boolean; copyFrom?: CopySource };
 
 function rowLabel(row: MasterTableRow): string {
   return row.masterCode || row.masterName || String(row.__recordId);
@@ -112,6 +124,49 @@ export default function UserAdministrationPage() {
     (row: MasterTableRow) =>
       setDialog({ mode: "edit", usrId: String(row.__recordId), readOnly: !permissions.canEdit }),
     [permissions.canEdit],
+  );
+
+  /**
+   * Copy: a NEW user (no id, so Save creates and the source is never
+   * written). Re-checks what the button already gates on, as Qt does.
+   */
+  const copySelected = useCallback(
+    (row: MasterTableRow | null) => {
+      const sourceId = row ? String(row.__recordId ?? "") : "";
+      if (!row || !sourceId || !permissions.canCreate) return;
+      if (isSuperAdminRole(row.__source?.usr_type)) {
+        toast.info(SUPER_ADMIN_COPY_REFUSAL, { title: COPY_REFUSAL_TITLE });
+        return;
+      }
+      setDialog({
+        mode: "create",
+        usrId: null,
+        readOnly: false,
+        copyFrom: { usrId: sourceId, loginName: sourceText(row, "usr_login_name") || rowLabel(row) },
+      });
+    },
+    [permissions.canCreate],
+  );
+
+  const copyAction = useCallback(
+    (row: MasterTableRow | null) => (
+      <>
+        <span className="erp-ms-tsep" aria-hidden="true" />
+        <button
+          type="button"
+          className={`${styles.iconBtn} ${styles.iconBtnRefresh} erp-ms-tbtn`}
+          title={COPY_ACTION_TOOLTIP}
+          disabled={!row || !permissions.canCreate || isSuperAdminRole(row.__source?.usr_type)}
+          onClick={() => copySelected(row)}
+        >
+          <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}>
+            <ErpActionIcon name="copy" />
+          </span>
+          <span>Copy</span>
+        </button>
+      </>
+    ),
+    [copySelected, permissions.canCreate],
   );
 
   const isSelf = useCallback(
@@ -189,12 +244,14 @@ export default function UserAdministrationPage() {
         deleteConfirmMessage={deleteConfirmMessage}
         deleteConfirmNote="The user is deactivated and every menu right they hold is removed."
         enableListActionKeys
+        toolbarActions={copyAction}
       />
       <UserEntryDialog
         open={dialog !== null}
         mode={dialog?.mode ?? "create"}
         usrId={dialog?.usrId ?? null}
         readOnly={dialog?.readOnly ?? false}
+        copyFrom={dialog?.copyFrom ?? null}
         onClose={() => setDialog(null)}
         onSaved={afterSave}
       />

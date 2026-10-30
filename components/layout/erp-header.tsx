@@ -23,6 +23,7 @@ import {
   DEFAULT_BRANCH_OPTIONS,
   DEFAULT_COMPANY_OPTIONS,
   DEFAULT_FISCAL_YEAR_OPTIONS,
+  visibleMenuItems,
 } from "./constants";
 import type {
   ErpHeaderItem,
@@ -550,6 +551,12 @@ export default function ErpHeader({
     [dateText, pickedDate],
   );
   const resolvedPrimaryMenu = primaryMenu ?? primaryMenuFromApi ?? NO_MENU_ITEMS;
+  // Rows with menu_visiblity off stay in the data (their grant still governs the
+  // route) but are not drawn, as in Qt.
+  const visiblePrimaryMenu = useMemo(
+    () => visibleMenuItems(resolvedPrimaryMenu),
+    [resolvedPrimaryMenu],
+  );
   const resolvedCompany = selectedCompany ?? localCompany;
   const resolvedBranch = selectedBranch ?? localBranch;
   const resolvedFiscalYear = selectedFiscalYear ?? localFiscalYear;
@@ -665,7 +672,7 @@ export default function ErpHeader({
           aria-label={ARIA_LABELS.MAIN_MENU}
         >
           <MenuTree
-            items={resolvedPrimaryMenu}
+            items={visiblePrimaryMenu}
             rootListClassName={styles.primaryMenuList}
             rootLinkClassName={styles.primaryMenuItem}
             onNavigate={handleNavigate}

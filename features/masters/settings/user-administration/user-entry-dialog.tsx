@@ -10,12 +10,18 @@
  *
  * Nothing about a save is silent: a save that revokes anything asks first
  * (§7.3), and the page's toast says when the rights take effect (§8).
+ *
+ * `copyFrom` (the list's Copy, Qt 2026-10-30) opens a create that reads the
+ * source user once and takes its menus and Allow Edit Date / Entry / Rate —
+ * see `domain/copyUser.ts`. A SUPER ADMIN source is refused and the dialog
+ * closes.
  */
 import { type CSSProperties, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import ModalPortal from "@/components/ui/modal-portal";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import { cx } from "@/components/design-system/cx";
 import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
+import { toast } from "@/lib/notify";
 import { useAppSelector } from "@/store/hooks";
 import { selectUserInfo } from "@/store/slices/authSlice";
 import {
@@ -28,7 +34,15 @@ import { useLoadMenuTreeMutation } from "./api/menuMasters";
 import { CopyRightsPicker, type PickedUser } from "./components/copy-rights-picker";
 import { buildSaveBody } from "./domain/body";
 import {
+  COPY_REFUSAL_TITLE,
+  copyPrefillFromPayload,
+  type CopySource,
+  isSuperAdminRole,
+  SUPER_ADMIN_COPY_REFUSAL,
+} from "./domain/copyUser";
+import {
   canSave,
+  copyNote,
   currentDiff,
   entryReducer,
   grantsForSave,
@@ -60,6 +74,8 @@ export type UserEntryDialogProps = {
   mode: EntryMode;
   usrId: string | null;
   readOnly?: boolean;
+  /** List → Copy: a create that starts with this user's rights. Ignored on an edit. */
+  copyFrom?: CopySource | null;
   onClose: () => void;
   onSaved: (payload: UserAdminPayload) => void;
 };
@@ -70,13 +86,20 @@ export function UserEntryDialog(props: UserEntryDialogProps) {
   return <EntryDialogBody {...props} />;
 }
 
-function EntryDialogBody({ mode, usrId, readOnly = false, onClose, onSaved }: UserEntryDialogProps) {
+function EntryDialogBody({
+  mode,
+  usrId,
+  readOnly = false,
+  copyFrom: copySource = null,
+  onClose,
+  onSaved,
+}: UserEntryDialogProps) {
   // Who is signed in decides whether SUPER ADMIN is offered, and whether a
   // SUPER ADMIN user may be changed at all (notes 125).
   const sessionUserType = useAppSelector(selectUserInfo)?.userType ?? null;
   const [state, dispatch] = useReducer(
     entryReducer,
-    { mode, usrId, readOnly, sessionUserType },
+    { mode, usrId, readOnly, sessionUserType, copyFrom: copySource },
     initialEntryState,
   );
   const roleOptions = useMemo(
@@ -96,6 +119,11 @@ function EntryDialogBody({ mode, usrId, readOnly = false, onClose, onSaved }: Us
   useEffect(() => {
     nestedOpenRef.current = nestedOpen;
   }, [nestedOpen]);
+  // The page hands a fresh arrow every render; the copy read must not re-run for it.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   // The tree and the user load in parallel; the grants apply when both have
   // arrived — a derived value, not a queue (§6.5).
@@ -131,6 +159,34 @@ function EntryDialogBody({ mode, usrId, readOnly = false, onClose, onSaved }: Us
       cancelled = true;
     };
   }, [loadUser, mode, usrId]);
+
+  // List → Copy: the source is read once. The list already refused a SUPER
+  // ADMIN row; this is the server's own answer, in case the row was stale.
+  const copyUsrId = state.copy?.source.usrId ?? null;
+  useEffect(() => {
+    if (mode !== "create" || !copyUsrId) return;
+    let cancelled = false;
+    dispatch({ type: "copy/loading" });
+    loadUser(copyUsrId)
+      .unwrap()
+      .then((payload) => {
+        if (cancelled) return;
+        if (isSuperAdminRole(payload.usrType)) {
+          toast.info(SUPER_ADMIN_COPY_REFUSAL, { title: COPY_REFUSAL_TITLE });
+          onCloseRef.current();
+          return;
+        }
+        dispatch({ type: "copy/loaded", prefill: copyPrefillFromPayload(payload) });
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        dispatch({ type: "copy/failed", error: readUserAdminError(error).message });
+        toast.apiError(error, { fallback: "The user's rights could not be read." });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [copyUsrId, loadUser, mode]);
 
   const requestClose = useCallback(() => {
     if (!state.readOnly && !state.saving && isDirty(state)) {
@@ -248,6 +304,7 @@ function EntryDialogBody({ mode, usrId, readOnly = false, onClose, onSaved }: Us
   const grantCount = countGrants(state.grants, state.tree.value);
   const identityDisabled = state.readOnly || state.saving || state.user.status !== "loaded";
   const permissionHoldText = permissionsHold(state);
+  const headingNote = copyNote(state);
 
   return (
     <ModalPortal>
@@ -270,6 +327,8 @@ function EntryDialogBody({ mode, usrId, readOnly = false, onClose, onSaved }: Us
                 {state.identity.loginName ? (
                   <span className="erp-ms-modal-mode"> — {state.identity.loginName}</span>
                 ) : null}
+                {/* The dense skin hides the subtitle line, so Qt's heading note rides in the title bar. */}
+                {headingNote ? <span className="erp-ms-modal-mode"> · {headingNote}</span> : null}
                 {state.readOnly ? <span className={styles.readOnlyTag}>read-only</span> : null}
               </h3>
               <button

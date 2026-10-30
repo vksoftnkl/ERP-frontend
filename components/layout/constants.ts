@@ -205,6 +205,8 @@ export type MenuMasterItem = {
   menuId?: number;
   menuName: string;
   menuSeparator?: boolean;
+  /** `menuVisibility` or `menuIsActive` came back false. */
+  menuHidden?: boolean;
   permissions?: ErpMenuPermissionFlags;
   children?: MenuMasterItem[];
 };
@@ -317,6 +319,12 @@ function toMenuMasterItem(value: unknown): MenuMasterItem | null {
   if (separator === true) {
     item.menuSeparator = true;
   }
+  if (
+    toBooleanFlag(value.menuVisibility) === false ||
+    toBooleanFlag(value.menuIsActive) === false
+  ) {
+    item.menuHidden = true;
+  }
   const permissions = toMenuPermissionFlags(value.permissions);
   if (permissions) {
     item.permissions = permissions;
@@ -365,6 +373,9 @@ export function buildPrimaryMenu(apiItems: MenuMasterItem[]): ErpHeaderItem[] {
       if (apiItem.menuSeparator) {
         nextItem.menuSeparator = true;
       }
+      if (apiItem.menuHidden) {
+        nextItem.menuHidden = true;
+      }
       if (typeof apiItem.menuId === "number") {
         nextItem.menuId = apiItem.menuId;
       }
@@ -377,6 +388,25 @@ export function buildPrimaryMenu(apiItems: MenuMasterItem[]): ErpHeaderItem[] {
       return nextItem;
     })
     .filter((item): item is ErpHeaderItem => item !== null);
+}
+/**
+ * What the bar draws: the menu without the rows `menu_master` hides, each with
+ * its whole subtree, as Qt's `MenuWindow::buildMenu` skips them. The order is
+ * the server's (`menu_position`, then `menu_id`) and is never re-sorted here.
+ * The full tree still feeds the permission index, so a hidden screen reached
+ * from another one keeps its grant.
+ */
+export function visibleMenuItems(items: ErpHeaderItem[]): ErpHeaderItem[] {
+  return items
+    .filter((item) => !item.menuHidden)
+    .map((item) => {
+      if (!item.children) {
+        return item;
+      }
+      const { children, ...rest } = item;
+      const shown = visibleMenuItems(children);
+      return shown.length > 0 ? { ...rest, children: shown } : rest;
+    });
 }
 export const DEFAULT_BRANCH_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "", label: "Select Branch" },

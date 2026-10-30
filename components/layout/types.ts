@@ -55,6 +55,12 @@ export type ErpHeaderItem = {
   onClick?: () => void;
   menuSeparator?: boolean;
   /**
+   * `menu_visiblity` (or `menu_is_active`) is false. The row stays in the tree so
+   * its grant still governs its route, as Qt keeps every row's rights; it is
+   * only left out of the bar (`visibleMenuItems`), with everything under it.
+   */
+  menuHidden?: boolean;
+  /**
    * `fixed.menu_master.menu_id` — the key permissions are granted against, and
    * the key `MENU_ROUTES` binds a DB row's route by.
    */

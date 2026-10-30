@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { buildSaveBody } from "./body";
+import { copyPrefillFromPayload, placeCopiedGrants } from "./copyUser";
 import {
   canSave,
+  copyNote,
+  copyPending,
   currentDiff,
   entryReducer,
   grantsForSave,
@@ -14,7 +18,9 @@ import {
   type EntryState,
 } from "./entryModel";
 import { LIVE_MENU_TREE_PAYLOAD, liveUserPayload } from "./fixtures";
-import { setFlag, tickMenu } from "./grants";
+import { EMPTY_GRANTS, sameGrants, setFlag, tickMenu, withAncestorsTicked } from "./grants";
+import { EMPTY_IDENTITY } from "./identity";
+import { revokesAnything } from "./grantDiff";
 import { parseMenuTree } from "./menuTree";
 
 const tree = parseMenuTree({ data: LIVE_MENU_TREE_PAYLOAD });
@@ -297,5 +303,129 @@ describe("splitServerErrors (§7.4)", () => {
     expect(state.saving).toBe(false);
     expect(state.fieldErrors.loginName).toBe("taken");
     expect(state.banner).toBeNull();
+  });
+});
+
+describe("list → Copy (Qt 2026-10-30)", () => {
+  const SOURCE = { usrId: "019e441b-6e48-7918-b246-b857ffb35db1", loginName: "arjun" };
+  const source = liveUserPayload({ usrEditDate: true, usrEditEntry: false, usrEditRate: true });
+  const prefill = copyPrefillFromPayload(source);
+  const expectedGrants = withAncestorsTicked(placeCopiedGrants(prefill.grants, tree), tree, EMPTY_GRANTS);
+
+  function copied(order: "tree-first" | "copy-first"): EntryState {
+    const start = initialEntryState({ mode: "create", usrId: null, copyFrom: SOURCE });
+    const loading = run(start, { type: "tree/loading" }, { type: "copy/loading" });
+    return order === "tree-first"
+      ? run(loading, { type: "tree/loaded", tree }, { type: "copy/loaded", prefill })
+      : run(loading, { type: "copy/loaded", prefill }, { type: "tree/loaded", tree });
+  }
+
+  it("Save and the Permissions tab wait for the source read", () => {
+    let state = initialEntryState({ mode: "create", usrId: null, copyFrom: SOURCE });
+    state = run(state, { type: "tree/loading" }, { type: "copy/loading" }, { type: "tree/loaded", tree });
+    expect(copyPending(state)).toBe(true);
+    expect(canSave(state)).toBe(false);
+    expect(permissionsReady(state)).toBe(false);
+    expect(saveHold(state)).toBe("Copying arjun's rights…");
+    expect(permissionsHold(state)).toBe("Copying arjun's rights…");
+    expect(copyNote(state)).toBe("New user — rights copied from arjun");
+  });
+
+  it.each(["tree-first", "copy-first"] as const)("%s: the menus land on the tree, groups ticked", (order) => {
+    const state = copied(order);
+    expect(copyPending(state)).toBe(false);
+    expect(canSave(state)).toBe(true);
+    expect(permissionsHold(state)).toBeNull();
+    expect(sameGrants(state.grants, expectedGrants)).toBe(true);
+    expect(state.grants.size).toBeGreaterThan(0);
+    for (const grant of state.grants.values()) {
+      expect(grant.favourite).toBe(false);
+      expect(grant.pinned).toBe(false);
+      expect(grant.sortOrder).toBe(0);
+    }
+  });
+
+  it("everything but menus and Allow Edit Date / Entry / Rate stays at the New defaults", () => {
+    const state = copied("tree-first");
+    expect(state.mode).toBe("create");
+    expect(state.usrId).toBeNull();
+    expect(state.identity).toEqual({ ...EMPTY_IDENTITY, editDate: true, editEntry: false, editRate: true });
+    expect(state.loadedIdentity).toEqual(EMPTY_IDENTITY);
+    expect(state.loadedGrants).toBe(EMPTY_GRANTS);
+  });
+
+  it("nothing reads as revoked, and the copy is unsaved work", () => {
+    const state = copied("tree-first");
+    expect(revokesAnything(currentDiff(state))).toBe(false);
+    expect(isDirty(state)).toBe(true);
+  });
+
+  it("Save is a create: no usrId, the source's id nowhere in the body", () => {
+    const state = copied("copy-first");
+    const body = buildSaveBody({
+      mode: state.mode,
+      usrId: state.usrId,
+      identity: { ...state.identity, loginName: "ZT-COPY", password: "zt-pass" },
+      grants: grantsForSave(state),
+    });
+    expect("usrId" in body).toBe(false);
+    expect(JSON.stringify(body)).not.toContain(SOURCE.usrId);
+    expect(body.usrLoginName).toBe("ZT-COPY");
+    expect(body.usrType).toBe("USER");
+    expect(body.usrEditDate).toBe(true);
+    expect(body.usrEditEntry).toBe(false);
+    expect(body.usrEditRate).toBe(true);
+    expect(body.usrFullName).toBeNull();
+    expect(body.usrCompanyId).toBeNull();
+    expect(body.menus?.length).toBe(expectedGrants.size);
+    for (const menu of body.menus ?? []) {
+      expect(Object.keys(menu)).not.toContain("umId");
+      expect(Object.keys(menu)).not.toContain("umUserId");
+      expect(menu.umVisibility).toBe(true);
+      expect(menu.umIsFavourite).toBe(false);
+      expect(menu.umIsPinned).toBe(false);
+      expect(menu.umSortOrder).toBe(0);
+    }
+  });
+
+  it("a failed read leaves a plain new user and says so in the heading", () => {
+    const state = run(
+      initialEntryState({ mode: "create", usrId: null, copyFrom: SOURCE }),
+      { type: "tree/loading" },
+      { type: "copy/loading" },
+      { type: "copy/failed", error: "Not found" },
+      { type: "tree/loaded", tree },
+    );
+    expect(canSave(state)).toBe(true);
+    expect(state.grants.size).toBe(0);
+    expect(state.identity).toEqual(EMPTY_IDENTITY);
+    expect(copyNote(state)).toBe("New user — could not copy the rights of arjun");
+  });
+
+  it("the tree failing still saves the identity without menus", () => {
+    const state = run(
+      initialEntryState({ mode: "create", usrId: null, copyFrom: SOURCE }),
+      { type: "tree/loading" },
+      { type: "copy/loading" },
+      { type: "copy/loaded", prefill },
+      { type: "tree/failed", error: "down" },
+    );
+    expect(canSave(state)).toBe(true);
+    expect(grantsForSave(state)).toBeNull();
+    expect(state.identity.editDate).toBe(true);
+  });
+
+  it("an edit ignores copyFrom, and a plain create has none", () => {
+    expect(initialEntryState({ mode: "edit", usrId: "u1", copyFrom: SOURCE }).copy).toBeNull();
+    const plain = initialEntryState({ mode: "create", usrId: null });
+    expect(plain.copy).toBeNull();
+    expect(copyNote(plain)).toBeNull();
+    expect(run(plain, { type: "copy/loaded", prefill })).toEqual(plain);
+  });
+
+  it("a successful save drops the copy state", () => {
+    const state = run(copied("tree-first"), { type: "save/succeeded", payload: liveUserPayload({ usrId: "new" }) });
+    expect(state.copy).toBeNull();
+    expect(copyNote(state)).toBeNull();
   });
 });

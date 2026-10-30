@@ -13,7 +13,8 @@ export type ErpActionIconName =
   | "excel"
   | "print"
   | "history"
-  | "search";
+  | "search"
+  | "copy";
 
 export const ERP_ACTION_ICON_PATHS: Record<ErpActionIconName, string> = {
   add: "M12 5v14M5 12h14",
@@ -25,6 +26,7 @@ export const ERP_ACTION_ICON_PATHS: Record<ErpActionIconName, string> = {
   print: "M6 9V2h12v7M6 18H4V11h16v7h-2M6 14h12v8H6z",
   history: "M12 8v4l3 3M3 12a9 9 0 1 0 9-9",
   search: "M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35",
+  copy: "M9 9h11v11H9zM5 15H4V4h11v1",
 };
 
 export type ErpActionIconProps = {

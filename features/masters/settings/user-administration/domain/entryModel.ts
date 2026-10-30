@@ -13,9 +13,14 @@
  *   open dirty; the next save sends the group (Qt 6f15977).
  * - A SUPER ADMIN user opened by anyone else locks read-only once it loads
  *   (Qt 425fa80, notes 125).
+ * - A Copy from the list (Qt 2026-10-30, `copyUser.ts`) is a create whose
+ *   menus and Allow Edit Date / Entry / Rate come from another user. Save
+ *   waits for that read as it waits for the tree, and the copied menus are
+ *   placed once the tree is in.
  *
  * The React side (`user-entry-dialog.tsx`) only dispatches and renders.
  */
+import { type CopyPrefill, type CopySource, copyHeadingNote, placeCopiedGrants } from "./copyUser";
 import { grantDiff, type GrantDiff } from "./grantDiff";
 import { EMPTY_GRANTS, type Grants, grantsFromPayload, sameGrants, withAncestorsTicked } from "./grants";
 import {
@@ -35,6 +40,14 @@ import type { ApiFieldError, UserAdminPayload } from "./wire";
 export type EntryMode = "create" | "edit";
 export type EntryTab = "identity" | "permissions";
 export type LoadStatus = "idle" | "loading" | "loaded" | "failed";
+
+/** A create that starts from another user's rights (list → Copy). */
+export type CopyState = {
+  source: CopySource;
+  status: LoadStatus;
+  /** The copied menus, held until the tree is in to place them. */
+  pending: Grants | null;
+};
 
 export type EntryState = {
   mode: EntryMode;
@@ -58,6 +71,8 @@ export type EntryState = {
   fieldErrors: IdentityErrors;
   banner: string | null;
   saving: boolean;
+  /** Set only on a create opened by the list's Copy. */
+  copy: CopyState | null;
 };
 
 export type EntryAction =
@@ -72,6 +87,9 @@ export type EntryAction =
   | { type: "tab/changed"; tab: EntryTab }
   | { type: "errors/set"; fieldErrors: IdentityErrors; banner: string | null }
   | { type: "errors/cleared" }
+  | { type: "copy/loading" }
+  | { type: "copy/loaded"; prefill: CopyPrefill }
+  | { type: "copy/failed"; error: string }
   | { type: "save/started" }
   | { type: "save/failed"; fieldErrors: IdentityErrors; banner: string | null }
   | { type: "save/succeeded"; payload: UserAdminPayload };
@@ -81,8 +99,11 @@ export function initialEntryState(args: {
   usrId: string | null;
   readOnly?: boolean;
   sessionUserType?: string | null;
+  /** List → Copy: the user whose rights the new one starts with. Ignored on an edit. */
+  copyFrom?: CopySource | null;
 }): EntryState {
   const create = args.mode === "create";
+  const copyFrom = create ? (args.copyFrom ?? null) : null;
   return {
     mode: args.mode,
     usrId: create ? null : args.usrId,
@@ -101,6 +122,22 @@ export function initialEntryState(args: {
     fieldErrors: {},
     banner: null,
     saving: false,
+    copy: copyFrom ? { source: copyFrom, status: "idle", pending: null } : null,
+  };
+}
+
+/**
+ * The copied menus, put in the form once both the read and the tree are in —
+ * whichever came second. They become the form's set over an empty baseline,
+ * so nothing reads as revoked and the copy counts as unsaved work.
+ */
+function withCopyPlaced(state: EntryState): EntryState {
+  const pending = state.copy?.pending;
+  if (!pending || !state.copy || state.tree.status !== "loaded") return state;
+  return {
+    ...state,
+    grants: placeCopiedGrants(pending, state.tree.value),
+    copy: { ...state.copy, pending: null },
   };
 }
 
@@ -120,9 +157,16 @@ function withGroupsTicked(state: EntryState): EntryState {
 
 export function entryReducer(state: EntryState, action: EntryAction): EntryState {
   const next = reduce(state, action);
-  return action.type === "tree/loaded" || action.type === "user/loaded" || action.type === "save/succeeded"
-    ? withGroupsTicked(next)
-    : next;
+  switch (action.type) {
+    case "tree/loaded":
+    case "copy/loaded":
+      return withGroupsTicked(withCopyPlaced(next));
+    case "user/loaded":
+    case "save/succeeded":
+      return withGroupsTicked(next);
+    default:
+      return next;
+  }
 }
 
 function reduce(state: EntryState, action: EntryAction): EntryState {
@@ -174,6 +218,21 @@ function reduce(state: EntryState, action: EntryAction): EntryState {
       return { ...state, fieldErrors: action.fieldErrors, banner: action.banner };
     case "errors/cleared":
       return { ...state, fieldErrors: {}, banner: null };
+    case "copy/loading":
+      return state.copy ? { ...state, copy: { ...state.copy, status: "loading", pending: null } } : state;
+    case "copy/loaded":
+      // Allow Edit Date / Entry / Rate land at once, as Qt fills them; the
+      // menus wait for the tree (`withCopyPlaced`).
+      return state.copy
+        ? {
+            ...state,
+            identity: { ...state.identity, ...action.prefill.identity },
+            copy: { ...state.copy, status: "loaded", pending: action.prefill.grants },
+          }
+        : state;
+    case "copy/failed":
+      // The form stays a plain new user, as in Qt; the heading says why.
+      return state.copy ? { ...state, copy: { ...state.copy, status: "failed", pending: null } } : state;
     case "save/started":
       return { ...state, saving: true, fieldErrors: {}, banner: null };
     case "save/failed":
@@ -193,6 +252,7 @@ function reduce(state: EntryState, action: EntryAction): EntryState {
         saving: false,
         fieldErrors: {},
         banner: null,
+        copy: null,
       };
     }
     default:
@@ -202,9 +262,22 @@ function reduce(state: EntryState, action: EntryAction): EntryState {
 
 // ── selectors ──────────────────────────────────────────────────────────────
 
-/** Both halves of the set have arrived: the tab may be edited and the set may be sent. */
+/** A Copy's read of the source user has not answered yet. */
+export function copyPending(state: EntryState): boolean {
+  return state.copy !== null && (state.copy.status === "idle" || state.copy.status === "loading");
+}
+
+/** The muted line beside the title on a Copy, or null. */
+export function copyNote(state: EntryState): string | null {
+  return state.copy ? copyHeadingNote(state.copy.source.loginName, state.copy.status === "failed") : null;
+}
+
+/**
+ * Both halves of the set have arrived — and a Copy's read, when there is one:
+ * the tab may be edited and the set may be sent.
+ */
 export function permissionsReady(state: EntryState): boolean {
-  return state.tree.status === "loaded" && state.user.status === "loaded";
+  return state.tree.status === "loaded" && state.user.status === "loaded" && !copyPending(state);
 }
 
 /** Why the Permissions tab is read-only right now, or null when it is not. */
@@ -213,6 +286,7 @@ export function permissionsHold(state: EntryState): string | null {
   if (state.tree.status === "failed") {
     return `${state.tree.error ?? "The menu tree could not be loaded."} Saving leaves this user's menu rights exactly as they are.`;
   }
+  if (state.copy && copyPending(state)) return `Copying ${state.copy.source.loginName}'s rights…`;
   if (!permissionsReady(state)) return "Loading the menu tree and this user's rights…";
   return null;
 }
@@ -243,6 +317,7 @@ export function canSave(state: EntryState): boolean {
   if (state.readOnly || state.saving) return false;
   if (state.user.status !== "loaded") return false;
   if (state.tree.status === "idle" || state.tree.status === "loading") return false;
+  if (copyPending(state)) return false;
   return true;
 }
 
@@ -253,6 +328,7 @@ export function saveHold(state: EntryState): string | null {
   if (state.user.status === "loading" || state.user.status === "idle") return "Loading the user…";
   if (state.user.status === "failed") return state.user.error ?? "The user could not be loaded.";
   if (state.tree.status === "idle" || state.tree.status === "loading") return "Loading the menu tree…";
+  if (state.copy && copyPending(state)) return `Copying ${state.copy.source.loginName}'s rights…`;
   return null;
 }
 
