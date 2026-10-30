@@ -261,6 +261,44 @@ export function isEditable(
   return stored ? stored.ptvIsEditable : false;
 }
 
+/**
+ * TESTING-PHASE SWITCH -- a published design is editable in place.
+ *
+ * One client prints at the moment, and every change they ask for would mean
+ * New draft, edit, Publish. With this ON, a saved design whose live revision is
+ * PUBLISHED and that has NO draft opens EDITABLE, and Save writes the edits as
+ * the NEXT revision and publishes it in the same call. Rule 1 still holds on
+ * the server: the published revision itself is never updated, so `print_log`
+ * keeps naming the bytes it printed, and the rail keeps the old revision to roll
+ * back to.
+ *
+ * Turning it OFF restores the frozen flow untouched: a published revision is
+ * read-only and the only move on it is "New draft". Do that once more than one
+ * client prints. Mirrors Qt's `PrintDesignerRules::kEditPublishedInPlace`.
+ */
+export const EDIT_PUBLISHED_IN_PLACE = true;
+
+/**
+ * Whether the revision on screen is edited that way: the switch is on, the
+ * design is saved, nothing in its history is editable (no DRAFT), and the
+ * revision in the tabs is the PUBLISHED one.
+ *
+ * `enabled` is the constant by default; it is a parameter so the OFF state can
+ * be tested.
+ */
+export function editsPublishedInPlace(
+  working: DraftVersion,
+  history: PrintTemplateVersionPayload[],
+  enabled: boolean = EDIT_PUBLISHED_IN_PLACE,
+): boolean {
+  if (!enabled) return false;
+  // Not yet written: a new template, or an unsaved new draft -- editable anyway.
+  if (!working.ptvId) return false;
+  if (history.some((version) => version.ptvIsEditable)) return false;
+  const stored = history.find((version) => version.ptvId === working.ptvId);
+  return stored?.ptvStatus === "PUBLISHED";
+}
+
 /** The blank rev 1 a "New template" starts on. */
 export function blankVersion(): DraftVersion {
   return {

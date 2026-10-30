@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   blankVersion,
   checkPublishable,
+  EDIT_PUBLISHED_IN_PLACE,
+  editsPublishedInPlace,
   isEditable,
   newDraftFrom,
   parseBody,
@@ -293,5 +295,48 @@ describe("a design with no published revision resolves for nobody", () => {
 
   it("is false once something is published", () => {
     expect(resolvesForNobody({ ptlPublishedRevId: "v1" })).toBe(false);
+  });
+});
+
+describe("editing a PUBLISHED design in place (EDIT_PUBLISHED_IN_PLACE)", () => {
+  const published = storedVersion({
+    ptvId: "v3",
+    ptvRevNo: 3,
+    ptvStatus: "PUBLISHED",
+    ptvIsEditable: false,
+  });
+  const onScreen = { ...blankVersion(), ptvId: "v3" };
+
+  it("is ON for the testing phase", () => {
+    expect(EDIT_PUBLISHED_IN_PLACE).toBe(true);
+  });
+
+  it("applies to a saved design whose only live revision is PUBLISHED", () => {
+    expect(editsPublishedInPlace(onScreen, [published])).toBe(true);
+  });
+
+  it("does not apply once the design has a DRAFT -- the draft is edited, as before", () => {
+    const draft = storedVersion({ ptvId: "v4", ptvRevNo: 4 });
+    expect(editsPublishedInPlace(onScreen, [draft, published])).toBe(false);
+    // ...and not when the published one is merely the revision being read.
+    expect(editsPublishedInPlace({ ...blankVersion(), ptvId: "v4" }, [draft, published])).toBe(false);
+  });
+
+  it("does not apply to a design never saved, or to an unsaved new draft", () => {
+    expect(editsPublishedInPlace(blankVersion(), [])).toBe(false);
+    expect(editsPublishedInPlace(blankVersion(), [published])).toBe(false);
+  });
+
+  it("does not apply to a RETIRED revision -- nothing live to edit", () => {
+    const retired = storedVersion({ ptvId: "v2", ptvStatus: "RETIRED", ptvIsEditable: false });
+    expect(editsPublishedInPlace({ ...blankVersion(), ptvId: "v2" }, [retired])).toBe(false);
+  });
+
+  it("is switched off by the flag: the frozen flow is back", () => {
+    expect(editsPublishedInPlace(onScreen, [published], false)).toBe(false);
+  });
+
+  it("leaves rule 1 itself alone -- isEditable still says a published revision is frozen", () => {
+    expect(isEditable(onScreen, [published])).toBe(false);
   });
 });

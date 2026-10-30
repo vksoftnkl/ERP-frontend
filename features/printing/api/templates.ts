@@ -163,6 +163,7 @@ export const printingTemplatesApi = baseApi.injectEndpoints({
 export const {
   useListPrintingTemplatesQuery,
   useGetPrintingTemplateQuery,
+  useLazyGetPrintingTemplateQuery,
   useSavePrintingTemplateMutation,
   useDeletePrintingTemplateMutation,
 } = printingTemplatesApi;

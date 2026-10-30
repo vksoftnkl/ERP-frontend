@@ -1,0 +1,47 @@
+/*
+ * The Print Templates list's own bits: the status pills and the filter strip.
+ * Pill colours are the ones the neighbouring screens already use -- the grey
+ * and blue of Stock Reasons' Scope pill, the green / amber / red of the
+ * printing module's published / draft / none pills -- so there is no new
+ * palette. They are copied rather than imported because `printing.module.scss`
+ * pills lean on variables only the printing shell defines.
+ */
+.pill {
+  display: inline-block;
+  padding: 1px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.pillShipped { background: #f1f5f9; color: #475569; border-color: #e2e8f0; }
+.pillOwn { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.pillPublished { background: #eefaf1; color: #1c6338; border-color: #bcd9c6; }
+.pillNotPublished { background: #fdf5e7; color: #7a5312; border-color: #dfc9a5; }
+.pillActive { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+.pillInactive { background: #fdeceb; color: #9a2c2c; border-color: #e0b4b4; }
+
+.rowMuted { opacity: 0.55; }
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+.select {
+  min-height: 29px;
+  max-width: 14rem;
+  padding: 0 7px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 0.8rem;
+  font-family: inherit;
+  color: #111827;
+}
+
+/* The selected row's reasons, in the hint bar. */
+.hintNote { color: #8b1a1a; font-weight: 600; }

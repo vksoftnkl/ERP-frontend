@@ -116,6 +116,12 @@ export type CanvasPreview = {
    * — the alternative is showing a design nothing will ever print.
    */
   previewsUnsaved: boolean;
+  /**
+   * Replaces the dialog's "this revision is published" line when the preview is
+   * stored-only for another reason -- a published design edited in place, which
+   * is not read-only but still cannot preview an unsaved body.
+   */
+  storedOnlyNote?: string;
   /** Seeded into the dialog's inputs, so the common case needs no typing. */
   defaults?: { accYear?: string };
   /**

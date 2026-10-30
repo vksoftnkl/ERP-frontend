@@ -1,229 +1,202 @@
 "use client";
 
 /**
- * Settings -> Printing -> Templates, per `printing_ui_mockup`.
+ * Settings -> Printing -> Templates (menu 62), on the house `CrudMasterPage`
+ * over the registered grid `MAIN LIST - PRINT TEMPLATES` -- the same grid Qt's
+ * `PrintTemplateList` reads, so both front ends share one column definition
+ * that Grid Master can edit.
  *
- * Find a design, clone one, open it, retire it -- and SEE WHAT IS PUBLISHED.
- * That last one is why this is not a generic master list: `ptlPublishedRevId` is
- * a POINTER, not "the newest revision", and a template whose pointer is null
- * resolves for nobody. The amber row is that state, and it has to be visible
- * here rather than discovered at a till.
+ * It used to be a custom table over `/print-templates/list`, with a client-side
+ * "used by" fan-out over `/print-assignments/list`, client paging and a
+ * client-side "not published" filter (the query booleans could not say false).
+ * All of that is the grid's SQL now: `used_by` is computed there, the filters
+ * are tokens, paging and search are the shell's.
  *
- * The toolbar acts on the SELECTED row, which is why the table carries a
- * selection: Clone, Open and Retire are all "this one", and the mockup groups
- * them rather than repeating three links on every line.
+ * What the grid cannot do stays here:
+ *  - the pills (owner, state, active), through `COLUMN_RENDER_OVERRIDES`;
+ *  - open / new, which navigate to the designer rather than open the shell's
+ *    popup (`onEditAction` / `onViewAction` / `onCreateAction`);
+ *  - Clone, which needs the whole design (the grid row carries no revisions),
+ *    so it reads `/print-templates/get` first -- the old screen's clone, unchanged;
+ *  - Retire, the old `/print-templates/delete`. A shipped design (no company)
+ *    is refused up front, with the reason, instead of through a server error.
  *
- * Nothing about printing is compiled in. The purposes come from the rows (see
- * `domain/purposes.ts` for why that is a stopgap), the engines from the
- * generated vocabulary, which comes from the OpenAPI enums, which come from the
- * CHECK constraints.
+ * `ptlPublishedRevId` is a POINTER, not "the newest revision": a design whose
+ * pointer is null resolves for nobody. The State pill and the hint line make
+ * that visible here rather than at a till.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "@/lib/notify";
 
-import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
+import CrudMasterPage from "@/components/master/crud-master-page";
+import type { MasterTableRow } from "@/components/master/crud-master-page.types";
+import { useBusinessContext } from "@/components/layout/business-context";
+import { usePagePermissions } from "@/hooks/useMenuPermissions";
+import { toast } from "@/lib/notify";
+import masterStyles from "@/app/master/state-master/page.module.scss";
 import { getApiErrorMessage } from "@/store/api";
-import { useAppSelector } from "@/store/hooks";
-import { selectBusinessContext } from "@/store/slices/authSlice";
-import { useGetCompanyListQuery } from "@/store/api/businessContextApi";
 import {
   useDeletePrintingTemplateMutation,
-  useListPrintingTemplatesQuery,
+  useLazyGetPrintingTemplateQuery,
   useSavePrintingTemplateMutation,
 } from "@/features/printing/api/templates";
-import { useListPrintingAssignmentsQuery } from "@/features/printing/api/assignments";
 import { useGetPrintPurposeOptionsQuery } from "@/features/printing/api/purposes";
 import { buildSavePayload } from "@/features/printing/domain/buildSavePayload";
 import { newDraftFrom, toDesignerDraft } from "@/features/printing/domain/draft";
-import { rungOf } from "@/features/printing/domain/ladder";
-import { collectPurposes, purposeLabel } from "@/features/printing/domain/purposes";
-import { NEW_PRINTING_TEMPLATE_ROUTE, printingDesignerRoute } from "@/features/printing/routes";
+import { purposeLabel } from "@/features/printing/domain/purposes";
 import {
-  PTV_ENGINE_VALUES,
-  type PrintTemplatePayload,
-  type PtvEngine,
-} from "@/features/printing/types/printing";
-import { Note, ScreenShell, SectionHead } from "@/features/printing/components/screen-shell";
-import styles from "@/features/printing/printing.module.scss";
+  NEW_PRINTING_TEMPLATE_ROUTE,
+  PRINTING_TEMPLATES_ROUTE,
+  printingDesignerRoute,
+} from "@/features/printing/routes";
+import { PTV_ENGINE_VALUES } from "@/features/printing/types/printing";
+import {
+  INITIAL_TEMPLATE_FILTERS,
+  isInactiveRow,
+  retireRefusal,
+  rowNotes,
+  templateGridParams,
+  text,
+  type TemplateGridRow,
+  type TemplateListFilters,
+} from "./templateList";
+import styles from "./templateList.module.scss";
 
-const TABS = [{ id: "templates" as const, label: "Templates" }];
+const HREF = PRINTING_TEMPLATES_ROUTE;
 
-type Filters = {
-  purposeId: string;
-  engine: string;
-  /** "" any, "yes" published, "no" not published. A tri-state, so not a boolean. */
-  published: string;
-  activeOnly: boolean;
-  onlyOwned: boolean;
-};
+// The shell's own form never opens here (open / new navigate, Retire is the
+// page's own request); these only satisfy its contract.
+const API_ENDPOINTS = {
+  getById: "/print-templates/get",
+  create: "/print-templates/create",
+  delete: "/print-templates/delete",
+} as const;
 
-const INITIAL_FILTERS: Filters = {
-  purposeId: "",
-  engine: "",
-  published: "",
-  activeOnly: true,
-  onlyOwned: false,
-};
+const LOOKUP_KEYS = {
+  id: ["ptl_id"],
+  code: ["ptl_code"],
+  name: ["ptl_name"],
+  short: [],
+  alias: [],
+  active: ["ptl_is_active"],
+  array: ["items", "data", "rows", "results", "list"],
+} as const;
 
-/** "rev 2 · PUBLISHED", or the loud state. */
-function PublishedCell({ template }: { template: PrintTemplatePayload }) {
-  if (!template.ptlPublishedRevId) {
-    return (
-      <span
-        className={`${styles.pill} ${styles.pillNone}`}
-        title="Nothing is published, so this design resolves for nobody — no counter can print it."
-      >
-        not published
-      </span>
-    );
-  }
-  const revNo = template.ptlPublishedRevNo;
-  const newest = (template.versions ?? [])
-    .filter((version) => !version.ptvIsDeleted)
-    .reduce((best, version) => Math.max(best, version.ptvRevNo), 0);
+const REQUEST_PAYLOAD_KEYS = {
+  id: "ptlId",
+  name: "ptl_name",
+  alias: "",
+  short: "",
+  description: "",
+  sort: "",
+} as const;
 
+const NO_TENANT_ID = "";
+
+function sourceOf(row: MasterTableRow | null | undefined): TemplateGridRow | null {
+  return (row?.__source as TemplateGridRow | undefined) ?? null;
+}
+
+function Pill({ tone, title, children }: { tone: string; title?: string; children: ReactNode }) {
   return (
-    <span className={styles.chipRow}>
-      <span className={`${styles.pill} ${styles.pillPublished}`}>
-        {revNo ? `rev ${revNo} · PUBLISHED` : "PUBLISHED"}
-      </span>
-      {revNo && newest > revNo ? (
-        <span
-          className={`${styles.pill} ${styles.pillDraft}`}
-          title={`Revision ${newest} is a draft, and is not what prints`}
-        >
-          draft {newest}
-        </span>
-      ) : null}
+    <span className={`${styles.pill} ${tone}`} title={title}>
+      {children}
     </span>
   );
 }
 
+/*
+ * Same meaning as Qt's badge colours: SHIPPED neutral, OWN blue; PUBLISHED
+ * green, NOT PUBLISHED amber (a design only a draft backs); Inactive in danger red.
+ */
+const COLUMN_RENDER_OVERRIDES: Record<string, (row: MasterTableRow) => ReactNode> = {
+  owner: (row) => {
+    const word = text(sourceOf(row)?.owner).toUpperCase();
+    return <Pill tone={word === "SHIPPED" ? styles.pillShipped : styles.pillOwn}>{word}</Pill>;
+  },
+  state: (row) => {
+    const word = text(sourceOf(row)?.state).toUpperCase();
+    return word === "NOT PUBLISHED" ? (
+      <Pill
+        tone={styles.pillNotPublished}
+        title="Nothing is published, so this design resolves for nobody — no counter can print it."
+      >
+        {word}
+      </Pill>
+    ) : (
+      <Pill tone={styles.pillPublished}>{word}</Pill>
+    );
+  },
+  ptl_is_active: (row) =>
+    isInactiveRow(sourceOf(row)) ? (
+      <Pill tone={styles.pillInactive}>Inactive</Pill>
+    ) : (
+      <Pill tone={styles.pillActive}>Active</Pill>
+    ),
+};
+
 export default function TemplateListScreen() {
   const router = useRouter();
-  const businessContext = useAppSelector(selectBusinessContext);
-  const companyId = businessContext?.companyId ?? null;
+  const { activeCompany } = useBusinessContext();
+  const companyId = activeCompany?.compId ?? activeCompany?.id ?? "";
+  const { permissions } = usePagePermissions({ href: HREF });
 
-  const { data: companies = [] } = useGetCompanyListQuery();
-  const companyName = companies.find((company) => company.id === companyId)?.name ?? null;
+  const [filters, setFilters] = useState<TemplateListFilters>(INITIAL_TEMPLATE_FILTERS);
+  const [acting, setActing] = useState(false);
+  const actingRef = useRef(false);
 
-  const [filters, setFilters] = useState<Filters>(INITIAL_FILTERS);
-  const [search, setSearch] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<PrintTemplatePayload | null>(null);
+  const [deleteTemplate] = useDeletePrintingTemplateMutation();
+  const [saveTemplate] = useSavePrintingTemplateMutation();
+  const [loadTemplate] = useLazyGetPrintingTemplateQuery();
 
-  const [deleteTemplate, { isLoading: isDeleting }] = useDeletePrintingTemplateMutation();
-  const [saveTemplate, { isLoading: isCloning }] = useSavePrintingTemplateMutation();
-
-  /*
-   * EVERY BOOLEAN IS SENT ONLY WHEN TRUE. A query boolean cannot express false
-   * -- see `toParams` in api/templates.ts -- so `onlyOwned: false` would arrive
-   * as `true` and hide every shipped design.
-   *
-   * `includeVersions` stays true: the Published column needs the revision
-   * numbers to say "rev 2 published, draft 3 in progress", and that sentence is
-   * the point of the screen.
-   */
-  const { data, isFetching, error, refetch } = useListPrintingTemplatesQuery({
-    limit: 100,
-    includeVersions: true,
-    ...(search.trim() ? { search: search.trim() } : {}),
-    ...(companyId ? { ptlCompanyId: companyId } : {}),
-    ...(companyId && filters.onlyOwned ? { onlyOwned: true } : {}),
-    ...(filters.purposeId ? { ptlPurposeId: filters.purposeId } : {}),
-    ...(filters.engine ? { engine: filters.engine as PtvEngine } : {}),
-    ...(filters.published === "yes" ? { isPublished: true } : {}),
-    ...(filters.activeOnly ? { ptlIsActive: true } : {}),
-  });
-
-  /*
-   * "Used by" counts print_template_assignment rows -- the question a designer
-   * actually has before changing anything. One read, counted per template; a
-   * request per row would be one per visible design.
-   *
-   * `includeGlobal` matters more here than anywhere: a SHIPPED design is most
-   * likely to be used by an every-company row, whose `pta_company_id` is NULL
-   * and which an exact-match company filter therefore drops. Without it the
-   * shipped designs -- the ones a whole tenant depends on -- would read "used
-   * by 0" to the person about to change them.
-   */
-  const { data: assignmentPage, isError: assignmentsFailed } = useListPrintingAssignmentsQuery(
-    companyId ? { ptaCompanyId: companyId, includeGlobal: true, limit: 100 } : { limit: 100 },
-  );
-  const assignments = useMemo(() => assignmentPage?.items ?? [], [assignmentPage]);
-  const assignmentsTruncated = (assignmentPage?.total ?? 0) > assignments.length;
-
-  const templates = useMemo(() => data?.items ?? [], [data]);
-
-  /*
-   * "Not published" is filtered HERE because the server cannot be asked for it:
-   * `isPublished=false` arrives as `true`.
-   */
-  const rows = useMemo(
-    () =>
-      filters.published === "no"
-        ? templates.filter((template) => !template.ptlPublishedRevId)
-        : templates,
-    [templates, filters.published],
+  // Every purpose from print_purpose, so filtering to one that has no design
+  // yet is possible -- and that is a useful thing to ask for.
+  const { data: catalogue } = useGetPrintPurposeOptionsQuery({ companyId: companyId || null });
+  const purposes = useMemo(
+    () => [...(catalogue ?? [])].sort((a, b) => purposeLabel(a).localeCompare(purposeLabel(b))),
+    [catalogue],
   );
 
-  /*
-   * The filter offers every purpose from print_purpose, with the ones these rows
-   * already reference merged in — so filtering to a purpose that has no design
-   * yet is possible, and that is a useful thing to ask for.
-   */
-  const { data: catalogue } = useGetPrintPurposeOptionsQuery({ companyId });
-  const purposes = useMemo(() => {
-    const byId = new Map((catalogue ?? []).map((purpose) => [purpose.ppoId, purpose]));
-    for (const purpose of collectPurposes({ templates, assignments })) {
-      if (!byId.has(purpose.ppoId)) byId.set(purpose.ppoId, purpose);
-    }
-    return [...byId.values()].sort((left, right) =>
-      purposeLabel(left).localeCompare(purposeLabel(right)),
-    );
-  }, [catalogue, templates, assignments]);
-
-  const selected = rows.find((template) => template.ptlId === selectedId) ?? null;
-
-  const patch = useCallback((next: Partial<Filters>) => {
+  const patch = useCallback((next: Partial<TemplateListFilters>) => {
     setFilters((current) => ({ ...current, ...next }));
   }, []);
-
-  const usedBy = useCallback(
-    (ptlId: string): string => {
-      if (assignmentsFailed) return "—";
-      const mine = assignments.filter((assignment) => assignment.ptaTemplateId === ptlId);
-      if (mine.length === 0) return "—";
-
-      const counters = new Set<string>();
-      const branches = new Set<string>();
-      let companyWide = 0;
-      for (const assignment of mine) {
-        const rung = rungOf(assignment);
-        if (rung === "COUNTER" && assignment.ptaDeviceId) counters.add(assignment.ptaDeviceId);
-        if (assignment.ptaBranchId) branches.add(assignment.ptaBranchId);
-        if (rung === "COMPANY" || rung === "EVERY_COMPANY") companyWide += 1;
-      }
-
-      // A company-wide row with nothing narrower beating it reaches every till,
-      // which is what the mockup's "every counter" says.
-      if (companyWide > 0 && counters.size === 0 && branches.size === 0) {
-        return "every counter";
-      }
-      const parts: string[] = [];
-      if (counters.size) parts.push(`${counters.size} counter${counters.size === 1 ? "" : "s"}`);
-      if (branches.size) parts.push(`${branches.size} branch${branches.size === 1 ? "" : "es"}`);
-      if (companyWide) parts.push("company-wide");
-      return parts.join(", ");
-    },
-    [assignments, assignmentsFailed],
-  );
 
   const openDesigner = useCallback(
     (ptlId: string) => router.push(printingDesignerRoute(ptlId)),
     [router],
+  );
+
+  const buildListQuery = useCallback(
+    ({
+      searchTerm,
+      currentPage,
+      pageSize,
+      sortBy,
+      sortDir,
+    }: {
+      searchTerm: string;
+      currentPage: number;
+      pageSize: number;
+      sortBy?: string;
+      sortDir?: "asc" | "desc";
+    }): Record<string, string> => ({
+      page: String(currentPage),
+      limit: String(pageSize),
+      ...(searchTerm ? { search: searchTerm } : {}),
+      ...(sortBy ? { sort_by: sortBy } : {}),
+      ...(sortBy && sortDir ? { sort_dir: sortDir } : {}),
+      grid_param: JSON.stringify(templateGridParams(companyId || NO_TENANT_ID, filters)),
+    }),
+    [companyId, filters],
+  );
+
+  const openRow = useCallback(
+    (row: MasterTableRow) => {
+      const ptlId = text(sourceOf(row)?.ptl_id);
+      if (ptlId) openDesigner(ptlId);
+    },
+    [openDesigner],
   );
 
   /**
@@ -234,300 +207,220 @@ export default function TemplateListScreen() {
    * start printing the moment it was assigned, before anyone had read it. And
    * `newDraftFrom` is what strips every `ptvId` and `ptdId`, so the whole design
    * is INSERTed onto the copy rather than moved off the original.
+   *
+   * The grid row has no revisions, so the whole design is read first.
    */
-  const cloneSelected = useCallback(async () => {
-    if (!selected) return;
-    const source = toDesignerDraft(selected);
-    const suffix = Date.now().toString(36).toUpperCase().slice(-4);
-    try {
-      const created = await saveTemplate(
-        buildSavePayload({
-          ...source,
-          ptlId: undefined,
-          // A clone belongs to the company doing the cloning -- that is what
-          // forking a shipped design means.
-          ptlCompanyId: companyId,
-          ptlCode: `${source.ptlCode}_${suffix}`.slice(0, 60),
-          ptlName: `${source.ptlName} (copy)`.slice(0, 120),
-          // What the "Cloned from" column reads. The pair goes together; the
-          // revision recorded is the one actually copied, which is the newest
-          // undeleted one -- not necessarily the published one.
-          ptlForkedFromId: selected.ptlId,
-          ptlForkedFromRev: source.working.ptvRevNo ?? null,
-          ptlForkedFromCode: null,
-          working: newDraftFrom(source.working),
-          history: [],
-          publishedRevId: null,
-        }),
-      ).unwrap();
-      toast.success("Cloned. The copy publishes nothing until you publish it.");
-      openDesigner(created.ptlId);
-    } catch (thrown) {
-      toast.error(getApiErrorMessage(thrown as never) ?? "Could not clone the design.");
-    }
-  }, [companyId, openDesigner, saveTemplate, selected]);
+  const cloneRow = useCallback(
+    async (row: TemplateGridRow | null) => {
+      const ptlId = text(row?.ptl_id);
+      if (!ptlId || actingRef.current) return;
+      actingRef.current = true;
+      setActing(true);
+      try {
+        const selected = await loadTemplate(ptlId).unwrap();
+        const source = toDesignerDraft(selected);
+        const suffix = Date.now().toString(36).toUpperCase().slice(-4);
+        const created = await saveTemplate(
+          buildSavePayload({
+            ...source,
+            ptlId: undefined,
+            // A clone belongs to the company doing the cloning -- that is what
+            // forking a shipped design means.
+            ptlCompanyId: companyId || null,
+            ptlCode: `${source.ptlCode}_${suffix}`.slice(0, 60),
+            ptlName: `${source.ptlName} (copy)`.slice(0, 120),
+            // What the "Cloned from" column reads. The pair goes together; the
+            // revision recorded is the one actually copied, which is the newest
+            // undeleted one -- not necessarily the published one.
+            ptlForkedFromId: selected.ptlId,
+            ptlForkedFromRev: source.working.ptvRevNo ?? null,
+            ptlForkedFromCode: null,
+            working: newDraftFrom(source.working),
+            history: [],
+            publishedRevId: null,
+          }),
+        ).unwrap();
+        toast.success("Cloned. The copy publishes nothing until you publish it.");
+        openDesigner(created.ptlId);
+      } catch (thrown) {
+        toast.error(getApiErrorMessage(thrown as never) ?? "Could not clone the design.");
+      } finally {
+        actingRef.current = false;
+        setActing(false);
+      }
+    },
+    [companyId, loadTemplate, openDesigner, saveTemplate],
+  );
 
-  const confirmDelete = useCallback(async () => {
-    if (!pendingDelete) return;
-    try {
-      await deleteTemplate({ ptlId: pendingDelete.ptlId }).unwrap();
-      toast.success(`"${pendingDelete.ptlName}" retired.`);
-      setPendingDelete(null);
-      setSelectedId(null);
-    } catch (thrown) {
-      // The common refusal is a 409: an assignment still points at it, and a
-      // counter would otherwise resolve to a design that is gone.
-      toast.error(getApiErrorMessage(thrown as never) ?? "Could not retire the design.");
-    }
-  }, [deleteTemplate, pendingDelete]);
+  /**
+   * Retire -- the shell asks first (its confirm, worded below), then this runs.
+   * True means the design is gone and the shell reloads the list.
+   */
+  const retireRow = useCallback(
+    async (shellRow: MasterTableRow): Promise<boolean> => {
+      const row = sourceOf(shellRow);
+      const ptlId = text(row?.ptl_id);
+      if (!ptlId) return false;
+      try {
+        await deleteTemplate({ ptlId }).unwrap();
+        toast.success(`"${text(row?.ptl_name)}" retired.`);
+        return true;
+      } catch (thrown) {
+        // The common refusal is a 409: an assignment still points at it, and a
+        // counter would otherwise resolve to a design that is gone.
+        toast.error(getApiErrorMessage(thrown as never) ?? "Could not retire the design.");
+        return false;
+      }
+    },
+    [deleteTemplate],
+  );
 
-  const readError = error ? getApiErrorMessage(error as never) : null;
-  const hasUnpublished = rows.some((template) => !template.ptlPublishedRevId);
+  const toolbarContent = (
+    <div className={styles.filters}>
+      <label className={masterStyles.filterCheckLabel}>
+        <input
+          type="checkbox"
+          checked={filters.activeOnly}
+          onChange={(event) => patch({ activeOnly: event.target.checked })}
+        />
+        Active only
+      </label>
+      <select
+        className={styles.select}
+        value={filters.purposeId}
+        onChange={(event) => patch({ purposeId: event.target.value })}
+        title="What the design prints"
+        aria-label="Purpose"
+      >
+        <option value="">Any purpose</option>
+        {purposes.map((purpose) => (
+          <option key={purpose.ppoId} value={purpose.ppoId}>
+            {purposeLabel(purpose)}
+          </option>
+        ))}
+      </select>
+      <select
+        className={styles.select}
+        value={filters.state}
+        onChange={(event) => patch({ state: event.target.value as TemplateListFilters["state"] })}
+        aria-label="State"
+      >
+        <option value="">Any state</option>
+        <option value="PUBLISHED">Published</option>
+        <option value="UNPUBLISHED">Not published</option>
+      </select>
+      <select
+        className={styles.select}
+        value={filters.engine}
+        onChange={(event) => patch({ engine: event.target.value })}
+        title="The engine of the published revision, else the newest"
+        aria-label="Engine"
+      >
+        <option value="">Any engine</option>
+        {PTV_ENGINE_VALUES.map((engine) => (
+          <option key={engine} value={engine}>
+            {engine}
+          </option>
+        ))}
+      </select>
+      <label className={masterStyles.filterCheckLabel} title="Hide the designs shipped with the product">
+        <input
+          type="checkbox"
+          checked={filters.ownedOnly}
+          onChange={(event) => patch({ ownedOnly: event.target.checked })}
+        />
+        Ours only
+      </label>
+    </div>
+  );
 
-  return (
-    <ScreenShell
-      title="Print Templates"
-      subtitle={[companyName, "every design this company can print with"]}
-      tabs={TABS}
-      activeTab="templates"
-      footer={
+  const toolbarActions = useCallback(
+    (shellRow: MasterTableRow | null) => {
+      const row = sourceOf(shellRow);
+      const allowed = !!row && permissions.canCreate;
+      const title = !row
+        ? "Select a design first"
+        : !permissions.canCreate
+          ? "No right to create a design"
+          : "Fork this design into a new one, as an unpublished draft";
+      return (
         <>
-          <button type="button" className={styles.btn} onClick={() => router.back()}>
-            Close
-          </button>
+          <span className="erp-ms-tsep" aria-hidden="true" />
           <button
             type="button"
-            className={styles.btnPrimary}
-            disabled={!selected}
-            onClick={() => selected && openDesigner(selected.ptlId)}
+            className={`${masterStyles.iconBtn} erp-ms-tbtn`}
+            title={title}
+            disabled={!allowed || acting}
+            onClick={() => void cloneRow(row)}
           >
-            Open
+            <span>{acting ? "Cloning…" : "Clone"}</span>
           </button>
         </>
+      );
+    },
+    [acting, cloneRow, permissions.canCreate],
+  );
+
+  // Two jobs in one line, as in Qt: say why a button is off, and what the
+  // selected row's state means. The shell prints the key legend beside it.
+  const hintMessage = useCallback((shellRow: MasterTableRow | null) => {
+    const notes = rowNotes(sourceOf(shellRow));
+    return notes.length ? <span className={styles.hintNote}>{notes.join("  ")}</span> : null;
+  }, []);
+
+  const rowClassName = useCallback(
+    (shellRow: MasterTableRow) => (isInactiveRow(sourceOf(shellRow)) ? styles.rowMuted : undefined),
+    [],
+  );
+
+  const isRowDeleteDisabled = useCallback(
+    (shellRow: MasterTableRow) => retireRefusal(sourceOf(shellRow)) !== null,
+    [],
+  );
+
+  return (
+    <CrudMasterPage
+      title="Print Templates"
+      listTitleOverride="Print Templates"
+      listSubtitleOverride="Every design this company can print with — its own and the shipped ones."
+      entityLabel="design"
+      entityLabelPlural="designs"
+      searchPlaceholder="Search code, name or purpose..."
+      apiEndpoints={API_ENDPOINTS}
+      gridKey="printTemplateList"
+      gridTableName="print_template"
+      listResponseStyleArrayKey=""
+      useConfiguredGridColumnsOnly
+      enableGridSettingsContextMenu
+      lookupKeys={LOOKUP_KEYS}
+      requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
+      styles={masterStyles}
+      columnRenderOverrides={COLUMN_RENDER_OVERRIDES}
+      rowClassName={rowClassName}
+      buildListQuery={buildListQuery}
+      listStateResetKey={`${companyId}|${JSON.stringify(filters)}`}
+      listEmptyText="No designs here. Untick Active only, or clear a filter."
+      toolbarContent={toolbarContent}
+      toolbarActions={toolbarActions}
+      enableListActionKeys
+      listHintMessage={hintMessage}
+      permissionHref={HREF}
+      codeColumnHeader="Code"
+      nameColumnHeader="Name"
+      // New, and Open / Edit / Enter / double-click, go to the designer.
+      createLabel="New template"
+      onCreateAction={() => router.push(NEW_PRINTING_TEMPLATE_ROUTE)}
+      onEditAction={openRow}
+      onViewAction={openRow}
+      // Retire = the old soft delete, refused up front for a shipped design.
+      deleteActionLabel="Retire"
+      onDeleteAction={retireRow}
+      isRowDeleteDisabled={isRowDeleteDisabled}
+      rowDeleteDisabledReason="A shipped design is used by every company — Clone it to change it; it cannot be retired."
+      deleteConfirmMessage={(row) =>
+        `Retire "${text(sourceOf(row)?.ptl_name)}"? The design is soft deleted with every revision and dataset — print history keeps pointing at them.`
       }
-    >
-      <section className={styles.section}>
-        <SectionHead
-          title="Designs"
-          table="print_template"
-          slice={`${rows.length} of ${data?.meta.total ?? 0}`}
-        />
-        <Note>
-          Identity only — a name, an owner, and a pointer to the revision currently published. The
-          body lives on the version.
-        </Note>
-
-        <div className={styles.toolbar}>
-          <button
-            type="button"
-            className={styles.btnPrimary}
-            onClick={() => router.push(NEW_PRINTING_TEMPLATE_ROUTE)}
-          >
-            New template
-          </button>
-          <button
-            type="button"
-            className={styles.btn}
-            disabled={!selected || isCloning}
-            title={
-              selected
-                ? "Fork this design into a new one, as an unpublished draft"
-                : "Select a design first"
-            }
-            onClick={() => void cloneSelected()}
-          >
-            {isCloning ? "Cloning…" : "Clone"}
-          </button>
-          <button
-            type="button"
-            className={styles.btn}
-            disabled={!selected}
-            onClick={() => selected && openDesigner(selected.ptlId)}
-          >
-            Open
-          </button>
-          <button
-            type="button"
-            className={styles.btn}
-            disabled={!selected}
-            title="Soft delete — print history keeps pointing at the revisions"
-            onClick={() => selected && setPendingDelete(selected)}
-          >
-            Retire
-          </button>
-
-          <span className={styles.toolbarRight}>
-            <select
-              className={styles.select}
-              value={filters.purposeId}
-              onChange={(event) => patch({ purposeId: event.target.value })}
-              title="What the design prints"
-            >
-              <option value="">Any purpose</option>
-              {purposes.map((purpose) => (
-                <option key={purpose.ppoId} value={purpose.ppoId}>
-                  {purposeLabel(purpose)}
-                </option>
-              ))}
-            </select>
-            <select
-              className={styles.select}
-              value={filters.engine}
-              onChange={(event) => patch({ engine: event.target.value })}
-              title="The engine of the published revision"
-            >
-              <option value="">Any engine</option>
-              {PTV_ENGINE_VALUES.map((engine) => (
-                <option key={engine} value={engine}>
-                  {engine}
-                </option>
-              ))}
-            </select>
-            <select
-              className={styles.select}
-              value={filters.published}
-              onChange={(event) => patch({ published: event.target.value })}
-            >
-              <option value="">Any state</option>
-              <option value="yes">Published</option>
-              <option value="no">Not published</option>
-            </select>
-            <label className={styles.checkRow} title="Hide the designs shipped with the product">
-              <input
-                type="checkbox"
-                checked={filters.onlyOwned}
-                disabled={!companyId}
-                onChange={(event) => patch({ onlyOwned: event.target.checked })}
-              />
-              Ours only
-            </label>
-            <input
-              className={`${styles.input} ${styles.search}`}
-              value={search}
-              placeholder="search code, name or purpose…"
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </span>
-        </div>
-
-        <div className={styles.tableWrap}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th className={styles.colSmall}>Code</th>
-                <th>Name</th>
-                <th className={styles.colSmall}>Purpose</th>
-                <th className={styles.colSmall}>Owner</th>
-                <th className={styles.colSmall}>Published</th>
-                <th className={styles.colSmall}>Used by</th>
-                <th>Cloned from</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((template) => (
-                <tr
-                  key={template.ptlId}
-                  className={[
-                    styles.rowClickable,
-                    template.ptlPublishedRevId ? "" : styles.rowWarning,
-                    template.ptlId === selectedId ? styles.rowSelected : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                  onClick={() => setSelectedId(template.ptlId)}
-                  onDoubleClick={() => openDesigner(template.ptlId)}
-                >
-                  <td className={styles.mono}>{template.ptlCode}</td>
-                  <td>
-                    {template.ptlName}
-                    {template.ptlIsActive ? null : (
-                      <span className={styles.muted}> · inactive</span>
-                    )}
-                  </td>
-                  <td>{template.ptlPurposeName ?? template.ptlPurposeCode ?? "—"}</td>
-                  <td>
-                    {template.ptlCompanyId === null
-                      ? "Shipped"
-                      : (template.ptlCompanyName ?? "This company")}
-                  </td>
-                  <td>
-                    <PublishedCell template={template} />
-                  </td>
-                  <td>{usedBy(template.ptlId)}</td>
-                  <td className={styles.muted}>
-                    {template.ptlForkedFromCode
-                      ? `${template.ptlForkedFromCode}${
-                          template.ptlForkedFromRev ? ` rev ${template.ptlForkedFromRev}` : ""
-                        }`
-                      : "—"}
-                  </td>
-                </tr>
-              ))}
-
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className={styles.muted}>
-                    {isFetching
-                      ? "Loading…"
-                      : "No designs yet. Create one, then publish a revision."}
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-
-        {readError ? (
-          <Note
-            tone="red"
-            action={
-              <button type="button" className={styles.btn} onClick={() => void refetch()}>
-                Try again
-              </button>
-            }
-          >
-            {readError}
-          </Note>
-        ) : null}
-
-        {/*
-         * The amber row explained, where the row is. This is the state the whole
-         * subsystem is arranged to make visible.
-         */}
-        {hasUnpublished ? (
-          <Note tone="amber">
-            The amber row is <span className={styles.mono}>ptl_published_rev_id IS NULL</span> — a
-            design with only a draft. It resolves for nobody and reaches no counter. That state has
-            to be visible HERE, not discovered at a till.
-          </Note>
-        ) : null}
-
-        <Note>
-          “Used by” counts <span className={styles.mono}>print_template_assignment</span> rows. It
-          is the question a designer actually has before changing anything: is this safe to touch?
-        </Note>
-
-        {assignmentsTruncated ? (
-          <Note tone="amber">
-            “Used by” counts the first {assignments.length} of {assignmentPage?.total} assignments —
-            the list endpoint caps a page at 100 — so a design may be used more widely than shown.
-            Check Assignments before changing one.
-          </Note>
-        ) : null}
-      </section>
-
-      <DeleteConfirmModal
-        isOpen={pendingDelete !== null}
-        itemName={pendingDelete?.ptlName}
-        title="Retire this design?"
-        message="The design is soft deleted with every revision and dataset — print history keeps pointing at them."
-        note="Refused while a branch or counter is still assigned to it, because that counter would resolve to a design that is gone."
-        confirmLabel="Retire"
-        loading={isDeleting}
-        loadingLabel="Retiring…"
-        onCancel={() => setPendingDelete(null)}
-        onConfirm={() => void confirmDelete()}
-      />
-    </ScreenShell>
+      deleteConfirmNote="Refused while a branch or counter is still assigned to it, because that counter would resolve to a design that is gone."
+    />
   );
 }

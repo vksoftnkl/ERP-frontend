@@ -326,8 +326,8 @@ export function PreviewDialog({ open, onClose }: PreviewDialogProps) {
             */}
             {preview && !preview.previewsUnsaved ? (
               <p className={styles.issueLine}>
-                This revision is published, so the preview shows the design as stored. Unsaved
-                changes on the canvas are not included — save them as a new draft to see them.
+                {preview.storedOnlyNote ??
+                  "This revision is published, so the preview shows the design as stored. Unsaved changes on the canvas are not included — save them as a new draft to see them."}
               </p>
             ) : null}
 

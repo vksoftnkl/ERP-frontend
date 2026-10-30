@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   bodyForWire,
   buildIdentitySavePayload,
+  buildPublishedInPlacePayload,
   buildPublishPayload,
   buildSavePayload,
   buildVersionPayload,
@@ -314,5 +315,50 @@ describe("prompts", () => {
       { name: "from_date", type: "DATE", required: true, label: "From date" },
       { name: "godown_id", type: "UUID", required: false },
     ]);
+  });
+});
+
+describe("a published design edited in place", () => {
+  const draft = draftWith({
+    ptlId: "t1",
+    publishedRevId: "v3",
+    working: {
+      ...blankVersion(),
+      ptvId: "v3",
+      ptvRevNo: 3,
+      ptvBody: { bands: [{ type: "DETAIL" }, { type: "SUMMARY" }] },
+      datasets: [dataset({ ptdId: "d1" })],
+    },
+  });
+  const payload = buildPublishedInPlacePayload(draft, APPROVER);
+  const version = payload.versions?.[0];
+
+  it("sends one revision with NO ptvId, so the server appends the next one", () => {
+    expect(payload.versions).toHaveLength(1);
+    expect(version).toBeDefined();
+    expect("ptvId" in (version ?? {})).toBe(false);
+  });
+
+  it("is PUBLISHED and signed by the approver, in the same call", () => {
+    expect(version?.ptvStatus).toBe("PUBLISHED");
+    expect(version?.ptvApprovedBy).toBe(APPROVER);
+  });
+
+  it("carries the edit", () => {
+    expect(version?.ptvBody).toContain("SUMMARY");
+  });
+
+  it("carries the datasets, without their old ids", () => {
+    expect(version?.datasets).toHaveLength(1);
+    expect(version?.datasets?.[0].ptdName).toBe("items");
+    expect("ptdId" in (version?.datasets?.[0] ?? {})).toBe(false);
+  });
+
+  it("does not echo the published pointer -- a publish moves it itself", () => {
+    expect("ptlPublishedRevId" in payload).toBe(false);
+  });
+
+  it("does not send the published revision's number or id", () => {
+    expect(version?.ptvRevNo).toBeUndefined();
   });
 });

@@ -44,7 +44,7 @@ const TABS: { id: DesignerTab; label: string }[] = [
 export default function DesignerScreen({ ptlId }: { ptlId: string | null }) {
   const router = useRouter();
   const designer = useDesigner(ptlId);
-  const { draft, editable, workingStored } = designer;
+  const { draft, editable, editingPublished, workingStored } = designer;
 
   const userNames = useUserNames();
   const [approver, setApprover] = useState("");
@@ -113,7 +113,13 @@ export default function DesignerScreen({ ptlId }: { ptlId: string | null }) {
       activeTab={designer.tab}
       onTabChange={designer.setTab}
       footerNote={
-        designer.dirty ? "Unsaved changes" : editable ? null : "This revision is read-only"
+        designer.dirty
+          ? "Unsaved changes"
+          : editingPublished
+            ? "Editing the published revision — Preview shows the live revision, not unsaved edits"
+            : editable
+              ? null
+              : "This revision is read-only"
       }
       footer={
         <>
@@ -130,7 +136,11 @@ export default function DesignerScreen({ ptlId }: { ptlId: string | null }) {
               className={styles.btnPrimary}
               disabled={!canSave || designer.isSaving}
               onClick={() => void designer.save()}
-              title="Identity, the page, the layout, the datasets and the prompts — one request"
+              title={
+                editingPublished
+                  ? "Writes the next revision and publishes it — one request"
+                  : "Identity, the page, the layout, the datasets and the prompts — one request"
+              }
             >
               {designer.isSaving ? "Saving…" : "Save"}
             </button>
@@ -150,7 +160,9 @@ export default function DesignerScreen({ ptlId }: { ptlId: string | null }) {
       <div className={styles.chipRow}>
         <Chip tone={editable ? "amber" : "green"}>
           {workingStored
-            ? `${editable ? "editing" : "reading"} rev ${workingStored.ptvRevNo} · ${workingStored.ptvStatus}`
+            ? editingPublished
+              ? `editing published rev ${workingStored.ptvRevNo} · Save publishes the change`
+              : `${editable ? "editing" : "reading"} rev ${workingStored.ptvRevNo} · ${workingStored.ptvStatus}`
             : designer.isNew
               ? "new template · rev 1 DRAFT"
               : "new draft · unsaved"}

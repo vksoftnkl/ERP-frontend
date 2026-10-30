@@ -45,21 +45,25 @@ import { useRenderPrintPreviewMutation } from "@/features/printing/api/render";
 import { buildPreviewRequest, canPreview } from "@/features/printing/domain/previewRequest";
 import { isServerOwnedParam } from "@/features/printing/domain/context";
 import { useSavePrintingTemplateMutation } from "@/features/printing/api/templates";
-import { buildSavePayload } from "@/features/printing/domain/buildSavePayload";
+import {
+  buildPublishedInPlacePayload,
+  buildSavePayload,
+} from "@/features/printing/domain/buildSavePayload";
+import { checkPublishable } from "@/features/printing/domain/draft";
 import {
   bodyFromDefinition,
   toProviderDescriptors,
   toTemplateDefinition,
 } from "@/features/printing/domain/canvasBridge";
-import { useDesigner } from "./useDesigner";
-import { printingDesignerRoute } from "@/features/printing/routes";
+import { confirmPublishedInPlace, useDesigner } from "./useDesigner";
+import { printingDesignerRoute, printingLayoutCanvasRoute } from "@/features/printing/routes";
 import styles from "@/features/printing/printing.module.scss";
 export default function LayoutCanvasScreen({ ptlId }: { ptlId: string }) {
   const router = useRouter();
   // Which revision the Designer was pointing at when the canvas was opened.
   const revId = useSearchParams().get("rev");
   const designer = useDesigner(ptlId, revId);
-  const { draft, editable, workingStored } = designer;
+  const { draft, editable, editingPublished, workingStored } = designer;
   const [saveTemplate] = useSavePrintingTemplateMutation();
   const [renderPreview] = useRenderPrintPreviewMutation();
   /*
@@ -81,6 +85,43 @@ export default function LayoutCanvasScreen({ ptlId }: { ptlId: string }) {
   }, [ptlId, router]);
   const onSave = useCallback(
     async (next: TemplateDefinition) => {
+      /*
+       * A PUBLISHED design edited in place (`EDIT_PUBLISHED_IN_PLACE`): the
+       * canvas's save is the Designer's save -- the NEXT revision, published,
+       * in one call. Unlike the draft save below it must SEND the datasets: a
+       * new revision created without them would render nothing.
+       *
+       * Rejecting (a refusal, or "No" at the question) leaves the canvas dirty.
+       */
+      if (editingPublished) {
+        const approvedBy = designer.sessionUserId;
+        const refusal = checkPublishable(working, approvedBy);
+        if (refusal || !approvedBy) {
+          toast.error(refusal?.reason ?? "Your user id is not known, so the change cannot be signed.");
+          throw new Error("not publishable");
+        }
+        if (!(await confirmPublishedInPlace(workingStored?.ptvRevNo))) {
+          throw new Error("cancelled");
+        }
+        try {
+          const saved = await saveTemplate(
+            buildPublishedInPlacePayload(
+              { ...draft, working: { ...working, ptvBody: bodyFromDefinition(next) } },
+              approvedBy,
+            ),
+          ).unwrap();
+          toast.success("Layout saved. The change is now the revision that prints.");
+          // The revision on screen was just superseded: point the canvas at the
+          // one that was written, or it would go on editing the old one.
+          if (saved.ptlPublishedRevId) {
+            router.replace(printingLayoutCanvasRoute(ptlId, saved.ptlPublishedRevId));
+          }
+        } catch (thrown) {
+          toast.error(getApiErrorMessage(thrown as never) ?? "Could not save the layout.");
+          throw thrown;
+        }
+        return;
+      }
       /*
        * `includeDatasets: false` OMITS the key. The canvas edits the body and
        * nothing else; sending `datasets` would replace the revision's set with
@@ -125,7 +166,7 @@ export default function LayoutCanvasScreen({ ptlId }: { ptlId: string }) {
           throw thrown;
         });
     },
-    [draft, saveTemplate, working],
+    [draft, designer.sessionUserId, editingPublished, ptlId, router, saveTemplate, working, workingStored?.ptvRevNo],
   );
   /**
    * Rendering, as the host offers it.
@@ -140,6 +181,7 @@ export default function LayoutCanvasScreen({ ptlId }: { ptlId: string }) {
    * that case this sends no body at all and the dialog says the preview shows
    * the stored design, which is the truthful reading rather than an error.
    */
+  const previewsUnsaved = editable && !editingPublished;
   const previewHost: CanvasPreview | undefined = useMemo(() => {
     const versionId = workingStored?.ptvId;
     return {
@@ -147,7 +189,14 @@ export default function LayoutCanvasScreen({ ptlId }: { ptlId: string }) {
       notReadyReason:
         "This revision has not been saved yet, so there is nothing on the server to render. " +
         "Save the layout first.",
-      previewsUnsaved: editable,
+      // Not while the PUBLISHED revision is edited in place: the server takes
+      // an unsaved body only against a DRAFT, so Preview shows the live one.
+      previewsUnsaved,
+      storedOnlyNote: editingPublished
+        ? "You are editing the published revision in place, and the server renders an unsaved layout only against a draft. " +
+          "The preview shows the live revision as stored — your unsaved changes on the canvas are not included. " +
+          "Save publishes them as the next revision."
+        : undefined,
       defaults: { accYear: sessionAccYear },
       /*
        * What this revision asks its operator, straight from `ptv_params`.
@@ -178,7 +227,7 @@ export default function LayoutCanvasScreen({ ptlId }: { ptlId: string }) {
         renderPreview(
           buildPreviewRequest({
             versionId,
-            editable,
+            editable: previewsUnsaved,
             definition: request.definition,
             accYear: request.accYear,
             params: request.params,
@@ -187,7 +236,8 @@ export default function LayoutCanvasScreen({ ptlId }: { ptlId: string }) {
         ).unwrap(),
     };
   }, [
-    editable,
+    editingPublished,
+    previewsUnsaved,
     renderPreview,
     sessionAccYear,
     working.ptvParams,

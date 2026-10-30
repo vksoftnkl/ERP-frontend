@@ -41,7 +41,7 @@ import type {
   SavePrintTemplateVersion,
 } from "../types/printing";
 import { PTV_JSON_ENGINE } from "../types/printing";
-import type { DesignerDraft, DraftDataset, DraftVersion } from "./draft";
+import { newDraftFrom, type DesignerDraft, type DraftDataset, type DraftVersion } from "./draft";
 
 /**
  * TRAP 5. The body as the wire wants it: ALWAYS A STRING, encoded per the
@@ -357,4 +357,26 @@ export function buildPublishPayload(
     ...identityPayload(draft),
     versions: [{ ptvId, ptvStatus: "PUBLISHED", ptvApprovedBy: approvedBy }],
   };
+}
+
+/**
+ * Save a PUBLISHED design edited in place (`draft.editsPublishedInPlace`): the
+ * edits go up as the NEXT revision, already published, in ONE call.
+ *
+ * `newDraftFrom` drops `ptvId` (so the server appends a revision instead of
+ * updating the frozen one -- TRAP 6) and strips each dataset's `ptdId` (so they
+ * are INSERTed onto the new revision), and the datasets are always sent: a new
+ * revision without them would render nothing. The pair `ptvStatus: PUBLISHED` +
+ * `ptvApprovedBy` is the whole publish gesture (TRAP 3), so no pointer is echoed.
+ * The server allows composing and publishing in one request; a roll-back already
+ * does.
+ */
+export function buildPublishedInPlacePayload(
+  draft: DesignerDraft,
+  approvedBy: string,
+): SavePrintTemplate {
+  return buildSavePayload(
+    { ...draft, working: newDraftFrom(draft.working) },
+    { intent: { kind: "PUBLISH", approvedBy }, includeDatasets: true },
+  );
 }

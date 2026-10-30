@@ -26,12 +26,14 @@ import {
 } from "@/features/printing/api/templates";
 import {
   buildIdentitySavePayload,
+  buildPublishedInPlacePayload,
   buildPublishPayload,
   buildSavePayload,
 } from "@/features/printing/domain/buildSavePayload";
 import {
   blankDraft,
   checkPublishable,
+  editsPublishedInPlace,
   isEditable,
   newDraftFrom,
   rollbackTo,
@@ -44,6 +46,21 @@ import {
 import { printingDesignerRoute } from "@/features/printing/routes";
 import type { PrintTemplateVersionPayload } from "@/features/printing/types/printing";
 import { confirm } from "@/lib/confirm";
+
+/**
+ * The one question an in-place save asks. Shared with the canvas's save so both
+ * say the same thing.
+ */
+export function confirmPublishedInPlace(revNo: number | undefined): Promise<boolean> {
+  return confirm({
+    title: "Save this change to the published design?",
+    message:
+      "It goes up as the next revision and every counter prints it from now on. " +
+      `Rev ${revNo ?? "?"} stays in the history to roll back to, and your user id is recorded as the approver.`,
+    confirmLabel: "Save and publish",
+    iconVariant: "replace",
+  });
+}
 
 export type DesignerTab = "template" | "layout" | "data";
 
@@ -146,10 +163,23 @@ export function useDesigner(
     [],
   );
 
-  /** RULE 1. A published revision is read-only; the only move on one is "new draft". */
-  const editable = useMemo(
-    () => isEditable(draft.working, draft.history),
+  /**
+   * The published revision is being edited in place (`EDIT_PUBLISHED_IN_PLACE`):
+   * the tabs are editable, and Save writes the NEXT revision, already published.
+   * False with the switch off, and false whenever the design has a draft.
+   */
+  const editingPublished = useMemo(
+    () => editsPublishedInPlace(draft.working, draft.history),
     [draft.working, draft.history],
+  );
+
+  /**
+   * RULE 1. A published revision is read-only; the only move on one is "new
+   * draft" -- unless the testing-phase switch makes it editable in place.
+   */
+  const editable = useMemo(
+    () => isEditable(draft.working, draft.history) || editingPublished,
+    [draft.working, draft.history, editingPublished],
   );
 
   /**
@@ -178,6 +208,27 @@ export function useDesigner(
       toast.error("This revision is published and cannot be edited. Start a new draft instead.");
       return;
     }
+    if (editingPublished) {
+      const approvedBy = sessionUserId;
+      if (!approvedBy) {
+        toast.error("Your user id is not known, so the change cannot be signed. Sign in again.");
+        return;
+      }
+      const refusal = checkPublishable(draft.working, approvedBy);
+      if (refusal) {
+        toast.error(refusal.reason);
+        return;
+      }
+      if (!(await confirmPublishedInPlace(workingStored?.ptvRevNo))) return;
+      try {
+        await saveTemplate(buildPublishedInPlacePayload(draft, approvedBy)).unwrap();
+        setDirty(false);
+        toast.success("Saved. The change is now the revision that prints.");
+      } catch (thrown) {
+        reportError(thrown, "Could not save the change.");
+      }
+      return;
+    }
     try {
       // `preservePublishedRevId` defends against a server defect that nulls the
       // published pointer on every update that does not itself publish. See the
@@ -195,7 +246,7 @@ export function useDesigner(
     } catch (thrown) {
       reportError(thrown, "Could not save the design.");
     }
-  }, [draft, editable, reportError, router, saveTemplate]);
+  }, [draft, editable, editingPublished, reportError, router, saveTemplate, sessionUserId, workingStored]);
 
   /**
    * TRAP 4 -- the rename path, which sends `ptl*` ALONE.
@@ -296,6 +347,7 @@ export function useDesigner(
     draft,
     dirty,
     editable,
+    editingPublished,
     workingStored,
     isNew: !ptlId,
     isLoading: Boolean(ptlId) && isLoading,

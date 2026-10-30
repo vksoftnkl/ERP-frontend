@@ -133,6 +133,13 @@ export const CONFIGURED_GRIDS = {
    */
   purchaseAgentList: { name: "MAIN LIST - PURCHASE AGENTS", fallbackId: "194", deletedParam: null },
   /**
+   * Print Templates (menu 62; Qt NexERP print_template_list). Binds six QUOTED
+   * tokens — `iptl_company_id`, `iptl_active`, `iptl_purpose_id`, `iptl_state`,
+   * `iptl_owned`, `iptl_engine` — ALL always sent ('' = no filter). The grid
+   * hardcodes `ptl_is_deleted = false`.
+   */
+  printTemplateList: { name: "MAIN LIST - PRINT TEMPLATES", fallbackId: "196", deletedParam: null },
+  /**
    * Supplier–Item Map (menu 295; Qt 97a5b48). Binds QUOTED `'icompany_id'`,
    * `'isupplier_id'` ('' = all suppliers) and `'iinactive'`, all always sent.
    */
