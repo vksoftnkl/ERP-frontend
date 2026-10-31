@@ -13,6 +13,7 @@ import {
   type LazyDropdownHandlers,
 } from "@/features/masters/shared/use-lazy-configured-dropdown";
 import { buildFormDefaults } from "@/features/masters/shared/build-form-defaults";
+import { mergeTemplateDocument } from "./merge-template-document";
 import { applyFormDefaults } from "@/features/masters/shared/apply-form-defaults";
 import {
   buildSessionScopeOverride,
@@ -577,15 +578,13 @@ export default function ItemTemplatePage() {
             },
           }),
         ) as Record<string, unknown>;
-        const settingValue: Record<string, unknown> = {};
-        for (const [key, value] of Object.entries(savedRawRef.current ?? {})) {
-          // A field this screen shows is answered by this screen — including by being
-          // cleared, which drops it. Everything else is the stored document's business.
-          if (!RENDERED_DOCUMENT_KEYS.has(key)) {
-            settingValue[key] = value;
-          }
-        }
-        Object.assign(settingValue, built);
+        // Only the rendered keys come from the form; the rest of the stored document
+        // passes through with its original JSON types.
+        const settingValue = mergeTemplateDocument(
+          savedRawRef.current,
+          built,
+          RENDERED_DOCUMENT_KEYS,
+        );
         try {
           await saveSettings([
             buildSessionScopeOverride(
