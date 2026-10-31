@@ -118,8 +118,9 @@ const ITEM_TEMPLATE_FORM_FIELD_NAMES = [
 const INITIAL_FORM_VALUES: Record<string, string> = Object.fromEntries(
   ITEM_TEMPLATE_FORM_FIELD_NAMES.map((name) => [name, ITEM_INITIAL_FORM_VALUES[name] ?? ""]),
 );
-// The lazy dropdowns' label keys, so a save can replace what this screen renders
-// without disturbing a key it does not (see the merge in onSubmit).
+// The id fields' label keys (the lazy dropdowns' and the branch's), so a save can
+// replace what this screen renders without disturbing a key it does not (see the
+// merge in onSubmit).
 const RENDERED_DOCUMENT_KEYS = new Set<string>([
   ...ITEM_TEMPLATE_FORM_FIELD_NAMES,
   ...ITEM_TEMPLATE_FIELD_SPECS.filter(
@@ -565,6 +566,8 @@ export default function ItemTemplatePage() {
             excludedPrefixes: ITEM_TEMPLATE_EXCLUDED_PREFIXES,
             labels: {
               item_company_id: resolveOptionLabel(company.options, values.item_company_id ?? ""),
+              // The branch picked now names itself: a changed branch writes its own name.
+              item_branch_id: resolveOptionLabel(branchOptions, values.item_branch_id ?? ""),
               item_group_id: resolveOptionLabel(group.options, values.item_group_id ?? ""),
               item_category_id: resolveOptionLabel(category.options, values.item_category_id ?? ""),
               item_section_id: resolveOptionLabel(section.options, values.item_section_id ?? ""),

@@ -5,11 +5,11 @@ import { ITEM_TEMPLATE_EXCLUDED_PREFIXES } from "./excluded";
 /**
  * How each Item Entry field is written into the template document.
  *
- * Only the LAZY dropdowns carry a `*Name` companion, and that is the rule
- * rather than an omission: a lazy field has no options when the create form
- * opens, so without the stored label its box would come up looking empty. The
- * eager ones (branch, base unit, HSN) have their lists loaded by then and
- * resolve their own label from the id.
+ * The LAZY dropdowns carry a `*Name` companion: a lazy field has no options
+ * when the create form opens, so without the stored label its box would come
+ * up looking empty. Of the eager ones only the branch does too (below); base
+ * unit and HSN have their lists loaded by then and resolve their own label
+ * from the id.
  *
  * The `*_name` keys are the ones `/items/get` already returns for those
  * columns, so a document written here reads the same way as a fetched item.
@@ -27,8 +27,17 @@ const ID_FIELDS: FormDefaultsFieldSpec[] = [
 
 const NUMBER_FIELDS = ["item_sort_order", "item_expiry_days", "item_intimate_before_days"] as const;
 
+/**
+ * The branch is an eager list, but the document stores its name as well
+ * (`item_branch_name`, which Qt's Item Entry reads and shows). Declared with
+ * its label key so a save writes the name of the branch picked NOW — without
+ * it, the stored name would ride through a branch change and name the old one.
+ */
+const BRANCH_FIELD: FormDefaultsFieldSpec = { name: "item_branch_id", kind: "id", labelKey: "item_branch_name" };
+
 export const ITEM_TEMPLATE_FIELD_SPECS: FormDefaultsFieldSpec[] = [
   ...ID_FIELDS,
+  BRANCH_FIELD,
   ...NUMBER_FIELDS.map((name) => ({ name, kind: "number" as const })),
   // The row editors' own flags (ir_is_active, ean_is_default, …) are dropped by
   // the prefix rule, so they are left out here rather than declared and ignored.

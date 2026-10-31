@@ -40,4 +40,55 @@ describe("mergeTemplateDocument", () => {
     const saved = mergeTemplateDocument({ item_sort_order: 4 }, {}, RENDERED);
     expect(saved).not.toHaveProperty("item_sort_order");
   });
+
+  describe("the branch and its stored name (item_branch_name, as Qt Item Entry shows it)", () => {
+    // What the page renders: the branch, and — through its spec's label key — its name.
+    const renderedWithBranch = new Set([
+      ...RENDERED,
+      "item_branch_id",
+      ...ITEM_TEMPLATE_FIELD_SPECS.filter((spec) => spec.name === "item_branch_id").map((spec) => spec.labelKey as string),
+    ]);
+    const stored = {
+      item_branch_id: "br-old",
+      item_branch_name: "Old Branch",
+      item_incl_tax: true,
+      item_is_active: true,
+    };
+    const save = (branchId: string, branchLabel: string) => {
+      const values = { ...applyFormDefaults(JSON.stringify(stored), ITEM_TEMPLATE_FIELD_SPECS).values, item_branch_id: branchId };
+      const built = JSON.parse(
+        buildFormDefaults(values, {
+          specs: ITEM_TEMPLATE_FIELD_SPECS,
+          excluded: [],
+          labels: { item_branch_id: branchLabel },
+        }),
+      ) as Record<string, unknown>;
+      return mergeTemplateDocument(stored, built, renderedWithBranch);
+    };
+
+    it("declares item_branch_name as the branch's label key", () => {
+      expect(renderedWithBranch.has("item_branch_name")).toBe(true);
+      // A label key is never read back as a form value of its own.
+      expect(applyFormDefaults(JSON.stringify(stored), ITEM_TEMPLATE_FIELD_SPECS).values).not.toHaveProperty("item_branch_name");
+    });
+
+    it("writes the new branch's name when the branch changes", () => {
+      const saved = save("br-new", "New Branch");
+      expect(saved.item_branch_id).toBe("br-new");
+      expect(saved.item_branch_name).toBe("New Branch");
+      // Unrendered keys still ride through with their types.
+      expect(saved.item_incl_tax).toBe(true);
+    });
+
+    it("keeps the name with an unchanged branch", () => {
+      const saved = save("br-old", "Old Branch");
+      expect(saved).toMatchObject({ item_branch_id: "br-old", item_branch_name: "Old Branch" });
+    });
+
+    it("drops the id and its name together when the branch is cleared", () => {
+      const saved = save("", "");
+      expect(saved).not.toHaveProperty("item_branch_id");
+      expect(saved).not.toHaveProperty("item_branch_name");
+    });
+  });
 });
