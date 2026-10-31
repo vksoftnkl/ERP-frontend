@@ -5,7 +5,10 @@ import {
   buildSavePayload,
   newSchemeForm,
   parseTime12,
+  listDateText,
   realRowCount,
+  rowIsRemovable,
+  rowIsUntouched,
   schemeFormFromPayload,
   schemeReducer,
   slabIsBlank,
@@ -471,6 +474,40 @@ describe("interlocks (reducer)", () => {
     expect(form.branches[0].branchId).toBe("");
   });
 
+  it("removes a half-filled trailing Items row (a Kind, no target) by blanking it", () => {
+    const picked = run(fresh(), { type: "itemPicked", index: 0, scopeId: "i1", name: "ZT-ITEM-A", unitId: "u1", unitName: "PCS" });
+    expect(picked.items).toHaveLength(2);
+    // Kind chosen on the trailing row: nothing grows, and it is still the last row.
+    const half = run(picked, { type: "itemKind", index: 1, kind: "ITEM_BRAND" });
+    expect(half.items).toHaveLength(2);
+    expect(half.items[1]).toMatchObject({ kind: "ITEM_BRAND", scopeId: "" });
+    expect(rowIsRemovable(half.items, 1, "items", half.header.benefit)).toBe(true);
+
+    const removed = run(half, { type: "removeRow", grid: "items", index: 1 });
+    expect(removed.items).toHaveLength(2);
+    expect(removed.items[0].scopeId).toBe("i1");
+    expect(rowIsUntouched("items", removed.items[1], removed.header.benefit)).toBe(true);
+    expect(removed.items[1].key).not.toBe(half.items[1].key);
+    // Blank again, it is the "type here to add" row and stays.
+    expect(rowIsRemovable(removed.items, 1, "items", removed.header.benefit)).toBe(false);
+    expect(run(removed, { type: "removeRow", grid: "items", index: 1 })).toBe(removed);
+  });
+
+  it("takes a half-filled trailing row that is the only row", () => {
+    const half = run(fresh(), { type: "itemKind", index: 0, kind: "ITEM_GROUP" });
+    const removed = run(half, { type: "removeRow", grid: "items", index: 0 });
+    expect(removed.items).toHaveLength(1);
+    expect(removed.items[0].kind).toBe("");
+  });
+
+  it("knows a seeded band from a touched one", () => {
+    const form = fresh();
+    expect(rowIsUntouched("slabs", form.slabs[0], form.header.benefit)).toBe(true);
+    const keyed = run(form, { type: "slabEdit", index: 0, field: "discPerc", value: "10" });
+    expect(rowIsUntouched("slabs", keyed.slabs[0], keyed.header.benefit)).toBe(false);
+    expect(rowIsRemovable(keyed.slabs, 9, "slabs", keyed.header.benefit)).toBe(false);
+  });
+
   it("seeds a new band from the header benefit", () => {
     expect(blankSlabRow("FREE_ITEM")).toMatchObject({ benefit: "FREE_ITEM", each: "1", freeStockCheck: true });
   });
@@ -494,6 +531,14 @@ describe("formats", () => {
   it("shows the list's time window on the 12-hour clock", () => {
     expect(timeWindowText("22:00 - 04:00")).toBe("10:00 PM - 04:00 AM");
     expect(timeWindowText(null)).toBe("");
+  });
+
+  it("shows the list's start and end dates dd/MM/yyyy, the stored day unshifted", () => {
+    expect(listDateText("2026-08-24")).toBe("24/08/2026");
+    // A timestamp's day part is the day: midnight UTC never turns into the 23rd.
+    expect(listDateText("2027-08-24T00:00:00.000Z")).toBe("24/08/2027");
+    expect(listDateText(null)).toBe("");
+    expect(listDateText("")).toBe("");
   });
 
   it("accepts number text the way a QDoubleValidator does", () => {

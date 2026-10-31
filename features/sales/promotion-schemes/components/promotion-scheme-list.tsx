@@ -40,7 +40,7 @@ import {
   PROMOTION_SCHEMES_MENU_ID,
   type PromotionListState,
 } from "../promotion-schemes.vocab";
-import { timeWindowText } from "../promotion-schemes.state";
+import { listDateText, timeWindowText } from "../promotion-schemes.state";
 import { useGridRefId } from "../use-grid-ref-id";
 import { PromotionSchemeEntry } from "./promotion-scheme-entry";
 import styles from "../page.module.scss";
@@ -83,6 +83,9 @@ const COLUMN_RENDER_OVERRIDES: Record<string, (row: MasterTableRow) => ReactNode
   prm_status: (row) => textOf(sourceOf(row).prm_status),
   prm_is_active: (row) => (sourceOf(row).prm_is_active === false ? "Inactive" : "Active"),
   prm_time_window: (row) => timeWindowText(sourceOf(row).prm_time_window),
+  // The grid sends the bare `date` (2026-08-24); shown dd/MM/yyyy.
+  prm_start_date: (row) => listDateText(sourceOf(row).prm_start_date),
+  prm_end_date: (row) => listDateText(sourceOf(row).prm_end_date),
 };
 
 type OpenEntry = { key: number; schemeId: string | null };

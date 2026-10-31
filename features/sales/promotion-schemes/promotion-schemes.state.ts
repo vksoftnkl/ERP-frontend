@@ -18,6 +18,7 @@
  * = soft delete), so a scope of ALL sends `[]` and a removed row is simply
  * absent.
  */
+import { formatDateOrRaw } from "@/lib/date-format";
 import { clock12FromHhmm } from "@/lib/time-format";
 import {
   ITEM_SCOPES,
@@ -256,6 +257,17 @@ export function timeWindowText(value: unknown): string {
   if (!raw) return "";
   const [from, to] = raw.split(" - ");
   return to === undefined ? clock12FromHhmm(raw) : `${clock12FromHhmm(from)} - ${clock12FromHhmm(to)}`;
+}
+
+/**
+ * A list date cell (`prm_start_date` / `prm_end_date`): the grid sends the bare
+ * `date` — the calendar day itself, `2026-08-24`, or a timestamp whose day part
+ * is that day — shown dd/MM/yyyy and never shifted through a time zone.
+ */
+export function listDateText(value: unknown): string {
+  const raw = value === null || value === undefined ? "" : String(value).trim();
+  if (!raw) return "";
+  return formatDateOrRaw(/^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : raw);
 }
 
 /**
@@ -536,6 +548,40 @@ export function schemeFormFromPayload(data: unknown): SchemeForm {
 /** Rows above the trailing blank one (Qt `realRowCount`). */
 export function realRowCount(list: readonly unknown[]): number {
   return Math.max(0, list.length - 1);
+}
+
+/** A fresh "type here to add" row for a grid. */
+function blankRowOf(grid: GridName, benefit: string): BranchRow | PartyRow | ItemRow | SlabRow {
+  switch (grid) {
+    case "branches":
+      return blankBranchRow();
+    case "parties":
+      return blankPartyRow();
+    case "items":
+      return blankItemRow();
+    case "slabs":
+      return blankSlabRow(benefit);
+  }
+}
+
+/** A row holding nothing the operator put there: field for field a fresh blank row (its key aside). */
+export function rowIsUntouched(grid: GridName, row: object, benefit: string): boolean {
+  const blank = blankRowOf(grid, benefit) as unknown as Record<string, unknown>;
+  const cells = row as Record<string, unknown>;
+  return Object.keys(blank).every((field) => field === "key" || cells[field] === blank[field]);
+}
+
+/**
+ * Whether Ctrl+Del may take this row. Any row above the trailing one; the
+ * trailing one only once something is in it — a Kind chosen with no target
+ * yet, say. A trailing row that is still blank is the grid's "type here to
+ * add" row, not data, and stays. (Qt refuses the trailing row outright, which
+ * leaves a half-filled last row impossible to clear.)
+ */
+export function rowIsRemovable(list: readonly object[], index: number, grid: GridName, benefit: string): boolean {
+  if (!Number.isInteger(index) || index < 0 || index >= list.length) return false;
+  if (index < list.length - 1) return true;
+  return !rowIsUntouched(grid, list[index], benefit);
 }
 
 // ── The payload (Qt collectHeader / collect*) ─────────────────────────────
@@ -1222,9 +1268,14 @@ export function schemeReducer(form: SchemeForm, action: SchemeAction): SchemeFor
       return { ...form, slabs: grow(slabs, action.index, () => blankSlabRow(h.benefit)), dirty: true };
     }
     case "removeRow": {
-      const list = form[action.grid] as unknown[];
-      // The trailing blank row is the "type here to add" affordance, not data.
-      if (action.index < 0 || action.index >= list.length - 1) return form;
+      const list = form[action.grid] as object[];
+      // A blank trailing row is the "type here to add" affordance, not data.
+      if (!rowIsRemovable(list, action.index, action.grid, h.benefit)) return form;
+      if (action.index === list.length - 1) {
+        // A half-filled trailing row: the grid always keeps one waiting, so
+        // removing it puts a blank one in its place.
+        return { ...form, [action.grid]: replaceAt(list, action.index, blankRowOf(action.grid, h.benefit)), dirty: true };
+      }
       const kept = list.filter((_, index) => index !== action.index);
       return { ...form, [action.grid]: kept, dirty: true };
     }

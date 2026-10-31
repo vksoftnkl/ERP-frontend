@@ -53,6 +53,7 @@ import {
   buildSavePayload,
   newSchemeForm,
   realRowCount,
+  rowIsRemovable,
   schemeFormFromPayload,
   schemeReducer,
   triggerRefused,
@@ -360,13 +361,16 @@ export function PromotionSchemeEntry({ schemeId, onClose, onSaved }: PromotionSc
     if (!rowElement) return;
     const index = Number(rowElement.dataset.rowIndex);
     const list = formRef.current[tab as GridName];
-    // The trailing blank row is the "type here to add" affordance, not data.
-    if (!Number.isInteger(index) || index >= list.length - 1) return;
+    // A blank trailing row is the "type here to add" affordance, not data; a
+    // half-filled one (a Kind with no target yet) can be removed.
+    if (!rowIsRemovable(list, index, tab as GridName, formRef.current.header.benefit)) return;
     if (!(await confirm({ title: "Remove row", message: `Remove row ${index + 1}?`, confirmLabel: "Remove", iconVariant: "delete" }))) {
       return;
     }
     dispatch({ type: "removeRow", grid: tab as GridName, index });
-    setFocusRequest(cellFocusKey(tab as GridName, Math.max(0, index - 1), tab === "branches" ? "branch" : tab === "slabs" ? "exceeds" : "kind"));
+    // The trailing row stays where it was, blank again; any other row's place goes.
+    const focusRow = index === list.length - 1 ? index : Math.max(0, index - 1);
+    setFocusRequest(cellFocusKey(tab as GridName, focusRow, tab === "branches" ? "branch" : tab === "slabs" ? "exceeds" : "kind"));
   }, [tab]);
 
   // ── Save / close ────────────────────────────────────────────────────────
