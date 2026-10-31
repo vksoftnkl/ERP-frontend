@@ -71,6 +71,8 @@ export type ShippingDialogProps = {
   onSaveTransport: (band: TransportBand) => Promise<boolean>;
   /** "+" beside the site combo — the customer's ship-to list screen. */
   onOpenShipToList?: () => void;
+  /** A document with no terms on the band (the delivery challan) leaves the Terms group out. */
+  hideTerms?: boolean;
 };
 
 const SHIP_TO_BILL = "__bill-to__";
@@ -101,6 +103,7 @@ function ShippingDialogBody({
   onApply,
   onSaveTransport,
   onOpenShipToList,
+  hideTerms = false,
 }: ShippingDialogProps) {
   const [band, setBand] = useState<TransportBand>(initialBand);
   const [terms, setTerms] = useState<SaleBillTerms>(initialTerms);
@@ -441,7 +444,7 @@ function ShippingDialogBody({
           </GroupBox>
         </div>
 
-        <GroupBox title="Terms" className={styles.shippingGroup}>
+        {hideTerms ? null : <GroupBox title="Terms" className={styles.shippingGroup}>
           <div className={quotationStyles.fieldGrid}>
             <TextField id="ship-payment-terms" label="Payment Terms" value={terms.paymentTerms} disabled={locked || mode === "ownVerb"} maxLength={250} onChange={(value) => setTerms((current) => ({ ...current, paymentTerms: value }))} />
             <TextField id="ship-delivery-terms" label="Delivery Terms" value={terms.deliveryTerms} disabled={locked || mode === "ownVerb"} maxLength={250} onChange={(value) => setTerms((current) => ({ ...current, deliveryTerms: value }))} />
@@ -450,7 +453,7 @@ function ShippingDialogBody({
           {mode === "ownVerb" ? (
             <p className={quotationStyles.modalNote}>The terms belong to the document; on a posted bill they change through Amend.</p>
           ) : null}
-        </GroupBox>
+        </GroupBox>}
       </div>
     </ModalShell>
   );

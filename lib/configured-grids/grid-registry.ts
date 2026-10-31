@@ -158,6 +158,8 @@ export const CONFIGURED_GRIDS = {
   quotationList: { name: "TXN MAIN LIST - QUOTATION", fallbackId: "83", deletedParam: null },
   billList: { name: "TXN MAIN LIST - BILLS", fallbackId: "86", deletedParam: null },
   saleOrderList: { name: "TXN MAIN LIST - SALES ORDER", fallbackId: "87", deletedParam: null },
+  /** Delivery Challan (menu 182). Binds `icompany_id`, `ibranch_id`, `iacc_year`, `ifrom_date`, `ito_date`, `ifulfil` — all ALWAYS sent. */
+  deliveryChallanList: { name: "MAIN LIST - DELIVERY CHALLANS", fallbackId: "116", deletedParam: null },
   /**
    * Receipt Entry (menu 99) — the register behind F8.
    *

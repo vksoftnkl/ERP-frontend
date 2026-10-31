@@ -88,6 +88,8 @@ export const UI_TABLES = {
   advanceAdj: { name: "ADVANCE ADJ", fallbackId: "25" },
   /** Sale Order Entry item grid. */
   saleOrderLines: { name: "SO - ITEM", fallbackId: "24" },
+  /** Delivery Challan (menu 182) — 101 columns, Qt `SalesItemCols`. */
+  deliveryChallanLines: { name: "DELIVERY CHALLAN - LINES", fallbackId: "38" },
   /**
    * The additional-charges grid, shared by Quotation, Sale Bill and Sale Order:
    * one layout, one set of widths, whichever screen opens it.

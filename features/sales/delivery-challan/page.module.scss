@@ -1,0 +1,162 @@
+/*
+ * Delivery Challan — layout the challan adds over the quotation / sale-order
+ * skins (which carry every field, grid, button and colour). Tokens only.
+ */
+:root {
+  --erp-dc-u: var(--erp-q-u, 1rem);
+}
+@function u($n) {
+  @return calc(#{$n} * var(--erp-dc-u));
+}
+
+.headerRowDc {
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.facts {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: u(0.15);
+  margin-top: u(0.25);
+  font-size: u(0.66);
+}
+
+.factLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.2) u(0.9);
+}
+
+.factCaption {
+  color: var(--text-muted);
+  font-size: u(0.6);
+  margin-right: u(0.3);
+}
+
+.factValue {
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.inlinePair {
+  display: flex;
+  gap: u(0.3);
+  align-items: center;
+  min-width: 0;
+}
+
+.inlinePair > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sourceList {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.25);
+  font-size: u(0.7);
+}
+
+.sourceRow {
+  display: flex;
+  gap: u(0.4);
+  align-items: baseline;
+}
+
+.sourceTag {
+  padding: 0 u(0.25);
+  border-radius: var(--erp-radius);
+  background: var(--primary);
+  color: var(--card-bg);
+  font-size: u(0.58);
+  font-weight: 700;
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.transportSummary {
+  grid-column: 1 / -1;
+  font-size: u(0.66);
+  color: var(--text-soft);
+}
+
+.badgeLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.3) u(1);
+  padding: u(0.2) u(0.6);
+  font-size: u(0.7);
+  font-weight: 600;
+  border: 1px solid var(--border-light);
+  border-radius: var(--erp-radius);
+  background: var(--header-bg);
+}
+
+.stockLine {
+  min-height: u(1);
+  padding: 0 u(0.4);
+  font-size: u(0.68);
+  color: var(--text-soft);
+}
+
+.totalsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.4) u(1.6);
+  justify-content: flex-end;
+  padding: u(0.35) u(0.8);
+  border: 1px solid var(--border);
+  border-radius: var(--erp-radius);
+  background: var(--card-bg);
+}
+
+.totalCell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: u(5);
+}
+
+.totalLabel {
+  color: var(--text-muted);
+  font-size: u(0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.totalValue {
+  font-size: u(0.85);
+  font-weight: 700;
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+}
+
+.totalGrand .totalValue {
+  font-size: u(1.05);
+  color: var(--primary);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  gap: u(0.5);
+}
+
+.footer > :last-child {
+  margin-left: auto;
+}
+
+.fulfilmentBadge {
+  font-size: u(0.72);
+  font-weight: 700;
+}
+
+.promptGrid {
+  display: grid;
+  grid-template-columns: minmax(u(6), auto) minmax(0, 1fr);
+  gap: u(0.4) u(0.6);
+  align-items: center;
+}

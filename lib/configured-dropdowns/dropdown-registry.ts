@@ -63,6 +63,8 @@ export const CONFIGURED_DROPDOWNS = {
   /** Salesmen and agents alike. Its SQL binds a company token — send `dropdown_param`. */
   employee: { name: "EMPLOYEES", fallbackId: "38", paramBound: true },
   customer: { name: "CUSTOMERS", fallbackId: "39", paramBound: false },
+  /** Delivery Challan purposes — `unnest(comp_dc_purposes)`; binds a bare `icomp_id`. */
+  dcPurposes: { name: "DC PURPOSES", fallbackId: "57", paramBound: true },
   /**
    * Receipt Entry's customer picker, narrowed by the beat. Its SQL names a bare
    * `iarea_id` token, so `dropdown_param` is ALWAYS sent — as an empty string

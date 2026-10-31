@@ -43,6 +43,7 @@ export const MENU_ROUTES: Readonly<Record<number, MenuRoute>> = {
   10: { href: "/master/customer" },
   14: { href: "/sales/quotation" },
   11: { href: "/sales/sale-order" },
+  182: { href: "/sales/delivery-challan" },
   // The sale bill (Ctrl+S).
   12: { href: "/sales/sale-bill" },
   // The two registers the sale bill owns (plan-react-sale-bill §24): grid 113
