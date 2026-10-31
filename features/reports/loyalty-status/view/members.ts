@@ -163,3 +163,17 @@ export function membersNote(count: number, f: MembersFilters): string {
   const period = f.earned ? `* Earned in the period (${showDate(f.earnedFrom)} → ${showDate(f.earnedTo)}).  ` : "";
   return period + MEMBERS_LEGEND;
 }
+
+/**
+ * The member the cursor lands on once a load is in (Qt `fillMembers`' keep):
+ * the wanted one when it is listed, else the first row.
+ *
+ * "Wanted" is an id, never a name — the member the cursor was on, or the one
+ * an Enter on an expiring row drilled to. Find is a text match, so the drill's
+ * "Customer" also lists "Cash Customer"; picking by id is what lands on the
+ * member the operator pressed Enter on.
+ */
+export function memberToKeep(items: readonly Pick<MemberItem, "memberId">[], wanted: string | null): string | null {
+  if (wanted && items.some((m) => m.memberId === wanted)) return wanted;
+  return items[0]?.memberId ?? null;
+}

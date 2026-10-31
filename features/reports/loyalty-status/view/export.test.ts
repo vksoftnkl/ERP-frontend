@@ -57,6 +57,16 @@ describe("print and Excel", () => {
     expect(html).toContain("<p>1 row(s)</p>");
   });
 
+  it("carries no Total row — Qt's exportHtml / saveTabAsCsv write the rows alone", () => {
+    const rows = [cashCustomer as never, cashCustomer as never];
+    const html = exportHtml({ tabLabel: "Members", printedAs: "", tab: "members", rows });
+    expect(html).not.toMatch(/>Total</);
+    expect(html.match(/<tr>/g)).toHaveLength(1 + rows.length);
+    const sheet = exportSheet({ tabLabel: "Members", printedAs: "", tab: "members", rows });
+    // printedAs, the headings, one row per export row — nothing after.
+    expect(sheet.rows).toHaveLength(2 + rows.length);
+  });
+
   it("writes the sheet: printedAs, the headings, numbers as numbers, dates as dates", () => {
     const sheet = exportSheet({ tabLabel: "Expiring soon", printedAs: "As on 31-10-2026", tab: "expiring", rows: [expiringRow as never] });
     expect(sheet.rows[0]).toEqual([{ t: "s", v: "As on 31/10/2026" }]);

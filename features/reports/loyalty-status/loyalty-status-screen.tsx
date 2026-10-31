@@ -99,7 +99,7 @@ import {
 } from "./view/expiring";
 import { exportFileName, exportHtml, exportSheet } from "./view/export";
 import { num, txt } from "./view/format";
-import { memberCells, memberColumns, membersNote, memberTiles, memberTotals } from "./view/members";
+import { memberCells, memberColumns, membersNote, memberTiles, memberToKeep, memberTotals } from "./view/members";
 import {
   GIFT_COLUMNS,
   giftCells,
@@ -328,8 +328,7 @@ export default function LoyaltyStatusScreen() {
   const [seenMembers, setSeenMembers] = useState(members.state.version);
   if (seenMembers !== members.state.version) {
     setSeenMembers(members.state.version);
-    const items = members.state.items;
-    const keep = memberSel.id && items.some((m) => m.memberId === memberSel.id) ? memberSel.id : (items[0]?.memberId ?? null);
+    const keep = memberToKeep(members.state.items, memberSel.id);
     setMemberSel((s) => ({ id: keep, nonce: s.nonce + 1 }));
   }
   const currentMember = useMemo(
@@ -389,13 +388,17 @@ export default function LoyaltyStatusScreen() {
 
   const openExpiringMember = useCallback(
     (row: ExpiringItem) => {
-      // Enter on an expiring row → that member on the Members tab (Find = the name).
+      // Enter on an expiring row → that member on the Members tab (Find = the
+      // name, as Qt). The cursor is put on the row's own member BY ID before
+      // the list loads, so the load keeps it (`memberToKeep`) — a name match
+      // alone would land on whichever "…Customer" sorts first.
       const next: AllFilters = {
         ...latest.current.filters,
         members: { ...latest.current.filters.members, find: txt(row.customerName) },
       };
       setFilters(next);
       latest.current = { ...latest.current, filters: next, tab: "members" };
+      setMemberSel((s) => (s.id === row.memberId ? s : { id: row.memberId, nonce: s.nonce }));
       setTab("members");
       loadMembers(next.members);
     },
@@ -748,7 +751,8 @@ export default function LoyaltyStatusScreen() {
                 totals={memberTotals(members.state.items, members.state.summary, members.state.total)}
                 selectedKey={memberSel.id}
                 onSelect={(row) => setMemberSel((s) => (s.id === row.memberId ? s : { id: row.memberId, nonce: s.nonce }))}
-                emptyText={members.state.loading ? LOADING : members.state.loaded ? "No member matches these filters." : ""}
+                // The note under the grid says it (Qt lblMembersNote) — once.
+                emptyText=""
                 ariaLabel="Members"
                 stale={members.state.loading && members.state.items.length > 0}
                 testId="ls-members-grid"
@@ -824,7 +828,8 @@ export default function LoyaltyStatusScreen() {
                 selectedKey={expiringSel}
                 onSelect={(row, i) => setExpiringSel(expiringKey(row, i))}
                 onEnter={openExpiringMember}
-                emptyText={expiring.state.loading ? LOADING : expiring.state.loaded ? "Nothing lapses in this window." : ""}
+                // The note under the grid says it (Qt lblExpNote) — once.
+                emptyText=""
                 ariaLabel="Expiring lots"
                 stale={expiring.state.loading && expiring.state.items.length > 0}
                 testId="ls-expiring-grid"
@@ -861,7 +866,8 @@ export default function LoyaltyStatusScreen() {
                 totals={schemes.state.data ? schemeTotals(schemes.state.data.summary) : null}
                 selectedKey={schemeRow}
                 onSelect={pickScheme}
-                emptyText={schemes.state.loading ? LOADING : schemes.state.data ? "No scheme holds points or moved in this period." : ""}
+                // The note under the grid says it (Qt lblSchNote) — once.
+                emptyText=""
                 ariaLabel="Schemes"
                 stale={schemes.state.loading && schemeItems.length > 0}
                 testId="ls-schemes-grid"

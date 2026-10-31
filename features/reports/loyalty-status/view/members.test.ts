@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { defaultMembers } from "../query/params";
 import { cashCustomer, lakshmi, membersSummary, noScheme, TODAY, velan } from "../testing/fixtures";
-import { bestGiftText, memberCells, memberColumns, membersNote, memberTiles, memberTotals } from "./members";
+import { bestGiftText, memberCells, memberColumns, membersNote, memberTiles, memberToKeep, memberTotals } from "./members";
 
 const texts = (cells: { text: string }[]) => cells.map((c) => c.text);
 
@@ -85,5 +85,26 @@ describe("the Total row, tiles and note", () => {
     expect(membersNote(3, { ...defaultMembers(TODAY), earned: true })).toMatch(
       /^\* Earned in the period \(01\/04\/2026 → 31\/10\/2026\)\. {2}Redeemed includes gifts\./,
     );
+  });
+});
+
+describe("where the cursor lands after a load", () => {
+  // Find "Customer" (the drill from an expiring row) lists Cash Customer too,
+  // and it may well sort first.
+  const customer = { ...cashCustomer, memberId: "m-customer", customerName: "Customer" };
+  const found = [cashCustomer, customer];
+
+  it("lands on the drilled member by id, not on the first name match", () => {
+    expect(memberToKeep(found, "m-customer")).toBe("m-customer");
+  });
+
+  it("keeps the member the cursor was on", () => {
+    expect(memberToKeep([lakshmi, velan], velan.memberId)).toBe(velan.memberId);
+  });
+
+  it("falls back to the first row when the wanted member is not listed, or none was wanted", () => {
+    expect(memberToKeep(found, "m-gone")).toBe(cashCustomer.memberId);
+    expect(memberToKeep(found, null)).toBe(cashCustomer.memberId);
+    expect(memberToKeep([], "m-customer")).toBeNull();
   });
 });
