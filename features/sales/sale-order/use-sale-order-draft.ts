@@ -113,6 +113,7 @@ import {
   createOrderDraft,
   deliveryDefaultsToKeep,
   isCustomerLocked,
+  withFreshRowKeys,
   type OrderHeaderDefaults,
 } from "./sale-order.state";
 import { newOrderStatusFor, toEnginePolicy, type SaleOrderSettings } from "./sale-order.settings";
@@ -1167,7 +1168,7 @@ export function useSaleOrderDraft(
       return;
     }
     if (resume.source === "recalled") {
-      dispatch(draftReplaced(resume.recalled));
+      dispatch(draftReplaced(withFreshRowKeys(resume.recalled)));
     }
     setMemoryArmed(true);
     await new Promise((resolve) => window.setTimeout(resolve, 0));

@@ -8,6 +8,8 @@ import { describe, expect, it } from "vitest";
 import { recalcDocument } from "@/domain/pricing";
 import type { SaveActor } from "@/features/sales/quotation/quotation.payload";
 import { createDraftChargeRow } from "@/features/sales/quotation/quotation.state";
+import { nextRowKey } from "@/features/sales/quotation/quotation.utils";
+import { nextTenderKey } from "./tender/rows";
 import { buildSavePayload, dominantTenderType } from "./sale-order.payload";
 import {
   applyDiscountPercToLines,
@@ -18,6 +20,7 @@ import {
   emptyOrderHeader,
   findDuplicateLine,
   scaleLineRates,
+  withFreshRowKeys,
 } from "./sale-order.state";
 import type { PartyCreditSummary, SaleOrderDraft, TenderDraftRow } from "./sale-order.types";
 import { chargeRoleGate, creditGate, validateSaveInputs } from "./sale-order.validate";
@@ -303,5 +306,36 @@ describe("payload: status, pay mode, pin", () => {
     expect(payload.soPayMode).toBe("CARD");
     expect(payload.soCustPin).toBe("600001");
     expect(dominantTenderType([])).toBeNull();
+  });
+});
+
+// The key counters restart at every page load, so the keys a remembered order
+// carries can be the very ones this page hands out next; a new row would then
+// share a restored row's key and an edit would change both.
+describe("a recalled order gets fresh row keys", () => {
+  it("lines, charges and tenders all leave the page's next keys free", () => {
+    const base = baseDraft();
+    const lineProbe = Number(nextRowKey("line").split("-")[1]);
+    const chargeProbe = Number(nextRowKey("charge").split("-")[1]);
+    const tenderProbe = Number(nextTenderKey().split("-")[1]);
+    const stored: SaleOrderDraft = {
+      ...base,
+      lines: [
+        { ...base.lines[0], key: `line-${lineProbe + 1}` },
+        { ...base.lines[0], key: `line-${lineProbe + 2}` },
+      ],
+      charges: [
+        {
+          ...createDraftChargeRow({ chgId: "chg-f", chgName: "Freight", ledgerCode: "L-FR", role: "FREIGHT" }),
+          key: `charge-${chargeProbe + 1}`,
+        },
+      ],
+      tenders: [tenderRow({ key: `tender-${tenderProbe + 1}` })],
+    };
+    const back = withFreshRowKeys(stored);
+    const keys = [...back.lines, ...back.charges, ...back.tenders].map((r) => r.key);
+    const next = [nextRowKey("line"), nextRowKey("charge"), nextTenderKey()];
+    expect(new Set([...keys, ...next]).size).toBe(keys.length + next.length);
+    expect(back.lines.map((l) => l.itemName)).toEqual(stored.lines.map((l) => l.itemName));
   });
 });

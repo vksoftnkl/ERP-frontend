@@ -64,7 +64,7 @@ let lineSeq = 0;
 /** A key no other line on the screen holds. */
 export function newLineKey(): string {
   lineSeq += 1;
-  return `sal-${lineSeq}`;
+  return `sal-${Date.now().toString(36)}-${lineSeq}`;
 }
 
 export function blankLine(key: string = newLineKey()): AdjustmentLine {

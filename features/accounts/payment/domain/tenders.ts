@@ -101,7 +101,7 @@ let tenderKeySequence = 0;
 export function paymentTenderRowFrom(master: TenderMasterRow): PaymentTenderRow {
   tenderKeySequence += 1;
   return {
-    key: `payment-tender-${tenderKeySequence}`,
+    key: `payment-tender-${Date.now().toString(36)}-${tenderKeySequence}`,
     tdId: null,
     tenderId: master.tndId,
     tenderTypeId: typeIdOf(master),

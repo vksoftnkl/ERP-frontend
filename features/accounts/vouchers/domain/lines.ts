@@ -76,7 +76,7 @@ let lineSequence = 0;
 export function blankLine(drCr: DrCr = "DR"): VoucherLine {
   lineSequence += 1;
   return {
-    key: `voucher-line-${lineSequence}`,
+    key: `voucher-line-${Date.now().toString(36)}-${lineSequence}`,
     drCr,
     ledgerId: "",
     ledgerName: "",

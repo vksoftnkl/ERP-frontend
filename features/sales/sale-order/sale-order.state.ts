@@ -22,7 +22,8 @@ import {
   DEFAULT_POS_STATE_NAME,
 } from "@/features/sales/quotation/quotation.constants";
 import type { DraftLine as QuotationDraftLine } from "@/features/sales/quotation/quotation.types";
-import { addDays, asEnum, todayIso } from "@/features/sales/quotation/quotation.utils";
+import { addDays, asEnum, nextRowKey, todayIso } from "@/features/sales/quotation/quotation.utils";
+import { nextTenderKey } from "./tender/rows";
 import {
   DEFAULT_DELIVERY_MODE,
   DEFAULT_ORDER_PRIORITY,
@@ -285,6 +286,23 @@ export function applyOrderHeaderField(
     return { ...next, priceLevel: clampPriceLevel(Number(value)) };
   }
   return next;
+}
+
+/**
+ * A stored draft with fresh row keys on its lines, charge rows and tender rows.
+ *
+ * The keys were minted by the page that stored the draft, and the key counters
+ * start again at every page load: after a reload a new row could be handed a
+ * key a restored one already carries, and an edit addressed to one would change
+ * both. Every other field is left as stored.
+ */
+export function withFreshRowKeys(draft: SaleOrderDraft): SaleOrderDraft {
+  return {
+    ...draft,
+    lines: (draft.lines ?? []).map((line) => ({ ...line, key: nextRowKey("line") })),
+    charges: (draft.charges ?? []).map((row) => ({ ...row, key: nextRowKey("charge") })),
+    tenders: (draft.tenders ?? []).map((row) => ({ ...row, key: nextTenderKey() })),
+  };
 }
 
 /**

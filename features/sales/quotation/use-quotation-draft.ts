@@ -105,6 +105,7 @@ import {
   nextHoldSlno,
   readHoldUiState,
   readQuotationAutosave,
+  withFreshRowKeys,
   writeQuotationAutosave,
   type QuotationAutosave,
 } from "./quotation.hold";
@@ -1434,7 +1435,7 @@ export function useQuotationDraft(
       return;
     }
     if (resume.source === "recalled") {
-      dispatch(draftReplaced(resume.recalled));
+      dispatch(draftReplaced(withFreshRowKeys(resume.recalled)));
     }
     setMemoryArmed(true);
     await new Promise((resolve) => window.setTimeout(resolve, 0));

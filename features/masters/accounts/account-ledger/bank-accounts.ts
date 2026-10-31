@@ -76,7 +76,7 @@ export type LedgerBankAccountFieldName =
 let bankAccountRowKeySeq = 0;
 function nextBankAccountRowKey(): string {
   bankAccountRowKeySeq += 1;
-  return `lba-row-${bankAccountRowKeySeq}`;
+  return `lba-row-${Date.now().toString(36)}-${bankAccountRowKeySeq}`;
 }
 export function createEmptyBankAccountRow(): LedgerBankAccountFormRow {
   return {

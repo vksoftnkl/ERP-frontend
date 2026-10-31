@@ -247,7 +247,7 @@ let lineSequence = 0;
 /** A fresh React key. Never sent. */
 export function newLineKey(): string {
   lineSequence += 1;
-  return `osl-${lineSequence}`;
+  return `osl-${Date.now().toString(36)}-${lineSequence}`;
 }
 
 export function blankLine(key: string = newLineKey()): OpeningStockLine {

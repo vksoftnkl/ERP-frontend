@@ -113,7 +113,7 @@ export function usableTenders(
 }
 
 let tenderRowSequence = 0;
-function nextTenderKey(): string {
+export function nextTenderKey(): string {
   tenderRowSequence += 1;
   return `tender-${tenderRowSequence}`;
 }

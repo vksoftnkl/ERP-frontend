@@ -107,7 +107,7 @@ let rowSequence = 0;
 /** A fresh React key for a row this screen puts on the grid. */
 export function nextRowKey(): string {
   rowSequence += 1;
-  return `csp-${rowSequence}`;
+  return `csp-${Date.now().toString(36)}-${rowSequence}`;
 }
 
 // ---------------------------------------------------------------------------

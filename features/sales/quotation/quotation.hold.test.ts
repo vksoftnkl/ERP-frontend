@@ -40,6 +40,7 @@ import {
   nextHoldNo,
   nextHoldSlno,
   readHoldUiState,
+  withFreshRowKeys,
   type QuotationAutosave,
 } from "./quotation.hold";
 import type { SaveActor } from "./quotation.payload";
@@ -719,5 +720,41 @@ describe("draftFromAutosave", () => {
       draft: { ...legacy, customer } as unknown as QuotationDraft,
     });
     expect(back.customer.masterName).toBe("Acme");
+  });
+});
+
+// The key counter restarts at every page load, so the keys a stored quotation
+// carries can be the very ones this page hands out next; a new row would then
+// share a restored row's key and an edit would change both.
+describe("restored quotations get fresh row keys", () => {
+  function parked(): QuotationDraft {
+    const probe = Number(nextRowKey("line").split("-")[1]);
+    const base = baseDraft();
+    return {
+      ...base,
+      lines: [
+        { ...base.lines[0], key: `line-${probe + 1}` },
+        { ...base.lines[0], key: `line-${probe + 2}` },
+      ],
+      charges: [{ ...(base.charges[0] ?? ({} as QuotationDraft["charges"][number])), key: `charge-${probe + 1}` }],
+    };
+  }
+  const keysOf = (d: QuotationDraft) => [...d.lines, ...d.charges].map((r) => r.key);
+
+  it.each([
+    [
+      "hold",
+      (d: QuotationDraft) =>
+        draftFromHold(holdRow(), { draft: d } as unknown as NonNullable<ReturnType<typeof readHoldUiState>>),
+    ],
+    ["autosave", (d: QuotationDraft) => draftFromAutosave({ draft: d } as unknown as QuotationAutosave)],
+    ["screen memory", (d: QuotationDraft) => withFreshRowKeys(d)],
+  ])("%s: every key is unique and none is one the page mints next", (_name, restore) => {
+    const src = parked();
+    const back = restore(src);
+    const keys = keysOf(back);
+    const next = nextRowKey("line");
+    expect(new Set([...keys, next]).size).toBe(keys.length + 1);
+    expect(back.lines).toHaveLength(src.lines.length);
   });
 });

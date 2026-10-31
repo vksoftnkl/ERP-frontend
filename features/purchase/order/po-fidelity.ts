@@ -158,7 +158,7 @@ export function chargeBasis(method: string, onBill: boolean, type: string): stri
 let chargeSeq = 0;
 export function nextChargeKey(): string {
   chargeSeq += 1;
-  return `poc-${chargeSeq}`;
+  return `poc-${Date.now().toString(36)}-${chargeSeq}`;
 }
 
 /** A stored charge (Qt applyLoaded: the saved estimate stands as typed). */

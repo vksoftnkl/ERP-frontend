@@ -30,7 +30,7 @@ let rowSequence = 0;
 
 function nextKey(prefix: string): string {
   rowSequence += 1;
-  return `${prefix}-${rowSequence}`;
+  return `${prefix}-${Date.now().toString(36)}-${rowSequence}`;
 }
 
 export function emptyLine(): ExpenseLineDraft {

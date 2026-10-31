@@ -26,7 +26,7 @@ let rowKeySequence = 0;
  */
 export function nextRowKey(prefix: string): string {
   rowKeySequence += 1;
-  return `${prefix}-${rowKeySequence}`;
+  return `${prefix}-${Date.now().toString(36)}-${rowKeySequence}`;
 }
 
 export function parseLedgerRow(dto: OpeningRowDto): LedgerRow {

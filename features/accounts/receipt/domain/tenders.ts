@@ -98,7 +98,7 @@ let tenderKeySequence = 0;
 export function tenderRowFrom(master: TenderMasterRow): TenderRow {
   tenderKeySequence += 1;
   return {
-    key: `tender-row-${tenderKeySequence}`,
+    key: `tender-row-${Date.now().toString(36)}-${tenderKeySequence}`,
     tdId: null,
     tenderId: master.tndId,
     tenderTypeId: Number.parseInt(master.tndTypeId, 10) || 0,

@@ -43,7 +43,7 @@ import { toPaise, toRupees } from "../domain/money";
 let rowKeySequence = 0;
 export function nextRowKey(prefix: string): string {
   rowKeySequence += 1;
-  return `${prefix}-${rowKeySequence}`;
+  return `${prefix}-${Date.now().toString(36)}-${rowKeySequence}`;
 }
 
 /** A wire date (or timestamp) as a date input's value. */

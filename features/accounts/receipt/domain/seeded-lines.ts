@@ -59,7 +59,7 @@ export function isSeededRole(role: ReceiptRole | null): boolean {
 let seededKeySequence = 0;
 function seededKey(role: ReceiptRole): string {
   seededKeySequence += 1;
-  return `seeded-${role}-${seededKeySequence}`;
+  return `seeded-${role}-${Date.now().toString(36)}-${seededKeySequence}`;
 }
 
 function blankSeededLine(role: ReceiptRole, amount: number): OtherLineRow {

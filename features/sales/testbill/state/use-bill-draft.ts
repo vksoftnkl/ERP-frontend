@@ -257,6 +257,7 @@ import {
   nextHoldSlno,
   readAutosave,
   readBillHoldUiState,
+  withFreshRowKeys,
   writeAutosave,
   type BillAutosave,
 } from "@/features/sales/testbill/state/hold";
@@ -662,7 +663,7 @@ export function useSaleBillDraft(
     billReducer,
     undefined,
     () =>
-      recalled ??
+      (recalled ? withFreshRowKeys(recalled) : null) ??
       createBillDraft({
         companyId: context.companyId,
         branchId: context.branchId,

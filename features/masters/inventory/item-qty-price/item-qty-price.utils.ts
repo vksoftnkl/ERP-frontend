@@ -55,7 +55,7 @@ export function priceModeLabel(mode: string): string {
 let localIdCounter = 0;
 export function createLocalId(): string {
   localIdCounter += 1;
-  return `new-${localIdCounter}`;
+  return `new-${Date.now().toString(36)}-${localIdCounter}`;
 }
 // Today as the operator's calendar has it (not UTC's — the counter opens before
 // 05:30 IST too).

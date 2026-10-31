@@ -92,7 +92,7 @@ function seededLine(
   seededKeySequence += 1;
   const defaults = defaultsForRole(role);
   return {
-    key: `payment-seeded-${role}-${seededKeySequence}`,
+    key: `payment-seeded-${role}-${Date.now().toString(36)}-${seededKeySequence}`,
     role,
     ledgerId: null,
     ledgerName: "",

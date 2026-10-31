@@ -184,6 +184,22 @@ export function isQuotationHold(hold: TxnHoldPayload): boolean {
   return readHoldUiState(hold.txhPayload) !== null;
 }
 /**
+ * A stored draft with fresh row keys on its lines and charge rows.
+ *
+ * The keys were minted by the page that stored the draft, and the key counter
+ * starts again at every page load: after a reload a new row could be handed a
+ * key a restored one already carries, and an edit addressed to one would change
+ * both. Every other field is left as stored.
+ */
+export function withFreshRowKeys(draft: QuotationDraft): QuotationDraft {
+  return {
+    ...draft,
+    lines: (draft.lines ?? []).map((line) => ({ ...line, key: nextRowKey("line") })),
+    charges: (draft.charges ?? []).map((row) => ({ ...row, key: nextRowKey("charge") })),
+  };
+}
+
+/**
  * The cart, as the screen last had it.
  *
  * Restored as an editable draft with live pricing: a parked cart is unfinished
@@ -211,8 +227,7 @@ export function draftFromHold(
     // cart, and the key counter starts again at every load: after a reload a
     // new row could be handed a key a restored one already carries, and an
     // edit addressed to one would change both.
-    lines: (state.draft.lines ?? []).map((line) => ({ ...line, key: nextRowKey("line") })),
-    charges: (state.draft.charges ?? []).map((row) => ({ ...row, key: nextRowKey("charge") })),
+    ...withFreshRowKeys(state.draft),
     customer: {
       ...state.draft.customer,
       masterName: heldCustomer?.masterName ?? heldCustomer?.name ?? "",
@@ -530,7 +545,7 @@ export async function clearQuotationAutosave(deviceId: string): Promise<void> {
 export function draftFromAutosave(record: QuotationAutosave): QuotationDraft {
   const heldCustomer = record.draft.customer as Partial<CustomerSnapshot> | undefined;
   return {
-    ...record.draft,
+    ...withFreshRowKeys(record.draft),
     customer: {
       ...record.draft.customer,
       masterName: heldCustomer?.masterName ?? heldCustomer?.name ?? "",
