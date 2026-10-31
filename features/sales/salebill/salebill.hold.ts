@@ -50,7 +50,7 @@ import type {
   SaveTxnHoldDto,
   TxnHoldPayload,
 } from "@/features/sales/quotation/quotation.types";
-import { toNullableText, toNumber } from "@/features/sales/quotation/quotation.utils";
+import { nextRowKey, toNullableText, toNumber } from "@/features/sales/quotation/quotation.utils";
 import {
   DEFAULT_BILL_STATUS,
   SALE_BILL_HOLD_DOC_TYPE,
@@ -135,12 +135,32 @@ export function isBillHold(hold: TxnHoldPayload): boolean {
  * The lines come back with their stock gate UNRESOLVED whatever the parked draft
  * said: the cart may have sat for an hour and the stock has moved since (§7.2).
  */
+/**
+ * A stored draft with fresh row keys on its lines, charge rows and tender rows.
+ *
+ * The keys were minted by the page that stored the draft, and the key counter
+ * starts again at every page load: after a reload a new row could be handed a
+ * key a restored one already carries, and an edit addressed to one would change
+ * both (one item twice on the bill, stock issued twice). Every other field is
+ * left as stored. Adjustment rows are keyed by the credit they take, not by the
+ * counter, so they stand.
+ */
+export function withFreshRowKeys(draft: SaleBillDraft): SaleBillDraft {
+  return {
+    ...draft,
+    lines: (draft.lines ?? []).map((line) => ({ ...line, key: nextRowKey("line") })),
+    charges: (draft.charges ?? []).map((row) => ({ ...row, key: nextRowKey("charge") })),
+    tenders: (draft.tenders ?? []).map((row) => ({ ...row, key: nextRowKey("tender") })),
+  };
+}
+
 export function draftFromBillHold(
   hold: TxnHoldPayload,
   state: SaleBillHoldUiState,
 ): SaleBillDraft {
+  const fresh = withFreshRowKeys(state.draft);
   return {
-    ...state.draft,
+    ...fresh,
     mode: "entry",
     pricing: "live",
     isDirty: false,
@@ -149,7 +169,7 @@ export function draftFromBillHold(
     // draft was parked with, so it comes back on the status a new bill opens on.
     // An existing bill keeps its own — parking one does not re-post it.
     status: state.draft.docId ? state.draft.status : DEFAULT_BILL_STATUS,
-    lines: (state.draft.lines ?? []).map((line) => ({ ...line, stockGateResolved: false })),
+    lines: fresh.lines.map((line) => ({ ...line, stockGateResolved: false })),
     holdId: hold.txhId,
     holdNo: hold.txhHoldNo,
   };
@@ -332,13 +352,14 @@ export async function clearAutosave(deviceId: string): Promise<void> {
  * stock gate is reset for the same reason a hold's is.
  */
 export function draftFromAutosave(record: BillAutosave): SaleBillDraft {
+  const fresh = withFreshRowKeys(record.draft);
   return {
-    ...record.draft,
+    ...fresh,
     mode: "entry",
     pricing: "live",
     isDirty: true,
     storedPricing: null,
     status: record.draft.docId ? record.draft.status : DEFAULT_BILL_STATUS,
-    lines: (record.draft.lines ?? []).map((line) => ({ ...line, stockGateResolved: false })),
+    lines: fresh.lines.map((line) => ({ ...line, stockGateResolved: false })),
   };
 }

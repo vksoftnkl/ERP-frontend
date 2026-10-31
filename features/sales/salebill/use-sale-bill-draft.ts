@@ -225,6 +225,7 @@ import {
   holdAccYearOf,
   holdLockMessage,
   holdLockScope,
+  withFreshRowKeys,
   isWorthAutosaving,
   nextHoldNo,
   nextHoldSlno,
@@ -2846,7 +2847,7 @@ export function useSaleBillDraft(
       return;
     }
     if (resume.source === "recalled") {
-      dispatch(draftReplaced(resume.recalled));
+      dispatch(draftReplaced(withFreshRowKeys(resume.recalled)));
     }
     setMemoryArmed(true);
     // One tick: this runs from the mount effect, and a lazy RTK trigger fired

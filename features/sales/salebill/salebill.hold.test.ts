@@ -28,8 +28,10 @@ import {
   isBillHold,
   isWorthAutosaving,
   readBillHoldUiState,
+  withFreshRowKeys,
   type BillAutosave,
 } from "./salebill.hold";
+import { nextRowKey } from "@/features/sales/quotation/quotation.utils";
 import { createBillDraft, createBillDraftLine } from "./salebill.state";
 import type { SaleBillDraft } from "./salebill.types";
 
@@ -303,5 +305,38 @@ describe("draftFromAutosave", () => {
     expect(back.adjustments[0].credit.docRefno).toBe("SO-2201");
     expect(back.adjustments[0].credit.billAccYear).toBe("2025-2026");
     expect(back.adjustmentsTouched).toBe(true);
+  });
+});
+
+// The key counter restarts at every page load, so the keys a stored bill carries
+// can be the very ones this page hands out next; a new row would then share a
+// restored row's key and an edit would change both.
+describe("restored bills get fresh row keys", () => {
+  function parked(): SaleBillDraft {
+    const probe = Number(nextRowKey("line").split("-")[1]);
+    const base = cart();
+    return {
+      ...base,
+      lines: [
+        { ...base.lines[0], key: `line-${probe + 1}` },
+        { ...base.lines[0], key: `line-${probe + 2}` },
+      ],
+      charges: [{ ...(base.charges[0] ?? ({} as SaleBillDraft["charges"][number])), key: `charge-${probe + 1}` }],
+    };
+  }
+  const keysOf = (d: SaleBillDraft) => [...d.lines, ...d.charges, ...d.tenders].map((r) => r.key);
+
+  it.each([
+    ["hold", (d: SaleBillDraft) => draftFromBillHold(holdRow({}), { draft: d } as never)],
+    ["autosave", (d: SaleBillDraft) => draftFromAutosave({ draft: d } as never)],
+    ["screen memory", (d: SaleBillDraft) => withFreshRowKeys(d)],
+  ])("%s: every key is unique and none is one the page mints next", (_name, restore) => {
+    const src = parked();
+    const back = restore(src);
+    const keys = keysOf(back);
+    const next = nextRowKey("line");
+    expect(new Set([...keys, next]).size).toBe(keys.length + 1);
+    expect(back.lines).toHaveLength(src.lines.length);
+    expect(back.lines.map((l) => l.itemName)).toEqual(src.lines.map((l) => l.itemName));
   });
 });
