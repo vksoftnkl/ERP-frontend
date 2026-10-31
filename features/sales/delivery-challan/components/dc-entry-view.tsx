@@ -31,7 +31,7 @@ import { useDropdownId } from "@/lib/configured-dropdowns";
 import { formatDateTime } from "@/lib/date-format";
 import { confirm } from "@/lib/confirm";
 import { toast } from "@/lib/notify";
-import { keySheetRows, type TxnKeyRow } from "@/lib/txn-keys";
+import { keySheetRows, withKey, type TxnKeyRow } from "@/lib/txn-keys";
 import { useTxnKeys } from "@/components/txn/use-txn-keys";
 import { TxnKeysSheet } from "@/components/txn/txn-keys-sheet";
 import { TxnHistoryDialog } from "@/components/txn/txn-history-dialog";
@@ -58,9 +58,10 @@ import { useLazyGetBranchAddressQuery, useQuickAddCustomerMutation, type BranchA
 import { QuickRateDialog } from "@/features/stocks/selling-price/components/quick-rate-dialog";
 import { DC_DOC_TYPE, DC_MENU_ID, DC_PRINT_PURPOSE, DC_PURPOSES, DC_PURPOSE_DROPDOWN_KEY, DC_TITLE, purposeLabel } from "../dc.constants";
 import { billToLocked, customerLockReason, gstBadgeText, partyFacts, sourceSummary, type Fact } from "../dc.lifecycle";
-import { dcKeyOf } from "../dc.payload";
-import { itemLines } from "../dc.state";
-import type { DcDocKey, DcDraftLine } from "../dc.types";
+import { DC_IMPORT_KEY_TEXT, DC_IMPORT_QT_KEY_TEXT, dcScreenKeyOf } from "../dc.keys";
+import { dcKeyOf, dcTotalWeight } from "../dc.payload";
+import { hasUnsavedWork, itemLines } from "../dc.state";
+import type { DcDocKey, DcDraft, DcDraftLine } from "../dc.types";
 import { isDcHold, type DcScreen } from "../use-dc-screen";
 import styles from "../page.module.scss";
 
@@ -86,7 +87,7 @@ const SCREEN_KEYS: TxnKeyRow[] = [
   { label: "Hold", keyText: "F9" },
   { label: "Pick held", keyText: "F10" },
   { label: "Validate (dry run)", keyText: "Ctrl+F7" },
-  { label: "Import order lines", keyText: "Ctrl+F4" },
+  { label: "Import order lines", keyText: `${DC_IMPORT_KEY_TEXT} / ${DC_IMPORT_QT_KEY_TEXT}` },
   { label: "Discount % to all", keyText: "Alt+D" },
   { label: "Show line cost", keyText: "Alt+O" },
   { label: "Copy as new", keyText: "Alt+Y" },
@@ -160,11 +161,40 @@ export function DcEntryView({ screen, onShowList }: DcEntryViewProps) {
   }, [activeLine]);
 
   const guardUnsaved = async (then: () => void) => {
-    if (draft.isDirty && !draft.docId && itemLines(draft.lines).length > 0) {
+    if (hasUnsavedWork(draft)) {
       const ok = await confirm({ title: "Open Challan", message: "This challan hasn't been saved. Discard it and open another?" });
       if (!ok) return;
     }
     then();
+  };
+
+  /** F10 / Pick held — Qt TxnHoldController::pick asks BEFORE the picker opens. */
+  const openHeldList = async () => {
+    if (hasUnsavedWork(draft)) {
+      const ok = await confirm({ title: "Pick Held", message: "This challan hasn't been saved. Discard it and pick a held one?" });
+      if (!ok) return;
+    }
+    setHeldOpen(true);
+  };
+
+  /**
+   * Close · Esc (Qt btnCancel → `closeEvent`): back to the list, asking first
+   * when a new challan has work on it. The challan on screen is let go — a
+   * recalled hold's lease handed back — so the list's New starts clean.
+   */
+  const closeEntry = async () => {
+    if (hasUnsavedWork(draft)) {
+      const ok = await confirm({ title: "Confirm Close", message: "This challan hasn't been saved. Close anyway?" });
+      if (!ok) return;
+    }
+    await actions.discardAndReset();
+    onShowList();
+  };
+
+  /** Convert purpose opens blank every time — never on the last challan's answer. */
+  const openConvert = () => {
+    setConvert({ purpose: "", remark: "" });
+    actions.requestConvert();
   };
 
   const showCost = () => {
@@ -232,38 +262,62 @@ export function DcEntryView({ screen, onShowList }: DcEntryViewProps) {
       previous: () => void walk("prev"),
       next: () => void walk("next"),
       changeRate: activeLine?.itemId ? () => setQuickRate(activeLine) : null,
+      close: () => void closeEntry(),
     },
     { enabled: !busy, onHelp: () => setKeysOpen(true) },
   );
 
-  // Qt's own F-keys and chords on this screen.
+  // Qt's own F-keys and chords on this screen. Each one is TAKEN first — a
+  // browser F5 mid-post would reload the page — and only then is the screen
+  // asked whether it may act: not while a call is out, not under a dialog.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || busy || document.querySelector('[aria-modal="true"]')) return;
-      const key = event.key;
-      const ctrl = event.ctrlKey || event.metaKey;
-      const alt = event.altKey;
+      if (event.defaultPrevented) return;
+      const owned = dcScreenKeyOf(event);
+      if (!owned) return;
+      event.preventDefault();
+      if (owned === "swallow" || event.repeat || busy || document.querySelector('[aria-modal="true"]')) return;
       const run = (fn: () => void) => {
-        event.preventDefault();
         (document.activeElement as HTMLElement | null)?.blur?.();
         fn();
       };
-      if (!ctrl && !alt) {
-        if (key === "F5" && verbs.save.visible && verbs.save.enabled) return run(() => actions.primaryVerb(false));
-        if (key === "F6" && verbs.postPrint.visible && verbs.postPrint.enabled) return run(() => actions.primaryVerb(true));
-        if (key === "F3") return run(() => void actions.deleteDraft());
-        if (key === "F7" && verbs.clear) return run(() => void actions.clearScreen());
-        if (key === "F8" && verbs.showList) return run(() => void guardUnsaved(onShowList));
-        if (key === "F9" && verbs.hold) return run(() => void actions.hold());
-        if (key === "F10" && verbs.pickHeld) return run(() => setHeldOpen(true));
-      }
-      if (ctrl && !alt && key === "F7") return run(() => void actions.validate());
-      if (ctrl && !alt && key === "F4") return run(() => void actions.openImportOrders());
-      if (alt && !ctrl) {
-        const letter = event.code;
-        if (letter === "KeyD" && editable) return run(() => setDiscountOpen(true));
-        if (letter === "KeyO") return run(showCost);
-        if (letter === "KeyY" && verbs.copyAsNew) return run(() => void actions.copyAsNew());
+      switch (owned) {
+        case "primary":
+          if (verbs.save.visible && verbs.save.enabled) run(() => actions.primaryVerb(false));
+          return;
+        case "primaryPrint":
+          if (verbs.postPrint.visible && verbs.postPrint.enabled) run(() => actions.primaryVerb(true));
+          return;
+        case "deleteDraft":
+          run(() => void actions.deleteDraft());
+          return;
+        case "clear":
+          if (verbs.clear) run(() => void actions.clearScreen());
+          return;
+        case "showList":
+          if (verbs.showList) run(() => void guardUnsaved(onShowList));
+          return;
+        case "hold":
+          if (verbs.hold) run(() => void actions.hold());
+          return;
+        case "pickHeld":
+          if (verbs.pickHeld) run(() => void openHeldList());
+          return;
+        case "validate":
+          run(() => void actions.validate());
+          return;
+        case "importOrder":
+          run(() => void actions.openImportOrders());
+          return;
+        case "discountAll":
+          if (editable) run(() => setDiscountOpen(true));
+          return;
+        case "showCost":
+          run(showCost);
+          return;
+        case "copyAsNew":
+          if (verbs.copyAsNew) run(() => void actions.copyAsNew());
+          return;
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -273,11 +327,11 @@ export function DcEntryView({ screen, onShowList }: DcEntryViewProps) {
   // Qt `closeEvent`: a new challan with lines asks before the tab goes.
   useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (draft.isDirty && !draft.docId && itemLines(draft.lines).length > 0) event.preventDefault();
+      if (hasUnsavedWork(draft)) event.preventDefault();
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [draft.docId, draft.isDirty, draft.lines]);
+  }, [draft]);
 
   const keyRows = useMemo(
     () =>
@@ -289,13 +343,13 @@ export function DcEntryView({ screen, onShowList }: DcEntryViewProps) {
   );
 
   const quickStrip: Array<{ key: string; label: string; icon: ReactNode; enabled: boolean; title: string; onClick: () => void }> = [
-    { key: "import", label: "Import order", icon: <FiShoppingBag />, enabled: verbs.importOrder, title: "Draw lines from the customer's open orders (Ctrl+F4)", onClick: () => void actions.openImportOrders() },
+    { key: "import", label: "Import order", icon: <FiShoppingBag />, enabled: verbs.importOrder, title: `Draw lines from the customer's open orders (${DC_IMPORT_KEY_TEXT} / ${DC_IMPORT_QT_KEY_TEXT})`, onClick: () => void actions.openImportOrders() },
     { key: "hold", label: "Hold", icon: <FiPauseCircle />, enabled: verbs.hold, title: "Park this challan (F9)", onClick: () => void actions.hold() },
-    { key: "held", label: "Pick held", icon: <FiArchive />, enabled: verbs.pickHeld, title: "Resume a held challan (F10)", onClick: () => setHeldOpen(true) },
+    { key: "held", label: "Pick held", icon: <FiArchive />, enabled: verbs.pickHeld, title: "Resume a held challan (F10)", onClick: () => void openHeldList() },
     { key: "disc", label: "Discount all", icon: <FiPercent />, enabled: editable, title: "Discount % on every item (Alt+D)", onClick: () => setDiscountOpen(true) },
     { key: "cost", label: "Show cost", icon: <FiDollarSign />, enabled: Boolean(activeLine?.itemId), title: "This line's cost (Alt+O)", onClick: showCost },
     { key: "eway", label: "E-way bill", icon: <FiNavigation />, enabled: verbs.eway.enabled, title: verbs.eway.title, onClick: actions.eway },
-    { key: "convert", label: "Convert purpose", icon: <FiGitBranch />, enabled: verbs.convert.enabled, title: verbs.convert.title, onClick: actions.requestConvert },
+    { key: "convert", label: "Convert purpose", icon: <FiGitBranch />, enabled: verbs.convert.enabled, title: verbs.convert.title, onClick: openConvert },
     { key: "return", label: "DC return", icon: <FiCornerUpLeft />, enabled: verbs.returnLink, title: "Goods coming back on a challan (menu 251)", onClick: () => toast.info("The DC Return screen (menu 251) is not on the web yet.") },
     { key: "bill", label: "Bill it", icon: <FiFileText />, enabled: verbs.billLink, title: "Raise the bill — Sales Bill imports open challans", onClick: () => router.push("/sales/sale-bill") },
     { key: "transport", label: "Transport", icon: <FiTruck />, enabled: true, title: "The transport band — the e-way bill's details", onClick: () => void openShipping() },
@@ -304,7 +358,7 @@ export function DcEntryView({ screen, onShowList }: DcEntryViewProps) {
   const totalCells: Array<{ label: string; value: string; grand?: boolean }> = [
     { label: "Items", value: String(stored ? stored.totItems : totals.totItems) },
     { label: "Qty", value: (stored ? stored.totQty : totals.totQty).toFixed(3) },
-    { label: "Weight", value: (stored ? stored.totWeight : totals.totWeight).toFixed(3) },
+    { label: "Weight", value: (stored ? stored.totWeight : dcTotalWeight(draft.lines)).toFixed(3) },
     { label: "Taxable", value: formatCurrency(stored ? stored.taxable : totals.lineTaxable, 2, true) },
     { label: "Tax", value: formatCurrency(stored ? stored.tax : totals.lineTax, 2, true) },
     { label: "Total", value: formatCurrency(stored ? stored.total : totals.bill, 2, true), grand: true },
@@ -320,7 +374,7 @@ export function DcEntryView({ screen, onShowList }: DcEntryViewProps) {
     <div className={quotationStyles.page}>
       <header className={quotationStyles.titleBar}>
         <span className={quotationStyles.gridHeadActions}>
-          <button type="button" className={quotationStyles.button} disabled={!verbs.showList} onClick={() => void guardUnsaved(onShowList)}>
+          <button type="button" className={quotationStyles.button} disabled={!verbs.showList || busy} onClick={() => void guardUnsaved(onShowList)}>
             ‹ Delivery Challans
           </button>
           <h1 className={cx(quotationStyles.title, orderStyles.entryTitle)}>{DC_TITLE}</h1>
@@ -345,7 +399,7 @@ export function DcEntryView({ screen, onShowList }: DcEntryViewProps) {
         ) : null}
         <div className={quotationStyles.titleMeta}>
           {draft.mode === "browse" ? <span className={quotationStyles.readOnlyBadge}>Read only</span> : null}
-          {stored ? <span>showing saved figures</span> : null}
+          {stored && draft.mode === "browse" ? <span>showing saved figures</span> : null}
           {draft.isDirty ? <span className={quotationStyles.dirtyDot}>● unsaved</span> : null}
           {screen.activeHold ? <span>held cart {screen.activeHold.txhHoldNo}</span> : null}
           <span>
@@ -518,7 +572,7 @@ export function DcEntryView({ screen, onShowList }: DcEntryViewProps) {
                   value={draft.header[idField] ?? ""}
                   selectedLabel={draft.header[nameField]}
                   params={employeeParams}
-                  disabled={!crewEditable(draft.mode, draft.status)}
+                  disabled={!crewEditable(draft)}
                   onSelect={(value, name) => dispatch({ type: "header", patch: { [idField]: value || null, [nameField]: name } })}
                 />
             ))}
@@ -526,7 +580,7 @@ export function DcEntryView({ screen, onShowList }: DcEntryViewProps) {
               id="dc-vehicle"
               label="Vehicle no"
               value={draft.header.vehicleNo}
-              disabled={!crewEditable(draft.mode, draft.status)}
+              disabled={!crewEditable(draft)}
               maxLength={20}
               onChange={(value) => dispatch({ type: "header", patch: { vehicleNo: value.toUpperCase(), vehicleId: null } })}
             />
@@ -554,7 +608,7 @@ export function DcEntryView({ screen, onShowList }: DcEntryViewProps) {
               ))
             )}
             <button type="button" className={quotationStyles.button} disabled={!editable || busy} onClick={() => void actions.openImportOrders()}>
-              Import order lines (Ctrl+F4)
+              Import order lines ({DC_IMPORT_KEY_TEXT})
             </button>
             {screen.dcRequiresOrder ? <span className={styles.muted}>This company sends goods against an order only.</span> : null}
           </div>
@@ -652,7 +706,7 @@ export function DcEntryView({ screen, onShowList }: DcEntryViewProps) {
             </button>
           ) : null}
           {verbs.pickHeld ? (
-            <button type="button" className={quotationStyles.button} disabled={busy} onClick={() => setHeldOpen(true)}>
+            <button type="button" className={quotationStyles.button} disabled={busy} onClick={() => void openHeldList()}>
               Pick held <span className={quotationStyles.buttonHint}>F10</span>
             </button>
           ) : null}
@@ -671,6 +725,9 @@ export function DcEntryView({ screen, onShowList }: DcEntryViewProps) {
               Show list <span className={quotationStyles.buttonHint}>F8</span>
             </button>
           ) : null}
+          <button type="button" className={quotationStyles.button} disabled={busy} onClick={() => void closeEntry()}>
+            {withKey("Close", "close")}
+          </button>
         </div>
       </div>
 
@@ -921,11 +978,17 @@ const BILL_TO_HINT = 'From the customer master. "Edit for this challan" corrects
 
 /**
  * A draft's crew opens and closes with the screen. On a POSTED challan Qt opens
- * the crew row with the band (`applyTransportLocks`), but PUT /transport carries
- * the band only, so a crew edit there would never be saved — it stays shut here.
+ * the crew row with the band (`applyTransportLocks`: `grpCrew` follows
+ * `locks.editable.transportBand`). Here it opens while AMENDING with the band
+ * open — the amendment re-sends the header, crew included, so the edit is
+ * saved. Outside an amendment PUT /transport carries the band alone, so a crew
+ * edit there would never be saved and the row stays shut.
  */
-function crewEditable(mode: string, status: string): boolean {
-  return status !== "POSTED" && mode === "entry";
+function crewEditable(draft: Pick<DcDraft, "mode" | "status" | "amending" | "posting">): boolean {
+  if (draft.status === "POSTED") {
+    return draft.amending && draft.mode === "entry" && (draft.posting?.bandEditable ?? false);
+  }
+  return draft.mode === "entry";
 }
 
 function printTargetOf(key: DcDocKey, refno: string) {

@@ -152,6 +152,12 @@ export function createDcDraft(context: DcDraftContext): DcDraft {
  * Qt `fetchItemPrice` (full fill). A line drawn from an order keeps the
  * ORDER's rate and discount — the customer agreed it; a hand-keyed line takes
  * the price list. The bucket defaults to SALEABLE; Auto Pop Qty puts 1.
+ *
+ * Godown, batch, batch date and expiry are the LOOKUP's on every line, order
+ * lines included: Qt's full fill writes those cells from the answer without
+ * looking at what the row held (`setCellValue(row, GodownId, data.godown_id)`
+ * and so on), so an order line's godown and batch give way to the price
+ * lookup's — and a lookup that names no batch leaves the row with none.
  */
 export function applyDcItemPrice(
   line: DcDraftLine,
@@ -166,12 +172,11 @@ export function applyDcItemPrice(
     hsnCode: lookup.hsn_code ?? line.hsnCode,
     bucket: line.bucket || DC_DEFAULT_BUCKET,
     priceLevel: clampPriceLevel(echoed),
-    batchNo: lookup.batch_no ?? line.batchNo,
-    batchDate: lookup.batch_date ?? line.batchDate,
-    expiryDate: lookup.expiry_date ?? line.expiryDate,
-    // An order line's godown came with the order.
-    godownId: fromOrder && line.godownId ? line.godownId : priced.godownId,
-    godownName: line.godownName && fromOrder ? line.godownName : priced.godownName,
+    batchNo: lookup.batch_no ?? null,
+    batchDate: lookup.batch_date ?? null,
+    expiryDate: lookup.expiry_date ?? null,
+    godownId: priced.godownId,
+    godownName: priced.godownName,
     rate: fromOrder ? line.rate : priced.rate,
     discPerc: fromOrder ? line.discPerc : priced.discPerc,
     discPerQty: fromOrder ? line.discPerQty : priced.discPerQty,
@@ -350,6 +355,47 @@ export function copyDcAsNew(draft: DcDraft, today: string): DcDraft {
   };
 }
 
+/**
+ * Qt `cfg.hasUnsavedWork` / `closeEvent`: a NEW challan with item lines on it
+ * that has been touched. The one test behind every "discard it?" question on
+ * this screen — open another, pick a held one, close.
+ */
+export function hasUnsavedWork(draft: Pick<DcDraft, "isDirty" | "docId" | "lines">): boolean {
+  return draft.isDirty && !draft.docId && itemLines(draft.lines).length > 0;
+}
+
+/**
+ * A recalled hold is a NEW challan (Qt `restoreFromSnapshot`), in this
+ * screen's tenant.
+ *
+ * Every line gets a fresh row key. The stored keys were minted by whichever
+ * page parked the challan, and the key counter starts again at every page
+ * load — so after a reload the next blank row can be handed a key a restored
+ * line already carries, and an edit addressed to one row would land on both
+ * (the item twice, the stock issued twice on post).
+ */
+export function draftFromHeld(
+  held: DcDraft,
+  tenant: { companyId: string; branchId: string; accYear: string },
+): DcDraft {
+  return {
+    ...held,
+    docId: null,
+    status: "DRAFT",
+    refno: "",
+    revisionNo: 0,
+    mode: "entry",
+    amending: false,
+    posting: null,
+    storedTotals: null,
+    isDirty: true,
+    companyId: tenant.companyId,
+    branchId: tenant.branchId,
+    accYear: tenant.accYear,
+    lines: withTrailingBlank((held.lines ?? []).map((line) => ({ ...line, key: nextRowKey("line") }))),
+  };
+}
+
 // ── Reducer ────────────────────────────────────────────────────────────────
 
 export type DcAction =
@@ -382,7 +428,20 @@ const edited = (draft: DcDraft, patch: Partial<DcDraft>): DcDraft => ({
   storedTotals: patch.lines ? null : draft.storedTotals,
 });
 
+/** The row actions, addressed by key — a key that is not on the draft is a no-op. */
+function addressesMissingRow(draft: DcDraft, action: DcAction): boolean {
+  if (action.type !== "lineReplace" && action.type !== "linePatch" && action.type !== "lineDisplay") {
+    return false;
+  }
+  return !draft.lines.some((line) => line.key === action.rowKey);
+}
+
 export function dcReducer(draft: DcDraft, action: DcAction): DcDraft {
+  // A late answer for a row that has gone (another challan loaded, the row
+  // removed) changes nothing — and must not mark the draft dirty either.
+  if (addressesMissingRow(draft, action)) {
+    return draft;
+  }
   switch (action.type) {
     case "replace":
       return action.draft;

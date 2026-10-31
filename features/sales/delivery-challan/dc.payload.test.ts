@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { recalcDocument } from "@/domain/pricing";
-import { buildDcPayload, dcDateTime, draftFromPayload, loadedLocalSale } from "./dc.payload";
+import { buildDcPayload, dcDateTime, dcTotalWeight, draftFromPayload, loadedLocalSale } from "./dc.payload";
 import { createDcDraft, createDcLine, withTrailingBlank } from "./dc.state";
 import type { DcDraft } from "./dc.types";
 import { validateDc } from "./dc.validate";
@@ -112,6 +112,35 @@ describe("the /create body (Qt buildSavePayload)", () => {
     });
     expect(items[0]).not.toHaveProperty("sdiBilledQty");
     expect(items[0]).not.toHaveProperty("sdiLineStatus");
+  });
+
+  it("sends the weight to the column's three places, and the discount and tax as Decimal sums", () => {
+    const base = sampleDraft();
+    const draft: DcDraft = {
+      ...base,
+      lines: withTrailingBlank([
+        // 0.3333 × 3 = 0.9999 and 0.1235 × 1 = 0.1235: 1.1234 → 1.123 (a 2-place figure would say 1.12).
+        createDcLine({ itemId: "a", itemUnitId: "u", billQty: 3, rate: 10.1, discPerc: 3.3, gstPerc: 18, cgstPerc: 9, sgstPerc: 9, igstPerc: 18, weight: 0.3333 }),
+        createDcLine({ itemId: "b", itemUnitId: "u", billQty: 1, rate: 20.2, discPerc: 7.7, gstPerc: 5, cgstPerc: 2.5, sgstPerc: 2.5, igstPerc: 5, cessPerc: 1, weight: 0.1235 }),
+      ]),
+    };
+    const pricing = priced(draft);
+    const body = buildDcPayload(draft, pricing, actor);
+    expect(body.sdcTotWeight).toBe(1.123);
+    expect(dcTotalWeight(draft.lines)).toBe(1.123);
+    const t = pricing.totals;
+    expect(body.sdcTaxAmt).toBe(t.lineTax);
+    const cents = (n: number) => Math.round(n * 100);
+    expect(cents(body.sdcDiscAmt as number)).toBe(cents(t.itemDisc) + cents(t.splDisc) + cents(t.schDisc));
+    expect(cents(body.sdcTaxAmt as number)).toBe(cents(t.lineCgst) + cents(t.lineSgst) + cents(t.lineIgst) + cents(t.lineCess));
+    // Exactly two places — never a float tail like 2.0300000000000002.
+    expect(String(body.sdcDiscAmt)).toMatch(/^\d+(\.\d{1,2})?$/);
+    expect(String(body.sdcTaxAmt)).toMatch(/^\d+(\.\d{1,2})?$/);
+  });
+
+  it("weighs only the lines that name an item", () => {
+    expect(dcTotalWeight([{ itemId: "", weight: 5, billQty: 5 }, { itemId: "x", weight: 0.0005, billQty: 1 }])).toBe(0.001);
+    expect(dcTotalWeight([])).toBe(0);
   });
 
   it("an order line carries its trail; a saved challan carries its id and modified-by", () => {

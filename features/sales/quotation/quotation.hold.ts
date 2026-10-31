@@ -49,6 +49,7 @@ import {
 } from "./quotation.constants";
 import type { SaveActor } from "./quotation.payload";
 import { buildSavePayload } from "./quotation.payload";
+import { nextRowKey } from "./quotation.utils";
 import type {
   CustomerSnapshot,
   QuotationDraft,
@@ -206,6 +207,12 @@ export function draftFromHold(
   const heldCustomer = state.draft.customer as Partial<CustomerSnapshot> | undefined;
   return {
     ...state.draft,
+    // Fresh row keys. The parked ones were minted by the page that held the
+    // cart, and the key counter starts again at every load: after a reload a
+    // new row could be handed a key a restored one already carries, and an
+    // edit addressed to one would change both.
+    lines: (state.draft.lines ?? []).map((line) => ({ ...line, key: nextRowKey("line") })),
+    charges: (state.draft.charges ?? []).map((row) => ({ ...row, key: nextRowKey("charge") })),
     customer: {
       ...state.draft.customer,
       masterName: heldCustomer?.masterName ?? heldCustomer?.name ?? "",

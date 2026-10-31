@@ -8,7 +8,7 @@
  * voucher, the revision. A challan charges nothing — `charges` goes empty so a
  * re-save never leaves a stray row — and carries no tender.
  */
-import type { DocumentPricing, PricedLine, VoucherPolicy } from "@/domain/pricing";
+import { Decimal, dec, money, sum, type DocumentPricing, type PricedLine, type VoucherPolicy } from "@/domain/pricing";
 import { emptyCustomer } from "@/features/sales/quotation/quotation.state";
 import { actorLabel, type SaveActor } from "@/features/sales/quotation/quotation.payload";
 import { nextRowKey } from "@/features/sales/quotation/quotation.utils";
@@ -153,6 +153,21 @@ function itemDto(line: DcDraftLine, priced: PricedLine | undefined, index: numbe
 
 export type DcSaveActor = SaveActor & { deviceType?: string | null };
 
+/** Places `sdc_tot_weight` keeps — the column is numeric(15,3). */
+const WEIGHT_DP = 3;
+
+/**
+ * Qt `recalcDocumentTotals`' weight: Σ per-unit weight × bill qty over the item
+ * lines, unrounded in Qt and sent as is. Summed in Decimal here and kept to the
+ * column's three places — the engine's `totals.totWeight` is a 2-place money
+ * figure, which would lose the third.
+ */
+export function dcTotalWeight(lines: readonly Pick<DcDraftLine, "itemId" | "weight" | "billQty">[]): number {
+  const total = sum(lines.filter((line) => line.itemId).map((line) => dec(line.weight).times(dec(line.billQty))));
+  const rounded = total.toDecimalPlaces(WEIGHT_DP, Decimal.ROUND_HALF_UP).toNumber();
+  return rounded === 0 ? 0 : rounded;
+}
+
 /** The whole `/create` (and `/validate`, `/amend`) body for the challan on screen. */
 export function buildDcPayload(
   draft: DcDraft,
@@ -211,16 +226,17 @@ export function buildDcPayload(
     sdcAgentId: null,
     sdcPackedId: [],
     sdcTotItems: t.totItems,
-    sdcTotWeight: t.totWeight,
+    sdcTotWeight: dcTotalWeight(draft.lines),
     sdcTotBags: t.totQty,
     sdcGrossAmt: t.grossAmt,
-    sdcDiscAmt: t.itemDisc + t.splDisc + t.schDisc,
+    // Decimal sums: three money figures added as doubles can land a cent off.
+    sdcDiscAmt: money(dec(t.itemDisc).plus(dec(t.splDisc)).plus(dec(t.schDisc))),
     sdcTaxableAmt: t.lineTaxable,
     sdcCgstAmt: t.lineCgst,
     sdcSgstAmt: t.lineSgst,
     sdcIgstAmt: t.lineIgst,
     sdcCessAmt: t.lineCess,
-    sdcTaxAmt: t.lineCgst + t.lineSgst + t.lineIgst + t.lineCess,
+    sdcTaxAmt: t.lineTax,
     sdcOtherAmt: 0,
     sdcRoundOff: t.roundOff,
     sdcDcAmt: t.bill,

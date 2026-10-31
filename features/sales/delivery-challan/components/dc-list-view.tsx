@@ -24,6 +24,7 @@ import { useBusinessContext } from "@/components/layout/business-context";
 import { DateInput } from "@/components/design-system/ui/date-input";
 import masterStyles from "@/app/master/state-master/page.module.scss";
 import { formatCurrency } from "@/domain/pricing";
+import { formatDate } from "@/lib/date-format";
 import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
 import { TxnHistoryDialog } from "@/components/txn/txn-history-dialog";
 import { addDays, toDateInput, todayIso, toNumber } from "@/features/sales/quotation/quotation.utils";
@@ -41,6 +42,7 @@ import {
   DC_PRINT_PURPOSE,
   DC_SEARCH_HINT,
   DC_TITLE,
+  purposeLabel,
 } from "../dc.constants";
 import { useDcDeleteMutation } from "../dc.api";
 import { dcRowPolicy } from "../dc.lifecycle";
@@ -80,9 +82,12 @@ function pill(value: string) {
   return value ? <span className={`${orderStyles.statusPill} ${STATUS_PILL[value] ?? orderStyles.statusPillDraft}`}>{value}</span> : "";
 }
 
-/** The badge columns (Qt `badgeColumns`): status and fulfilment. */
+/** The cells drawn here: date, purpose, amount, and the badge columns (Qt `badgeColumns`). */
 const COLUMN_RENDER_OVERRIDES = {
-  sdc_dc_date: (row: MasterTableRow) => toDateInput(asText(sourceValue(row, "sdc_dc_date"))),
+  // The calendar day as stored (no zone shift), shown dd/MM/yyyy.
+  sdc_dc_date: (row: MasterTableRow) => formatDate(toDateInput(asText(sourceValue(row, "sdc_dc_date")))),
+  // The label the entry shows ("Job work"), not the stored code.
+  sdc_purpose: (row: MasterTableRow) => purposeLabel(asText(sourceValue(row, "sdc_purpose"))),
   sdc_dc_amt: (row: MasterTableRow) => formatCurrency(toNumber(asText(sourceValue(row, "sdc_dc_amt"))), 2, true),
   sdc_status: (row: MasterTableRow) => pill(statusOf(row)),
   sdc_fulfil_status: (row: MasterTableRow) => pill(asText(sourceValue(row, "sdc_fulfil_status")).trim().toUpperCase()),

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ItemPriceLookupPayload } from "@/features/sales/quotation/quotation.types";
+import { nextRowKey } from "@/features/sales/quotation/quotation.utils";
 import type { OpenSourcePick } from "@/features/sales/testbill/domain/import";
 import {
   appendSourceLines,
@@ -9,6 +10,8 @@ import {
   createDcLine,
   dcReducer,
   discountAll,
+  draftFromHeld,
+  hasUnsavedWork,
   lineIsFulfilled,
   setLineDiscPerc,
   setLineQty,
@@ -104,7 +107,32 @@ describe("delivery challan draft", () => {
     expect(line.rate).toBe(90);
     expect(line.discPerc).toBe(0);
     expect(line.billQty).toBe(3);
-    expect(line.godownId).toBe("gd-o");
+  });
+
+  it("takes godown and batch from the lookup on every line, order lines too (Qt full fill)", () => {
+    const fromOrder = createDcLine({
+      srcLineId: "soi-1",
+      godownId: "gd-o",
+      godownName: "Order godown",
+      batchNo: "B-ORDER",
+      batchDate: "2026-09-01",
+      expiryDate: "2027-09-01",
+    });
+    const named = applyDcItemPrice(
+      fromOrder,
+      { ...lookup(), batch_no: "B-LOOKUP", batch_date: "2026-10-01", expiry_date: "2027-10-01" },
+      { autoPopQty: false, priceLevel: 1 },
+    );
+    expect(named).toMatchObject({
+      godownId: "gd-1",
+      godownName: "Main",
+      batchNo: "B-LOOKUP",
+      batchDate: "2026-10-01",
+      expiryDate: "2027-10-01",
+    });
+    // The live lookup names no batch: Qt writes the empty answer over the cell.
+    const unnamed = applyDcItemPrice(fromOrder, lookup(), { autoPopQty: false, priceLevel: 1 });
+    expect(unnamed).toMatchObject({ godownId: "gd-1", batchNo: null, batchDate: null, expiryDate: null });
   });
 
   it("caps a quantity at the order line's open quantity, with Qt's warning", () => {
@@ -177,5 +205,91 @@ describe("delivery challan draft", () => {
     expect(d.lines).toHaveLength(2);
     expect(d.storedTotals).toBeNull();
     expect(d.isDirty).toBe(true);
+  });
+
+  it("an answer for a row that has gone changes nothing and leaves the draft clean", () => {
+    const loaded: DcDraft = { ...draft(), storedTotals: { totItems: 1, totQty: 1, totWeight: 0, taxable: 1, tax: 0, total: 1 } };
+    for (const action of [
+      { type: "lineReplace", rowKey: "line-gone", line: createDcLine({ itemId: "x" }) },
+      { type: "linePatch", rowKey: "line-gone", patch: { billQty: 2 } },
+      { type: "lineDisplay", rowKey: "line-gone", patch: { itemName: "late" } },
+    ] as const) {
+      const after = dcReducer(loaded, action);
+      expect(after).toBe(loaded);
+      expect(after.isDirty).toBe(false);
+      expect(after.storedTotals).not.toBeNull();
+    }
+  });
+
+  it("asks before discarding only a NEW challan with item lines that was touched", () => {
+    const withLine: DcDraft = { ...draft(), isDirty: true, lines: withTrailingBlank([createDcLine({ itemId: "x" })]) };
+    expect(hasUnsavedWork(withLine)).toBe(true);
+    expect(hasUnsavedWork({ ...withLine, isDirty: false })).toBe(false);
+    expect(hasUnsavedWork({ ...withLine, docId: "dc-1" })).toBe(false);
+    expect(hasUnsavedWork({ ...draft(), isDirty: true })).toBe(false);
+  });
+});
+
+describe("a recalled hold", () => {
+  const tenant = { companyId: "co-now", branchId: "br-now", accYear: "2026-2027" };
+
+  /** The stored draft as a hold row carries it — through JSON, as the server keeps it. */
+  function parked(): DcDraft {
+    const held: DcDraft = {
+      ...draft(),
+      docId: "dc-old",
+      status: "POSTED",
+      refno: "dc00042",
+      revisionNo: 3,
+      mode: "browse",
+      isDirty: false,
+      lines: withTrailingBlank([createDcLine({ itemId: "a", billQty: 1 }), createDcLine({ itemId: "b", billQty: 2 })]),
+    };
+    return JSON.parse(JSON.stringify(held)) as DcDraft;
+  }
+
+  it("comes back a NEW, editable challan in this screen's tenant", () => {
+    const restored = draftFromHeld(parked(), tenant);
+    expect(restored).toMatchObject({
+      docId: null,
+      status: "DRAFT",
+      refno: "",
+      revisionNo: 0,
+      mode: "entry",
+      amending: false,
+      posting: null,
+      storedTotals: null,
+      isDirty: true,
+      ...tenant,
+    });
+    expect(restored.lines.map((line) => line.itemId)).toEqual(["a", "b", ""]);
+  });
+
+  it("gives every line a fresh key, so a row keyed after a reload cannot share one", () => {
+    const stored = parked();
+    const restored = draftFromHeld(stored, tenant);
+    const keys = restored.lines.map((line) => line.key);
+    expect(new Set(keys).size).toBe(keys.length);
+    for (const key of keys) {
+      expect(stored.lines.map((line) => line.key)).not.toContain(key);
+    }
+    // A blank row inserted next is keyed apart from every restored line.
+    const grown = dcReducer(restored, { type: "lineInserted", rowKey: keys[0] });
+    expect(new Set(grown.lines.map((line) => line.key)).size).toBe(grown.lines.length);
+  });
+
+  it("an edit to one row changes that row alone, after the key counter restarted (a reload)", () => {
+    // The parked keys are exactly the ones this page's counter hands out next —
+    // what a reload produces. Kept as stored, the next blank row would share
+    // the first line's key and an edit would land on both.
+    const probe = Number(nextRowKey("line").split("-")[1]);
+    const stored = parked();
+    stored.lines = stored.lines.map((line, i) => ({ ...line, key: `line-${probe + 1 + i}` }));
+    const restored = draftFromHeld(stored, tenant);
+    const withNewRow = dcReducer(restored, { type: "lineInserted", rowKey: restored.lines[2].key });
+    const keys = withNewRow.lines.map((line) => line.key);
+    expect(new Set(keys).size).toBe(keys.length);
+    const edited = dcReducer(withNewRow, { type: "linePatch", rowKey: withNewRow.lines[0].key, patch: { billQty: 9 } });
+    expect(edited.lines.map((line) => line.billQty)).toEqual([9, 2, 0, 0]);
   });
 });

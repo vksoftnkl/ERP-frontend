@@ -64,6 +64,7 @@ import {
   createDcDraft,
   dcReducer,
   discountAll,
+  draftFromHeld,
   itemLines,
   lineIsFulfilled,
   setLineDiscPerc,
@@ -288,7 +289,10 @@ export function useDcScreen() {
       const level = levelOverride ?? (line.priceLevel > 0 && line.itemId ? line.priceLevel : current.header.priceLevel);
       try {
         const lookup = await fetchPrice(priceQuery(itemId, unitId, level, current.customer.custId));
-        const latest = draftRef.current.lines.find((candidate) => candidate.key === rowKey) ?? line;
+        // The row may have gone while the lookup was out (another challan
+        // loaded, the row removed): its answer is then no one's.
+        const latest = draftRef.current.lines.find((candidate) => candidate.key === rowKey);
+        if (!latest) return;
         dispatch({
           type: "lineReplace",
           rowKey,
@@ -340,13 +344,34 @@ export function useDcScreen() {
 
   // ── Load / reset ─────────────────────────────────────────────────────────
 
+  /**
+   * Which open is the live one (Qt's `m_loadSeq`). Every open bumps it and
+   * aborts the read before it; an answer for an older number is dropped, so a
+   * slow first open can never paint over a later one. A reset or a resumed
+   * hold bumps it too: what is on screen then is not waiting for any read.
+   */
+  const loadSeqRef = useRef(0);
+  const loadRequestRef = useRef<{ abort: () => void } | null>(null);
+  const supersedeLoad = useCallback(() => {
+    loadSeqRef.current += 1;
+    const pending = loadRequestRef.current;
+    if (pending) {
+      // The open it replaces held the busy flag and will no longer clear it.
+      pending.abort();
+      loadRequestRef.current = null;
+      setBusy(false);
+    }
+    return loadSeqRef.current;
+  }, []);
+
   const resetScreen = useCallback(() => {
+    supersedeLoad();
     setNotes([]);
     setOverrides([]);
     setParty(null);
     setActiveHold(null);
     dispatch({ type: "replace", draft: freshDraft(draftRef.current) });
-  }, [freshDraft]);
+  }, [freshDraft, supersedeLoad]);
 
   const loadChallan = useCallback(
     async (key: DcDocKey, openForEdit: boolean) => {
@@ -354,9 +379,13 @@ export function useDcScreen() {
         toast.warning("This challan can't be opened: the list didn't supply its company, branch and accounting year.");
         return;
       }
+      const seq = supersedeLoad();
       setBusy(true);
+      const request = dcGet(key);
+      loadRequestRef.current = request;
       try {
-        const data = await dcGet(key).unwrap();
+        const data = await request.unwrap();
+        if (seq !== loadSeqRef.current) return;
         if (!data || !data.sdcId) {
           toast.warning("That challan could not be found.");
           return;
@@ -366,15 +395,22 @@ export function useDcScreen() {
         setOverrides([]);
         setActiveHold(null);
         dispatch({ type: "replace", draft: loaded });
+        // Set now, not on the next render: the reads below check the draft.
+        draftRef.current = loaded;
         void fetchPartyContext(loaded.customer.custId, loaded.header.dcDate);
         void fillNames(loaded);
       } catch (error) {
+        // An open that a later one replaced (and aborted) answers no one.
+        if (seq !== loadSeqRef.current) return;
         toast.apiError(error);
       } finally {
-        setBusy(false);
+        if (seq === loadSeqRef.current) {
+          loadRequestRef.current = null;
+          setBusy(false);
+        }
       }
     },
-    [companyStateCode, dcGet, fetchPartyContext, fillNames, policy],
+    [companyStateCode, dcGet, fetchPartyContext, fillNames, policy, supersedeLoad],
   );
 
   // ── Customer ─────────────────────────────────────────────────────────────
@@ -1010,52 +1046,74 @@ export function useDcScreen() {
     dispatch({ type: "replace", draft: copyDcAsNew(current, todayIso()) });
   }, []);
 
-  const clearScreen = useCallback(async () => {
-    const ok = await confirm({ title: "Clear Screen", message: "Clear all entered data on this screen?", iconVariant: "replace" });
-    if (!ok) return;
-    const hold = activeHoldRef.current;
-    if (hold && actor.deviceMasterId) {
+  /** Hand a recalled hold's lease back (Qt `releaseActiveHold`); it stays HELD for later. */
+  const releaseLease = useCallback(
+    async (held: TxnHoldPayload | null) => {
+      if (!held || !actor.deviceMasterId) return;
       try {
-        await releaseHold({ txhId: hold.txhId, deviceId: actor.deviceMasterId, scope: holdLockScope(hold) }).unwrap();
+        await releaseHold({ txhId: held.txhId, deviceId: actor.deviceMasterId, scope: holdLockScope(held) }).unwrap();
       } catch {
         // The lease expires on its own.
       }
-    }
+    },
+    [actor.deviceMasterId, releaseHold],
+  );
+
+  /** Clear without asking: the recalled hold's lease goes back, then a fresh challan. */
+  const discardAndReset = useCallback(async () => {
+    await releaseLease(activeHoldRef.current);
     resetScreen();
-  }, [actor.deviceMasterId, releaseHold, resetScreen]);
+  }, [releaseLease, resetScreen]);
+
+  const clearScreen = useCallback(async () => {
+    const ok = await confirm({ title: "Clear Screen", message: "Clear all entered data on this screen?", iconVariant: "replace" });
+    if (!ok) return;
+    await discardAndReset();
+  }, [discardAndReset]);
 
   // ── Hold / pick held (txn_hold, doc type DELIVERY_CHALLAN) ───────────────
 
+  /** One hold at a time: a second press while the first is asking or saving does nothing. */
+  const holdingRef = useRef(false);
+
   const hold = useCallback(async () => {
+    if (holdingRef.current) return;
     const current = draftRef.current;
     if (current.mode === "browse") return void toast.warning("A read-only challan can't be held.");
     if (itemLines(current.lines).length === 0) return void toast.warning("Nothing to hold — the challan is empty.");
     if (current.docId) return void toast.warning("A saved challan can't be held — it is already on the list.");
     if (!actor.deviceMasterId) return void toast.warning("This browser is not a registered device — a challan can't be held here.");
-    const now = new Date();
-    const totals = pricingRef.current.totals;
+    holdingRef.current = true;
     try {
+      // Qt TxnHoldController::hold — asked after the checks, before the save.
+      const ok = await confirm({ title: "Hold", message: "Suspend this challan and start the next one?" });
+      if (!ok) return;
+      setBusy(true);
+      // What is on screen once the question is answered is what is parked.
+      const held = draftRef.current;
+      const now = new Date();
+      const totals = pricingRef.current.totals;
       const saved = await saveHold({
         txhStatus: "HELD",
         txhKind: HOLD_KIND,
         txhSrcModule: HOLD_SRC_MODULE,
         txhDocType: DC_DOC_TYPE,
-        txhCompanyId: current.companyId,
-        txhBranchId: current.branchId,
-        txhAccYear: current.accYear,
+        txhCompanyId: held.companyId,
+        txhBranchId: held.branchId,
+        txhAccYear: held.accYear,
         txhHoldNo: nextHoldNo(now),
-        txhHoldSlno: nextHoldSlno({ companyId: current.companyId, branchId: current.branchId, accYear: current.accYear, docType: DC_DOC_TYPE }, now),
+        txhHoldSlno: nextHoldSlno({ companyId: held.companyId, branchId: held.branchId, accYear: held.accYear, docType: DC_DOC_TYPE }, now),
         txhHoldOn: now.toISOString(),
         txhDeviceId: actor.deviceMasterId,
         txhHeldBy: actor.userId || undefined,
         txhPartyType: HOLD_PARTY_TYPE,
-        txhPartyId: current.customer.custId || null,
-        txhPartyName: current.customer.name.slice(0, 150) || null,
-        txhPartyMobile: (current.customer.phone ?? "").slice(0, 20) || null,
-        txhItemCount: itemLines(current.lines).length,
+        txhPartyId: held.customer.custId || null,
+        txhPartyName: held.customer.name.slice(0, 150) || null,
+        txhPartyMobile: (held.customer.phone ?? "").slice(0, 20) || null,
+        txhItemCount: itemLines(held.lines).length,
         txhTotalQty: Math.max(0, totals.totQty),
         txhNetAmount: Math.max(0, totals.bill),
-        txhPayload: { kind: DC_HOLD_UI_KIND, version: HOLD_UI_VERSION, screen: DC_DOC_TYPE, heldAt: now.toISOString(), challan: payload(), draft: current },
+        txhPayload: { kind: DC_HOLD_UI_KIND, version: HOLD_UI_VERSION, screen: DC_DOC_TYPE, heldAt: now.toISOString(), challan: payload(), draft: held },
         txhPayloadVersion: HOLD_UI_VERSION,
         txhCreatedBy: actor.userId || null,
       }).unwrap();
@@ -1063,10 +1121,13 @@ export function useDcScreen() {
       resetScreen();
     } catch (error) {
       toast.apiError(error);
+    } finally {
+      holdingRef.current = false;
+      setBusy(false);
     }
   }, [actor.deviceMasterId, actor.userId, payload, resetScreen, saveHold]);
 
-  /** A recalled hold is a NEW challan (Qt `restoreFromSnapshot`). */
+  /** A recalled hold is a NEW challan (Qt `restoreFromSnapshot`), every line on a fresh row key. */
   const resumeHeld = useCallback(
     async (txhId: string) => {
       if (!actor.deviceMasterId) {
@@ -1083,30 +1144,18 @@ export function useDcScreen() {
           toast.warning("That hold has nothing this screen can show.");
           return;
         }
-        const restored: DcDraft = {
-          ...stored.draft,
-          docId: null,
-          status: "DRAFT",
-          refno: "",
-          revisionNo: 0,
-          mode: "entry",
-          amending: false,
-          posting: null,
-          storedTotals: null,
-          isDirty: true,
-          companyId,
-          branchId,
-          accYear,
-        };
+        const restored = draftFromHeld(stored.draft, { companyId, branchId, accYear });
+        supersedeLoad();
         setNotes([]);
         setActiveHold(locked);
         dispatch({ type: "replace", draft: restored });
+        draftRef.current = restored;
         void fetchPartyContext(restored.customer.custId, restored.header.dcDate);
       } catch (error) {
         toast.apiError(error);
       }
     },
-    [accYear, actor.deviceMasterId, branchId, companyId, dispatchStore, fetchPartyContext, resumeHold],
+    [accYear, actor.deviceMasterId, branchId, companyId, dispatchStore, fetchPartyContext, resumeHold, supersedeLoad],
   );
 
   const takeOverHold = useCallback(
@@ -1194,6 +1243,7 @@ export function useDcScreen() {
       saveTransport,
       copyAsNew,
       clearScreen,
+      discardAndReset,
       hold,
       resumeHeld,
       takeOverHold,

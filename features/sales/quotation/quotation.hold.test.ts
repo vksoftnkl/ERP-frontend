@@ -45,7 +45,7 @@ import {
 import type { SaveActor } from "./quotation.payload";
 import { createDraft, createDraftLine } from "./quotation.state";
 import type { QuotationDraft, TxnHoldPayload } from "./quotation.types";
-import { accountingYearOf, todayIso } from "./quotation.utils";
+import { accountingYearOf, nextRowKey, todayIso } from "./quotation.utils";
 
 const DEVICE_MASTER_ID = "019e7257-ec4c-79a3-bad6-99faf77c536c";
 const ACTOR: SaveActor = {
@@ -427,6 +427,26 @@ describe("draftFromHold", () => {
     expect(restored.lines[0].itemName).toBe("New Claw");
     expect(restored.customer.name).toBe("Acme");
     expect(restored.customer.masterName).toBe("Acme");
+  });
+
+  // The key counter restarts at every page load, so the keys a cart was parked
+  // with can be the very ones this page hands out next — a new row would then
+  // share a restored row's key and an edit would change both.
+  it("gives every line and charge row a fresh key, never one a reloaded page mints next", () => {
+    const probe = Number(nextRowKey("line").split("-")[1]);
+    const parked = JSON.parse(JSON.stringify(uiState)) as typeof uiState;
+    parked.draft.lines = parked.draft.lines.map((line, i) => ({ ...line, key: `line-${probe + 1 + i}` }));
+    parked.draft.charges = [
+      ...parked.draft.charges,
+      { ...(parked.draft.charges[0] ?? ({} as (typeof parked.draft.charges)[number])), key: `charge-${probe + 1}` },
+    ];
+    const back = draftFromHold(holdRow(), parked);
+    const keys = [...back.lines.map((line) => line.key), ...back.charges.map((row) => row.key)];
+    const next = nextRowKey("line");
+    expect(new Set([...keys, next]).size).toBe(keys.length + 1);
+    expect(back.lines).toHaveLength(parked.draft.lines.length);
+    expect(back.charges).toHaveLength(parked.draft.charges.length);
+    expect(back.lines.map((line) => line.itemName)).toEqual(parked.draft.lines.map((line) => line.itemName));
   });
 
   // `txh_payload` is written by whatever version parked the cart, so a field

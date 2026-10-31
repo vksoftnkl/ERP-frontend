@@ -52,7 +52,7 @@
  * narrowed for a human, not scope being claimed for a render.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/lib/notify";
 
 import ModalPortal from "@/components/ui/modal-portal";
@@ -310,6 +310,43 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
     }
   }, [chosenPtlId, format, options, step]);
 
+  /*
+   * Escape is the dialog's Cancel: on the five buttons it closes, on the
+   * format list it goes back to the buttons — what each step's Cancel does.
+   *
+   * Decided per EVENT, as `ModalShell` does: only while this dialog is the
+   * topmost modal surface, and only if nothing above it (a message, a nested
+   * picker) already took the key. Capture phase, so the screen underneath —
+   * whose own Escape may leave the screen — never sees it. The paper popup
+   * (`previewing`) replaces this dialog and answers its own keys.
+   */
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const escapeRef = useRef<() => void>(onClose);
+  useEffect(() => {
+    escapeRef.current = step === "format" ? () => setStep("ask") : onClose;
+  });
+  const listening = open && Boolean(primary) && !previewing;
+  useEffect(() => {
+    if (!listening) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) {
+        return;
+      }
+      const panel = panelRef.current;
+      const modals = document.querySelectorAll('[aria-modal="true"]');
+      if (!panel || (modals.length > 0 && modals[modals.length - 1] !== panel)) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      escapeRef.current();
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [listening]);
+
   if (!open || !primary) {
     // No targets is not an error state worth rendering a popup for — it means a
     // screen opened the dialog on a selection that has since gone away.
@@ -507,6 +544,7 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
       <div className={styles.overlay}>
         <div className={styles.backdrop} onClick={onClose} />
         <div
+          ref={panelRef}
           className={styles.modal}
           style={{ width: "min(100%, 460px)" }}
           role="dialog"
