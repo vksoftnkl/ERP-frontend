@@ -2,7 +2,8 @@
 
 /**
  * The header's account menu: who is signed in (name, role, email, last
- * login), My profile, Change password, the app-wide key sheet and Logout.
+ * login), My profile, Change password, the app-wide key sheet, Switch user and Logout.
+ * Switch user is a sign-out that lands on the login page (same path as Logout).
  *
  * The session only knows the login name and the role, so the rest comes from
  * the user's own `/user-administration/get` row — read once per page load and
@@ -11,7 +12,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
-import { LuChevronDown, LuKeyboard, LuLock, LuLogOut, LuUser } from "react-icons/lu";
+import { LuChevronDown, LuKeyboard, LuLock, LuLogOut, LuUser, LuUsers } from "react-icons/lu";
 import { useLoadUserAdminMutation } from "@/store/api/userAdminApi";
 import type { UserAdminPayload } from "@/features/masters/settings/user-administration/domain/wire";
 import { useAppSelector } from "@/store/hooks";
@@ -248,6 +249,15 @@ export default function UserMenu({ logoutLabel, onLogout }: UserMenuProps) {
               </button>
             </div>
             <div className={styles.userMenuSection}>
+              <button
+                type="button"
+                role="menuitem"
+                className={styles.userMenuItem}
+                onClick={handleLogoutClick}
+              >
+                <LuUsers className={styles.userMenuItemIcon} aria-hidden="true" />
+                <span className={styles.userMenuItemLabel}>Switch user</span>
+              </button>
               <button
                 type="button"
                 role="menuitem"
