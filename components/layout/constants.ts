@@ -50,6 +50,7 @@ export const MENU_ROUTES: Readonly<Record<number, MenuRoute>> = {
   226: { href: "/sales/bill-delivery" },
   257: { href: "/sales/temp-credits" },
   67: { href: "/sales/promotion-loyalty-points" },
+  79: { href: "/sales/loyalty-status" },
   18: { href: "/master/state-master" },
   19: { href: "/master/city-master" },
   20: { href: "/master/area-master" },

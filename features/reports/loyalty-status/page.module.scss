@@ -1,0 +1,824 @@
+/**
+ * Loyalty Status — the screen's skin (Qt loyalty_status_entry.ui and the
+ * template's LoyaltyStatusEntry block; mockups share/loyalty/
+ * loyalty_status_ui_mockup_{members,expiring,schemes}.png).
+ *
+ * Top to bottom: title (+ the "Statistical only" pill), the three tabs, the
+ * tab's filter bar (summary · Filter F8 · Show F5), its tiles, its grids and
+ * panels, then the footer (key hints + actions).
+ *
+ * `.erp-app-content` already gives the page a definite height, so the shell
+ * is `height: 100%` and NEVER `100dvh` / `100vh`. Only the grids scroll.
+ *
+ * Lengths are `u(n)`, n times `--erp-q-u`, the fluid unit the report screens
+ * share (declared on `:root`, repeated so the screen stands alone). The tone
+ * colours are the delegate's palette, kept literal like the other reports'
+ * so the portaled dialogs keep them; the brand is the theme's `--primary`.
+ */
+:root {
+  --erp-q-u: clamp(
+    0.875rem,
+    0.2rem + calc(0.5vw / var(--erp-ui-scale, 1)) + calc(0.35vh / var(--erp-ui-scale, 1)),
+    1.25rem
+  );
+}
+
+@function u($n) {
+  @return calc(#{$n} * var(--erp-q-u, 1rem));
+}
+
+$brand: var(--primary, #7b1113);
+$green: #15803d;
+$green-bg: #e7f5ec;
+$amber: #b45309;
+$amber-bg: #fdf3e3;
+$blue: #1d4ed8;
+$blue-bg: #e8eefc;
+$red: #b91c1c;
+$red-bg: #fbeaea;
+$teal: #0f766e;
+$teal-bg: #dcf3f0;
+$violet: #6d28d9;
+$violet-bg: #ede9fe;
+$grey: #6b7280;
+$grey-bg: #f1f3f5;
+$muted: #9ca3af;
+$row-h: 26px;
+
+.page {
+  --ls-control: #{u(1.8)};
+  display: flex;
+  flex-direction: column;
+  gap: u(0.35);
+  padding: u(0.4) u(0.6) u(0.3);
+  height: 100%;
+  min-height: 0;
+  font-family: var(--erp-font-family, "Segoe UI", system-ui, Arial, sans-serif);
+  font-size: u(0.78);
+  color: var(--text-main, #111827);
+  background: var(--surface-muted, #f7f7f7);
+}
+
+/* ----------------------------------------------------------------- title */
+.titleBar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: u(0.6);
+}
+.title {
+  margin: 0;
+  font-size: u(1.15);
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+.subtitle {
+  margin: u(0.05) 0 0;
+  font-size: u(0.7);
+  color: var(--text-muted, #6b7280);
+  white-space: pre;
+}
+.pill {
+  padding: u(0.15) u(0.7);
+  border-radius: 999px;
+  background: $blue-bg;
+  color: $blue;
+  font-size: u(0.66);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- tabs */
+.tabs {
+  display: flex;
+  align-items: stretch;
+  gap: u(0.2);
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+.tab {
+  padding: u(0.3) u(0.9);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  font: inherit;
+  font-size: u(0.78);
+  font-weight: 600;
+  color: var(--text-muted, #6b7280);
+  cursor: pointer;
+}
+.tab:hover {
+  color: var(--text-main, #111827);
+}
+.tabActive,
+.tabActive:hover {
+  color: $brand;
+  border-bottom-color: $brand;
+}
+
+/* ---------------------------------------------------------- filter bar */
+.filterBar {
+  display: flex;
+  align-items: center;
+  gap: u(0.6);
+  padding: u(0.35) u(0.6);
+  background: var(--surface, #fafafb);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: u(0.3);
+}
+.filterCap {
+  color: var(--text-muted, #6b7280);
+  white-space: nowrap;
+}
+.filterSummary {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Qt's "  ·  " separators keep their two spaces. */
+  white-space: pre;
+}
+
+/* --------------------------------------------------------------- buttons */
+.button,
+.primaryButton {
+  box-sizing: border-box;
+  height: var(--ls-control, #{u(1.8)});
+  padding: 0 u(0.8);
+  border-radius: var(--erp-radius, 4px);
+  border: 1px solid var(--border, #c9c9c9);
+  background: var(--surface, #ffffff);
+  color: var(--text-main, #111827);
+  font: inherit;
+  font-size: u(0.74);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.primaryButton {
+  background: $brand;
+  border-color: $brand;
+  color: #ffffff;
+  font-weight: 600;
+}
+.button:disabled,
+.primaryButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.button:not(:disabled):hover {
+  background: var(--surface-muted, #f2f2f2);
+}
+.key {
+  margin-left: u(0.35);
+  font-size: u(0.62);
+  opacity: 0.8;
+}
+
+/* --------------------------------------------------------------- tiles */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(var(--ls-tiles, 6), minmax(0, 1fr));
+  gap: u(0.5);
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.08);
+  min-width: 0;
+  padding: u(0.35) u(0.6);
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: u(0.3);
+}
+.tileCaption {
+  font-size: u(0.62);
+  letter-spacing: 0.04em;
+  color: var(--text-muted, #6b7280);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tileValue {
+  font-size: u(1.1);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tileSub {
+  font-size: u(0.64);
+  color: var(--text-muted, #6b7280);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ------------------------------------------------------------ sections */
+.tabBody {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.35);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.splitMembers,
+.splitExpiring,
+.splitSchemes {
+  display: grid;
+  gap: u(0.45);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.splitMembers {
+  grid-template-rows: minmax(u(8), 3fr) minmax(u(12), 2fr);
+}
+.splitExpiring {
+  grid-template-rows: minmax(u(8), 3fr) minmax(u(9), 1fr);
+}
+.splitSchemes {
+  grid-template-rows: minmax(u(7), 1fr) minmax(u(11), 1fr);
+}
+.bottomMembers,
+.bottomSchemes {
+  display: grid;
+  gap: u(0.5);
+  min-height: 0;
+}
+.bottomMembers {
+  grid-template-columns: minmax(0, 3fr) minmax(u(16), 1fr);
+}
+.bottomSchemes {
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+}
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.2);
+  min-height: 0;
+  min-width: 0;
+}
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.25);
+  min-height: 0;
+  min-width: 0;
+  padding: u(0.4) u(0.6);
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: u(0.3);
+}
+.heading {
+  display: flex;
+  align-items: baseline;
+  gap: u(0.6);
+  font-size: u(0.66);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: $brand;
+}
+.headingHint {
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--text-muted, #6b7280);
+}
+.note {
+  font-size: u(0.64);
+  color: var(--text-muted, #6b7280);
+  white-space: pre-wrap;
+}
+.statementDates {
+  display: flex;
+  align-items: center;
+  gap: u(0.5);
+  > label {
+    color: var(--text-muted, #6b7280);
+  }
+}
+.dateBox {
+  width: u(8.5);
+}
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: u(0.3);
+  white-space: nowrap;
+  cursor: pointer;
+  input {
+    accent-color: $brand;
+  }
+}
+
+/* ---------------------------------------------------------- member card */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: u(0.35) u(0.6);
+}
+.fact {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.factCaption {
+  font-size: u(0.6);
+  letter-spacing: 0.04em;
+  color: var(--text-muted, #6b7280);
+}
+.factValue {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.redeemable {
+  margin-top: u(0.3);
+  font-weight: 600;
+  white-space: pre-wrap;
+}
+.giftNow {
+  color: $teal;
+  font-weight: 600;
+  white-space: pre-wrap;
+}
+.rules {
+  font-size: u(0.66);
+  color: var(--text-muted, #6b7280);
+  white-space: pre-wrap;
+}
+.unlotted {
+  padding: u(0.2) u(0.4);
+  border-radius: u(0.2);
+  background: $amber-bg;
+  color: $amber;
+  font-size: u(0.66);
+}
+
+/* ---------------------------------------------------------------- grid */
+.gridViewport {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  outline: none;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #d8d8d8);
+  border-radius: u(0.2);
+}
+.gridViewport:focus-visible {
+  box-shadow: inset 0 0 0 2px rgba(123, 17, 19, 0.25);
+}
+.gridStale {
+  opacity: 0.55;
+}
+.gridTable {
+  position: relative;
+  min-width: 100%;
+}
+.gridHead,
+.gridRow,
+.gridTotal {
+  display: grid;
+  align-items: center;
+  min-width: 100%;
+}
+.gridHead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #eceaea;
+  border-bottom: 1px solid var(--border, #d0d0d0);
+  font-size: u(0.66);
+  font-weight: 700;
+  > div {
+    padding: u(0.32) u(0.4);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+.gridRow,
+.gridTotal {
+  height: $row-h;
+  font-size: u(0.74);
+  > div {
+    padding: 0 u(0.4);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: pre;
+  }
+}
+.gridRow {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-bottom: 1px solid var(--border, #eeeeee);
+  cursor: default;
+}
+.gridRow:hover {
+  background: #faf6f6;
+}
+.rowSelected,
+.rowSelected:hover {
+  background: #fbeeee;
+  box-shadow:
+    inset 0 0 0 1px #c97f7f,
+    inset 3px 0 0 $brand;
+}
+.gridTotal {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: #e4e2e2;
+  border-top: 1px solid var(--border, #cfcfcf);
+  font-weight: 800;
+}
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.bold {
+  font-weight: 700;
+}
+.cellSplit {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: u(0.4);
+}
+.aside {
+  font-size: u(0.64);
+  font-weight: 400;
+}
+.gridEmpty {
+  padding: u(1.2) u(0.6);
+  text-align: center;
+  color: var(--text-muted, #7a7a7a);
+}
+
+/* --------------------------------------------------------------- tones */
+.tBrand {
+  color: $brand;
+}
+.tGreen {
+  color: $green;
+}
+.tAmber {
+  color: $amber;
+}
+.tBlue {
+  color: $blue;
+}
+.tRed {
+  color: $red;
+}
+.tTeal {
+  color: $teal;
+}
+.tViolet {
+  color: $violet;
+}
+.tGrey {
+  color: $grey;
+}
+.tMuted {
+  color: $muted;
+}
+
+/* --------------------------------------------------------------- chips */
+.chip {
+  display: inline-block;
+  padding: 0 u(0.45);
+  border-radius: 999px;
+  font-size: u(0.58);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  line-height: 1.7;
+  white-space: nowrap;
+  vertical-align: middle;
+  background: $grey-bg;
+  color: $grey;
+}
+.badge {
+  margin-left: u(0.4);
+}
+.cGreen {
+  background: $green-bg;
+  color: $green;
+}
+.cAmber {
+  background: $amber-bg;
+  color: $amber;
+}
+.cBlue {
+  background: $blue-bg;
+  color: $blue;
+}
+.cRed {
+  background: $red-bg;
+  color: $red;
+}
+.cTeal {
+  background: $teal-bg;
+  color: $teal;
+}
+.cViolet {
+  background: $violet-bg;
+  color: $violet;
+}
+
+/* --------------------------------------------------------------- charts */
+.chart {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: u(7);
+}
+.chartLegend {
+  display: flex;
+  gap: u(1);
+  font-size: u(0.66);
+  color: var(--text-main, #111827);
+}
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: u(0.3);
+  white-space: nowrap;
+}
+.swatch {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+.plot {
+  display: flex;
+  align-items: stretch;
+  flex: 1 1 auto;
+  min-height: u(4);
+  border-bottom: 1px solid #cbd5e1;
+}
+.group {
+  display: flex;
+  flex: 1 1 0;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 0 u(0.25);
+  background: none;
+  border: 0;
+  font: inherit;
+  color: inherit;
+}
+button.group {
+  cursor: pointer;
+}
+button.group:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+.barSlot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 0 1 u(2.6);
+  min-width: 4px;
+  height: 100%;
+}
+.barValue {
+  font-size: u(0.58);
+  color: #6b7280;
+  white-space: nowrap;
+}
+.bar {
+  width: 100%;
+  border-radius: 3px 3px 0 0;
+}
+.labels {
+  display: flex;
+  > span {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-top: u(0.15);
+    font-size: u(0.6);
+    color: #6b7280;
+    text-align: center;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+}
+.chartEmpty {
+  display: grid;
+  place-items: center;
+  flex: 1 1 auto;
+  color: var(--text-muted, #7a7a7a);
+}
+.monthlyTotals {
+  font-weight: 600;
+  white-space: pre-wrap;
+}
+.bRed {
+  background: #b91c1c;
+}
+.bAmber {
+  background: #b45309;
+}
+.bBrand {
+  background: $brand;
+}
+.bFaint {
+  background: #e7c9ca;
+}
+.bOff {
+  background: #e5e7eb;
+}
+.bGreen {
+  background: $green;
+}
+.bBlue {
+  background: $blue;
+}
+.bGrey {
+  background: $muted;
+}
+
+/* -------------------------------------------------------------- footer */
+.footer {
+  display: flex;
+  align-items: center;
+  gap: u(0.6);
+  padding-top: u(0.3);
+  border-top: 1px solid var(--border, #e5e7eb);
+}
+.footerHints {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: u(0.66);
+  color: var(--text-muted, #6b7280);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.footerActions {
+  display: flex;
+  gap: u(0.4);
+}
+.denied {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font-size: u(0.95);
+  color: var(--text-muted, #6b7280);
+}
+.emptyState {
+  display: grid;
+  place-items: center;
+  flex: 1 1 auto;
+  color: var(--text-muted, #7a7a7a);
+}
+
+/* -------------------------------------------------------------- dialogs */
+.dialogTitle {
+  margin: 0;
+  font-size: u(0.95);
+  font-weight: 700;
+}
+.dialogMuted {
+  margin: 0;
+  font-size: u(0.7);
+  color: var(--text-muted, #6b7280);
+}
+/* The dialogs are portaled out of `.page`: they set their own type. */
+.dialogBody {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.6);
+  font-family: var(--erp-font-family, "Segoe UI", system-ui, Arial, sans-serif);
+  font-size: u(0.78);
+  color: var(--text-main, #111827);
+}
+.filterForm {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: u(0.5) u(0.7);
+}
+.formRow {
+  grid-column: 2 / span 3;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: u(0.5) u(1);
+}
+.formNote {
+  grid-column: 2 / span 3;
+  font-size: u(0.66);
+  color: var(--text-muted, #6b7280);
+}
+.statusForm {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: u(0.5) u(0.7);
+}
+.fieldLabel {
+  color: var(--text-muted, #6b7280);
+  white-space: nowrap;
+}
+.input,
+.select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: var(--ls-control, #{u(1.8)});
+  padding: 0 u(0.4);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: var(--surface, #ffffff);
+  font: inherit;
+  color: inherit;
+}
+.input:focus-visible,
+.select:focus-visible {
+  outline: 2px solid $brand;
+  outline-offset: -1px;
+}
+.inputShort {
+  width: u(5.5);
+}
+.inline {
+  display: flex;
+  align-items: center;
+  gap: u(0.4);
+}
+.footerSpacer {
+  flex: 1 1 auto;
+}
+/* A configured dropdown (DropdownCombo renders its own label + box) with a clear ×. */
+.comboCell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  > label {
+    display: none;
+  }
+  > div {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  input[role="combobox"] {
+    height: var(--ls-control, #{u(1.8)});
+  }
+}
+.comboClear {
+  flex: 0 0 auto;
+  margin-left: u(0.2);
+  width: u(1.3);
+  height: var(--ls-control, #{u(1.8)});
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: $muted;
+  font: inherit;
+  font-size: u(0.9);
+  line-height: 1;
+  cursor: pointer;
+}
+.comboClear:hover {
+  color: $red;
+}
+.historyTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: u(0.72);
+  th,
+  td {
+    padding: u(0.25) u(0.4);
+    border-bottom: 1px solid var(--border, #e5e7eb);
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    background: #eceaea;
+    font-weight: 700;
+  }
+}
+.historyScroll {
+  max-height: u(16);
+  overflow: auto;
+}
+
+@media (max-width: 1100px) {
+  .tiles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .bottomMembers,
+  .bottomSchemes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
