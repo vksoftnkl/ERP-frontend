@@ -1,7 +1,9 @@
 "use client";
 /**
  * The filter strip (plan §6): Side, Group, Area, Ledger name, Branch, As on, Show
- * (row 1); Age by, Buckets, the four checkboxes, More filters (row 2).
+ * (row 1); Age by, Buckets, the four checkboxes, More filters (row 2). More
+ * filters (F8) holds every one of these again, plus the ones the strip has no
+ * room for; `useFilterChoices` builds the combos' lists for both.
  *
  * Editing a filter does NOT fetch. Show writes the URL, and the URL change is
  * what fetches. Unlike the ledger statement there are no display-only
@@ -33,9 +35,27 @@ export const AS_ON_TIP =
   "As on decides the year, the bills, what is pending and every age. Figures are as the books stand today: " +
   "a receipt cancelled later changes an earlier date's figure.";
 
-const DEFAULT_GROUP = "";
-const ALL = "all";
-const ALL_PARTIES = "";
+export const DEFAULT_GROUP = "";
+export const ALL_BRANCHES = "all";
+export const ALL_PARTIES = "";
+
+export const BUCKETS_TIP = "Rising whole numbers of days: 30 60 90 180 gives 0–30 · 31–60 · 61–90 · 91–180 · > 180.";
+
+/** The four switches, with the tip each wears in the strip and in More filters. */
+export const SWITCHES: ReadonlyArray<{
+  key: "onlyOverdue" | "includeOnAccount" | "deductPdc" | "hideZero";
+  label: string;
+  tip: string;
+}> = [
+  { key: "onlyOverdue", label: "Only overdue", tip: "Parties with something overdue; on the bills, overdue bills only." },
+  {
+    key: "includeOnAccount",
+    label: "Show on-account / advances",
+    tip: "Advances, returns and unadjusted notes. Off drops them from every figure.",
+  },
+  { key: "deductPdc", label: "Deduct PDC", tip: "Subtract post-dated cheques in hand (not yet effective) from Net." },
+  { key: "hideZero", label: "Hide zero balance", tip: "Drop parties with nothing pending either way on As on." },
+];
 
 /** The Party combo: its list (fetched on first open), and what picking does. */
 export type PartyPicker = {
@@ -49,37 +69,15 @@ export type PartyPicker = {
   onPick: (partyId: string | null) => void;
 };
 
-type Props = {
-  draft: Draft;
-  onDraft: (patch: Partial<Draft>) => void;
-  onSide: (side: OutstandingSide) => void;
-  options: OptionsPayload | null;
-  /** Until `/options` answers, the session's branches stand in. */
-  fallbackBranches: ReadonlyArray<{ value: string; label: string }>;
-  flagged: ErrorField;
-  onShow: () => void;
-  onMoreFilters: () => void;
-  moreCount: number;
-  asOnRef: MutableRefObject<HTMLInputElement | null>;
-  party: PartyPicker;
-  /** The Party combo's box, for Ctrl+F. */
-  partyRef: MutableRefObject<HTMLDivElement | null>;
-};
+export type FallbackBranches = ReadonlyArray<{ value: string; label: string }>;
 
-export function FilterStrip({
-  draft,
-  onDraft,
-  onSide,
-  options,
-  fallbackBranches,
-  flagged,
-  onShow,
-  onMoreFilters,
-  moreCount,
-  asOnRef,
-  party,
-  partyRef,
-}: Props) {
+/** The combos' lists, built once for the strip and the More filters popup alike. */
+export function useFilterChoices(
+  draft: Draft,
+  options: OptionsPayload | null,
+  fallbackBranches: FallbackBranches,
+  party: PartyPicker,
+) {
   const receivable = draft.side === "RECEIVABLE";
 
   const groupOptions = useMemo(() => {
@@ -124,6 +122,48 @@ export function FilterStrip({
         ? options.branches.map((b) => ({ value: b.branchId, label: b.name }))
         : fallbackBranches.map((b) => ({ value: b.value, label: b.label })),
     [fallbackBranches, options],
+  );
+
+  return { groupChoices, areaOptions, partyOptions, partyEmpty, partyTip, branchOptions };
+}
+
+type Props = {
+  draft: Draft;
+  onDraft: (patch: Partial<Draft>) => void;
+  onSide: (side: OutstandingSide) => void;
+  options: OptionsPayload | null;
+  /** Until `/options` answers, the session's branches stand in. */
+  fallbackBranches: FallbackBranches;
+  flagged: ErrorField;
+  onShow: () => void;
+  onMoreFilters: () => void;
+  moreCount: number;
+  asOnRef: MutableRefObject<HTMLInputElement | null>;
+  party: PartyPicker;
+  /** The Party combo's box, for Ctrl+F. */
+  partyRef: MutableRefObject<HTMLDivElement | null>;
+};
+
+export function FilterStrip({
+  draft,
+  onDraft,
+  onSide,
+  options,
+  fallbackBranches,
+  flagged,
+  onShow,
+  onMoreFilters,
+  moreCount,
+  asOnRef,
+  party,
+  partyRef,
+}: Props) {
+  const receivable = draft.side === "RECEIVABLE";
+  const { groupChoices, areaOptions, partyOptions, partyEmpty, partyTip, branchOptions } = useFilterChoices(
+    draft,
+    options,
+    fallbackBranches,
+    party,
   );
 
   return (
@@ -193,10 +233,10 @@ export function FilterStrip({
           <span className={styles.fieldLabel}>Branch</span>
           <select
             className={styles.select}
-            value={draft.branchId ?? ALL}
-            onChange={(event) => onDraft({ branchId: event.target.value === ALL ? null : event.target.value })}
+            value={draft.branchId ?? ALL_BRANCHES}
+            onChange={(event) => onDraft({ branchId: event.target.value === ALL_BRANCHES ? null : event.target.value })}
           >
-            <option value={ALL}>All branches (combined)</option>
+            <option value={ALL_BRANCHES}>All branches (combined)</option>
             {branchOptions.map((branch) => (
               <option key={branch.value} value={branch.value}>
                 {branch.label}
@@ -236,7 +276,7 @@ export function FilterStrip({
 
         <label
           className={cx(styles.field, flagged === "buckets" && styles.fieldFlagged)}
-          title="Rising whole numbers of days: 30 60 90 180 gives 0–30 · 31–60 · 61–90 · 91–180 · > 180."
+          title={BUCKETS_TIP}
         >
           <span className={styles.fieldLabel}>Buckets</span>
           <input
@@ -248,38 +288,16 @@ export function FilterStrip({
           />
         </label>
 
-        <label className={styles.check} title="Parties with something overdue; on the bills, overdue bills only.">
-          <input
-            type="checkbox"
-            checked={draft.onlyOverdue}
-            onChange={(event) => onDraft({ onlyOverdue: event.target.checked })}
-          />
-          Only overdue
-        </label>
-        <label className={styles.check} title="Advances, returns and unadjusted notes. Off drops them from every figure.">
-          <input
-            type="checkbox"
-            checked={draft.includeOnAccount}
-            onChange={(event) => onDraft({ includeOnAccount: event.target.checked })}
-          />
-          Show on-account / advances
-        </label>
-        <label className={styles.check} title="Subtract post-dated cheques in hand (not yet effective) from Net.">
-          <input
-            type="checkbox"
-            checked={draft.deductPdc}
-            onChange={(event) => onDraft({ deductPdc: event.target.checked })}
-          />
-          Deduct PDC
-        </label>
-        <label className={styles.check} title="Drop parties with nothing pending either way on As on.">
-          <input
-            type="checkbox"
-            checked={draft.hideZero}
-            onChange={(event) => onDraft({ hideZero: event.target.checked })}
-          />
-          Hide zero balance
-        </label>
+        {SWITCHES.map((item) => (
+          <label key={item.key} className={styles.check} title={item.tip}>
+            <input
+              type="checkbox"
+              checked={draft[item.key]}
+              onChange={(event) => onDraft({ [item.key]: event.target.checked })}
+            />
+            {item.label}
+          </label>
+        ))}
         <button type="button" className={styles.button} onClick={onMoreFilters}>
           More filters{moreCount > 0 ? ` (${moreCount})` : ""}
           <span className={styles.key}>F8</span>

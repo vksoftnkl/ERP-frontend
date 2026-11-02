@@ -171,7 +171,8 @@ $row-h: 26px;
   width: u(17);
 }
 .combo > div,
-.comboWide > div {
+.comboWide > div,
+.dialogCombo > div {
   width: 100%;
 }
 /*
@@ -180,7 +181,8 @@ $row-h: 26px;
  * with the native selects beside it.
  */
 .combo [role="combobox"],
-.comboWide [role="combobox"] {
+.comboWide [role="combobox"],
+.dialogCombo [role="combobox"] {
   min-height: var(--po-control) !important;
   height: var(--po-control);
   padding-top: 0 !important;
@@ -1076,6 +1078,75 @@ button.calDay:focus-visible {
 }
 .dialogFootLeft {
   margin-right: auto;
+}
+
+/* More filters holds every filter: two sections side by side, the switches under both. */
+.dialogWide {
+  width: min(u(44), calc(100vw / var(--erp-ui-scale, 1) - 32px));
+}
+.dialogHeadNote {
+  margin-left: u(0.6);
+  font-size: u(0.66);
+  font-weight: 400;
+  color: var(--text-muted, #7a7a7a);
+}
+.filterDialogBody {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: u(0.7) u(1.2);
+  align-items: start;
+  max-height: calc(100vh / var(--erp-ui-scale, 1) - 160px);
+  overflow-y: auto;
+  padding: u(0.7) u(0.8);
+}
+.filterSection {
+  display: grid;
+  grid-template-columns: u(6.2) minmax(0, 1fr);
+  gap: u(0.45) u(0.6);
+  align-items: center;
+  min-width: 0;
+}
+.filterSection > .select,
+.filterCell > .select {
+  width: 100%;
+  min-width: 0;
+}
+.filterSectionFull {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr);
+}
+.filterSectionHead {
+  grid-column: 1 / -1;
+  padding-bottom: u(0.2);
+  border-bottom: 1px solid var(--border, #e5e5e5);
+  font-size: u(0.68);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: $accent;
+}
+.filterCell {
+  display: flex;
+  align-items: center;
+  gap: u(0.4);
+  min-width: 0;
+}
+.filterSwitches {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  gap: u(0.45) u(2);
+}
+.dialogCombo {
+  min-width: 0;
+}
+.dialogError {
+  grid-column: 1 / -1;
+  padding: u(0.25) u(0.6);
+  border: 1px solid #efb9b5;
+  border-radius: u(0.2);
+  background: #fbeceb;
+  color: #8b1e17;
+  font-size: u(0.72);
 }
 
 /* -------------------------------------------------------------- footer */

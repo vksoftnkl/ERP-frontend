@@ -1,37 +1,52 @@
 "use client";
 /**
- * More filters (F8): the 3.0 filters the mockup's strip has no room for —
- * Salesman, Collection day, Due days ≥ / ≤ (plan §6.1). A deliberate
- * deviation from the mockup, named in the plan so it is not a surprise.
- * Party moved to the strip (2026-10-29), where it can be searched.
+ * More filters (F8): EVERY filter of the report in one popup — the strip's
+ * (Side, As on, Branch, Age by, Buckets, Group, Area, Ledger name, the four
+ * switches) and the 3.0 ones the strip has no room for (Salesman, Collection
+ * day, Due days ≥ / ≤, plan §6.1). The user's call, 2026-11-02.
  *
- * It edits a COPY. Cancel (or Esc, or the backdrop) drops the copy, so the
- * draft is exactly what it was. Reset clears the copy. Apply hands it back and
- * runs Show.
+ * It edits the screen's DRAFT, live, so the Group / Area / Ledger lists follow
+ * a Side picked here exactly as they follow the strip's. The screen keeps the
+ * draft as it was when the popup opened: Cancel (or Esc, or the backdrop) puts
+ * it back. Reset sets the report's defaults (the Side stays). Apply (Enter,
+ * F5) runs Show; a filter the client's own check refuses keeps the popup open
+ * with the message and the field marked.
+ *
+ * Picking a Ledger name here does NOT run Show at once, as it does in the
+ * strip: here it is one filter among the rest, and Apply runs them together.
  *
  * The overlay is the house three-part one (ModalPortal, an isolated overlay
  * with no background, its own backdrop, a pre-promoted panel), so the grid
  * behind it cannot ghost through.
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ModalPortal from "@/components/ui/modal-portal";
 import { cx } from "@/components/design-system/cx";
+import { SearchableSelect } from "@/components/design-system/ui";
+import { DateInput } from "@/components/design-system/ui/date-input";
 import { Z_MODAL } from "@/lib/z-index";
 import styles from "../page.module.scss";
+import type { ErrorField } from "../wire/errors";
 import { COLLECTION_DAYS, type CollectionDay, type OptionsPayload, type OutstandingSide } from "../wire/types";
+import {
+  ALL_BRANCHES,
+  ALL_PARTIES,
+  AS_ON_TIP,
+  BUCKETS_TIP,
+  DEFAULT_GROUP,
+  SWITCHES,
+  useFilterChoices,
+  type Draft,
+  type FallbackBranches,
+  type PartyPicker,
+} from "./filter-strip";
 
+/** The filters only this popup carries: the strip's "More filters (n)" counts these. */
 export type MoreFilters = {
   salesmanId: string | null;
   collectionDay: CollectionDay | null;
   minDueDays: number | null;
   maxDueDays: number | null;
-};
-
-export const EMPTY_MORE: MoreFilters = {
-  salesmanId: null,
-  collectionDay: null,
-  minDueDays: null,
-  maxDueDays: null,
 };
 
 const DAY_NAMES: Record<CollectionDay, string> = {
@@ -48,7 +63,7 @@ export function dayName(day: CollectionDay): string {
   return DAY_NAMES[day];
 }
 
-/** How many of the popup's filters are set, for the button's badge. */
+/** How many of the popup-only filters are set, for the button's badge. */
 export function moreCount(more: MoreFilters): number {
   return [more.salesmanId, more.collectionDay, more.minDueDays, more.maxDueDays].filter(
     (value) => value !== null,
@@ -75,37 +90,92 @@ function days(text: string): number | null {
   return /^\d{1,5}$/.test(trimmed) ? Number(trimmed) : null;
 }
 
+function daysText(value: number | null): string {
+  return value === null ? "" : String(value);
+}
+
 type Props = {
-  side: OutstandingSide;
-  value: MoreFilters;
+  draft: Draft;
+  onDraft: (patch: Partial<Draft>) => void;
+  onSide: (side: OutstandingSide) => void;
   options: OptionsPayload | null;
-  onApply: (next: MoreFilters) => void;
+  fallbackBranches: FallbackBranches;
+  /** The strip's party list (its `onPick`, which runs Show, is not used here). */
+  party: PartyPicker;
+  flagged: ErrorField;
+  /** The client's own check, when Apply was refused. */
+  error: string | null;
+  onApply: () => void;
+  onReset: () => void;
   onCancel: () => void;
 };
 
-export function MoreFiltersDialog({ side, value, options, onApply, onCancel }: Props) {
-  const receivable = side === "RECEIVABLE";
-  const [copy, setCopy] = useState<MoreFilters>(value);
-  const [minText, setMinText] = useState(value.minDueDays === null ? "" : String(value.minDueDays));
-  const [maxText, setMaxText] = useState(value.maxDueDays === null ? "" : String(value.maxDueDays));
+export function MoreFiltersDialog({
+  draft,
+  onDraft,
+  onSide,
+  options,
+  fallbackBranches,
+  party,
+  flagged,
+  error,
+  onApply,
+  onReset,
+  onCancel,
+}: Props) {
+  const receivable = draft.side === "RECEIVABLE";
+  const { groupChoices, areaOptions, partyOptions, partyEmpty, partyTip, branchOptions } = useFilterChoices(
+    draft,
+    options,
+    fallbackBranches,
+    party,
+  );
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  // Due days as typed: a half-typed box must not snap back.
+  const [minText, setMinText] = useState(daysText(draft.minDueDays));
+  const [maxText, setMaxText] = useState(daysText(draft.maxDueDays));
+
+  /*
+   * Apply waits one task: an Enter in As on (or a box blurred just below)
+   * settles its text into the draft first, and the screen's Apply must see
+   * the draft of THAT render, not this one.
+   */
+  const applyRef = useRef(onApply);
+  useEffect(() => {
+    applyRef.current = onApply;
+  });
+  const settleThenApply = useCallback(() => {
+    const active = document.activeElement;
+    if (active instanceof HTMLInputElement && active.type === "text" && dialogRef.current?.contains(active)) {
+      active.blur();
+      active.focus();
+    }
+    window.setTimeout(() => applyRef.current(), 0);
+  }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === "F5") {
         event.preventDefault();
         event.stopPropagation();
-        onCancel();
+        settleThenApply();
+        return;
       }
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      // An open combo's list takes its own Escape (it is portaled out of the panel).
+      if (dialogRef.current?.querySelector('[role="combobox"][aria-expanded="true"]')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      onCancel();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [onCancel]);
+  }, [onCancel, settleThenApply]);
 
-  const apply = () => onApply({ ...copy, minDueDays: days(minText), maxDueDays: days(maxText) });
   const reset = () => {
-    setCopy(EMPTY_MORE);
     setMinText("");
     setMaxText("");
+    onReset();
   };
 
   return (
@@ -113,94 +183,257 @@ export function MoreFiltersDialog({ side, value, options, onApply, onCancel }: P
       <div className={styles.overlay} style={{ zIndex: Z_MODAL }}>
         <button type="button" className={styles.backdrop} aria-label="Cancel" tabIndex={-1} onMouseDown={onCancel} />
         <div
-          className={styles.dialog}
+          ref={dialogRef}
+          className={cx(styles.dialog, styles.dialogWide)}
           role="dialog"
           aria-modal="true"
           aria-label="More filters"
           onKeyDown={(event) => {
-            if (event.key === "Enter" && (event.target as HTMLElement).tagName !== "BUTTON") {
-              event.preventDefault();
-              apply();
-            }
+            // A combo's own Enter (its list, portaled but still a React child) is already taken.
+            if (event.key !== "Enter" || event.defaultPrevented) return;
+            if ((event.target as HTMLElement).tagName === "BUTTON") return;
+            event.preventDefault();
+            settleThenApply();
           }}
         >
-          <div className={styles.dialogHead}>More filters</div>
-          <div className={styles.dialogBody}>
-            {receivable ? (
-              <>
-                <label className={styles.fieldLabel} htmlFor="po-more-salesman">
-                  Salesman
-                </label>
-                <select
-                  id="po-more-salesman"
-                  autoFocus
-                  className={styles.select}
-                  value={copy.salesmanId ?? ""}
-                  onChange={(event) => setCopy((c) => ({ ...c, salesmanId: event.target.value || null }))}
-                >
-                  <option value="">All salesmen</option>
-                  {(options?.salesmen ?? []).map((s) => (
-                    <option key={s.salesmanId} value={s.salesmanId}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-                <span className={styles.dialogNote}>
-                  The customer&apos;s default salesman: bills carry none yet, so customers without one never match.
-                </span>
+          <div className={styles.dialogHead}>
+            More filters<span className={styles.dialogHeadNote}>every filter of the report · Apply shows it</span>
+          </div>
+          <div className={styles.filterDialogBody}>
+            <section className={styles.filterSection} aria-label="Report">
+              <div className={styles.filterSectionHead}>Report</div>
 
-                <label className={styles.fieldLabel} htmlFor="po-more-day">
-                  Collection day
-                </label>
+              <label className={styles.fieldLabel} htmlFor="po-more-side">
+                Side <span className={styles.required}>*</span>
+              </label>
+              <select
+                id="po-more-side"
+                autoFocus
+                className={styles.select}
+                value={draft.side}
+                onChange={(event) => onSide(event.target.value as OutstandingSide)}
+              >
+                <option value="RECEIVABLE">Receivable</option>
+                <option value="PAYABLE">Payable</option>
+              </select>
+
+              <label className={styles.fieldLabel} htmlFor="po-more-ason" title={AS_ON_TIP}>
+                As on
+              </label>
+              <span className={cx(styles.filterCell, flagged === "asOn" && styles.fieldFlagged)} title={AS_ON_TIP}>
+                <DateInput
+                  id="po-more-ason"
+                  className={cx(styles.input, styles.inputDate)}
+                  value={draft.asOn}
+                  onChange={(value) => onDraft({ asOn: value })}
+                />
+              </span>
+
+              <label className={styles.fieldLabel} htmlFor="po-more-branch">
+                Branch
+              </label>
+              <span className={cx(styles.filterCell, flagged === "branch" && styles.fieldFlagged)}>
                 <select
-                  id="po-more-day"
+                  id="po-more-branch"
                   className={styles.select}
-                  value={copy.collectionDay ?? ""}
+                  value={draft.branchId ?? ALL_BRANCHES}
                   onChange={(event) =>
-                    setCopy((c) => ({ ...c, collectionDay: (event.target.value || null) as CollectionDay | null }))
+                    onDraft({ branchId: event.target.value === ALL_BRANCHES ? null : event.target.value })
                   }
                 >
-                  <option value="">Any day</option>
-                  {COLLECTION_DAYS.map((day) => (
-                    <option key={day} value={day}>
-                      {dayName(day)}
+                  <option value={ALL_BRANCHES}>All branches (combined)</option>
+                  {branchOptions.map((branch) => (
+                    <option key={branch.value} value={branch.value}>
+                      {branch.label}
                     </option>
                   ))}
                 </select>
-              </>
-            ) : null}
+              </span>
 
-            <span className={styles.fieldLabel}>Due days</span>
-            <span className={styles.field}>
-              ≥
-              <input
-                autoFocus={!receivable}
-                className={cx(styles.input, styles.inputDays)}
-                value={minText}
-                inputMode="numeric"
-                data-uppercase="off"
-                onChange={(event) => setMinText(event.target.value)}
-              />
-              ≤
-              <input
-                className={cx(styles.input, styles.inputDays)}
-                value={maxText}
-                inputMode="numeric"
-                data-uppercase="off"
-                onChange={(event) => setMaxText(event.target.value)}
-              />
-            </span>
-            <span className={styles.dialogNote}>Days overdue of an owed bill, as in 3.0.</span>
+              <label className={styles.fieldLabel} htmlFor="po-more-ageby">
+                Age by
+              </label>
+              <select
+                id="po-more-ageby"
+                className={styles.select}
+                value={draft.ageBy}
+                onChange={(event) => onDraft({ ageBy: event.target.value === "DUE_DATE" ? "DUE_DATE" : "BILL_DATE" })}
+              >
+                <option value="BILL_DATE">Bill date</option>
+                <option value="DUE_DATE">Due date</option>
+              </select>
+
+              <label className={styles.fieldLabel} htmlFor="po-more-buckets" title={BUCKETS_TIP}>
+                Buckets
+              </label>
+              <span className={cx(styles.filterCell, flagged === "buckets" && styles.fieldFlagged)} title={BUCKETS_TIP}>
+                <input
+                  id="po-more-buckets"
+                  className={cx(styles.input, styles.inputBuckets)}
+                  value={draft.bucketsText}
+                  onChange={(event) => onDraft({ bucketsText: event.target.value })}
+                  data-uppercase="off"
+                  inputMode="numeric"
+                />
+              </span>
+
+              <span className={styles.fieldLabel}>Due days</span>
+              <span className={cx(styles.filterCell, flagged === "dueDays" && styles.fieldFlagged)}>
+                ≥
+                <input
+                  aria-label="Due days at least"
+                  className={cx(styles.input, styles.inputDays)}
+                  value={minText}
+                  inputMode="numeric"
+                  data-uppercase="off"
+                  onChange={(event) => {
+                    setMinText(event.target.value);
+                    onDraft({ minDueDays: days(event.target.value) });
+                  }}
+                />
+                ≤
+                <input
+                  aria-label="Due days at most"
+                  className={cx(styles.input, styles.inputDays)}
+                  value={maxText}
+                  inputMode="numeric"
+                  data-uppercase="off"
+                  onChange={(event) => {
+                    setMaxText(event.target.value);
+                    onDraft({ maxDueDays: days(event.target.value) });
+                  }}
+                />
+              </span>
+              <span className={styles.dialogNote}>Due days: days overdue of an owed bill, as in 3.0.</span>
+            </section>
+
+            <section className={styles.filterSection} aria-label="Parties">
+              <div className={styles.filterSectionHead}>Parties</div>
+
+              {/* Spans, not labels: a label would re-route clicks to the combo's button. */}
+              <span className={styles.fieldLabel}>Group</span>
+              <div className={styles.dialogCombo}>
+                <SearchableSelect
+                  value={draft.groupId ?? DEFAULT_GROUP}
+                  options={groupChoices}
+                  onChange={(value) => onDraft({ groupId: value || null })}
+                  searchPlaceholder="Find a group"
+                />
+              </div>
+
+              {receivable ? (
+                <>
+                  <span className={styles.fieldLabel}>Area</span>
+                  <div className={styles.dialogCombo}>
+                    <SearchableSelect
+                      value={draft.areaId ?? ""}
+                      options={areaOptions}
+                      onChange={(value) => onDraft({ areaId: value || null })}
+                      searchPlaceholder="Find an area"
+                    />
+                  </div>
+                </>
+              ) : null}
+
+              <span className={styles.fieldLabel} title={partyTip}>
+                Ledger name
+              </span>
+              {/* Capture: the list is asked for on the first open, before the combo sees the click. */}
+              <div
+                className={cx(styles.dialogCombo, flagged === "party" && styles.fieldFlagged)}
+                title={partyTip}
+                onMouseDownCapture={party.request}
+                onFocusCapture={party.request}
+              >
+                <SearchableSelect
+                  value={draft.partyId ?? ALL_PARTIES}
+                  options={partyOptions}
+                  onChange={(value) => onDraft({ partyId: value || null })}
+                  searchPlaceholder="Find a ledger"
+                  emptyText={partyEmpty}
+                />
+              </div>
+
+              {receivable ? (
+                <>
+                  <label className={styles.fieldLabel} htmlFor="po-more-salesman">
+                    Salesman
+                  </label>
+                  <select
+                    id="po-more-salesman"
+                    className={styles.select}
+                    value={draft.salesmanId ?? ""}
+                    onChange={(event) => onDraft({ salesmanId: event.target.value || null })}
+                  >
+                    <option value="">All salesmen</option>
+                    {(options?.salesmen ?? []).map((s) => (
+                      <option key={s.salesmanId} value={s.salesmanId}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <label className={styles.fieldLabel} htmlFor="po-more-day">
+                    Collection day
+                  </label>
+                  <select
+                    id="po-more-day"
+                    className={styles.select}
+                    value={draft.collectionDay ?? ""}
+                    onChange={(event) =>
+                      onDraft({ collectionDay: (event.target.value || null) as CollectionDay | null })
+                    }
+                  >
+                    <option value="">Any day</option>
+                    {COLLECTION_DAYS.map((day) => (
+                      <option key={day} value={day}>
+                        {dayName(day)}
+                      </option>
+                    ))}
+                  </select>
+                  <span className={styles.dialogNote}>
+                    Salesman is the customer&apos;s default salesman: bills carry none yet, so customers without one
+                    never match.
+                  </span>
+                </>
+              ) : (
+                <span className={styles.dialogNote}>
+                  Area, Salesman and Collection day are for the Receivable side only.
+                </span>
+              )}
+            </section>
+
+            <section className={cx(styles.filterSection, styles.filterSectionFull)} aria-label="Include">
+              <div className={styles.filterSectionHead}>Include</div>
+              <div className={styles.filterSwitches}>
+                {SWITCHES.map((item) => (
+                  <label key={item.key} className={styles.check} title={item.tip}>
+                    <input
+                      type="checkbox"
+                      checked={draft[item.key]}
+                      onChange={(event) => onDraft({ [item.key]: event.target.checked })}
+                    />
+                    {item.label}
+                  </label>
+                ))}
+              </div>
+            </section>
+
+            {error ? (
+              <div className={styles.dialogError} role="alert">
+                {error}
+              </div>
+            ) : null}
           </div>
           <div className={styles.dialogFoot}>
             <button type="button" className={cx(styles.button, styles.dialogFootLeft)} onClick={reset}>
               Reset
             </button>
             <button type="button" className={styles.button} onClick={onCancel}>
-              Cancel
+              Cancel<span className={styles.key}>Esc</span>
             </button>
-            <button type="button" className={styles.primaryButton} onClick={apply}>
-              Apply
+            <button type="button" className={styles.primaryButton} onClick={onApply}>
+              Apply<span className={styles.key}>F5</span>
             </button>
           </div>
         </div>

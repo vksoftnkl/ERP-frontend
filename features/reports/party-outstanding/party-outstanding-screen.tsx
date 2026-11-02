@@ -279,18 +279,18 @@ export default function PartyOutstandingScreen() {
   }
   const options = useOptions(client, session.companyId, draft.side);
 
-  /* ---- Show (F5): the draft → the URL. The same report = run it again. */
+  /* ---- Show (F5): the draft → the URL. The same report = run it again. False = refused by the check. */
   const runShow = useCallback(
-    (d: Draft) => {
+    (d: Draft): boolean => {
       const { bucketsText: text, ...rest } = d;
       const next: Filters = { ...filters, ...rest, buckets: normaliseBuckets(text) };
       const problem = checkFilters(next);
       setCheckError(problem);
-      if (problem) return;
+      if (problem) return false;
       if (reportKey(next) === reportKey(filters)) {
         reload();
         selection.reload();
-        return;
+        return true;
       }
       // A new report: its first row will be focused, and the Summary's Area /
       // Salesman make no sense on Payable.
@@ -298,6 +298,7 @@ export default function PartyOutstandingScreen() {
         next.side === "PAYABLE" && (next.groupBy === "AREA" || next.groupBy === "SALESMAN") ? "GROUP" : next.groupBy;
       // A calendar day picked on the last report is not this one's.
       writeUrl({ ...next, selected: null, dueOn: null, groupBy });
+      return true;
     },
     [filters, reload, selection, writeUrl],
   );
@@ -312,18 +313,27 @@ export default function PartyOutstandingScreen() {
     setCheckError(null);
   }, []);
 
-  /* ---- More filters (F8) */
-  const [moreOpen, setMoreOpen] = useState(false);
+  /*
+   * ---- More filters (F8): every filter, editing the draft itself. `moreFrom`
+   * is the draft as it was when the popup opened, for Cancel to put back.
+   */
+  const [moreFrom, setMoreFrom] = useState<Draft | null>(null);
+  const moreOpen = moreFrom !== null;
   const appliedMore = moreOf(draftFrom(filters));
-  const onApplyMore = useCallback(
-    (more: MoreFilters) => {
-      setMoreOpen(false);
-      const next = { ...draft, ...more };
-      setDraft(next);
-      runShow(next);
-    },
-    [draft, runShow],
-  );
+  const onApplyMore = useCallback(() => {
+    if (runShow(draft)) setMoreFrom(null);
+  }, [draft, runShow]);
+  const onCancelMore = useCallback(() => {
+    if (moreFrom) setDraft(moreFrom);
+    setMoreFrom(null);
+    setCheckError(null);
+  }, [moreFrom]);
+  /** The report as the menu opens it, on the Side already picked. */
+  const onResetMore = useCallback(() => {
+    const side = new URLSearchParams({ side: draft.side === "PAYABLE" ? "P" : "R" });
+    setDraft(draftFrom(parseFilters(side, { asOn: defaultAsOn(session, today), branchId: session.branchId })));
+    setCheckError(null);
+  }, [draft.side, session, today]);
   const summaryText = moreSummary(appliedMore, {
     salesman: (id) => options.options?.salesmen.find((s) => s.salesmanId === id)?.name ?? null,
   });
@@ -612,7 +622,7 @@ export default function PartyOutstandingScreen() {
   const onClose = useCallback(() => router.push("/home"), [router]);
 
   /* ---- keys (the screen's own; the grids key their rows) */
-  const openMore = useCallback(() => setMoreOpen(true), []);
+  const openMore = useCallback(() => setMoreFrom(draft), [draft]);
   const keys = useRef({
     onShow,
     openLedger,
@@ -1022,11 +1032,17 @@ export default function PartyOutstandingScreen() {
 
       {moreOpen ? (
         <MoreFiltersDialog
-          side={draft.side}
-          value={moreOf(draft)}
+          draft={draft}
+          onDraft={onDraft}
+          onSide={onSide}
           options={options.options}
+          fallbackBranches={sessionBranches}
+          party={partyPicker}
+          flagged={flagged}
+          error={checkError?.message ?? null}
           onApply={onApplyMore}
-          onCancel={() => setMoreOpen(false)}
+          onReset={onResetMore}
+          onCancel={onCancelMore}
         />
       ) : null}
       {shownPopover ? (
