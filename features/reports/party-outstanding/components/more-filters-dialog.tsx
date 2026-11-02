@@ -1,9 +1,9 @@
 "use client";
 /**
- * More filters (F8): EVERY filter of the report in one popup — the strip's
- * (Side, As on, Branch, Age by, Buckets, Group, Area, Ledger name, the four
- * switches) and the 3.0 ones the strip has no room for (Salesman, Collection
- * day, Due days ≥ / ≤, plan §6.1). The user's call, 2026-11-02.
+ * More filters (F8): EVERY filter of the report, and the only place they are
+ * edited — Side, As on, Branch, Age by, Buckets, Due days ≥ / ≤ (Report);
+ * Group, Area, Ledger name, Salesman, Collection day (Parties); the four
+ * switches (Include). The user's call, 2026-11-02: the strip holds none.
  *
  * It edits the screen's DRAFT, live, so the Group / Area / Ledger lists follow
  * a Side picked here exactly as they follow the strip's. The screen keeps the
@@ -12,8 +12,9 @@
  * F5) runs Show; a filter the client's own check refuses keeps the popup open
  * with the message and the field marked.
  *
- * Picking a Ledger name here does NOT run Show at once, as it does in the
- * strip: here it is one filter among the rest, and Apply runs them together.
+ * Opened by F8, a Ledger name pick is one filter among the rest, and Apply
+ * runs them together. Opened by Ctrl+F (`findLedger`), the Ledger list opens
+ * on its search and a pick runs Show at once — a find: Ctrl+F, type, Enter.
  *
  * The overlay is the house three-part one (ModalPortal, an isolated overlay
  * with no background, its own backdrop, a pre-promoted panel), so the grid
@@ -28,6 +29,7 @@ import { Z_MODAL } from "@/lib/z-index";
 import styles from "../page.module.scss";
 import type { ErrorField } from "../wire/errors";
 import { COLLECTION_DAYS, type CollectionDay, type OptionsPayload, type OutstandingSide } from "../wire/types";
+import { bucketsText, DEFAULT_BUCKETS, type ReportFilters } from "../query/params";
 import {
   ALL_BRANCHES,
   ALL_PARTIES,
@@ -39,15 +41,7 @@ import {
   type Draft,
   type FallbackBranches,
   type PartyPicker,
-} from "./filter-strip";
-
-/** The filters only this popup carries: the strip's "More filters (n)" counts these. */
-export type MoreFilters = {
-  salesmanId: string | null;
-  collectionDay: CollectionDay | null;
-  minDueDays: number | null;
-  maxDueDays: number | null;
-};
+} from "./filter-choices";
 
 const DAY_NAMES: Record<CollectionDay, string> = {
   MON: "Mon",
@@ -63,26 +57,39 @@ export function dayName(day: CollectionDay): string {
   return DAY_NAMES[day];
 }
 
-/** How many of the popup-only filters are set, for the button's badge. */
-export function moreCount(more: MoreFilters): number {
-  return [more.salesmanId, more.collectionDay, more.minDueDays, more.maxDueDays].filter(
-    (value) => value !== null,
-  ).length;
-}
+export type FilterNames = {
+  group: (id: string) => string | null;
+  area: (id: string) => string | null;
+  ledger: (id: string) => string | null;
+  salesman: (id: string) => string | null;
+};
 
-/** "Salesman: Ravi · Collection: Thu · Due days ≥ 10" — the line under the strip. */
-export function moreSummary(more: MoreFilters, names: { salesman: (id: string) => string | null }): string {
+/**
+ * Every applied filter that is not at its default, one phrase each, for the
+ * strip's line and its "More filters (n)". Side, As on and Branch are left
+ * out: the title's subtitle always says them.
+ */
+export function appliedFilters(f: ReportFilters, names: FilterNames): string[] {
   const parts: string[] = [];
-  if (more.salesmanId) parts.push(`Salesman: ${names.salesman(more.salesmanId) ?? "(one salesman)"}`);
-  if (more.collectionDay) parts.push(`Collection: ${dayName(more.collectionDay)}`);
-  if (more.minDueDays !== null && more.maxDueDays !== null) {
-    parts.push(`Due days ${more.minDueDays} – ${more.maxDueDays}`);
-  } else if (more.minDueDays !== null) {
-    parts.push(`Due days ≥ ${more.minDueDays}`);
-  } else if (more.maxDueDays !== null) {
-    parts.push(`Due days ≤ ${more.maxDueDays}`);
+  if (f.groupId) parts.push(`Group: ${names.group(f.groupId) ?? "(one group)"}`);
+  if (f.areaId) parts.push(`Area: ${names.area(f.areaId) ?? "(one area)"}`);
+  if (f.partyId) parts.push(`Ledger: ${names.ledger(f.partyId) ?? "(one ledger)"}`);
+  if (f.salesmanId) parts.push(`Salesman: ${names.salesman(f.salesmanId) ?? "(one salesman)"}`);
+  if (f.collectionDay) parts.push(`Collection: ${dayName(f.collectionDay)}`);
+  if (f.minDueDays !== null && f.maxDueDays !== null) {
+    parts.push(`Due days ${f.minDueDays} – ${f.maxDueDays}`);
+  } else if (f.minDueDays !== null) {
+    parts.push(`Due days ≥ ${f.minDueDays}`);
+  } else if (f.maxDueDays !== null) {
+    parts.push(`Due days ≤ ${f.maxDueDays}`);
   }
-  return parts.join(" · ");
+  if (f.ageBy === "DUE_DATE") parts.push("Age by due date");
+  if (f.buckets !== DEFAULT_BUCKETS) parts.push(`Buckets ${bucketsText(f.buckets)}`);
+  if (f.onlyOverdue) parts.push("Only overdue");
+  if (!f.includeOnAccount) parts.push("No on-account / advances");
+  if (f.deductPdc) parts.push("PDC deducted");
+  if (!f.hideZero) parts.push("Zero balances shown");
+  return parts;
 }
 
 function days(text: string): number | null {
@@ -100,8 +107,9 @@ type Props = {
   onSide: (side: OutstandingSide) => void;
   options: OptionsPayload | null;
   fallbackBranches: FallbackBranches;
-  /** The strip's party list (its `onPick`, which runs Show, is not used here). */
   party: PartyPicker;
+  /** Opened by Ctrl+F: the Ledger list opens at once, and a pick applies. */
+  findLedger: boolean;
   flagged: ErrorField;
   /** The client's own check, when Apply was refused. */
   error: string | null;
@@ -117,6 +125,7 @@ export function MoreFiltersDialog({
   options,
   fallbackBranches,
   party,
+  findLedger,
   flagged,
   error,
   onApply,
@@ -152,6 +161,22 @@ export function MoreFiltersDialog({
     }
     window.setTimeout(() => applyRef.current(), 0);
   }, []);
+
+  /*
+   * Ctrl+F: open the Ledger list once the panel is really in the page. A ref
+   * callback, not an effect: ModalPortal mounts its content a commit late.
+   */
+  const openedLedger = useRef(false);
+  const openLedgerOnMount = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (!node || !findLedger || openedLedger.current) return;
+      openedLedger.current = true;
+      const trigger = node.querySelector<HTMLButtonElement>('[role="combobox"]');
+      trigger?.focus();
+      trigger?.click();
+    },
+    [findLedger],
+  );
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -208,7 +233,7 @@ export function MoreFiltersDialog({
               </label>
               <select
                 id="po-more-side"
-                autoFocus
+                autoFocus={!findLedger}
                 className={styles.select}
                 value={draft.side}
                 onChange={(event) => onSide(event.target.value as OutstandingSide)}
@@ -340,6 +365,7 @@ export function MoreFiltersDialog({
               </span>
               {/* Capture: the list is asked for on the first open, before the combo sees the click. */}
               <div
+                ref={openLedgerOnMount}
                 className={cx(styles.dialogCombo, flagged === "party" && styles.fieldFlagged)}
                 title={partyTip}
                 onMouseDownCapture={party.request}
@@ -348,7 +374,10 @@ export function MoreFiltersDialog({
                 <SearchableSelect
                   value={draft.partyId ?? ALL_PARTIES}
                   options={partyOptions}
-                  onChange={(value) => onDraft({ partyId: value || null })}
+                  onChange={(value) => {
+                    onDraft({ partyId: value || null });
+                    if (findLedger) settleThenApply();
+                  }}
                   searchPlaceholder="Find a ledger"
                   emptyText={partyEmpty}
                 />

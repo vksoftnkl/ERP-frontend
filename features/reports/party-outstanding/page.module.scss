@@ -1,7 +1,8 @@
 /**
  * Party-wise Outstanding — the screen's skin (party_outstanding_ui_mockup.png).
  *
- * Top to bottom: title, tabs, the two-row filter strip, one message line, the
+ * Top to bottom: title, tabs, the strip (More filters + the applied filters +
+ * Show; every filter is edited in the More filters popup), one message line, the
  * six tiles, the tab's body, and the footer (key hints + actions). On the
  * Party-wise tab the body is the party grid over a split of the selected
  * party's bills (left) and card (right).
@@ -121,6 +122,21 @@ $row-h: 26px;
   align-items: center;
   gap: u(0.35) u(0.7);
 }
+/** Which filters are applied, beside the button that edits them. */
+.stripSummary {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: u(0.72);
+  font-weight: 600;
+  color: $accent;
+}
+.stripSummaryNone {
+  font-weight: 400;
+  color: var(--text-muted, #7a7a7a);
+}
 .field {
   display: inline-flex;
   align-items: center;
@@ -164,24 +180,14 @@ $row-h: 26px;
 .inputDays {
   width: u(4.5);
 }
-.combo {
-  width: u(12);
-}
-.comboWide {
-  width: u(17);
-}
-.combo > div,
-.comboWide > div,
 .dialogCombo > div {
   width: 100%;
 }
 /*
  * The house SearchableSelect sizes itself for modal forms through inline
- * custom properties, so the strip sizes its trigger directly to sit level
+ * custom properties, so More filters sizes its trigger directly to sit level
  * with the native selects beside it.
  */
-.combo [role="combobox"],
-.comboWide [role="combobox"],
 .dialogCombo [role="combobox"] {
   min-height: var(--po-control) !important;
   height: var(--po-control);
@@ -264,8 +270,7 @@ $row-h: 26px;
 /* -------------------------------------------------- message lines */
 .errorLine,
 .banner,
-.hintLine,
-.summaryLine {
+.hintLine {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -288,11 +293,6 @@ $row-h: 26px;
   background: #eef3fb;
   color: #1f4a8c;
   border: 1px solid #c3d4ef;
-}
-.summaryLine {
-  padding-top: 0;
-  padding-bottom: 0;
-  color: var(--text-muted, #6b6b6b);
 }
 
 /* --------------------------------------------------------------- tiles */

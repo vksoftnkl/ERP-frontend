@@ -36,13 +36,9 @@ import { BillHistoryPopover } from "./components/bill-history-popover";
 import { BillWiseTab } from "./components/bill-wise-tab";
 import { BillsGrid } from "./components/bills-grid";
 import { DueCalendarTab } from "./components/due-calendar-tab";
-import { FilterStrip, type Draft, type PartyPicker } from "./components/filter-strip";
-import {
-  moreCount,
-  MoreFiltersDialog,
-  moreSummary,
-  type MoreFilters,
-} from "./components/more-filters-dialog";
+import type { Draft, PartyPicker } from "./components/filter-choices";
+import { FilterStrip } from "./components/filter-strip";
+import { appliedFilters, MoreFiltersDialog } from "./components/more-filters-dialog";
 import { PartyCard } from "./components/party-card";
 import { PartyGrid } from "./components/party-grid";
 import { StatTiles } from "./components/stat-tiles";
@@ -145,15 +141,6 @@ function clearReturnPoint(search: string) {
 function draftFrom(filters: Filters): Draft {
   const { buckets, ...rest } = reportFiltersOf(filters);
   return { ...rest, bucketsText: bucketsText(buckets) };
-}
-
-function moreOf(d: Draft): MoreFilters {
-  return {
-    salesmanId: d.salesmanId,
-    collectionDay: d.collectionDay,
-    minDueDays: d.minDueDays,
-    maxDueDays: d.maxDueDays,
-  };
 }
 
 function download(bytes: Uint8Array, fileName: string) {
@@ -314,42 +301,39 @@ export default function PartyOutstandingScreen() {
   }, []);
 
   /*
-   * ---- More filters (F8): every filter, editing the draft itself. `moreFrom`
-   * is the draft as it was when the popup opened, for Cancel to put back.
+   * ---- More filters (F8, and Ctrl+F on its Ledger list): the only place a
+   * filter is edited. It edits the draft itself; `more.from` is the draft as
+   * it was when the popup opened, for Cancel to put back.
    */
-  const [moreFrom, setMoreFrom] = useState<Draft | null>(null);
-  const moreOpen = moreFrom !== null;
-  const appliedMore = moreOf(draftFrom(filters));
+  const [more, setMore] = useState<{ from: Draft; findLedger: boolean } | null>(null);
+  const moreOpen = more !== null;
+  const openMore = useCallback(() => setMore({ from: draft, findLedger: false }), [draft]);
+  const findParty = useCallback(() => setMore({ from: draft, findLedger: true }), [draft]);
   const onApplyMore = useCallback(() => {
-    if (runShow(draft)) setMoreFrom(null);
+    if (runShow(draft)) setMore(null);
   }, [draft, runShow]);
   const onCancelMore = useCallback(() => {
-    if (moreFrom) setDraft(moreFrom);
-    setMoreFrom(null);
+    if (more) setDraft(more.from);
+    setMore(null);
     setCheckError(null);
-  }, [moreFrom]);
+  }, [more]);
   /** The report as the menu opens it, on the Side already picked. */
   const onResetMore = useCallback(() => {
     const side = new URLSearchParams({ side: draft.side === "PAYABLE" ? "P" : "R" });
     setDraft(draftFrom(parseFilters(side, { asOn: defaultAsOn(session, today), branchId: session.branchId })));
     setCheckError(null);
   }, [draft.side, session, today]);
-  const summaryText = moreSummary(appliedMore, {
+  /* The strip's line: the APPLIED filters off their defaults, by name. */
+  const applied = appliedFilters(reportFilters, {
+    group: (id) => options.options?.groups.find((g) => g.groupId === id)?.name ?? null,
+    area: (id) => options.options?.areas.find((a) => a.areaId === id)?.name ?? null,
+    ledger: partyName,
     salesman: (id) => options.options?.salesmen.find((s) => s.salesmanId === id)?.name ?? null,
   });
 
-  /* ---- Party (Ctrl+F): the strip's combo, listing the draft's parties; a pick runs Show */
-  const partyPickerRef = useRef<HTMLDivElement | null>(null);
+  /* ---- Ledger name: More filters' combo, listing the draft's parties */
   const choiceFilters = useMemo(() => partyChoiceFilters(draft, filters.asOn), [draft, filters.asOn]);
   const partyChoices = usePartyChoices(client, session, choiceFilters);
-  const onPickParty = useCallback(
-    (partyId: string | null) => {
-      const next = { ...draft, partyId };
-      setDraft(next);
-      runShow(next);
-    },
-    [draft, runShow],
-  );
   const partyPicker: PartyPicker = {
     choices: partyChoices.choices,
     loading: partyChoices.loading,
@@ -357,14 +341,7 @@ export default function PartyOutstandingScreen() {
     truncated: partyChoices.truncated,
     currentName: draft.partyId ? partyName(draft.partyId) : null,
     request: partyChoices.request,
-    onPick: onPickParty,
   };
-  const findParty = useCallback(() => {
-    const trigger = partyPickerRef.current?.querySelector<HTMLButtonElement>('[role="combobox"]');
-    if (!trigger) return;
-    trigger.focus();
-    if (trigger.getAttribute("aria-expanded") !== "true") trigger.click();
-  }, []);
 
   /* ---- hints */
   const [hint, setHint] = useState<string | null>(null);
@@ -378,7 +355,6 @@ export default function PartyOutstandingScreen() {
   const partyViewportRef = useRef<HTMLDivElement | null>(null);
   const billsViewportRef = useRef<HTMLDivElement | null>(null);
   const billWiseViewportRef = useRef<HTMLDivElement | null>(null);
-  const asOnRef = useRef<HTMLInputElement | null>(null);
 
   const [returnPoint] = useState<ReturnPoint | null>(() => peekReturnPoint(search));
   const [focusedBill, setFocusedBill] = useState<{ partyId: string | null; billId: string | null }>(() => ({
@@ -622,7 +598,6 @@ export default function PartyOutstandingScreen() {
   const onClose = useCallback(() => router.push("/home"), [router]);
 
   /* ---- keys (the screen's own; the grids key their rows) */
-  const openMore = useCallback(() => setMoreFrom(draft), [draft]);
   const keys = useRef({
     onShow,
     openLedger,
@@ -683,7 +658,7 @@ export default function PartyOutstandingScreen() {
         event.preventDefault();
         k.openNewVoucher();
       } else if (ctrl && key === "f") {
-        // Never the browser's find: the strip's Party combo, open on its search.
+        // Never the browser's find: More filters, its Ledger list open on its search.
         event.preventDefault();
         k.findParty();
       } else if (ctrl && key === "p") {
@@ -753,22 +728,8 @@ export default function PartyOutstandingScreen() {
         ))}
       </nav>
 
-      <FilterStrip
-        draft={draft}
-        onDraft={onDraft}
-        onSide={onSide}
-        options={options.options}
-        fallbackBranches={sessionBranches}
-        flagged={flagged}
-        onShow={onShow}
-        onMoreFilters={openMore}
-        moreCount={moreCount(moreOf(draft))}
-        asOnRef={asOnRef}
-        party={partyPicker}
-        partyRef={partyPickerRef}
-      />
+      <FilterStrip side={filters.side} applied={applied} onShow={onShow} onMoreFilters={openMore} />
 
-      {summaryText ? <div className={styles.summaryLine}>More filters: {summaryText}</div> : null}
       {checkError ? (
         <div className={styles.errorLine} role="alert">
           {checkError.message}
@@ -1030,7 +991,7 @@ export default function PartyOutstandingScreen() {
         />
       ) : null}
 
-      {moreOpen ? (
+      {more ? (
         <MoreFiltersDialog
           draft={draft}
           onDraft={onDraft}
@@ -1038,6 +999,7 @@ export default function PartyOutstandingScreen() {
           options={options.options}
           fallbackBranches={sessionBranches}
           party={partyPicker}
+          findLedger={more.findLedger}
           flagged={flagged}
           error={checkError?.message ?? null}
           onApply={onApplyMore}
