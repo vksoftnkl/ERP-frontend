@@ -1,211 +1,37 @@
 "use client";
 /**
- * The filter strip (plan §6): Ledger, From, To, Branch, Show, the five
- * checkboxes, and Show (F5).
+ * The strip over the panels: More filters (F8), the line that says which
+ * statement is shown (ledger, period, branch) and each switch away from its
+ * default, the key hints, and Show (F5).
  *
- * Editing a filter does NOT fetch. Show writes the URL, and the URL change is
- * what fetches. Three checkboxes are SERVER parameters and wait for Show like
- * any filter. Narration and Running balance are display switches and act at
- * once.
+ * Every filter lives in More filters (the user's call, 2026-11-02, as on
+ * Party-wise Outstanding): the strip holds none of its own.
  */
-import type { MutableRefObject } from "react";
 import { cx } from "@/components/design-system/cx";
 import styles from "../page.module.scss";
-import type { LedgerStatementClient } from "../api/ledger-statement";
-import type { ErrorField } from "../wire/errors";
-import type { LedgerPickItem } from "../wire/types";
-import { LedgerPicker } from "./ledger-picker";
-import { DateInput } from "@/components/design-system/ui/date-input";
-
-export type Draft = {
-  ledger: { id: string; text: string } | null;
-  fromDate: string;
-  toDate: string;
-  /** null = All branches (combined). */
-  branchId: string | null;
-  includeCancelled: boolean;
-  withBillRefs: boolean;
-  withLegs: boolean;
-};
-
-export type DisplaySwitches = { narration: boolean; runningBalance: boolean };
-
-export const ALL_BRANCHES_TIP =
-  "Every branch combined: the sum of every opening set (company-level and each branch's) and every " +
-  "branch's vouchers. Not the same as 'All branches' on the Opening Balance screen, which is the " +
-  "company-level set alone.";
 
 type Props = {
-  client: LedgerStatementClient;
-  companyId: string;
-  draft: Draft;
-  onDraft: (patch: Partial<Draft>) => void;
-  onPickLedger: (item: LedgerPickItem) => void;
-  /** The picker's "Show deleted" tick (party rules D1-7). Picker only: not a report filter. */
-  showDeletedLedgers: boolean;
-  onShowDeletedLedgers: (value: boolean) => void;
-  display: DisplaySwitches;
-  onDisplay: (patch: Partial<DisplaySwitches>) => void;
-  branches: Array<{ value: string; label: string }>;
-  yearBegin: string | null;
-  yearEnd: string | null;
-  flagged: ErrorField;
+  /** The statement's subject: ledger, period, branch. Empty = no ledger yet. */
+  head: string[];
+  /** Each switch away from its default; "More filters (n)" counts these. */
+  extra: string[];
   onShow: () => void;
-  ledgerInputRef: MutableRefObject<HTMLInputElement | null>;
+  onMoreFilters: () => void;
 };
 
-export function FilterStrip({
-  client,
-  companyId,
-  draft,
-  onDraft,
-  onPickLedger,
-  showDeletedLedgers,
-  onShowDeletedLedgers,
-  display,
-  onDisplay,
-  branches,
-  yearBegin,
-  yearEnd,
-  flagged,
-  onShow,
-  ledgerInputRef,
-}: Props) {
+export function FilterStrip({ head, extra, onShow, onMoreFilters }: Props) {
+  const line = [...head, ...extra].join(" · ");
   return (
     <div className={styles.strip} role="search" aria-label="Report filters">
-      {/* A div, not a label: the picker holds a button, and a label would re-route its clicks. */}
-      <div className={cx(styles.field, styles.fieldLedger, flagged === "ledger" && styles.fieldFlagged)}>
-        <div className={styles.fieldLabelRow}>
-          <span className={styles.fieldLabel}>
-            Ledger <span className={styles.required}>*</span>
-          </span>
-          <label
-            className={cx(styles.check, styles.checkSmall)}
-            title="List deleted parties too, marked (deleted). Their statement opens read-only."
-          >
-            <input
-              type="checkbox"
-              checked={showDeletedLedgers}
-              onChange={(event) => onShowDeletedLedgers(event.target.checked)}
-            />
-            Show deleted
-          </label>
-        </div>
-        <div className={styles.ledgerPicker}>
-          <LedgerPicker
-            client={client}
-            companyId={companyId}
-            value={draft.ledger}
-            onPick={onPickLedger}
-            includeDeleted={showDeletedLedgers}
-            invalid={flagged === "ledger"}
-            inputRef={ledgerInputRef}
-          />
-        </div>
-      </div>
-
-      <label className={cx(styles.field, styles.fieldDate, flagged === "dates" && styles.fieldFlagged)}>
-        <span className={styles.fieldLabel}>From</span>
-        <DateInput
-          block
-          className={styles.input}
-          value={draft.fromDate}
-          min={yearBegin ?? undefined}
-          max={yearEnd ?? undefined}
-          onChange={(value) => onDraft({ fromDate: value })}
-        />
-      </label>
-      <label className={cx(styles.field, styles.fieldDate, flagged === "dates" && styles.fieldFlagged)}>
-        <span className={styles.fieldLabel}>To</span>
-        <DateInput
-          block
-          className={styles.input}
-          value={draft.toDate}
-          min={yearBegin ?? undefined}
-          max={yearEnd ?? undefined}
-          onChange={(value) => onDraft({ toDate: value })}
-        />
-      </label>
-
-      <label className={cx(styles.field, styles.fieldBranch, flagged === "branch" && styles.fieldFlagged)}>
-        <span className={styles.fieldLabel}>Branch</span>
-        <select
-          className={styles.select}
-          value={draft.branchId ?? "all"}
-          title={draft.branchId ? undefined : ALL_BRANCHES_TIP}
-          onChange={(event) => onDraft({ branchId: event.target.value === "all" ? null : event.target.value })}
-        >
-          <option value="all" title={ALL_BRANCHES_TIP}>
-            All branches (combined)
-          </option>
-          {branches.map((branch) => (
-            <option key={branch.value} value={branch.value}>
-              {branch.label}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label className={cx(styles.field, styles.fieldShow)}>
-        <span className={styles.fieldLabel}>Show</span>
-        <select className={styles.select} value="DETAILED" disabled title="Condensed arrives later">
-          <option value="DETAILED">Detailed</option>
-          <option value="CONDENSED" disabled>
-            Condensed
-          </option>
-        </select>
-      </label>
-
-      <div className={styles.checks}>
-        <label className={styles.check} title="Display only: shows the narration beside the bill refs">
-          <input
-            type="checkbox"
-            checked={display.narration}
-            onChange={(event) => onDisplay({ narration: event.target.checked })}
-          />
-          Narration
-        </label>
-        <label className={styles.check} title="Asks the server for the bills each voucher settled. Takes effect on Show.">
-          <input
-            type="checkbox"
-            checked={draft.withBillRefs}
-            onChange={(event) => onDraft({ withBillRefs: event.target.checked })}
-          />
-          Bill refs
-        </label>
-        <label
-          className={styles.check}
-          title="Every 'as per details' row arrives with its legs expanded. Takes effect on Show. Alt+F1 shows one row's legs any time."
-        >
-          <input
-            type="checkbox"
-            checked={draft.withLegs}
-            onChange={(event) => onDraft({ withLegs: event.target.checked })}
-          />
-          Contra legs <span className={styles.checkKind}>Alt+F1</span>
-        </label>
-        <label
-          className={styles.check}
-          title="Off hides a cancelled pair (both halves), and the server keeps the running balance right. Takes effect on Show."
-        >
-          <input
-            type="checkbox"
-            checked={draft.includeCancelled}
-            onChange={(event) => onDraft({ includeCancelled: event.target.checked })}
-          />
-          Include cancelled
-        </label>
-        <label className={styles.check} title="Display only: shows or hides the Balance column">
-          <input
-            type="checkbox"
-            checked={display.runningBalance}
-            onChange={(event) => onDisplay({ runningBalance: event.target.checked })}
-          />
-          Running balance
-        </label>
-      </div>
-
+      <button type="button" className={styles.button} onClick={onMoreFilters}>
+        More filters{extra.length > 0 ? ` (${extra.length})` : ""}
+        <span className={styles.key}>F8</span>
+      </button>
+      <span className={cx(styles.stripSummary, !head.length && styles.stripSummaryNone)} title={line || undefined}>
+        {head.length ? line : "No ledger chosen: More filters (F8) or Ctrl+L picks one"}
+      </span>
       <div className={styles.stripSpacer} />
+      <span className={styles.stripHint}>Ctrl+L ledger · PgUp / PgDn ledger in group</span>
       <button type="button" className={styles.primaryButton} onClick={onShow}>
         Show<span className={styles.key}>F5</span>
       </button>

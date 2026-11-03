@@ -1,7 +1,8 @@
 /**
  * Ledger Statement — the screen's skin.
  *
- * Top to bottom: title, the filter strip, one error line, the three panels
+ * Top to bottom: title, the strip (More filters + the applied statement +
+ * Show; every filter is edited in the More filters popup), one error line, the three panels
  * (ledger detail, period summary, month-wise), the tabbed report, and the
  * footer (key hints + actions).
  *
@@ -68,53 +69,44 @@ $row-h: 26px;
   white-space: nowrap;
 }
 
-/* --------------------------------------------------------- filter strip */
+/* ------------------------------------------------------------- the strip */
 .strip {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: u(0.4) u(0.5);
+  align-items: center;
+  gap: u(0.4) u(0.7);
   padding: u(0.4) u(0.5);
   background: var(--surface, #ffffff);
   border: 1px solid var(--border, #e0e0e0);
   border-radius: u(0.2);
 }
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: u(0.15);
+/** Which statement is shown, and its switches off their defaults. */
+.stripSummary {
+  flex: 0 1 auto;
   min-width: 0;
-}
-.fieldLedger {
-  flex: 1 1 u(16);
-  min-width: u(12);
-  max-width: u(26);
-}
-.fieldDate {
-  width: u(8.2);
-}
-.fieldBranch {
-  width: u(12);
-}
-.fieldShow {
-  width: u(7);
-}
-.fieldLabel {
-  font-size: u(0.62);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: u(0.74);
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted, #6d6d6d);
+  color: var(--primary, #7b1515);
 }
-/* The Ledger label with the picker's "Show deleted" tick at its right. */
-.fieldLabelRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: u(0.5);
+.stripSummaryNone {
+  font-weight: 400;
+  color: var(--text-muted, #7a7a7a);
 }
-.required {
-  color: var(--danger, #b3261e);
+.stripHint {
+  font-size: u(0.66);
+  color: var(--text-muted, #7a7a7a);
+  white-space: nowrap;
+}
+.stripSpacer {
+  flex: 1 1 0;
+}
+
+/* ------------------------------------------- More filters' fields (popup) */
+/** Portaled out of `.page`, so the page's control token is declared again. */
+.filtersPanel {
+  --ls-control: #{u(1.85)};
 }
 .input,
 .select {
@@ -145,6 +137,10 @@ $row-h: 26px;
   border-color: var(--danger, #b3261e);
   box-shadow: 0 0 0 1px var(--danger, #b3261e);
 }
+.ledgerPicker {
+  flex: 1 1 auto;
+  min-width: 0;
+}
 .ledgerPicker input {
   box-sizing: border-box;
   height: var(--ls-control);
@@ -155,30 +151,20 @@ $row-h: 26px;
   font-size: u(0.78);
   border-radius: u(0.2);
 }
-.checks {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: u(0.15) u(0.7);
-  padding-bottom: u(0.3);
+.dateBox {
+  width: u(8.2);
 }
 .check {
   display: inline-flex;
   align-items: center;
   gap: u(0.25);
-  font-size: u(0.72);
+  font-size: u(0.74);
   white-space: nowrap;
   cursor: pointer;
-}
-.checkSmall {
-  font-size: u(0.62);
 }
 .checkKind {
   font-size: u(0.58);
   color: var(--text-muted, #8a8a8a);
-}
-.stripSpacer {
-  flex: 1 1 0;
 }
 
 /* --------------------------------------------------------------- buttons */

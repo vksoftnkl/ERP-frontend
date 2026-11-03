@@ -25,7 +25,14 @@ import { toast } from "@/lib/notify";
 import styles from "./page.module.scss";
 import { useLedgerStatementClient } from "./api/ledger-statement";
 import { isAborted } from "@/features/reports/shared/api/abort";
-import { FilterStrip, ALL_BRANCHES_TIP, type DisplaySwitches, type Draft } from "./components/filter-strip";
+import { FilterStrip } from "./components/filter-strip";
+import {
+  ALL_BRANCHES_TIP,
+  appliedFilters,
+  MoreFiltersDialog,
+  type DisplaySwitches,
+  type Draft,
+} from "./components/more-filters-dialog";
 import { LegsPopover } from "./components/legs-popover";
 import { LedgerDetailPanel, MonthWisePanel, PeriodSummaryPanel } from "./components/panels";
 import { DailyTable, MonthlyTable } from "./components/summary-tables";
@@ -187,24 +194,30 @@ export default function LedgerStatementScreen() {
   const period = header?.period ?? null;
   const dimmed = state.loading || state.behind;
 
-  /* ---- the draft the strip edits; re-seeded whenever the URL moves */
+  /* ---- the draft More filters edits; re-seeded whenever the URL moves */
   const [ledgerNames, setLedgerNames] = useState<Record<string, string>>({});
   const knownName = (id: string | null) =>
     (id && (ledgerNames[id] ?? (header?.ledger.ledgerId === id ? header.ledger.name : ""))) || "";
   const [draft, setDraft] = useState<Draft>(() => draftFrom(filters, ""));
   const [checkError, setCheckError] = useState<{ message: string; field: ErrorField } | null>(null);
+  // More filters, when open: what Cancel puts back (see "More filters" below).
+  type MoreFrom = { draft: Draft; display: DisplaySwitches; showDeleted: boolean };
+  const [more, setMore] = useState<{ from: MoreFrom } | null>(null);
   // Re-seeded when the URL (or the session's defaults) moves, and only then:
   // typing must not be overwritten by a render. Adjusted during render, the
   // React way to reset state on a changed input.
   const seedKey = `${search}|${session.branchId ?? ""}|${session.yearBegin ?? ""}`;
   const [seededFor, setSeededFor] = useState(seedKey);
   if (seededFor !== seedKey) {
+    const seeded = draftFrom(filters, knownName(filters.ledgerId));
     setSeededFor(seedKey);
-    setDraft(draftFrom(filters, knownName(filters.ledgerId)));
+    setDraft(seeded);
     setCheckError(null);
+    // The session's defaults arrived under an open More filters: its way back follows.
+    if (more) setMore({ from: { ...more.from, draft: seeded } });
   }
   // A link or a refresh carries only the ledger's id; its name arrives with /header.
-  const stripDraft: Draft =
+  const namedDraft: Draft =
     draft.ledger && !draft.ledger.text
       ? { ...draft, ledger: { id: draft.ledger.id, text: knownName(draft.ledger.id) } }
       : draft;
@@ -231,24 +244,73 @@ export default function LedgerStatementScreen() {
     setCheckError(null);
   }, []);
 
-  /* ---- Show (F5): the draft → the URL. Same URL = run it again. */
-  const onShow = useCallback(() => {
-    const next: Filters = {
-      ...filters,
-      ledgerId: draft.ledger?.id ?? null,
-      fromDate: draft.fromDate,
-      toDate: draft.toDate,
-      branchId: draft.branchId,
-      includeCancelled: draft.includeCancelled,
-      withBillRefs: draft.withBillRefs,
-      withLegs: draft.withLegs,
-    };
-    const problem = checkFilters(next, session);
-    setCheckError(problem);
-    if (problem) return;
-    if (buildSearch(next).toString() === search) reload();
-    else writeUrl(next);
-  }, [draft, filters, reload, search, session, writeUrl]);
+  /*
+   * ---- Show (F5): the draft → the URL. Same URL = run it again (F5), or
+   * nothing to do (Apply with only a display switch changed). False = refused.
+   */
+  const runShow = useCallback(
+    (d: Draft, rerunSame: boolean): boolean => {
+      const next: Filters = {
+        ...filters,
+        ledgerId: d.ledger?.id ?? null,
+        fromDate: d.fromDate,
+        toDate: d.toDate,
+        branchId: d.branchId,
+        includeCancelled: d.includeCancelled,
+        withBillRefs: d.withBillRefs,
+        withLegs: d.withLegs,
+      };
+      const problem = checkFilters(next, session);
+      setCheckError(problem);
+      if (problem) return false;
+      if (buildSearch(next).toString() !== search) writeUrl(next);
+      else if (rerunSame) reload();
+      return true;
+    },
+    [filters, reload, search, session, writeUrl],
+  );
+  const onShow = useCallback(() => runShow(draft, true), [draft, runShow]);
+
+  /*
+   * ---- More filters (F8, Ctrl+L): the only place a filter is edited. It edits
+   * the draft, the display switches and the picker's "Show deleted" live;
+   * `more.from` is what they were when it opened, for Cancel to put back.
+   */
+  const openMore = useCallback(
+    () => setMore({ from: { draft, display, showDeleted: showDeletedLedgers } }),
+    [display, draft, showDeletedLedgers],
+  );
+  const onApplyMore = useCallback(() => {
+    if (runShow(draft, false)) setMore(null);
+  }, [draft, runShow]);
+  const onCancelMore = useCallback(() => {
+    if (more) {
+      setDraft(more.from.draft);
+      onDisplay(more.from.display);
+      setShowDeletedLedgers(more.from.showDeleted);
+    }
+    setMore(null);
+    setCheckError(null);
+  }, [more, onDisplay]);
+  /** The statement as the menu opens it, on the ledger already picked. */
+  const onResetMore = useCallback(() => {
+    const defaults = parseFilters(new URLSearchParams(), {
+      ...defaultRange(session, todayIso()),
+      branchId: session.branchId,
+    });
+    setDraft((d) => ({ ...draftFrom(defaults, ""), ledger: d.ledger }));
+    onDisplay({ narration: true, runningBalance: true });
+    setCheckError(null);
+  }, [onDisplay, session]);
+  // No ledger yet (the menu, a bare link): the statement has no subject, so
+  // More filters opens on its Ledger box by itself, once.
+  const [autoOpened, setAutoOpened] = useState(false);
+  if (!autoOpened && sessionReady && !filters.ledgerId && !permissions.isDenied) {
+    setAutoOpened(true);
+    // From the URL, not `draft`: this can be the very render that seeds the
+    // draft with the session's defaults, and `draft` is still the one before.
+    setMore({ from: { draft: draftFrom(filters, ""), display, showDeleted: showDeletedLedgers } });
+  }
 
   /* ---- hints (the ledger walk's ends) */
   const [hint, setHint] = useState<string | null>(null);
@@ -493,11 +555,13 @@ export default function LedgerStatementScreen() {
   /* ---- keys (the screen's own; the grid keys its rows) */
   const keys = useRef({
     onShow,
+    openMore,
     walkLedger,
     openLegs,
     onClose,
     openPrint,
     closePrint,
+    moreOpen: false,
     printOpen: false,
     popoverOpen: false,
     popoverRow: null as string | null,
@@ -505,20 +569,23 @@ export default function LedgerStatementScreen() {
   useEffect(() => {
     keys.current = {
       onShow,
+      openMore,
       walkLedger,
       openLegs,
       onClose,
       openPrint,
       closePrint,
+      moreOpen: more !== null,
       printOpen,
       popoverOpen: popover !== null,
       popoverRow: popover?.row.voucherId ?? null,
     };
   });
-  const ledgerInputRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const k = keys.current;
+      // More filters keys its own F5 / Esc; nothing of the report's runs under it.
+      if (k.moreOpen) return;
       if (event.key === "F5") {
         event.preventDefault();
         if (!k.printOpen) k.onShow();
@@ -540,9 +607,10 @@ export default function LedgerStatementScreen() {
         k.openPrint();
         return;
       }
-      if (event.ctrlKey && !event.altKey && event.key.toLowerCase() === "l") {
+      if (event.key === "F8" || (event.ctrlKey && !event.altKey && event.key.toLowerCase() === "l")) {
+        // Ctrl+L: never the browser's address bar. Both open on the Ledger box.
         event.preventDefault();
-        ledgerInputRef.current?.focus();
+        k.openMore();
         return;
       }
       if (event.altKey && event.key === "F1") {
@@ -580,6 +648,13 @@ export default function LedgerStatementScreen() {
 
   const hasReport = Boolean(filters.ledgerId && sessionReady);
   const companyLevelOnly = period?.openingNote === "COMPANY_LEVEL_ONLY" && filters.branchId !== null;
+  // The strip's line: the APPLIED statement and its switches off their defaults.
+  const applied = appliedFilters(filters, display, {
+    ledger: knownName(filters.ledgerId),
+    branch: filters.branchId
+      ? (branches.find((b) => b.value === filters.branchId)?.label ?? "One branch")
+      : "All branches (combined)",
+  });
 
   return (
     <div className={styles.page}>
@@ -596,26 +671,7 @@ export default function LedgerStatementScreen() {
         </span>
       </header>
 
-      <FilterStrip
-        client={client}
-        companyId={session.companyId}
-        draft={stripDraft}
-        onDraft={(patch) => {
-          setDraft((d) => ({ ...d, ...patch }));
-          setCheckError(null);
-        }}
-        onPickLedger={onPickLedger}
-        showDeletedLedgers={showDeletedLedgers}
-        onShowDeletedLedgers={setShowDeletedLedgers}
-        display={display}
-        onDisplay={onDisplay}
-        branches={branches}
-        yearBegin={session.yearBegin}
-        yearEnd={session.yearEnd}
-        flagged={flagged}
-        onShow={onShow}
-        ledgerInputRef={ledgerInputRef}
-      />
+      <FilterStrip head={applied.head} extra={applied.extra} onShow={onShow} onMoreFilters={openMore} />
 
       {checkError ? (
         <div className={styles.errorLine} role="alert">
@@ -662,9 +718,12 @@ export default function LedgerStatementScreen() {
         <div className={styles.emptyState}>
           {sessionReady ? (
             <p>
-              Choose a ledger and press <strong>Show (F5)</strong>.
+              Choose a ledger in <strong>More filters (F8)</strong>, then Apply.
               <br />
-              <span className={styles.muted}>Ctrl+L jumps to the Ledger box from anywhere.</span>
+              <button type="button" className={styles.linkButton} onClick={openMore}>
+                Choose a ledger
+              </button>
+              <span className={styles.muted}> · Ctrl+L opens it on the Ledger box from anywhere.</span>
             </p>
           ) : (
             <p>Choose a company and a fiscal year in the header first.</p>
@@ -741,7 +800,8 @@ export default function LedgerStatementScreen() {
 
       <footer className={styles.footer}>
         <div className={styles.footerHints}>
-          <kbd>F5</kbd> Show · <kbd>Ctrl+L</kbd> Ledger · <kbd>PgUp</kbd>/<kbd>PgDn</kbd> Ledger in group ·{" "}
+          <kbd>F5</kbd> Show · <kbd>F8</kbd> More filters · <kbd>Ctrl+L</kbd> Ledger · <kbd>PgUp</kbd>/
+          <kbd>PgDn</kbd> Ledger in group ·{" "}
           <kbd>Enter</kbd> Open voucher · <kbd>Space</kbd> Legs · <kbd>Alt+F1</kbd> All legs · <kbd>End</kbd> Last
           row · <kbd>F11</kbd> Print · <kbd>Esc</kbd> Close
         </div>
@@ -789,6 +849,31 @@ export default function LedgerStatementScreen() {
           purposeCode={PURPOSE_CODE.LEDGER_STATEMENT}
           documentLabel={`Ledger Statement ${header?.ledger.name ?? ""}`.trim()}
           targets={[printTarget]}
+        />
+      ) : null}
+
+      {more ? (
+        <MoreFiltersDialog
+          client={client}
+          companyId={session.companyId}
+          draft={namedDraft}
+          onDraft={(patch) => {
+            setDraft((d) => ({ ...d, ...patch }));
+            setCheckError(null);
+          }}
+          onPickLedger={onPickLedger}
+          showDeletedLedgers={showDeletedLedgers}
+          onShowDeletedLedgers={setShowDeletedLedgers}
+          display={display}
+          onDisplay={onDisplay}
+          branches={branches}
+          yearBegin={session.yearBegin}
+          yearEnd={session.yearEnd}
+          flagged={flagged}
+          error={checkError?.message ?? null}
+          onApply={onApplyMore}
+          onReset={onResetMore}
+          onCancel={onCancelMore}
         />
       ) : null}
 

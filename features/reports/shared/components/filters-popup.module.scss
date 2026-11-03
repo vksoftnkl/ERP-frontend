@@ -1,0 +1,172 @@
+/**
+ * The report filters popup (filters-popup.tsx): two sections side by side,
+ * a wide one under both, the error line, and the foot. The look is Party-wise
+ * Outstanding's More filters, where the pattern started.
+ *
+ * Portaled out of the page, so it declares what it uses; the screen's own
+ * control tokens come in through `panelClassName`.
+ */
+:root {
+  --erp-q-u: clamp(
+    0.875rem,
+    0.2rem + calc(0.5vw / var(--erp-ui-scale, 1)) + calc(0.35vh / var(--erp-ui-scale, 1)),
+    1.25rem
+  );
+}
+
+@function u($n) {
+  @return calc(#{$n} * var(--erp-q-u, 1rem));
+}
+
+$accent: var(--primary, #7b1515);
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  isolation: isolate;
+  transform: translateZ(0);
+}
+.backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border: 0;
+  padding: 0;
+  background: rgba(20, 20, 20, 0.35);
+  cursor: default;
+}
+.panel {
+  position: relative;
+  z-index: 1;
+  will-change: transform, opacity;
+  width: min(u(44), calc(100vw / var(--erp-ui-scale, 1) - 32px));
+  background: var(--surface, #ffffff);
+  border-radius: u(0.35);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.25);
+  font-family: var(--erp-font-family, "Segoe UI", system-ui, Arial, sans-serif);
+  font-size: u(0.78);
+  color: var(--text-main, #222222);
+}
+.head {
+  padding: u(0.5) u(0.8);
+  border-bottom: 1px solid var(--border, #e5e5e5);
+  font-weight: 800;
+  color: $accent;
+}
+.headNote {
+  margin-left: u(0.6);
+  font-size: u(0.66);
+  font-weight: 400;
+  color: var(--text-muted, #7a7a7a);
+}
+.body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: u(0.7) u(1.2);
+  align-items: start;
+  max-height: calc(100vh / var(--erp-ui-scale, 1) - 160px);
+  overflow-y: auto;
+  padding: u(0.7) u(0.8);
+}
+.section {
+  display: grid;
+  grid-template-columns: u(5.6) minmax(0, 1fr);
+  gap: u(0.45) u(0.6);
+  align-items: center;
+  min-width: 0;
+}
+.sectionWide {
+  grid-column: 1 / -1;
+}
+.sectionHead {
+  grid-column: 1 / -1;
+  padding-bottom: u(0.2);
+  border-bottom: 1px solid var(--border, #e5e5e5);
+  font-size: u(0.68);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: $accent;
+}
+.caption {
+  font-size: u(0.72);
+  color: var(--text-muted, #6d6d6d);
+  white-space: nowrap;
+}
+.required {
+  color: var(--danger, #b3261e);
+}
+.cell {
+  display: flex;
+  align-items: center;
+  gap: u(0.4);
+  min-width: 0;
+}
+.note {
+  grid-column: 1 / -1;
+  font-size: u(0.66);
+  color: var(--text-muted, #7a7a7a);
+}
+.checks {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  gap: u(0.45) u(2);
+}
+.checksSingle {
+  grid-template-columns: max-content;
+}
+.column {
+  display: grid;
+  gap: u(0.7);
+  align-content: start;
+  min-width: 0;
+}
+.error {
+  grid-column: 1 / -1;
+  padding: u(0.25) u(0.6);
+  border: 1px solid #efb9b5;
+  border-radius: u(0.2);
+  background: #fbeceb;
+  color: #8b1e17;
+  font-size: u(0.72);
+}
+.foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: u(0.4);
+  padding: u(0.5) u(0.8);
+  border-top: 1px solid var(--border, #e5e5e5);
+}
+.footLeft {
+  margin-right: auto;
+}
+.button,
+.primaryButton {
+  height: u(1.85);
+  padding: 0 u(0.8);
+  border-radius: u(0.25);
+  border: 1px solid var(--border, #c9c9c9);
+  background: var(--surface, #ffffff);
+  color: var(--text-main, #222222);
+  font: inherit;
+  font-size: u(0.74);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.primaryButton {
+  background: $accent;
+  border-color: $accent;
+  color: #ffffff;
+  font-weight: 600;
+}
+.button:not(:disabled):hover {
+  background: var(--surface-muted, #f2f2f2);
+}
+.key {
+  margin-left: u(0.3);
+  font-size: u(0.62);
+  opacity: 0.75;
+}
