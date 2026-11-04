@@ -12,11 +12,14 @@
  *  an opening — which `includeZero=false` guarantees on load, and which the
  *  picker preserves because it only ever ADDS.
  *
- *  So: never page, filter, virtualise-away or trim the loaded set. A search box
- *  over these rows, added later with the best intentions, would make Save
- *  delete every opening scrolled out of view. Virtualised RENDERING is fine —
- *  the rows stay in `draft.rows`. A filter that drops rows from `draft.rows`,
- *  or a server-paged fetch, is not.
+ *  So: never page, filter, virtualise-away or trim the loaded set. Virtualised
+ *  RENDERING is fine, because the rows stay in `draft.rows`. A filter that drops
+ *  rows from `draft.rows`, or a server-paged fetch, is not.
+ *
+ *  The search box above the grid follows that rule. It narrows only what THIS
+ *  component renders (`searchLedgerRows` over the `rows` prop). The screen
+ *  still saves, validates and totals over the whole of `draft.rows`, so a
+ *  ledger hidden by a search is saved exactly as it was loaded.
  * ────────────────────────────────────────────────────────────────────────────
  *
  * There is no Add and no Remove button. The grid always ends in ONE blank row
@@ -25,11 +28,16 @@
  * drops it, validation ignores it, and nothing else on it opens until a ledger
  * is picked — an amount with no account is not an opening balance.
  */
-import { useMemo, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
+import {
+  useMemo,
+  type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type RefObject,
+} from "react";
 import { cx } from "@/components/design-system/cx";
 import { scaledWidth, totalColumnWidth } from "@/features/sales/quotation/quotation.utils";
 import type { LedgerColumnKey, ResolvedOpeningColumn } from "../columns";
-import { formatMoney, isBlankLedgerRow } from "../derived";
+import { formatMoney, isBlankLedgerRow, searchLedgerRows } from "../derived";
 import type { LedgerRow, ShownSide } from "../opening-balance.types";
 import { toDisplayDate } from "../wire/dates";
 import { SHOWN_SIDES } from "../wire/side";
@@ -40,6 +48,7 @@ import {
   GRID_ATTR,
   LOOKUP_ATTR,
   ROW_ATTR,
+  focusGrid,
   focusRow,
   moveCellFocus,
   moveRowFocus,
@@ -78,6 +87,11 @@ export type LedgerGridProps = {
   onRequestBreakup: (row: LedgerRow) => void;
   /** F4 on a settled Ledger cell: says why it cannot be repointed. */
   onRepointRefused: (row: LedgerRow) => void;
+  /** What the search box holds. It narrows the rendered rows only. */
+  search: string;
+  onSearchChange: (search: string) => void;
+  /** So the screen's Ctrl+F can put the caret in the box. */
+  searchInputRef: RefObject<HTMLInputElement | null>;
 };
 
 /**
@@ -119,9 +133,39 @@ export function LedgerGrid(props: LedgerGridProps) {
     onContextMenu,
     onRequestBreakup,
     onRepointRefused,
+    search,
+    onSearchChange,
+    searchInputRef,
   } = props;
 
   const visible = useMemo(() => columns.filter((column) => column.visible), [columns]);
+
+  // RENDERING ONLY. See the invariant at the top of this file.
+  const shownRows = useMemo(() => searchLedgerRows(rows, search), [rows, search]);
+  const searching = search.trim() !== "";
+  const ledgerCount = useMemo(() => rows.filter((row) => !isBlankLedgerRow(row)).length, [rows]);
+  const shownCount = searching
+    ? shownRows.filter((row) => !isBlankLedgerRow(row)).length
+    : ledgerCount;
+
+  /**
+   * The search box's keys:
+   *
+   *   ↓ / Enter   go to the first row shown
+   *   Esc         clear the search. With nothing typed, Esc passes through to
+   *               the screen as usual (close the breakup, or leave).
+   */
+  const onSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "ArrowDown" || event.key === "Enter") {
+      event.preventDefault();
+      focusGrid(LEDGER_GRID_NAME, "first");
+      return;
+    }
+    if (event.key === "Escape" && search !== "") {
+      event.preventDefault();
+      onSearchChange("");
+    }
+  };
   const tableWidth = useMemo(
     () => totalColumnWidth(visible, ROW_ACTION_PX),
     [visible],
@@ -331,10 +375,29 @@ export function LedgerGrid(props: LedgerGridProps) {
   return (
     <div className={styles.gridShell} onContextMenu={onContextMenu}>
       <div className={styles.gridHead}>
-        <span className={styles.gridHeadTitle}>Ledgers</span>
+        <span className={styles.gridHeadLead}>
+          <span className={styles.gridHeadTitle}>Ledgers</span>
+          <input
+            ref={searchInputRef}
+            type="search"
+            role="searchbox"
+            className={styles.gridSearch}
+            placeholder="Search ledger, group, remarks, amount… (Ctrl+F)"
+            aria-label="Search the ledgers in this set"
+            title="Narrows the rows shown. Save still saves every ledger in the set."
+            data-uppercase="off"
+            autoComplete="off"
+            spellCheck={false}
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
+            onKeyDown={onSearchKeyDown}
+          />
+        </span>
         <span className={styles.gridHeadNote}>
-          {rows.filter((row) => !isBlankLedgerRow(row)).length} ledger(s) in this set · pick into the
-          last row to add one · Ctrl+− removes a row · Alt+B opens a breakup
+          {searching
+            ? `showing ${shownCount} of ${ledgerCount} ledger(s) · Save keeps every one`
+            : `${ledgerCount} ledger(s) in this set`}{" "}
+          · pick into the last row to add one · Ctrl+− removes a row · Alt+B opens a breakup
         </span>
       </div>
       <div className={styles.gridViewport}>
@@ -370,7 +433,15 @@ export function LedgerGrid(props: LedgerGridProps) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, index) => {
+            {searching && shownCount === 0 ? (
+              <tr>
+                <td colSpan={visible.length + 1} className={styles.gridEmptyMatch}>
+                  No ledger in this set matches &ldquo;{search.trim()}&rdquo;. Esc in the search
+                  box clears it.
+                </td>
+              </tr>
+            ) : null}
+            {shownRows.map((row, index) => {
               const blank = isBlankLedgerRow(row);
               return (
                 <tr

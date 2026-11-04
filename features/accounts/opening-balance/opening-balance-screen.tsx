@@ -66,6 +66,7 @@ const SCREEN_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
   { label: "Breakup", keys: ["Alt", "B"] },
   { label: "Panels", keys: ["F1"] },
   { label: "Remove row", keys: ["-"] },
+  { label: "Search ledgers", keys: ["Ctrl", "F"] },
   { label: "Close", keys: ["Esc"] },
 ];
 
@@ -212,6 +213,13 @@ export default function OpeningBalanceScreen({ memory }: OpeningBalanceScreenPro
 
   const [pickerRow, setPickerRow] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<PendingConfirm | null>(null);
+  /**
+   * The Ledgers search. It narrows what the grid SHOWS, and nothing else reads
+   * it: save, validation, totals and the picker's used-ledger list all work
+   * over `draft.rows`, the whole set (see the invariant in ledger-grid.tsx).
+   */
+  const [ledgerSearch, setLedgerSearch] = useState("");
+  const ledgerSearchRef = useRef<HTMLInputElement | null>(null);
 
   const agreement = useMemo(
     () => computeAgreement(totals, draft.server, draft.dirty),
@@ -413,6 +421,7 @@ export default function OpeningBalanceScreen({ memory }: OpeningBalanceScreenPro
    *   F1                step between the ledger grid and the breakup panel
    *   ↑ / ↓             with no cell focused, enter the ledger grid
    *   Alt+B             open the selected row's breakup, or say why it cannot
+   *   Ctrl+F            put the caret in the Ledgers search box
    *   Esc               close the breakup; with none open, leave the screen
    *
    * F5 and F1 are ALWAYS prevented, keyed set on screen or not: the browser's
@@ -537,6 +546,21 @@ export default function OpeningBalanceScreen({ memory }: OpeningBalanceScreenPro
           break;
 
         default:
+          if (
+            (event.ctrlKey || event.metaKey) &&
+            !event.altKey &&
+            (event.key === "f" || event.key === "F")
+          ) {
+            // In place of the browser's find bar, which cannot see the cell
+            // values: they are inputs, not text.
+            const box = ledgerSearchRef.current;
+            if (box) {
+              event.preventDefault();
+              box.focus();
+              box.select();
+            }
+            break;
+          }
           if (event.altKey && (event.key === "b" || event.key === "B")) {
             // The same request the grid serves, from anywhere on the screen:
             // whichever row the caret is on, or the one whose breakup is open.
@@ -636,6 +660,9 @@ export default function OpeningBalanceScreen({ memory }: OpeningBalanceScreenPro
           onRemoveRow={onRemoveRow}
           onRequestBreakup={api.requestBreakup}
           onRepointRefused={onRepointRefused}
+          search={ledgerSearch}
+          onSearchChange={setLedgerSearch}
+          searchInputRef={ledgerSearchRef}
         />
 
         {draft.currentParty && currentRow ? (
@@ -699,6 +726,9 @@ export default function OpeningBalanceScreen({ memory }: OpeningBalanceScreenPro
           if (!rowKey) {
             return;
           }
+          // The new row has to be on screen for the caret to land on it, and
+          // the ledger just picked may not match the search.
+          setLedgerSearch("");
           api.pickLedger(rowKey, ledger);
           // A bill-wise party's work is in the panel, so focus goes there; an
           // ordinary ledger's is the figure.

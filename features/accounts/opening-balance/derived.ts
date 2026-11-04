@@ -127,6 +127,42 @@ export function isBlankLedgerRow(row: LedgerRow): boolean {
   return row.ledId === "";
 }
 
+/**
+ * The rows the Ledgers grid SHOWS for a search. A view, never the set.
+ *
+ * `POST /create` goes out with `replace: true`, so the payload must still be
+ * built from every row in `draft.rows`. This result is for rendering only, and
+ * nothing that saves, validates or totals may read it. See the invariant at the
+ * top of `components/ledger-grid.tsx`.
+ *
+ * Each whitespace-separated word must appear (case-insensitive) somewhere in
+ * the ledger name, group, nature, source or remarks, or in the opening figure,
+ * either as typed (`25000`) or as displayed (`25,000.00`). The trailing blank
+ * row is always kept, because new ledgers are added by picking into it.
+ */
+export function searchLedgerRows(rows: readonly LedgerRow[], query: string): readonly LedgerRow[] {
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) {
+    return rows;
+  }
+  return rows.filter((row) => {
+    if (isBlankLedgerRow(row)) {
+      return true;
+    }
+    const haystack = [
+      row.ledName,
+      row.groupName,
+      row.groupNature,
+      row.source ?? "",
+      row.remarks,
+      row.amount === 0 ? "" : `${row.amount} ${formatMoney(row.amount)}`,
+    ]
+      .join(" ")
+      .toLowerCase();
+    return words.every((word) => haystack.includes(word));
+  });
+}
+
 export type Agreement =
   | { kind: "agrees" }
   | { kind: "unsaved"; serverDebit: number; serverCredit: number }

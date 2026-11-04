@@ -223,6 +223,38 @@
   border-bottom: 1px solid var(--border, #c9c9c9);
   background: #f2f2f2;
 }
+.gridHeadLead {
+  display: flex;
+  flex: 0 1 auto;
+  gap: u(0.5);
+  align-items: center;
+  min-width: 0;
+}
+.gridSearch {
+  width: u(16);
+  max-width: 40vw;
+  min-width: 0;
+  padding: u(0.15) u(0.35);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: #ffffff;
+  font: inherit;
+  font-size: u(0.72);
+  line-height: 1.35;
+}
+.gridSearch:focus {
+  outline: none;
+  border-color: var(--primary, #7b1515);
+  box-shadow: 0 0 0 1px var(--primary, #7b1515);
+}
+/* Out-specifies `.grid tbody td`, which zeroes the padding and forbids wrapping. */
+.grid tbody td.gridEmptyMatch {
+  padding: u(0.4) u(0.5);
+  color: var(--text-muted, #666666);
+  font-size: u(0.72);
+  font-style: italic;
+  white-space: normal;
+}
 .gridHeadTitle {
   font-size: u(0.72);
   font-weight: 700;

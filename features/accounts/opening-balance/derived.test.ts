@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { agreement, isBlankBill, partyNet, toPaise, totals } from "./derived";
+import {
+  agreement,
+  isBlankBill,
+  partyNet,
+  searchLedgerRows,
+  toPaise,
+  totals,
+} from "./derived";
 import type { BillRow, LedgerRow, TrialBalance } from "./opening-balance.types";
 import { blankBillRow, blankLedgerRow } from "./wire/parse";
 
@@ -125,5 +132,45 @@ describe("toPaise", () => {
     expect(toPaise(2400.5)).toBe(240050);
     expect(toPaise(0.1 + 0.2)).toBe(30);
     expect(toPaise(Number.NaN)).toBe(0);
+  });
+});
+
+describe("searchLedgerRows — a view over the set, never a trim of it", () => {
+  const rows = [
+    ledger({ key: "a", ledId: "1", ledName: "HDFC Bank", groupName: "Bank Accounts", amount: 25000 }),
+    ledger({ key: "b", ledId: "2", ledName: "Ravi Traders", groupName: "Sundry Debtors" }),
+    ledger({ key: "c", ledId: "3", ledName: "Cash", groupName: "Cash-in-hand", remarks: "till float" }),
+    { ...blankLedgerRow(), key: "blank" },
+  ];
+
+  it("returns the set itself for an empty query", () => {
+    expect(searchLedgerRows(rows, "")).toBe(rows);
+    expect(searchLedgerRows(rows, "   ")).toBe(rows);
+  });
+
+  it("matches name, group and remarks case-insensitively", () => {
+    expect(searchLedgerRows(rows, "hdfc").map((row) => row.key)).toEqual(["a", "blank"]);
+    expect(searchLedgerRows(rows, "DEBTORS").map((row) => row.key)).toEqual(["b", "blank"]);
+    expect(searchLedgerRows(rows, "float").map((row) => row.key)).toEqual(["c", "blank"]);
+  });
+
+  it("needs every word, in any order", () => {
+    expect(searchLedgerRows(rows, "bank hdfc").map((row) => row.key)).toEqual(["a", "blank"]);
+    expect(searchLedgerRows(rows, "bank ravi").map((row) => row.key)).toEqual(["blank"]);
+  });
+
+  it("finds a figure as typed or as displayed", () => {
+    expect(searchLedgerRows(rows, "25000").map((row) => row.key)).toEqual(["a", "blank"]);
+    expect(searchLedgerRows(rows, "25,000").map((row) => row.key)).toEqual(["a", "blank"]);
+  });
+
+  it("always keeps the trailing blank row, so a ledger can still be added", () => {
+    expect(searchLedgerRows(rows, "no such ledger").map((row) => row.key)).toEqual(["blank"]);
+  });
+
+  it("never touches the rows it was given", () => {
+    const before = [...rows];
+    searchLedgerRows(rows, "hdfc");
+    expect(rows).toEqual(before);
   });
 });
