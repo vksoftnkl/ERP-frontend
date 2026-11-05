@@ -3,9 +3,11 @@
  * `PurchaseInvoiceEntry`'s grid bookkeeping, `buildPayload`, `paintCalc`,
  * `applyLoaded` and `resetScreen`, as one reducer.
  *
- * The client never computes money. Every figure from Taxable onward is the
- * server's (`POST /purchase/invoices/validate`), painted back by `calc`; a
- * loaded document shows the stored ones.
+ * Money: a typed line is worked out at once on the client as an ESTIMATE (Qt
+ * NexERP dd59c2c P11 — invoice-figures.ts `repriceLine` / `liveTotalsOf`); the
+ * server's figures (`POST /purchase/invoices/validate`), painted back by
+ * `calc`, follow and replace it. Charges, landing cost, ITC, the check and the
+ * prices are the server's alone; a loaded document shows the stored ones.
  */
 import { allocDtoOf, type PurchaseAllocEntry } from "../shared/purchase-dialogs.types";
 import { isoFromTyped, num, qtyText, text } from "../shared/purchase.format";
@@ -15,9 +17,19 @@ import {
   EXPRESSION_COLUMNS,
   FOCUS_STOPS,
   GRN_LINE_COLUMNS,
+  MARKUP_COLUMNS,
+  PRICE_LEVELS,
   SELL_COLUMNS,
   STATUS,
 } from "./invoice.constants";
+import {
+  derivedPairs,
+  lineHalfTyped,
+  liveTotalsOf,
+  NO_DERIVED,
+  repriceLine,
+  waitingHint,
+} from "./invoice-figures";
 import {
   evalMoneyExpression,
   foldAllocs,
@@ -54,6 +66,7 @@ import {
   type InvoiceLineCheck,
 } from "./invoice-fidelity";
 import type {
+  GstParts,
   InvoiceDraft,
   InvoiceLine,
   InvoiceScope,
@@ -166,6 +179,19 @@ export function blankLine(key: string): InvoiceLine {
     freeTyped: false,
     freeAuto: "",
     priceKept: false,
+    discAmt: "",
+    schAmt: "",
+    markupB: "",
+    markupC: "",
+    markupD: "",
+    marginBPct: "",
+    marginCPct: "",
+    marginDPct: "",
+    hsn: "",
+    msp: "",
+    mspOwned: false,
+    est: null,
+    derived: NO_DERIVED,
   };
 }
 
@@ -196,17 +222,34 @@ export function textileOpen(line: InvoiceLine, rules: LineSettings): boolean {
 export function withLineDefaults(draft: InvoiceDraft): InvoiceDraft {
   const lines = draft.lines.map((line) => {
     const loose = line as Partial<InvoiceLine> & { key: string; keptAllocs?: PurchaseAllocDto[] | null };
-    if (loose.split !== undefined && loose.grnItemId !== undefined && loose.freeAuto !== undefined) {
+    if (loose.split !== undefined && loose.grnItemId !== undefined && loose.freeAuto !== undefined && loose.derived !== undefined) {
       return line;
     }
     const legacy = loose.keptAllocs;
     const split: PurchaseAllocEntry[] | null = legacy
       ? legacy.map((dto) => ({ ...dto, bucket: dto.bucket === "DAMAGED" ? "DAMAGED" : "SALEABLE", qty: dto.qty }))
       : null;
-    return { ...blankLine(loose.key), ...line, split: loose.split ?? split };
+    // a remembered calc from before dd59c2c has no charge split / GST parts
+    const calc = loose.calc ? { ...EMPTY_CALC_EXTRAS, ...loose.calc } : null;
+    return { ...blankLine(loose.key), ...line, calc, split: loose.split ?? split };
   });
-  return { ...draft, lines, lineSettings: draft.lineSettings ?? DEFAULT_LINE_SETTINGS };
+  return {
+    ...draft,
+    lines,
+    lineSettings: draft.lineSettings ?? DEFAULT_LINE_SETTINGS,
+    awaitingServer: draft.awaitingServer ?? false,
+    liveTotals: draft.liveTotals ?? null,
+    gstBreakup: draft.gstBreakup ?? null,
+    supplierTaxMode: draft.supplierTaxMode ?? "",
+  };
 }
+
+const NO_GST_PARTS: GstParts = { cgst: 0, sgst: 0, igst: 0, cess: 0 };
+const EMPTY_CALC_EXTRAS: Pick<LineCalc, "chrgBeforeTax" | "chrgAfterTax" | "gstParts"> = {
+  chrgBeforeTax: 0,
+  chrgAfterTax: 0,
+  gstParts: NO_GST_PARTS,
+};
 
 /** Qt `resetScreen`: today's date on both dates, one blank line, DRAFT. */
 export function createDraft(scope: InvoiceScope, today: string, lineSettings: LineSettings = DEFAULT_LINE_SETTINGS): InvoiceDraft {
@@ -247,6 +290,10 @@ export function createDraft(scope: InvoiceScope, today: string, lineSettings: Li
     facts: EMPTY_FACTS,
     issues: EMPTY_ISSUES,
     serverTotals: null,
+    awaitingServer: false,
+    liveTotals: null,
+    gstBreakup: null,
+    supplierTaxMode: "",
   };
 }
 
@@ -283,13 +330,21 @@ export function whyNotEditable(line: InvoiceLine, column: number, rules: LineSet
           ? "The PO or GRN this line came from."
           : column === COL.Itc
             ? "The input tax credit, as the server classed it."
-            : "Worked out by the server from the line.";
+            : column === COL.Hsn
+              ? "The item's HSN, from the item master."
+              : column === COL.ChrgBeforeTax || column === COL.ChrgAfterTax
+                ? "The line's share of the bill's charges — the server spreads them."
+                : "Worked out by the server from the line.";
   }
   if (!rowHasItem(line)) {
     return column === COL.Barcode || column === COL.Item ? "" : "Scan or pick the item first.";
   }
   if (column === COL.Barcode) {
     return "The barcode only finds the item — pick another item on Item.";
+  }
+  // Qt dd59c2c: prices (and the MSP that goes with them) are keyed only where the bill writes them (the price policy)
+  if ((column === COL.Msp || SELL_COLUMNS.has(column) || MARKUP_COLUMNS.has(column)) && !rules.priceUpdate) {
+    return "Selling prices and the MSP are keyed only while the bill writes them (purchase settings).";
   }
   if (rowFromGrn(line)) {
     // R4: what came in is the GRN's — only the supplier's figures are keyed.
@@ -313,8 +368,36 @@ export function whyNotEditable(line: InvoiceLine, column: number, rules: LineSet
   return "";
 }
 
+/**
+ * Qt dd59c2c P15 `lineStop` — Enter on a line stops at the typing cells only:
+ * Item (a blank line's) → [Batch → Expiry on an item tracked by them] → Billed
+ * → Free → Rate → Disc % → Sch % → Extra disc → the next line. A cell the line
+ * cannot take (a GRN line's Free, a split line's Batch) is stepped over.
+ */
+export function lineStopOf(line: InvoiceLine, column: number, rules: LineSettings = DEFAULT_LINE_SETTINGS): boolean {
+  if (column === COL.Item) {
+    return !rowHasItem(line); // a keyed line's item is not re-picked by Enter
+  }
+  if (!rowHasItem(line)) {
+    return false;
+  }
+  if (column === COL.Batch) {
+    return line.signature.includes("B") && !rowTextile(line, rules) && !line.split && !rowFromGrn(line);
+  }
+  if (column === COL.Expiry) {
+    return line.signature.includes("E") && !line.split && !rowFromGrn(line);
+  }
+  if (rowFromGrn(line)) {
+    // a GRN line: only the supplier's figures are keyed (R4)
+    return (
+      column === COL.Billed || column === COL.Rate || column === COL.DiscPct || column === COL.SchPct || column === COL.ExtraDisc
+    );
+  }
+  return true;
+}
+
 export function isEnterStop(line: InvoiceLine, column: number, rules: LineSettings = DEFAULT_LINE_SETTINGS): boolean {
-  return FOCUS_STOPS.has(column) && whyNotEditable(line, column, rules) === "";
+  return FOCUS_STOPS.has(column) && whyNotEditable(line, column, rules) === "" && lineStopOf(line, column, rules);
 }
 
 // ---------------------------------------------------------------------------
@@ -400,14 +483,30 @@ export function lineDto(line: InvoiceLine, lineNo: number, bill?: LineDtoContext
         dto[key] = value;
       }
     }
-    // ENT-18: a markup with no Sell A prices it (the answer paints Sell A back).
-    if (!line.sellA.trim() && line.markup.trim()) {
-      dto.markupAPct = cellNumber(line.markup);
+    // ENT-18 / P8: a markup with no Sell prices its level (the answer paints the Sell back) — A to D.
+    const markups = [
+      ["markupAPct", line.sellA, line.markup],
+      ["markupBPct", line.sellB, line.markupB],
+      ["markupCPct", line.sellC, line.markupC],
+      ["markupDPct", line.sellD, line.markupD],
+    ] as const;
+    for (const [key, sell, markup] of markups) {
+      if (!sell.trim() && markup.trim()) {
+        dto[key] = cellNumber(markup);
+      }
     }
   }
+  // P9 / Q4: the line's MSP, only while the line owns it (0 = no MSP); untouched = left out — the item's current one is the server's default.
+  if (line.mspOwned && line.msp.trim()) {
+    dto.minPrice = cellNumber(line.msp);
+  }
+  // P7: Sch % else the Sch amount (the server takes the amount only without a %).
   const sch = positive(line.schPct);
+  const schAmt = positive(line.schAmt);
   if (sch !== undefined) {
     dto.schPct = sch;
+  } else if (schAmt !== undefined) {
+    dto.schAmt = schAmt;
   }
   const extra = positive(line.extraDisc);
   if (extra !== undefined) {
@@ -433,8 +532,11 @@ export function lineDto(line: InvoiceLine, lineNo: number, bill?: LineDtoContext
     dto.grnItemId = line.grnItemId;
     dto.grnItemAccYear = line.grnYear || accYear;
     const grnDisc = positive(line.discPct);
+    const grnDiscAmt = positive(line.discAmt);
     if (grnDisc !== undefined) {
       dto.discPct = grnDisc;
+    } else if (grnDiscAmt !== undefined) {
+      dto.discAmt = grnDiscAmt; // P7
     }
     return dto;
   }
@@ -450,8 +552,11 @@ export function lineDto(line: InvoiceLine, lineNo: number, bill?: LineDtoContext
     dto.freeQty = free;
   }
   const disc = positive(line.discPct);
+  const discAmt = positive(line.discAmt);
   if (disc !== undefined) {
     dto.discPct = disc;
+  } else if (discAmt !== undefined) {
+    dto.discAmt = discAmt; // P7: the amount only without a %
   }
   const mrp = positive(line.mrp);
   if (mrp !== undefined) {
@@ -467,6 +572,8 @@ export function lineDto(line: InvoiceLine, lineNo: number, bill?: LineDtoContext
 /**
  * The save / validate body and the line keys in the order they were sent —
  * the answer's lines come back in that order (Qt matches them by position).
+ * /validate leaves out a line with an item but no qty yet (Qt dd59c2c P11:
+ * the server would refuse the whole check for it); Save still names it.
  */
 export function buildPayload(
   draft: InvoiceDraft,
@@ -474,7 +581,7 @@ export function buildPayload(
   today: string,
   forValidate = false,
 ): { body: SavePurchaseInvoiceDto; sentKeys: string[] } {
-  const lines = itemLines(draft);
+  const lines = forValidate ? itemLines(draft).filter((line) => !lineHalfTyped(line)) : itemLines(draft);
   const invNo = draft.supplierInvNo.trim();
   const remarks = draft.remarks.trim();
   return {
@@ -504,9 +611,9 @@ export function buildPayload(
   };
 }
 
-/** Qt `recalcNow`'s gate: nothing is asked until supplier, godown and a line are there. */
+/** Qt `recalcNow`'s gate: nothing is asked until supplier, godown and a line with its qty are there. */
 export function canRecalc(draft: InvoiceDraft): boolean {
-  return Boolean(draft.supplierId && draft.godownId && itemLines(draft).length > 0);
+  return Boolean(draft.supplierId && draft.godownId && itemLines(draft).some((line) => !lineHalfTyped(line)));
 }
 
 /** Qt `saveDocument`'s gate. */
@@ -538,6 +645,9 @@ export function calcOf(row: {
   igst?: unknown;
   cess?: unknown;
   total?: unknown;
+  amount?: unknown;
+  chrgBeforeTax?: unknown;
+  chrgAfterTax?: unknown;
   landedCostWot?: unknown;
   pendingShortQty?: unknown;
   rejectedQty?: unknown;
@@ -547,11 +657,20 @@ export function calcOf(row: {
   itcIneligible?: unknown;
   check?: InvoiceLineCheck | null;
 }): LineCalc {
+  const after = num(row.chrgAfterTax);
+  const cgst = num(row.cgst);
+  const sgst = num(row.sgst);
+  const igst = num(row.igst);
+  const cess = num(row.cess);
   return {
     taxable: num(row.taxable),
     gstPct: num(row.gstPct),
-    tax: num(row.cgst) + num(row.sgst) + num(row.igst) + num(row.cess),
-    total: num(row.total),
+    tax: cgst + sgst + igst + cess,
+    // P10: Total = the server's amount (the after-tax share in); an older server's total + that share
+    total: row.amount !== undefined && row.amount !== null ? num(row.amount) : Math.round((num(row.total) + after) * 100) / 100,
+    chrgBeforeTax: num(row.chrgBeforeTax),
+    chrgAfterTax: after,
+    gstParts: { cgst, sgst, igst, cess },
     costWot: num(row.landedCostWot),
     shortQty: num(row.pendingShortQty),
     rejectedQty: num(row.rejectedQty),
@@ -696,6 +815,19 @@ function loadedLine(row: PurchaseInvoicePayload["lines"][number], key: string, b
   const billed = num(row.piiBilledQty);
   const srcType = text(row.piiSrcDocType).toUpperCase();
   const positiveText = (value: unknown) => (num(value) > 0 ? qtyText(num(value)) : "");
+  const markupText = (value: unknown) => (text(value) ? qtyText(num(value)) : "");
+  // P7: a % line keeps its %, an amount line its amount; the pair's figure shows muted
+  const schPct = num(row.piiSchPct);
+  const discAmt = num(row.piiDiscAmt);
+  const schAmt = num(row.piiSchAmt);
+  // P10: Total = taxable + GST + the after-tax share (the PO's Amount)
+  const before = num(row.piiChrgBeforeTax);
+  const after = num(row.piiChrgAfterTax);
+  const cgst = num(row.piiCgstAmt);
+  const sgst = num(row.piiSgstAmt);
+  const igst = num(row.piiIgstAmt);
+  const cess = num(row.piiCessAmt);
+  const storedMsp = text(row.piiMinPrice);
   const base: InvoiceLine = {
     ...line,
     itemId: text(row.piiItemId),
@@ -707,8 +839,15 @@ function loadedLine(row: PurchaseInvoicePayload["lines"][number], key: string, b
     free: free > 0 ? qtyText(free) : "",
     rate: rateText(row.piiRate),
     discPct: disc > 0 ? qtyText(disc) : "",
+    discAmt: disc <= 0 && discAmt > 0 ? qtyText(discAmt) : "",
+    schAmt: schPct <= 0 && schAmt > 0 ? qtyText(schAmt) : "",
+    derived: derivedPairs({ gross: num(row.piiGrossAmt), discAmt, schAmt }, { discPct: disc > 0, schPct: schPct > 0 }),
     mrp: mrp > 0 ? qtyText(mrp) : "",
     gstPct: qtyText(num(row.piiGstPct)),
+    hsn: text(row.piiHsnCode),
+    // Q4: stored on the bill = the line owns it (sent back until cleared)
+    msp: storedMsp ? qtyText(num(row.piiMinPrice)) : "",
+    mspOwned: storedMsp !== "",
     grnItemId: srcType === "GRN" ? text(row.piiSrcItemId) : "",
     grnYear: srcType === "GRN" ? text(row.piiSrcDocYear) : "",
     poItemId: srcType === "PURCHASE_ORDER" ? text(row.piiSrcItemId) : "",
@@ -717,10 +856,13 @@ function loadedLine(row: PurchaseInvoicePayload["lines"][number], key: string, b
     sisterSaleItemYear: srcType === "SALE_BILL" ? text(row.piiSrcDocYear) : "",
     // A sister bill's number stays whole (Qt); a PO / GRN shows its last segment.
     srcRefno: srcType === "SALE_BILL" ? text(row.piiSrcDocRefno) : srcType ? refnoTail(row.piiSrcDocRefno) : "",
-    schPct: positiveText(row.piiSchPct),
+    schPct: schPct > 0 ? qtyText(schPct) : "",
     extraDisc: positiveText(row.piiExtraDiscAmt),
     costIncl: billed > 0 ? (num(row.piiTotalAmt) / billed).toFixed(2) : "",
-    markup: text(row.piiMarkupAPct) ? qtyText(num(row.piiMarkupAPct)) : "",
+    markup: markupText(row.piiMarkupAPct),
+    markupB: markupText(row.piiMarkupBPct),
+    markupC: markupText(row.piiMarkupCPct),
+    markupD: markupText(row.piiMarkupDPct),
     sellA: positiveText(row.piiSellA),
     sellB: positiveText(row.piiSellB),
     sellC: positiveText(row.piiSellC),
@@ -729,8 +871,11 @@ function loadedLine(row: PurchaseInvoicePayload["lines"][number], key: string, b
     calc: {
       taxable: num(row.piiTaxableAmt),
       gstPct: num(row.piiGstPct),
-      tax: num(row.piiCgstAmt) + num(row.piiSgstAmt) + num(row.piiIgstAmt) + num(row.piiCessAmt),
-      total: num(row.piiTotalAmt),
+      tax: cgst + sgst + igst + cess,
+      total: Math.round((num(row.piiTotalAmt) + after) * 100) / 100,
+      chrgBeforeTax: before,
+      chrgAfterTax: after,
+      gstParts: { cgst, sgst, igst, cess },
       costWot: num(row.piiLandedCostWot),
       shortQty: num(row.piiShortQty),
       rejectedQty: num(row.piiRejectedAtGrnQty),
@@ -780,6 +925,19 @@ export function draftFromPayload(
     facts: factsOf(h as unknown as Record<string, unknown>),
     issues: { warnings: payload.warnings ?? [], refusals: payload.refusals ?? [] },
     serverTotals: payload.totals ?? totalsFromStoredHeader(h as unknown as Record<string, unknown>),
+    // another document: the last answer was the previous one's
+    awaitingServer: false,
+    liveTotals: null,
+    gstBreakup: Array.isArray(payload.gstBreakup) ? payload.gstBreakup : null,
+    supplierTaxMode: "",
+    audit: {
+      createdBy: text(h.piCreatedBy),
+      createdOn: text(h.piCreatedOn),
+      createdByName: text(h.createdByName),
+      modifiedBy: text(h.piModifiedBy),
+      modifiedOn: text(h.piModifiedOn),
+      modifiedByName: text(h.modifiedByName),
+    },
   };
   return isEditable(draft) ? ensureTrailingBlank(draft) : draft;
 }
@@ -849,10 +1007,16 @@ export type InvoiceAction =
   // ── 2026-10-29 fidelity rebuild ──
   /** The header's new fields (mode, credit days, agent, bill from, IRN / Ack, goods received, transport). */
   | { type: "ext"; patch: Partial<InvoiceHeaderExt> }
-  /** The supplier's context arrived: its default credit days and bill-from GSTIN (not an edit). */
-  | { type: "supplierDefaults"; creditDays: number | null; billFromGstin: string }
+  /**
+   * The supplier's context arrived: its default credit days and bill-from GSTIN (not an edit), and
+   * the godown a new bill takes when none is picked yet — the supplier's default, else the
+   * branch's (Qt dd59c2c P11, 1600680 Q5).
+   */
+  | { type: "supplierDefaults"; creditDays: number | null; billFromGstin: string; godownId?: string; godownName?: string }
   /** The strip's rows (a refused save / post). */
-  | { type: "issues"; issues: InvoiceIssues };
+  | { type: "issues"; issues: InvoiceIssues }
+  /** Qt 7d8c926 `m_dirtyAfterLoad`: a held / autosaved bill brought back is unsaved work. */
+  | { type: "markDirty" };
 
 function patchLine(draft: InvoiceDraft, key: string, patch: (line: InvoiceLine) => InvoiceLine): InvoiceDraft {
   let touched = false;
@@ -881,7 +1045,13 @@ type TypedField =
   | "markup"
   | "schPct"
   | "extraDisc"
-  | "costIncl";
+  | "costIncl"
+  | "discAmt"
+  | "schAmt"
+  | "msp"
+  | "markupB"
+  | "markupC"
+  | "markupD";
 
 const NUMBER_FIELDS: Readonly<Partial<Record<number, TypedField>>> = {
   [COL.Billed]: "billed",
@@ -899,6 +1069,26 @@ const NUMBER_FIELDS: Readonly<Partial<Record<number, TypedField>>> = {
   [COL.SchPct]: "schPct",
   [COL.ExtraDisc]: "extraDisc",
   [COL.CostIncl]: "costIncl",
+  [COL.DiscAmt]: "discAmt",
+  [COL.SchAmt]: "schAmt",
+  [COL.Msp]: "msp",
+  [COL.MarkupB]: "markupB",
+  [COL.MarkupC]: "markupC",
+  [COL.MarkupD]: "markupD",
+};
+
+/** P8: a level's Sell ↔ its Markup (and the markup's margin) — the fields one clears on the other. */
+const SELL_OF_MARKUP: Readonly<Partial<Record<number, TypedField>>> = {
+  [COL.Markup]: "sellA",
+  [COL.MarkupB]: "sellB",
+  [COL.MarkupC]: "sellC",
+  [COL.MarkupD]: "sellD",
+};
+const MARKUP_OF_SELL: Readonly<Partial<Record<number, { markup: TypedField; margin: "marginPct" | "marginBPct" | "marginCPct" | "marginDPct" }>>> = {
+  [COL.SellA]: { markup: "markup", margin: "marginPct" },
+  [COL.SellB]: { markup: "markupB", margin: "marginBPct" },
+  [COL.SellC]: { markup: "markupC", margin: "marginCPct" },
+  [COL.SellD]: { markup: "markupD", margin: "marginDPct" },
 };
 
 const QTY_COLUMNS: ReadonlySet<number> = new Set([COL.Billed, COL.Recd, COL.Dmg, COL.Free]);
@@ -953,12 +1143,31 @@ function editCell(draft: InvoiceDraft, key: string, column: number, raw: string)
       if (column === COL.CostIncl) {
         patched.costTyped = value !== ""; // ENT-04: the answer back-solves Rate
       }
-      if (column === COL.Markup && value !== "") {
-        patched.sellA = ""; // Sell A follows the markup
+      // P8: a typed markup prices its level (the answer paints the Sell back); a typed Sell clears its markup — A to D
+      const sellField = SELL_OF_MARKUP[column];
+      if (sellField && value !== "") {
+        patched[sellField] = "";
       }
-      if (column === COL.SellA) {
-        patched.markup = ""; // the markup follows Sell A
-        patched.marginPct = "";
+      const markupFields = MARKUP_OF_SELL[column];
+      if (markupFields) {
+        patched[markupFields.markup] = "";
+        patched[markupFields.margin] = "";
+      }
+      // P7: Disc % or Disc, Sch % or Sch — typing one clears the other (the server takes the amount only without a %)
+      if (column === COL.DiscPct && value !== "") {
+        patched.discAmt = "";
+      }
+      if (column === COL.DiscAmt && value !== "") {
+        patched.discPct = "";
+      }
+      if (column === COL.SchPct && value !== "") {
+        patched.schAmt = "";
+      }
+      if (column === COL.SchAmt && value !== "") {
+        patched.schPct = "";
+      }
+      if (column === COL.Msp) {
+        patched.mspOwned = true; // P9 / Q4: typed here (blank again = not sent)
       }
       return patched;
     });
@@ -1043,6 +1252,8 @@ function applyItem(
       mrp: mrp > 0 && (!quiet || (source && !current.mrp)) ? qtyText(mrp) : current.mrp,
       // A different item: the old figures are not this line's any more.
       calc: !quiet && fresh ? null : current.calc,
+      est: !quiet && fresh ? null : current.est,
+      derived: !quiet && fresh ? NO_DERIVED : current.derived,
     };
     if (!sameItem && !quiet) {
       // Another item on the line: its scheme, split, textile cells and PO link were the old item's.
@@ -1061,12 +1272,73 @@ function applyItem(
         sisterSaleItemId: "",
         sisterSaleItemYear: "",
         srcRefno: "",
+        // and its HSN / MSP (an owned MSP would otherwise go out on the new item)
+        hsn: "",
+        msp: "",
+        mspOwned: false,
       } satisfies Partial<InvoiceLine>);
     }
     return patched;
   });
   const withHint = quiet ? next : { ...next, dirty: true, hint: "" };
   return isEditable(withHint) ? ensureTrailingBlank(withHint) : withHint;
+}
+
+/** Sell / Markup / margin of one level, as the line keeps them (Qt `paintServerLine` levels). */
+const LEVEL_FIELDS = {
+  A: { sell: "sellA", markup: "markup", margin: "marginPct" },
+  B: { sell: "sellB", markup: "markupB", margin: "marginBPct" },
+  C: { sell: "sellC", markup: "markupC", margin: "marginCPct" },
+  D: { sell: "sellD", markup: "markupD", margin: "marginDPct" },
+} as const satisfies Record<string, { sell: keyof InvoiceLine; markup: keyof InvoiceLine; margin: keyof InvoiceLine }>;
+
+/**
+ * Qt `paintServerLine`: one line of the server's answer — its money, the charge
+ * split (P10), the cost, ITC, Sell / Markup A–D (P8), HSN and MSP (P9), what
+ * the blank Disc / Sch pair stands for (P7). A key the server does not send
+ * leaves its field alone; the estimate gives way.
+ */
+function paintServerLine(line: InvoiceLine, row: PurchaseCalcAnswer["lines"][number], priceUpdate: boolean): InvoiceLine {
+  const calc = calcOf(row);
+  const next: InvoiceLine = { ...line, calc, est: null, gstPct: qtyText(calc.gstPct) };
+  if (line.costTyped && text(row.rate) !== "") {
+    // ENT-04: the server's back-solved rate.
+    next.rate = rateText(row.rate);
+    next.costTyped = false;
+  }
+  if (text(row.costIncl)) {
+    next.costIncl = text(row.costIncl);
+  }
+  if (priceUpdate) {
+    // Sell / Markup A–D; the margin is the markup's tooltip (B–D: a server with P8)
+    for (const { level } of PRICE_LEVELS) {
+      const markupKey = `markup${level}Pct` as const;
+      const row2 = row as Record<string, unknown>;
+      if (row2[markupKey] === undefined) {
+        continue;
+      }
+      const fields = LEVEL_FIELDS[level];
+      if (num(row2[`sell${level}`]) > 0) {
+        next[fields.sell] = qtyText(num(row2[`sell${level}`]));
+      }
+      next[fields.markup] = text(row2[markupKey]) ? qtyText(num(row2[markupKey])) : "";
+      next[fields.margin] = text(row2[`margin${level}Pct`]) ? qtyText(num(row2[`margin${level}Pct`])) : "";
+    }
+  }
+  if (row.hsn !== undefined) {
+    next.hsn = text(row.hsn);
+  }
+  if (row.minPrice !== undefined && !line.mspOwned) {
+    // a line's own MSP stays as typed; else the item's current one, as the server shows it
+    next.msp = text(row.minPrice) ? qtyText(num(row.minPrice)) : "";
+  }
+  if (row.gross !== undefined) {
+    next.derived = derivedPairs(
+      { gross: num(row.gross), discAmt: num(row.discAmt), schAmt: num(row.schAmt) },
+      { discPct: line.discPct.trim() !== "", schPct: line.schPct.trim() !== "" },
+    );
+  }
+  return next;
 }
 
 function applyCalc(draft: InvoiceDraft, sentKeys: readonly string[], answer: PurchaseCalcAnswer): InvoiceDraft {
@@ -1079,32 +1351,17 @@ function applyCalc(draft: InvoiceDraft, sentKeys: readonly string[], answer: Pur
     }
   });
   const priceUpdate = draft.lineSettings.priceUpdate;
+  const lines = draft.lines.map((line) => {
+    const row = byKey.get(line.key);
+    return row && rowHasItem(line) ? paintServerLine(line, row, priceUpdate) : line;
+  });
   return {
     ...draft,
-    lines: draft.lines.map((line) => {
-      const row = byKey.get(line.key);
-      if (!row || !rowHasItem(line)) {
-        return line;
-      }
-      const calc = calcOf(row);
-      const next: InvoiceLine = { ...line, calc, gstPct: qtyText(calc.gstPct) };
-      if (line.costTyped && text(row.rate) !== "") {
-        // ENT-04: the server's back-solved rate.
-        next.rate = rateText(row.rate);
-        next.costTyped = false;
-      }
-      if (text(row.costIncl)) {
-        next.costIncl = text(row.costIncl);
-      }
-      if (priceUpdate) {
-        if (num(row.sellA) > 0) {
-          next.sellA = qtyText(num(row.sellA));
-        }
-        next.markup = text(row.markupAPct) ? qtyText(num(row.markupAPct)) : "";
-        next.marginPct = text(row.marginAPct) ? qtyText(num(row.marginAPct)) : "";
-      }
-      return next;
-    }),
+    lines,
+    awaitingServer: false,
+    liveTotals: null,
+    gstBreakup: Array.isArray(answer.gstBreakup) ? answer.gstBreakup : null,
+    supplierTaxMode: text(answer.supplierTaxMode) || draft.supplierTaxMode || "",
     charges: applyChargeCalc(draft.charges ?? [], answer.charges),
     totals: totalsFromCalc(answer),
     serverTotals: {
@@ -1119,7 +1376,8 @@ function applyCalc(draft: InvoiceDraft, sentKeys: readonly string[], answer: Pur
       answer.header && !draft.ext.goodsTyped && text(answer.header.goodsReceivedOn)
         ? { ...draft.ext, goodsReceivedOn: text(answer.header.goodsReceivedOn).slice(0, 10) }
         : draft.ext,
-    hint: "",
+    // P11: the lines with no qty yet were left out of this check
+    hint: waitingHint(lines),
   };
 }
 
@@ -1196,6 +1454,7 @@ function lineAction(draft: InvoiceDraft, action: InvoiceAction): InvoiceDraft {
         gstPct: qtyText(num(action.item.taxPerc)),
         mrp: mrp > 0 ? qtyText(mrp) : "",
         calc: null,
+        est: null,
       }));
       return { ...next, dirty: true, hint: `Line ${lineNoOf(draft, action.key)}: unit changed — check the rate.` };
     }
@@ -1274,7 +1533,59 @@ function lineAction(draft: InvoiceDraft, action: InvoiceAction): InvoiceDraft {
   }
 }
 
+/**
+ * The draft after an action, with the live estimate Qt dd59c2c P11 paints at
+ * once (`repriceRow` + `paintLive`): the lines the action touched work
+ * themselves out again and the totals follow, until the server's answer
+ * (`calc`) replaces both.
+ */
 export function invoiceReducer(draft: InvoiceDraft, action: InvoiceAction): InvoiceDraft {
+  const next = reduceInvoice(draft, action);
+  return next === draft ? draft : withLiveEstimate(draft, next, action);
+}
+
+/** Which lines an action re-prices (Qt: a typed cell, a source / new-unit line's lookup, the line defaults, lines brought in). */
+function repricedKeys(before: InvoiceDraft, after: InvoiceDraft, action: InvoiceAction): string[] | null {
+  switch (action.type) {
+    case "editCell":
+    case "unitSwitched":
+    case "lineDefaults":
+      return [action.key];
+    case "applyItem":
+      return action.source ? [action.key] : null;
+    case "addSourceLines":
+    case "sisterPull": {
+      const had = new Set(before.lines.map((line) => line.key));
+      return after.lines.filter((line) => !had.has(line.key)).map((line) => line.key);
+    }
+    case "removeLine":
+    case "chargeAdd":
+    case "chargeEdit":
+    case "chargeRemove":
+      return []; // the totals only
+    case "header":
+      return action.patch.invoiceAmount !== undefined || action.patch.tcsAmount !== undefined ? [] : null;
+    default:
+      return null;
+  }
+}
+
+function withLiveEstimate(before: InvoiceDraft, after: InvoiceDraft, action: InvoiceAction): InvoiceDraft {
+  // only where the server's answer follows (a recalc is scheduled), so the estimate never outstays it
+  if (!isEditable(after) || !changesFigures(action)) {
+    return after;
+  }
+  const keys = repricedKeys(before, after, action);
+  if (keys === null) {
+    return after;
+  }
+  const wanted = new Set(keys);
+  const ctx = { interState: Boolean(after.facts?.interState), supplierTaxMode: after.supplierTaxMode ?? "" };
+  const lines = wanted.size === 0 ? after.lines : after.lines.map((line) => (wanted.has(line.key) ? repriceLine(line, ctx) : line));
+  return { ...after, lines, liveTotals: liveTotalsOf({ ...after, lines }), awaitingServer: true };
+}
+
+function reduceInvoice(draft: InvoiceDraft, action: InvoiceAction): InvoiceDraft {
   switch (action.type) {
     case "reset":
       return createDraft(action.scope, action.today, draft.lineSettings);
@@ -1307,10 +1618,18 @@ export function invoiceReducer(draft: InvoiceDraft, action: InvoiceAction): Invo
       if (action.billFromGstin && ext.billFromGstin !== action.billFromGstin && !draft.ext.billFromGstin) {
         ext.billFromGstin = action.billFromGstin;
       }
-      return ext.creditDays === draft.ext.creditDays && ext.billFromGstin === draft.ext.billFromGstin ? draft : { ...draft, ext };
+      // a godown already picked is left alone; a stored bill keeps its own
+      const godownId = (action.godownId ?? "").trim();
+      const takeGodown = godownId !== "" && !draft.godownId && !draft.piId && draft.supplierId !== "";
+      if (ext.creditDays === draft.ext.creditDays && ext.billFromGstin === draft.ext.billFromGstin && !takeGodown) {
+        return draft;
+      }
+      return takeGodown ? { ...draft, ext, godownId, godownName: (action.godownName ?? "").trim() } : { ...draft, ext };
     }
     case "issues":
       return { ...draft, issues: action.issues };
+    case "markDirty":
+      return isEditable(draft) && !draft.dirty ? { ...draft, dirty: true } : draft;
     case "godown":
       if (!isEditable(draft) || draft.godownId === action.id) {
         return draft;
@@ -1373,7 +1692,8 @@ export function changesFigures(action: InvoiceAction): boolean {
     case "lineSettings":
       return true;
     case "applyItem":
-      return !action.quiet && !action.source;
+      // a picked item, and a source / new-unit line's lookup (Qt fetchItem quiet → m_recalc); not a loaded line's names
+      return !action.quiet;
     case "header":
       return action.patch.invoiceAmount !== undefined || action.patch.tcsAmount !== undefined;
     case "ext":

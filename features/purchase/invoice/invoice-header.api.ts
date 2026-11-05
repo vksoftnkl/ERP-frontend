@@ -1,7 +1,8 @@
 /**
  * Purchase Entry (menu 24) — the header / side routes (Qt NexERP 88cd3f2,
- * 8f2a1f4, 348957f, 4c09536): the purchase charge master, the supplier
- * context, payment hold, sister company bills and the autosave list.
+ * 8f2a1f4, 348957f, 4c09536, 1600680): the purchase charge master, the
+ * supplier context, payment hold, sister company bills, the autosave list and
+ * the branch's default godown.
  * Injected into the shared `baseApi` (paths WITHOUT `/api/v1`); every name is
  * prefixed `purchaseInvoice…` — injected endpoints share one namespace. The
  * charge master is shared/purchase.api.ts `useGetPurchaseChargeMasterQuery`.
@@ -27,6 +28,11 @@ export const PURCHASE_INVOICE_HOLD_ENDPOINT = "/purchase/invoices/hold";
 export const PURCHASE_SISTER_BILLS_ENDPOINT = "/purchase/sister-bills";
 export const PURCHASE_SISTER_BILL_LINES_ENDPOINT = "/purchase/sister-bills/lines";
 const TXN_HOLD_LIST_ENDPOINT = "/txn-holds/list";
+/** `GET /branch-masters/get?brId=` — the branch's default godown (Qt 1600680 `loadBranchGodown`). */
+export const PURCHASE_BRANCH_GET_ENDPOINT = "/branch-masters/get";
+
+/** What this screen reads of the branch (the server's branch row has much more). */
+export type PurchaseBranchGodown = { godownId: string; godownName: string };
 
 export type PurchaseInvoiceHoldArgs = { piId: string; accYear: string; hold: boolean; reason: string };
 
@@ -80,6 +86,20 @@ export const purchaseInvoiceHeaderApi = baseApi.injectEndpoints({
       }),
       transformResponse: (payload: ApiSuccessResponse<TxnHoldPayload[]>) => (Array.isArray(payload?.data) ? payload.data : []),
     }),
+    /**
+     * GET — the branch's default godown (`brDefaultGodownId` / `brDefaultGodownName`), read once: a new
+     * bill whose supplier names none takes it (Qt 1600680, Q5). The row may come as an object or a
+     * one-row array.
+     */
+    purchaseInvoiceBranchGodown: builder.mutation<PurchaseBranchGodown, { brId: string }>({
+      query: ({ brId }) => ({ url: PURCHASE_BRANCH_GET_ENDPOINT, method: "GET", params: { brId } }),
+      transformResponse: (payload: ApiSuccessResponse<unknown>) => {
+        const data = payload?.data;
+        const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null | undefined;
+        const text = (value: unknown) => (value === null || value === undefined ? "" : String(value).trim());
+        return { godownId: text(row?.brDefaultGodownId), godownName: text(row?.brDefaultGodownName) };
+      },
+    }),
   }),
 });
 
@@ -89,4 +109,5 @@ export const {
   usePurchaseInvoiceSisterBillsMutation,
   usePurchaseInvoiceSisterBillLinesMutation,
   usePurchaseInvoiceAutosaveListMutation,
+  usePurchaseInvoiceBranchGodownMutation,
 } = purchaseInvoiceHeaderApi;

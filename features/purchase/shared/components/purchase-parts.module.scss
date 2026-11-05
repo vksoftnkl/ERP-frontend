@@ -96,6 +96,13 @@
   background: var(--ds-surface-muted);
   color: var(--ds-text);
 }
+/* opt-in (`columns`): n cells to a row, rows as needed — the PO's block beside its charges (Qt setGridColumns) */
+.stripGrid {
+  grid-auto-flow: row;
+  grid-template-columns: repeat(var(--purchase-strip-columns, 3), minmax(0, 1fr));
+  row-gap: u(0.5);
+  align-content: start;
+}
 .stripCell {
   display: flex;
   flex-direction: column;
@@ -205,6 +212,68 @@
   margin: 0;
 }
 
+/* ----------------------------------- COM-09 notes (purchase-notes.tsx) */
+.notesLine {
+  padding: u(0.12) u(0.6);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font: inherit;
+  font-size: u(0.7);
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.notesLineWarn {
+  border-color: color-mix(in srgb, var(--ds-warning) 45%, transparent);
+  background: color-mix(in srgb, var(--ds-warning) 12%, var(--ds-surface));
+  color: var(--ds-warning);
+}
+.notesLineRefused {
+  border-color: color-mix(in srgb, var(--ds-danger) 45%, transparent);
+  background: color-mix(in srgb, var(--ds-danger) 10%, var(--ds-surface));
+  color: var(--ds-danger);
+}
+section.notesPanel {
+  width: min(u(52), 100%);
+}
+.notesBody {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.45);
+}
+.noteCard {
+  display: grid;
+  grid-template-columns: u(4) minmax(0, 1fr) max-content;
+  gap: u(0.6);
+  align-items: start;
+  padding: u(0.45) u(0.6);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--erp-radius);
+}
+.noteCard .pill {
+  justify-content: center;
+}
+.noteCardWarn {
+  border-color: color-mix(in srgb, var(--ds-warning) 40%, transparent);
+  background: color-mix(in srgb, var(--ds-warning) 7%, var(--ds-surface));
+}
+.noteCardRefuse {
+  border-color: color-mix(in srgb, var(--ds-danger) 40%, transparent);
+  background: color-mix(in srgb, var(--ds-danger) 6%, var(--ds-surface));
+}
+.noteMain {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.15);
+  min-width: 0;
+}
+.notesFoot {
+  min-height: u(1);
+  margin: 0;
+  color: var(--ds-text-muted);
+  font-size: u(0.68);
+}
+
 /* ------------------------------------------------- more columns chooser */
 .more {
   display: flex;
@@ -245,6 +314,14 @@ section.pickerPanel {
   grid-template-columns: u(9) minmax(0, 1fr);
   gap: u(0.4) u(0.6);
   align-items: center;
+}
+/* Qt 6b81080: the transport rows with no vertical gap */
+.formTight {
+  row-gap: 0;
+}
+/* a mouse-only button (Transport's Clear): quieter than the rest */
+.quietButton {
+  color: var(--ds-text-muted);
 }
 .formLabel {
   color: var(--ds-text-muted);
@@ -369,4 +446,75 @@ section.pickerPanel {
 /* "info" — the design system has no blue token; its Badge's info is the primary */
 .text-info {
   color: var(--ds-primary);
+}
+
+/* ------------------------------------------------- quick icon bar (opt-in) */
+/* Qt frameQuick (e782e59): icon-only buttons under the title. Every glyph at one size (721dabe). */
+.quickBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: u(0.25);
+  min-width: 0;
+}
+.quickGroup {
+  display: flex;
+  align-items: center;
+  gap: u(0.25);
+}
+.quickSeparator {
+  align-self: stretch;
+  width: 1px;
+  margin: u(0.15) u(0.3);
+  background: var(--ds-border);
+}
+.quickButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: u(1.9);
+  height: u(1.75);
+  padding: 0;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--erp-radius);
+  background: var(--ds-surface);
+  color: var(--ds-text);
+  cursor: pointer;
+}
+.quickButton:hover {
+  border-color: var(--ds-primary);
+  color: var(--ds-primary);
+}
+.quickButtonActive {
+  border-color: var(--ds-primary);
+  background: var(--ds-surface-muted);
+  color: var(--ds-primary);
+}
+.quickButtonDisabled,
+.quickButtonDisabled:hover {
+  border-color: var(--ds-border);
+  color: var(--ds-text-muted);
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+/* the glyph box: whatever icon set, the same drawn size */
+.quickIcon {
+  display: inline-flex;
+  width: u(1.05);
+  height: u(1.05);
+}
+.quickIcon > svg {
+  width: 100%;
+  height: 100%;
+}
+.quickTrailing {
+  margin-left: auto;
+  color: var(--ds-text-muted);
+  font-size: u(0.68);
+}
+
+/* -------------------------------------------- Agent dropdown wrapper */
+/* lays its label + combo straight into the screen's label / field grid */
+.contents {
+  display: contents;
 }

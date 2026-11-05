@@ -6,8 +6,13 @@
  *
  * On a DRAFT a blank line takes a Barcode (a scan, or a name and ↓ for the item
  * list) or an Item pick; a line with an item opens Qty, Free, Rate, Disc % and
- * MRP. Taxable, GST %, Tax and Total are the server's; Recd and Pending come
- * with a loaded PO. A refused cell is drawn read-only and SAYS why when keyed.
+ * MRP. Taxable, GST %, Tax and Amount are the server's (a live estimate while an
+ * edit waits); Chrg before tax · Chrg after tax · Landing cost · Landing cost
+ * incl. GST are the server's charge split and landing cost (Qt bcd844a), muted
+ * while an edit waits for the answer. Recd and Pending come with a loaded PO. A
+ * refused cell is drawn read-only and SAYS why when keyed. No input boxes are
+ * drawn in the cells (Qt 721dabe): the current cell keeps its own highlight.
+ * The Σ row under the lines sums qty and money (Qt paintLinesFooter).
  *
  * Keys: Enter walks Barcode / Item on a blank line and Qty → Rate → Disc % on a
  * line, then the next line (Qt `setFocusStops`); ↑ / ↓ keep the column; + / −
@@ -33,11 +38,12 @@ import {
 } from "@/features/sales/quotation/quotation.constants";
 import quotationStyles from "@/features/sales/quotation/page.module.scss";
 import type { PoGridColumn } from "../purchase-order.columns";
-import { COL, PO_LINE_GRID_NAME, PO_NUMBER_COLUMNS } from "../purchase-order.constants";
+import { COL, PO_LINE_GRID_NAME, PO_NUMBER_COLUMNS, PO_SERVER_FIGURE_COLUMNS } from "../purchase-order.constants";
 import { cellPattern, isEnterStop, rowHasItem, whyNotEditable } from "../purchase-order.state";
 import type { PoDraft, PoLine } from "../purchase-order.types";
 import { PurchaseCheckChip, purchaseFigureClass } from "../../shared/components/purchase-parts";
 import { lineStatusChip, pendingTone } from "../po-fidelity";
+import { poFooterCells } from "../po-landing";
 import styles from "../page.module.scss";
 
 /** The viewport's marker — what Tab leaves and what a read-only document focuses. */
@@ -312,6 +318,7 @@ export function PoLineGrid(props: PoLineGridProps) {
     onContextMenu,
   } = props;
   const lastKey = draft.lines[draft.lines.length - 1]?.key;
+  const footer = poFooterCells(draft.lines);
 
   /** ↑ / ↓ — the same column one line up or down, else that line's entry cell. */
   const onRowArrow = (event: ReactKeyboardEvent<HTMLTableRowElement>, index: number): boolean => {
@@ -371,16 +378,20 @@ export function PoLineGrid(props: PoLineGridProps) {
     focusPoBlankLine(line.key);
   };
 
-  /** A cell the editor refuses: read-only, and an edit attempt SAYS why instead of doing nothing. */
-  const refused = (line: PoLine, column: PoGridColumn, value: string, why: string) => {
+  /**
+   * A cell the editor refuses: read-only, and an edit attempt SAYS why instead of doing nothing.
+   * `extra`: a tone class (the muted split while an edit waits) and the cell's own tooltip (how a
+   * landing cost was reached).
+   */
+  const refused = (line: PoLine, column: PoGridColumn, value: string, why: string, extra: { className?: string; title?: string } = {}) => {
     const numeric = PO_NUMBER_COLUMNS.has(column.no);
     if (editable && rowHasItem(line) && why) {
       return (
         <input
           {...cellAttrs(line, column, false)}
-          className={cx(quotationStyles.cellInput, styles.cellReadOnly, numeric && quotationStyles.alignRight)}
+          className={cx(quotationStyles.cellInput, styles.cellReadOnly, numeric && quotationStyles.alignRight, extra.className)}
           value={value}
-          title={why}
+          title={extra.title || why}
           readOnly
           tabIndex={-1}
           onFocus={() => onActiveRow(line.key)}
@@ -406,11 +417,14 @@ export function PoLineGrid(props: PoLineGridProps) {
       );
     }
     return (
-      <div className={cx(quotationStyles.cellText, numeric && quotationStyles.alignRight)} title={why || undefined}>
+      <div className={cx(quotationStyles.cellText, numeric && quotationStyles.alignRight, extra.className)} title={extra.title || why || undefined}>
         {value || " "}
       </div>
     );
   };
+  // Qt cols.tone: an edit waits for the server — the split / landing cells hold its LAST figures, muted
+  const serverTone = (column: PoGridColumn) =>
+    draft.awaitingServer && PO_SERVER_FIGURE_COLUMNS.has(column.no) ? purchaseFigureClass("muted") : undefined;
 
   const renderCell = (line: PoLine, column: PoGridColumn) => {
     const hasItem = rowHasItem(line);
@@ -512,6 +526,18 @@ export function PoLineGrid(props: PoLineGridProps) {
         return refused(line, column, hasItem ? figure(line.tax, true) : "", "");
       case COL.Total:
         return refused(line, column, hasItem ? figure(line.total, true) : "", "");
+      case COL.ChrgBeforeTax:
+      case COL.ChrgAfterTax: {
+        const share = column.no === COL.ChrgBeforeTax ? line.chrgBeforeTax : line.chrgAfterTax;
+        return refused(line, column, hasItem ? figure(share ?? null, true) : "", "", { className: serverTone(column) });
+      }
+      case COL.LandedCost:
+      case COL.LandedCostIncl: {
+        // the server's 6 places are kept on the line; the cell shows 2, the tooltip how it was reached
+        const raw = column.no === COL.LandedCost ? line.landedCost : line.landedCostIncl;
+        const tip = column.no === COL.LandedCost ? line.landedTip : line.landedInclTip;
+        return refused(line, column, hasItem && raw ? money(Number(raw)) : "", "", { className: serverTone(column), title: tip || undefined });
+      }
       case COL.Recd:
         return refused(line, column, hasItem ? figure(line.received, false) : "", "");
       case COL.Pending: {
@@ -569,8 +595,8 @@ export function PoLineGrid(props: PoLineGridProps) {
         <thead>
           <tr>
             {columns.map((column) => (
-              <th key={column.no} scope="col">
-                {column.header}
+              <th key={column.no} scope="col" className={styles.poHead} title={column.tip || undefined}>
+                {column.heading}
               </th>
             ))}
           </tr>
@@ -602,6 +628,19 @@ export function PoLineGrid(props: PoLineGridProps) {
             </tr>
           ))}
         </tbody>
+        {footer ? (
+          <tfoot>
+            <tr className={styles.footRow}>
+              {columns.map((column) => (
+                <td key={column.no}>
+                  <div className={cx(quotationStyles.cellText, PO_NUMBER_COLUMNS.has(column.no) && quotationStyles.alignRight)}>
+                    {column.no === COL.Barcode ? "Σ" : (footer[column.no] ?? " ")}
+                  </div>
+                </td>
+              ))}
+            </tr>
+          </tfoot>
+        ) : null}
       </table>
     </div>
   );

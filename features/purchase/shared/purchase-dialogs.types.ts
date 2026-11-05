@@ -106,8 +106,8 @@ export type PurchaseAllocDialogProps = {
   /** Cancel / Esc (embedded: Esc in the panel). The line keeps what last added up. */
   onClose: () => void;
   /**
-   * An INLINE panel in the screen, not a modal (Qt `embedded`, NexERP GRN / Shortage
-   * / Purchase Entry): no window, no OK — every edit that adds up goes straight back
+   * An INLINE panel in the screen, not a modal (Qt `embedded`, NexERP GRN / Shortage;
+   * Purchase Entry opens the modal popup since c0dbff1): no window, no OK — every edit that adds up goes straight back
    * to the line (`onEdited`); Esc closes it; the screen's keys stay live around it.
    * Key it by the line (and opening) so each opening starts from the line's rows.
    */

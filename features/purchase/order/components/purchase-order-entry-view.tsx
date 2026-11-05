@@ -17,9 +17,15 @@
  *
  * Keys (the shared TxnKeys; Qt 7c809f9 `PurchaseDocNav`): Alt+N New, Ctrl+S
  * Save Draft, Ctrl+Enter Confirm / Save amendment, F2 Edit (a draft) or Amend
- * (a confirmed PO), Alt+X Cancel PO, Ctrl+P Print, Ctrl+H History,
- * Alt+PgUp / Alt+PgDn the previous / next PO, Ctrl+O Show List, Esc Close,
- * F1 the sheet.
+ * (a confirmed PO), Alt+X Cancel PO, Ctrl+P Print, Ctrl+H History (bound to the
+ * screen's own History button, Qt dd59c2c), Alt+PgUp / Alt+PgDn the previous /
+ * next PO, Ctrl+O Show List, Esc Close, F1 the sheet.
+ *
+ * NexERP 721dabe / bcd844a / eee7936: Credit days as wide as the other fields
+ * with "(supplier default)" inside the box; each line's charge split and landing
+ * cost; [ESTIMATED CHARGES heading + grid] in 3/5 beside the totals strip (3 to
+ * a row) in 2/5 — the strip always shown, a posted PO with no charges hides
+ * only the charges; Esc asks only for a new order with lines or a real change.
  */
 import {
   useCallback,
@@ -29,6 +35,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
 } from "react";
 import { cx } from "@/components/design-system/cx";
 import { TxnHistoryDialog, type TxnHistoryTarget } from "@/components/txn/txn-history-dialog";
@@ -38,18 +45,21 @@ import { ReasonDialog } from "@/features/accounts/vouchers/components/reason-dia
 import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
 import { PURCHASE_DOC_TYPES } from "@/features/purchase/shared/purchase.doc-types";
 import { money } from "@/features/purchase/shared/purchase.format";
-import { PurchaseAgentPicker } from "@/features/purchase/shared/components/purchase-agent-picker";
+import { PurchaseAgentDropdown } from "@/features/purchase/shared/components/purchase-agent-dropdown";
 import {
-  PurchasePickerBox,
   PurchaseSectionHeading,
   PurchaseStatusPill,
   PurchaseTotalsStrip,
 } from "@/features/purchase/shared/components/purchase-parts";
+import { PurchaseQuickBar, type PurchaseQuickAction } from "@/features/purchase/shared/components/purchase-quick-bar";
 import { useGetPurchaseChargeMasterQuery, useGetPurchaseSettingsQuery } from "@/features/purchase/shared/purchase.api";
-import { buildGrnFromPoHref } from "@/features/purchase/shared/purchase-handoff";
+import { buildBillFromPoHref, buildGrnFromPoHref } from "@/features/purchase/shared/purchase-handoff";
 import { usePurchaseCompanySubtitle } from "@/features/purchase/shared/use-purchase-scope";
 import { normalizeWhatsappNumber, whatsappChatUrl } from "@/features/sales/salebill/salebill.whatsapp";
 import { useRouter } from "next/navigation";
+import { FiClock, FiCopy, FiFileText, FiList, FiPackage, FiPauseCircle, FiPrinter, FiSend, FiTruck } from "react-icons/fi";
+import { useAppSelector } from "@/store/hooks";
+import { selectAuthUserId, selectUserInfo } from "@/store/slices/authSlice";
 import { isoToDisplayDate } from "@/lib/date-format";
 import { baseApi } from "@/store/api/baseApi";
 import type { PurchaseEntryViewProps } from "@/features/purchase/shared/purchase.types";
@@ -82,18 +92,22 @@ import {
   SUPPLIER_DROPDOWN_KEY,
 } from "../purchase-order.constants";
 import {
-  approvalText,
+  approvalPill,
+  auditText,
   poPillStatus,
   poPillTone,
+  poQuickRules,
   poStripCells,
-  revisionText,
+  revisionPill,
   shortCloseLines,
+  type PoQuickKey,
   type ReorderSuggestion,
 } from "../po-fidelity";
 import {
   amendProblem,
   awaitingApproval,
   cancellable,
+  closeQuestion,
   isEditable,
   mergeable,
   mergeChoices,
@@ -124,9 +138,7 @@ const IDS = {
   contact: "purchase-order-contact",
   remarks: "purchase-order-remarks",
   agent: "purchase-order-agent",
-  revision: "purchase-order-revision",
   creditDays: "purchase-order-credit-days",
-  approval: "purchase-order-approval",
   terms: "purchase-order-terms",
 } as const;
 
@@ -152,12 +164,27 @@ const LINE_KEYS: readonly TxnKeyRow[] = [
   { label: "Leave the grid", keyText: "Tab" },
 ];
 
+/** Qt `TxnKeys::installHelp` (e782e59): the PO's own keys. */
 const LINE_EXTRA_KEYS: readonly TxnKeyRow[] = [
   { label: "Reorder suggestions into this order", keyText: "F7" },
   { label: "Make a GRN against this order", keyText: "Ctrl+G" },
-  { label: "Versions of the order (on Revision)", keyText: "F4" },
-  { label: "Pick the agent (on Agent)", keyText: "F4" },
+  { label: "Versions of the order", keyText: "F4" },
 ];
+
+/** The quick strip's glyphs — one set (Feather), so every icon draws the same size (Qt 721dabe). */
+const QUICK_ICONS: Record<PoQuickKey, ReactNode> = {
+  reorder: <FiPackage />,
+  cloneMerge: <FiCopy />,
+  shortClose: <FiPauseCircle />,
+  send: <FiSend />,
+  makeGrn: <FiTruck />,
+  makeInvoice: <FiFileText />,
+  versions: <FiList />,
+  history: <FiClock />,
+  print: <FiPrinter />,
+};
+/** The strip's order (Qt hboxQuick), one group. */
+const QUICK_ORDER: readonly PoQuickKey[] = ["reorder", "cloneMerge", "shortClose", "send", "makeGrn", "makeInvoice", "versions", "history", "print"];
 
 const KEY_SHEET = keySheetRows(
   [
@@ -199,7 +226,8 @@ export function PurchaseOrderEntryView({ initialDocument, initialMode, onBackToL
   const [contactMutation] = ledgerContactApi.usePurchaseOrderLedgerContactMutation();
   const termsDropdownId = useDropdownId(PO_TERMS_DROPDOWN_KEY);
   const termsParams = useMemo(() => ({ icompany_id: draft.companyId }), [draft.companyId]);
-  const [agentOpen, setAgentOpen] = useState(false);
+  const userId = useAppSelector(selectAuthUserId);
+  const userInfo = useAppSelector(selectUserInfo);
   /** The current line (for Short close…'s tick), as state: render reads it. */
   const [activeLine, setActiveLine] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuKind>(null);
@@ -529,6 +557,33 @@ export function PurchaseOrderEntryView({ initialDocument, initialMode, onBackToL
     });
   }, [api, draftRef, feedsGrn, guardDirty, router]);
 
+  /**
+   * Make Purchase Invoice (Qt e782e59 `makeInvoice`): Purchase Entry (menu 24, its own rights) opens a new
+   * bill on this supplier and godown with this PO's pending lines (`?fromPo=`, shared/purchase-handoff).
+   */
+  const runMakeInvoice = useCallback(() => {
+    const current = draftRef.current;
+    if (!feedsGrn) {
+      api.setHint("A posted order with something pending (and approved, when it needs approval) makes a purchase invoice.");
+      return;
+    }
+    void guardDirty("Leave the order", "This order has unsaved changes. Open Purchase Entry anyway?").then((go) => {
+      if (go) {
+        api.forgetRemembered();
+        router.push(
+          buildBillFromPoHref({
+            poId: current.poId,
+            accYear: current.accYear,
+            supplierId: current.supplierId,
+            supplierName: current.supplierName,
+            refno: current.refno,
+            ...(current.godownId ? { godownId: current.godownId, godownName: current.godownName } : {}),
+          }),
+        );
+      }
+    });
+  }, [api, draftRef, feedsGrn, guardDirty, router]);
+
   /** Send — WhatsApp to the supplier (Qt sendWhatsApp): its number, a message; the PDF is attached by hand. */
   const runWhatsApp = useCallback(() => {
     const current = draftRef.current;
@@ -760,14 +815,27 @@ export function PurchaseOrderEntryView({ initialDocument, initialMode, onBackToL
     });
   }, [api, guardDirty, onBackToList]);
 
+  /**
+   * Esc / Close (Qt `closeEvent`, 90e5d36 + eee7936): a new order with lines, or
+   * a change not saved — to a saved draft or in an amendment — asks first; an
+   * untouched amendment closes at once.
+   */
   const runClose = useCallback(() => {
-    void guardDirty("Discard entry", "This order has unsaved changes. Close it anyway?").then((go) => {
+    const leave = () => {
+      api.forgetRemembered();
+      onBackToList();
+    };
+    const question = closeQuestion(draftRef.current);
+    if (!question) {
+      leave();
+      return;
+    }
+    void confirm({ title: "Confirm Close", message: question, confirmLabel: "Close" }).then((go) => {
       if (go) {
-        api.forgetRemembered();
-        onBackToList();
+        leave();
       }
     });
-  }, [api, guardDirty, onBackToList]);
+  }, [api, draftRef, onBackToList]);
 
   const openHistory = useCallback(() => {
     if (!draft.poId) {
@@ -788,7 +856,6 @@ export function PurchaseOrderEntryView({ initialDocument, initialMode, onBackToL
     mergeState !== null ||
     revisions !== null ||
     printOpen ||
-    agentOpen ||
     menu !== null ||
     shortCloseOpen ||
     reorderRows !== null;
@@ -810,10 +877,10 @@ export function PurchaseOrderEntryView({ initialDocument, initialMode, onBackToL
     { onHelp: () => setKeysOpen(true), enabled: !overlayOpen },
   );
 
-  // F7 Reorder suggestions, Ctrl+G Make GRN (Qt key(F7) / key(Ctrl+G)); F4 on Agent / Revision is their own.
-  const extraKeys = useRef({ runReorder, runMakeGrn, enabled: !overlayOpen && !working });
+  // F7 Reorder suggestions, Ctrl+G Make GRN, F4 the versions (Qt key(F7) / key(Ctrl+G) / key(F4), window-wide).
+  const extraKeys = useRef({ runReorder, runMakeGrn, runVersions, enabled: !overlayOpen && !working });
   useLayoutEffect(() => {
-    extraKeys.current = { runReorder, runMakeGrn, enabled: !overlayOpen && !working };
+    extraKeys.current = { runReorder, runMakeGrn, runVersions, enabled: !overlayOpen && !working };
   });
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -828,6 +895,9 @@ export function PurchaseOrderEntryView({ initialDocument, initialMode, onBackToL
       } else if (ctrl && !event.altKey && !event.shiftKey && (event.key === "g" || event.key === "G")) {
         event.preventDefault();
         if (!event.repeat) keys.runMakeGrn();
+      } else if (event.key === "F4" && !ctrl && !event.altKey && !event.shiftKey) {
+        event.preventDefault();
+        if (!event.repeat) keys.runVersions();
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -890,27 +960,67 @@ export function PurchaseOrderEntryView({ initialDocument, initialMode, onBackToL
   const charges = draft.charges ?? [];
   const showCharges = editable || charges.length > 0;
   const closable = shortCloseLines(draft);
+  const approval = approvalPill(draft, approvalAbove);
+  const revPill = revisionPill(draft);
+  const audit = auditText(draft, { userId, userName: userInfo?.userName });
+  const hintText = draft.hint || (draft.shortClosed ? `Short-closed${draft.shortCloseReason ? `: ${draft.shortCloseReason}` : ""}` : "");
+  // the quick strip (Qt applyStatus' enable rules): each button, its key, and why not while it can't run
+  const quickRules = poQuickRules({
+    poId: draft.poId,
+    status: draft.status,
+    amending,
+    shortClosed: draft.shortClosed,
+    supplierId: draft.supplierId,
+    approvalStatus: draft.approvalStatus,
+    editable,
+    hasPending,
+    working,
+    mayShortClose: canShortClose,
+  });
+  const quickRun: Record<PoQuickKey, () => void> = {
+    reorder: runReorder,
+    cloneMerge: () => setMenu("cloneMerge"),
+    shortClose: runShortClose,
+    send: () => setMenu("send"),
+    makeGrn: runMakeGrn,
+    makeInvoice: runMakeInvoice,
+    versions: runVersions,
+    history: openHistory,
+    print: runPrint,
+  };
+  const quickGroups: PurchaseQuickAction[][] = [
+    QUICK_ORDER.map((key) => ({ key, ...quickRules[key], icon: QUICK_ICONS[key], onClick: quickRun[key] })),
+  ];
   const currentLine = draft.lines.find((line) => line.key === activeLine);
   const shortCloseTick = currentLine && (currentLine.pending ?? 0) > 0 && closable.length > 1 ? currentLine.lineId : "";
 
   return (
     <div className={quotationStyles.page}>
       <div className={styles.topBand}>
-        {/* ── title band: "Purchase Order — <no> · rev n", company · branch, the pill ── */}
+        {/* ── title band (Qt e782e59 frameHeader): title · company · branch ··· audit · REV n · APPROVAL · status ── */}
         <div className={styles.titleRow}>
-          <div className={styles.titleBlock}>
-            <div className={styles.titleLine}>
-              <button type="button" className={quotationStyles.button} onClick={runList}>
-                ‹ {CONFIG.listTitle}
-              </button>
-              <h1 className={quotationStyles.title}>{titleLine(draft)}</h1>
-            </div>
+          <div className={styles.titleLine}>
+            <button type="button" className={quotationStyles.button} onClick={runList}>
+              ‹ {CONFIG.listTitle}
+            </button>
+            <h1 className={quotationStyles.title}>{titleLine(draft)}</h1>
             <span className={styles.scope}>{companySubtitle}</span>
           </div>
           <div className={styles.statusLine}>
             {draft.viewMode === "browse" ? <span className={quotationStyles.readOnlyBadge}>Read only</span> : null}
             {draft.dirty ? <span className={quotationStyles.dirtyDot}>● unsaved</span> : null}
             {api.busy ? <span className={styles.scope}>{api.busy === "loading" ? "loading…" : "working…"}</span> : null}
+            {audit ? (
+              <span className={styles.audit} title="Who raised this order, and who last changed it">
+                {audit}
+              </span>
+            ) : null}
+            {revPill ? (
+              <button type="button" className={styles.pillButton} title={revPill.tip} tabIndex={-1} onClick={runVersions}>
+                <PurchaseStatusPill status="" label={revPill.text} tone="neutral" />
+              </button>
+            ) : null}
+            <PurchaseStatusPill status="" label={approval.text} tone={approval.tone} title={approval.tip} />
             <PurchaseStatusPill
               status={pillStatus}
               tone={poPillTone(pillStatus)}
@@ -923,8 +1033,11 @@ export function PurchaseOrderEntryView({ initialDocument, initialMode, onBackToL
           </div>
         </div>
 
+        {/* ── the quick icon strip (Qt frameQuick): the order's own actions, as icons ── */}
+        <PurchaseQuickBar label="Purchase order actions" groups={quickGroups} onRefused={api.setHint} />
+
         <PurchaseSectionHeading title="THE HEADER" />
-        {/* ── the header: 4 × 4, as the mockup, in tab order ─────────────── */}
+        {/* ── the tight header (Qt gridFields): 4 + 4 + Terms / Remarks, in tab order ── */}
         <div className={styles.headerCard} ref={headerRef} onKeyDown={onHeaderKeyDown}>
           <div
             className={styles.pair}
@@ -977,16 +1090,14 @@ export function PurchaseOrderEntryView({ initialDocument, initialMode, onBackToL
             />
           </div>
           <div className={styles.pair} style={at(2, 2)}>
-            <Field label="Agent" htmlFor={IDS.agent}>
-              <PurchasePickerBox
-                id={IDS.agent}
-                text={draft.agentName || "—"}
-                disabled={!editable}
-                title="The broker for this order (Agents master) — ▾ or F4 to pick, Delete to clear"
-                onPick={() => setAgentOpen(true)}
-                onClear={() => api.setAgent("", "")}
-              />
-            </Field>
+            <PurchaseAgentDropdown
+              id={IDS.agent}
+              companyId={draft.companyId}
+              value={draft.agentId ?? ""}
+              selectedLabel={draft.agentName ?? ""}
+              disabled={!editable}
+              onSelect={api.setAgent}
+            />
           </div>
           <div className={styles.pair} style={at(2, 3)}>
             <TextField
@@ -1000,28 +1111,9 @@ export function PurchaseOrderEntryView({ initialDocument, initialMode, onBackToL
             />
           </div>
           <div className={styles.pair} style={at(2, 4)}>
-            <Field label="Revision" htmlFor={IDS.revision}>
-              <input
-                id={IDS.revision}
-                className={cx(quotationStyles.input, quotationStyles.inputReadOnly, styles.clickable)}
-                value={revisionText(draft)}
-                placeholder="first version"
-                readOnly
-                tabIndex={saved ? 0 : -1}
-                title="Every save of a confirmed order is a revision — click (or F4) for the versions"
-                onClick={() => saved && runVersions()}
-                onKeyDown={(event) => {
-                  if (event.key === "F4" && saved) {
-                    event.preventDefault();
-                    runVersions();
-                  }
-                }}
-              />
-            </Field>
-          </div>
-          <div className={styles.pair} style={at(3, 1)}>
+            {/* as wide as the other fields; "(supplier default)" sits INSIDE the box at its right end (Qt 721dabe) */}
             <Field label="Credit days" htmlFor={IDS.creditDays}>
-              <span className={styles.creditPair}>
+              <span className={styles.creditBox}>
                 <input
                   id={IDS.creditDays}
                   className={cx(quotationStyles.input, styles.creditInput)}
@@ -1031,25 +1123,18 @@ export function PurchaseOrderEntryView({ initialDocument, initialMode, onBackToL
                   maxLength={4}
                   autoComplete="off"
                   data-quotation-focus={IDS.creditDays}
+                  data-noted={draft.creditNote ? "true" : undefined}
                   onChange={(event) => api.setHeader({ creditDays: event.target.value.replace(/\D/g, ""), creditTyped: true, creditNote: "" })}
                 />
-                <span className={styles.scope}>{draft.creditNote}</span>
+                {draft.creditNote ? (
+                  <span className={styles.creditNote} aria-hidden="true">
+                    {draft.creditNote}
+                  </span>
+                ) : null}
               </span>
             </Field>
           </div>
-          <div className={styles.pair} style={at(3, 2)}>
-            <Field label="Approval" htmlFor={IDS.approval}>
-              <input
-                id={IDS.approval}
-                className={cx(quotationStyles.input, quotationStyles.inputReadOnly)}
-                value={approvalText(draft, approvalAbove)}
-                readOnly
-                tabIndex={-1}
-                title="A PO above purchase.po_approval_above waits for approval (Override right on menu 23) and feeds no GRN until then"
-              />
-            </Field>
-          </div>
-          <div className={styles.pair} style={at(3, 3, 2)}>
+          <div className={styles.pair} style={at(3, 1, 2)}>
             <DropdownCombo
               id={IDS.terms}
               label="Terms"
@@ -1065,7 +1150,7 @@ export function PurchaseOrderEntryView({ initialDocument, initialMode, onBackToL
               onSelect={(id, label) => api.setHeader({ termsId: id, termsLabel: id ? label : "", termsText: id ? "" : draft.termsText })}
             />
           </div>
-          <div className={styles.pair} style={at(4, 1, 4)}>
+          <div className={styles.pair} style={at(3, 3, 2)}>
             <TextField id={IDS.remarks} label="Remarks" value={draft.remarks} disabled={!editable} maxLength={500} onChange={(value) => api.setHeader({ remarks: value })} />
           </div>
         </div>
@@ -1093,78 +1178,33 @@ export function PurchaseOrderEntryView({ initialDocument, initialMode, onBackToL
         />
       </section>
 
-      {showCharges ? (
-        <div className={styles.chargesBlock}>
-          <PurchaseSectionHeading title="ESTIMATED CHARGES" hint="an estimate only · the PO total includes it · nothing posts" />
-          <PoChargesGrid
-            rows={charges}
-            editable={editable}
-            masters={chargeMasters}
-            onAdd={api.addCharge}
-            onEdit={api.editCharge}
-            onRemove={api.removeCharge}
-          />
+      {/* Qt chargesBox (eee7936): [chargesPanel — heading + grid, 3/5 | the totals strip, 2/5, 3 to a row].
+          The strip is always shown; a PO that can't be edited and has no charges empties only the panel. */}
+      <div className={styles.chargesBox}>
+        <div className={styles.chargesPanel}>
+          {showCharges ? (
+            <>
+              <PurchaseSectionHeading title="ESTIMATED CHARGES" hint="an estimate only · the PO total includes it · nothing posts" />
+              <PoChargesGrid
+                rows={charges}
+                editable={editable}
+                masters={chargeMasters}
+                onAdd={api.addCharge}
+                onEdit={api.editCharge}
+                onRemove={api.removeCharge}
+              />
+            </>
+          ) : null}
         </div>
-      ) : null}
+        <PurchaseTotalsStrip cells={stripCells} columns={3} className={styles.totalsBlock} />
+      </div>
 
-      <PurchaseTotalsStrip cells={stripCells} />
-
-      <p className={styles.hintLine} role="status">
-        {draft.hint}
-        {!draft.hint && draft.shortClosed ? `Short-closed${draft.shortCloseReason ? `: ${draft.shortCloseReason}` : ""}` : ""}
-      </p>
-
-      {/* row 1 — where lines come from, and what follows the order */}
-      <div className={styles.buttonBarLeft}>
-        <button
-          type="button"
-          className={quotationStyles.button}
-          title="Items at or below their reorder level → lines of this order"
-          disabled={!editable || working}
-          onClick={runReorder}
-        >
-          Reorder suggestions · F7
-        </button>
-        <button
-          type="button"
-          className={quotationStyles.button}
-          title="Clone: a new draft with these lines · Merge: what is pending on several confirmed orders of this supplier → one new draft"
-          disabled={amending || working || (!saved && !draft.supplierId)}
-          onClick={() => setMenu("cloneMerge")}
-        >
-          {api.busy === "copying" ? "Working…" : "Clone / merge pending"}
-        </button>
-        <button
-          type="button"
-          className={quotationStyles.button}
-          title="Stop waiting for the rest — per line or the whole order, with a reason"
-          disabled={!canShortClose || !hasPending || working}
-          onClick={runShortClose}
-        >
-          {api.busy === "closing" ? "Closing…" : "Short close…"}
-        </button>
-        <button
-          type="button"
-          className={quotationStyles.button}
-          title="The order's paper: print / save the PDF, or send it to the supplier on WhatsApp"
-          disabled={!saved || draft.status === "CANCELLED" || working}
-          onClick={() => setMenu("send")}
-        >
-          Send (PDF / WhatsApp)
-        </button>
-        <button
-          type="button"
-          className={quotationStyles.button}
-          title={
-            feedsGrn
-              ? "Goods came: a GRN opens with this order's pending lines"
-              : "A posted order with something pending (and approved, when it needs approval) makes a GRN"
-          }
-          disabled={!feedsGrn || working}
-          onClick={runMakeGrn}
-        >
-          Make GRN · Ctrl+G
-        </button>
+      {/* the bottom row (Qt frameButtons): the hint, then the document verbs (TxnKeys). Reorder, Clone / merge,
+          Short close, Send, Make GRN, History and Print moved to the quick strip under the title (Qt e782e59). */}
+      <div className={styles.buttonBar}>
+        <p className={styles.hintLine} role="status" title="F1 · keys on this screen">
+          {hintText || <span className={styles.footerHint}>F1 · keys on this screen</span>}
+        </p>
         {awaiting ? (
           <>
             <button
@@ -1198,19 +1238,6 @@ export function PurchaseOrderEntryView({ initialDocument, initialMode, onBackToL
             Stop amending
           </button>
         ) : null}
-      </div>
-      {/* row 2 — the document keys (TxnKeys), right-aligned */}
-      <div className={styles.buttonBar}>
-        <span className={styles.footerHint}>F1 · keys on this screen</span>
-        <button
-          type="button"
-          className={quotationStyles.button}
-          disabled={working || !rights.mayStartNew}
-          title="Start a new purchase order."
-          onClick={runNew}
-        >
-          {withKey("New", "new")}
-        </button>
         <button
           type="button"
           className={quotationStyles.button}
@@ -1254,11 +1281,11 @@ export function PurchaseOrderEntryView({ initialDocument, initialMode, onBackToL
         <button
           type="button"
           className={quotationStyles.button}
-          title="Every step of this order — who saved, confirmed, closed or cancelled it, when, and why."
-          disabled={!saved}
-          onClick={openHistory}
+          disabled={working || !rights.mayStartNew}
+          title="Start a new purchase order."
+          onClick={runNew}
         >
-          {withKey("History", "history")}
+          {withKey("New", "new")}
         </button>
         <button type="button" className={quotationStyles.button} disabled={working} onClick={runList}>
           {withKey("Show List", "open")}
@@ -1268,7 +1295,6 @@ export function PurchaseOrderEntryView({ initialDocument, initialMode, onBackToL
         </button>
       </div>
 
-      <PurchaseAgentPicker open={agentOpen} companyId={draft.companyId} onClose={() => setAgentOpen(false)} onPick={(agent) => api.setAgent(agent.id, agent.name)} />
       {menu === "cloneMerge" ? (
         <PoChoiceMenu
           title="Clone / merge pending"

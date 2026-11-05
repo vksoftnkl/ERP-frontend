@@ -9,11 +9,19 @@
  * Taxable onward are the server's figures — plain text, and a click on one
  * SAYS so instead of doing nothing.
  *
- * Keys: Enter walks Barcode, Item, Billed, Rate, Disc % (Qt `setFocusStops`),
- * then the next line. ↑ / ↓ keep the column and change the line; + / − add a
- * line / remove the current one on a cell that types neither (Alt+= / Alt+−
- * anywhere); Tab leaves the grid; F12 opens the line's batches / serials, F4
- * steps it to the item's next unit.
+ * Keys: Enter walks Item (a blank line's), Batch / Expiry (an item tracked by
+ * them), Billed, Free, Rate, Disc %, Sch %, Extra disc (Qt dd59c2c P15
+ * `setFocusStops` + `lineStop`), then the next line. ↑ / ↓ keep the column and
+ * change the line; + / − add a line / remove the current one on a cell that
+ * types neither (Alt+= / Alt+− anywhere); Tab leaves the grid; F12 opens the
+ * line's batches / serials, F4 steps it to the item's next unit.
+ *
+ * Qt dd59c2c: the columns are ui_table 56's (invoice.columns.ts), each at the
+ * pixels it needs — too many scroll sideways; no hint text and no input boxes
+ * in the cells (P5 / P6); a blank Disc % / Disc / Sch % / Sch shows, muted,
+ * what its pair comes to (P7); Taxable / Tax / Total show the line's estimate
+ * at once and the server's figures after (P11), the charge split and Cost w/o
+ * muted while they wait for it (P10).
  *
  * Qt 0fbe19c..e0c56ef: a GRN line keys only the supplier's figures (its batch
  * cell reads "from GRN"); Rate, Cost incl., Extra disc, MRP and Sell A–D take a
@@ -38,11 +46,13 @@ import {
   GRID_ROW_ATTR,
 } from "@/features/sales/quotation/quotation.constants";
 import quotationStyles from "@/features/sales/quotation/page.module.scss";
+import { scaledWidth } from "@/features/sales/quotation/quotation.utils";
 import { ChoicePickerCell } from "@/features/stocks/opening-stock/components/choice-picker-cell";
 import type { BatchDetailChoice } from "@/features/stocks/opening-stock/opening-stock.types";
 import { money, qtyText } from "../../shared/purchase.format";
-import type { LineColumn } from "../invoice.columns";
-import { COL, EXPRESSION_COLUMNS, LINE_GRID_NAME, NUMBER_COLUMNS } from "../invoice.constants";
+import { lineColumnsPx, type LineColumn } from "../invoice.columns";
+import { COL, EXPRESSION_COLUMNS, LINE_GRID_NAME, NUMBER_COLUMNS, SERVER_FIGURE_COLUMNS } from "../invoice.constants";
+import { shownFigures } from "../invoice-figures";
 import {
   checkText,
   checkTone,
@@ -56,7 +66,7 @@ import {
   whyNotEditable,
 } from "../invoice.state";
 import type { InvoiceLine, LineSettings } from "../invoice.types";
-import { PurchaseCheckChip } from "../../shared/components/purchase-parts";
+import { PurchaseCheckChip, purchaseFigureClass } from "../../shared/components/purchase-parts";
 import styles from "../page.module.scss";
 
 const QTY_PATTERN = /^\d*(\.\d{0,3})?$/;
@@ -116,6 +126,8 @@ export type InvoiceLineGridProps = {
   columns: LineColumn[];
   /** False on a posted / cancelled bill or in browse mode: nothing opens. */
   editable: boolean;
+  /** An edit's estimate is on screen, the server's answer not yet: the charge split and Cost w/o are muted (Qt `m_awaitingServer`). */
+  awaitingServer?: boolean;
   onActiveRow: (key: string) => void;
   onEdit: (key: string, column: number, raw: string) => void;
   onOpenItemPicker: (key: string, initialQuery: string) => void;
@@ -188,6 +200,7 @@ function TextCell({
   value: string;
   pattern: RegExp;
   align?: "right";
+  /** P7: what a blank pair cell stands for, shown muted until something is typed. */
   placeholder?: string;
   numeric?: boolean;
   /** Batch numbers are upper case; the app-wide title-casing must not touch them. */
@@ -220,9 +233,14 @@ function TextCell({
   return (
     <input
       {...cellAttrs(line, column, stop)}
-      className={cx(quotationStyles.cellInput, align === "right" && quotationStyles.alignRight, upper && styles.upperCell)}
+      className={cx(
+        quotationStyles.cellInput,
+        align === "right" && quotationStyles.alignRight,
+        upper && styles.upperCell,
+        placeholder && styles.derivedCell,
+      )}
       value={text}
-      placeholder={placeholder}
+      placeholder={placeholder || undefined}
       autoComplete="off"
       inputMode={numeric ? "decimal" : undefined}
       {...(upper ? { "data-uppercase": "off" } : {})}
@@ -273,14 +291,12 @@ function TextCell({
 function BarcodeCell({
   line,
   stop,
-  placeholder,
   onActive,
   onScan,
   onSearch,
 }: {
   line: InvoiceLine;
   stop: boolean;
-  placeholder?: string;
   onActive: () => void;
   onScan: (code: string) => void;
   onSearch: (typed: string) => void;
@@ -303,9 +319,8 @@ function BarcodeCell({
   return (
     <input
       {...cellAttrs(line, COL.Barcode, stop)}
-      className={cx(quotationStyles.cellInput, styles.cellPlaceholder)}
+      className={quotationStyles.cellInput}
       value={text}
-      placeholder={placeholder}
       title="Scan a barcode, or type a name and press ↓ for the item list"
       autoComplete="off"
       data-uppercase="off"
@@ -352,6 +367,9 @@ function patternOf(column: number): RegExp {
       return MONEY_PATTERN;
     case COL.SchPct:
     case COL.Markup:
+    case COL.MarkupB:
+    case COL.MarkupC:
+    case COL.MarkupD:
       return RATE_PATTERN;
     case COL.Expiry:
       return DATE_PATTERN;
@@ -372,9 +390,34 @@ function nameOf(choices: readonly BatchDetailChoice[] | undefined, id: string, n
   return choices?.find((choice) => choice.id === id)?.name ?? "…";
 }
 
+/** P7: the blank one of a Disc % / Disc, Sch % / Sch pair shows what the other comes to. */
+function derivedOf(line: InvoiceLine, column: number): string {
+  if (!rowHasItem(line) || typedCell(line, column) !== "") {
+    return "";
+  }
+  switch (column) {
+    case COL.DiscPct:
+      return line.derived.discPct;
+    case COL.DiscAmt:
+      return line.derived.discAmt;
+    case COL.SchPct:
+      return line.derived.schPct;
+    case COL.SchAmt:
+      return line.derived.schAmt;
+    default:
+      return "";
+  }
+}
+
+/** A server money figure for a cell that is blank when it is none (the charge split). */
+function blankZero(value: number | undefined): string {
+  return value ? money(value) : "";
+}
+
 /** The server's figures and the screen's own read-outs, by column. */
 function shownValue(line: InvoiceLine, column: number, lists?: { sizes?: readonly BatchDetailChoice[]; colours?: readonly BatchDetailChoice[] }): string {
   const calc = line.calc;
+  const figures = shownFigures(line);
   switch (column) {
     case COL.Barcode:
       return line.itemCode;
@@ -382,18 +425,24 @@ function shownValue(line: InvoiceLine, column: number, lists?: { sizes?: readonl
       return line.itemName;
     case COL.Unit:
       return line.unitName;
+    case COL.Hsn:
+      return line.hsn;
     case COL.Batch:
       return rowFromGrn(line) ? "from GRN" : line.batch;
     case COL.Short:
       return calc && calc.shortQty > 0 ? qtyText(calc.shortQty) : "";
     case COL.Taxable:
-      return calc ? money(calc.taxable) : "";
+      return figures ? money(figures.taxable) : "";
     case COL.GstPct:
       return rowHasItem(line) ? line.gstPct : "";
     case COL.Tax:
-      return calc ? money(calc.tax) : "";
+      return figures ? money(figures.tax) : "";
     case COL.Total:
-      return calc ? money(calc.total) : "";
+      return figures ? money(figures.total) : "";
+    case COL.ChrgBeforeTax:
+      return blankZero(calc?.chrgBeforeTax);
+    case COL.ChrgAfterTax:
+      return blankZero(calc?.chrgAfterTax);
     case COL.CostWot:
       return calc ? calc.costWot.toFixed(2) : "";
     case COL.Check:
@@ -407,11 +456,18 @@ function shownValue(line: InvoiceLine, column: number, lists?: { sizes?: readonl
     case COL.Colour:
       return nameOf(lists?.colours, line.colourId, line.colourName);
     default:
-      return typedCell(line, column);
+      return typedCell(line, column) || derivedOf(line, column);
   }
 }
 
-function toneOf(line: InvoiceLine, column: number): string | undefined {
+function toneOf(line: InvoiceLine, column: number, awaitingServer: boolean): string | undefined {
+  if (derivedOf(line, column)) {
+    return purchaseFigureClass("muted"); // P7
+  }
+  // an edit is waiting for the server: the charge shares / cost hold its LAST figures — muted, not final (as the PO)
+  if (awaitingServer && SERVER_FIGURE_COLUMNS.has(column) && rowHasItem(line) && shownValue(line, column)) {
+    return purchaseFigureClass("muted");
+  }
   if (column === COL.Short && line.calc && line.calc.shortQty > 0) {
     return styles.toneBad;
   }
@@ -422,10 +478,18 @@ function toneOf(line: InvoiceLine, column: number): string | undefined {
   return undefined;
 }
 
-/** Hover text beyond the value: the margin on Markup (ENT-18), the source on PO / GRN. */
+const MARGIN_TIPS: Readonly<Record<number, { level: string; margin: (line: InvoiceLine) => string }>> = {
+  [COL.Markup]: { level: "A", margin: (line) => line.marginPct },
+  [COL.MarkupB]: { level: "B", margin: (line) => line.marginBPct },
+  [COL.MarkupC]: { level: "C", margin: (line) => line.marginCPct },
+  [COL.MarkupD]: { level: "D", margin: (line) => line.marginDPct },
+};
+
+/** Hover text beyond the value: the margin on Markup A–D (ENT-18 / P8), the source on PO / GRN. */
 function tipOf(line: InvoiceLine, column: number): string | undefined {
-  if (column === COL.Markup && line.marginPct) {
-    return `Margin on Sell A ${line.marginPct} %`;
+  const margin = MARGIN_TIPS[column];
+  if (margin && margin.margin(line)) {
+    return `Margin on Sell ${margin.level} ${margin.margin(line)} %`;
   }
   if (column === COL.Grn && line.srcRefno) {
     return line.grnItemId ? `GRN ${line.srcRefno}` : line.poItemId ? `PO ${line.srcRefno}` : line.srcRefno;
@@ -438,6 +502,7 @@ export function InvoiceLineGrid(props: InvoiceLineGridProps) {
     lines,
     columns,
     editable,
+    awaitingServer = false,
     onActiveRow,
     onEdit,
     onOpenItemPicker,
@@ -455,9 +520,8 @@ export function InvoiceLineGrid(props: InvoiceLineGridProps) {
     onOpenAllocs,
     onCycleUnit,
   } = props;
-  const lastKey = lines[lines.length - 1]?.key;
   const lists = { sizes, colours };
-  const totalWeight = columns.reduce((sum, column) => sum + column.weight, 0);
+  const totalPx = lineColumnsPx(columns);
 
   /** ↑ / ↓ — the same column one line up or down, else that line's entry cell. */
   const onRowArrow = (event: ReactKeyboardEvent<HTMLTableRowElement>, index: number): boolean => {
@@ -532,7 +596,7 @@ export function InvoiceLineGrid(props: InvoiceLineGridProps) {
     }
     const text = shownValue(line, column, lists);
     const tip = tipOf(line, column);
-    const className = cx(NUMBER_COLUMNS.has(column) && quotationStyles.alignRight, toneOf(line, column));
+    const className = cx(NUMBER_COLUMNS.has(column) && quotationStyles.alignRight, toneOf(line, column, awaitingServer));
     if (editable && rowHasItem(line) && why) {
       return (
         <input
@@ -577,7 +641,6 @@ export function InvoiceLineGrid(props: InvoiceLineGridProps) {
     const open = editable && !why;
     const stop = editable && isEnterStop(line, column, rules);
     const active = () => onActiveRow(line.key);
-    const spare = !hasItem && line.key === lastKey;
 
     if (column === COL.Barcode) {
       if (editable && !hasItem) {
@@ -585,7 +648,6 @@ export function InvoiceLineGrid(props: InvoiceLineGridProps) {
           <BarcodeCell
             line={line}
             stop={stop}
-            placeholder={spare ? "scan barcode (supplier's code works too)" : ""}
             onActive={active}
             onScan={(code) => onScanBarcode(line.key, code)}
             onSearch={(typed) => onSearchItems(line.key, typed)}
@@ -602,9 +664,8 @@ export function InvoiceLineGrid(props: InvoiceLineGridProps) {
         <input
           {...cellAttrs(line, column, stop)}
           {...{ [GRID_LOOKUP_ATTR]: "true" }}
-          className={cx(quotationStyles.cellInput, styles.cellPlaceholder)}
+          className={quotationStyles.cellInput}
           value={line.itemName}
-          placeholder={spare ? "↓ item list · F12 batches / serials · F4 unit · + / − lines" : hasItem ? "…" : ""}
           readOnly
           title={hasItem ? `${line.itemCode ? `${line.itemCode} · ` : ""}${line.itemName} — type or double-click to change the item` : undefined}
           onFocus={active}
@@ -664,7 +725,7 @@ export function InvoiceLineGrid(props: InvoiceLineGridProps) {
           align={NUMBER_COLUMNS.has(column) ? "right" : undefined}
           numeric={NUMBER_COLUMNS.has(column) && !EXPRESSION_COLUMNS.has(column)}
           upper={column === COL.Batch}
-          placeholder={column === COL.Expiry ? "dd/MM/yyyy" : undefined}
+          placeholder={derivedOf(line, column)}
           onActive={active}
           onCommit={(raw) => onEdit(line.key, column, raw)}
         />
@@ -683,19 +744,24 @@ export function InvoiceLineGrid(props: InvoiceLineGridProps) {
     >
       <table
         className={cx(quotationStyles.grid, styles.lineGrid)}
-        // Thirty-odd columns scroll sideways rather than squeeze (≈ the Qt widths).
-        style={{ minWidth: `calc(${Math.max(64, Math.round(totalWeight * 0.62))} * var(--erp-q-u, 1rem))` }}
+        // Each column at the pixels it needs (Qt setPixelFloor): a wider grid shares the spare out, a narrower one scrolls sideways.
+        style={{ width: scaledWidth(totalPx) }}
       >
         <colgroup>
           {columns.map((column) => (
-            <col key={column.no} style={{ width: `${column.widthPct}%` }} />
+            <col key={column.no} style={{ width: scaledWidth(column.px) }} />
           ))}
         </colgroup>
         <thead>
           <tr>
             {columns.map((column) => (
-              <th key={column.no} scope="col" className={cx(NUMBER_COLUMNS.has(column.no) && quotationStyles.alignRight)}>
-                {column.header}
+              <th
+                key={column.no}
+                scope="col"
+                className={cx(styles.lineHead, NUMBER_COLUMNS.has(column.no) && quotationStyles.alignRight)}
+                title={column.heading !== column.header ? column.header : undefined}
+              >
+                {column.heading}
               </th>
             ))}
           </tr>

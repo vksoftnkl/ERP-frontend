@@ -11,6 +11,8 @@
  * came. It is otherwise short-closed or cancelled.
  */
 import { applyChargeCalc, chargeFromRow, chargesDto, lineExtrasOf, poTitle } from "./po-fidelity";
+import { chargesTypedOnLoad, paintServerLines } from "./po-landing";
+import { r2 } from "./po-line-math";
 import { num, qtyText, text } from "@/features/purchase/shared/purchase.format";
 import { COL } from "./purchase-order.constants";
 import type {
@@ -54,6 +56,13 @@ export function blankLine(key = nextLineKey()): PoLine {
     gstPct: null,
     tax: null,
     total: null,
+    lineTotal: null,
+    chrgBeforeTax: null,
+    chrgAfterTax: null,
+    landedCost: "",
+    landedCostIncl: "",
+    landedTip: "",
+    landedInclTip: "",
     received: null,
     pending: null,
   };
@@ -146,6 +155,11 @@ export const PO_EXTRAS_DEFAULTS = {
   docStatus: "DRAFT",
   charges: [] as PoChargeLine[],
   serverTotals: null as Record<string, unknown> | null,
+  awaitingServer: false,
+  createdBy: "",
+  createdOn: "",
+  modifiedBy: "",
+  modifiedOn: "",
 };
 
 export function withPoDefaults(draft: PoDraft): PoDraft {
@@ -167,6 +181,9 @@ export function draftFromPayload(
   const godownId = text(h.poDeliverGodownId);
   const lines: PoLine[] = (payload.lines ?? []).map((l) => {
     const received = num(l.receivedQty);
+    // the split as saved (poi_chrg_before_tax inside the taxable; Amount = the line total + the after-tax
+    // share); the landing costs are not stored — the open's /validate brings them (Qt bcd844a)
+    const after = num(l.poiChrgAfterTax);
     return {
       ...blankLine(),
       lineId: text(l.poiId),
@@ -182,7 +199,10 @@ export function draftFromPayload(
       taxable: num(l.poiTaxableAmt),
       gstPct: num(l.poiGstPct),
       tax: num(l.poiCgstAmt) + num(l.poiSgstAmt) + num(l.poiIgstAmt) + num(l.poiCessAmt),
-      total: num(l.poiTotalAmt),
+      lineTotal: num(l.poiTotalAmt),
+      total: r2(num(l.poiTotalAmt) + after),
+      chrgBeforeTax: num(l.poiChrgBeforeTax) === 0 ? null : num(l.poiChrgBeforeTax),
+      chrgAfterTax: after === 0 ? null : after,
       received: received > 0 || asStatus(h.poStatus) === "POSTED" ? received : null,
       pending: num(l.pendingQty),
       ...lineExtrasOf(l, asStatus(h.poStatus) === "POSTED"),
@@ -229,8 +249,13 @@ export function draftFromPayload(
     termsText: text(h.poTermsText),
     lastAmendReason: text(h.lastAmendReason),
     docStatus: text(h.docStatus).toUpperCase() || status,
-    charges: (payload.charges ?? []).map(chargeFromRow),
+    charges: chargesTypedOnLoad((payload.charges ?? []).map(chargeFromRow), lines),
     serverTotals: payload.totals ?? null,
+    awaitingServer: false,
+    createdBy: text(h.poCreatedBy),
+    createdOn: text(h.poCreatedOn),
+    modifiedBy: text(h.poModifiedBy),
+    modifiedOn: text(h.poModifiedOn),
   };
 }
 
@@ -548,6 +573,13 @@ export function applyItem(draft: PoDraft, key: string, lookup: PurchaseOrderItem
     taxable: null,
     tax: null,
     total: null,
+    lineTotal: null,
+    chrgBeforeTax: null,
+    chrgAfterTax: null,
+    landedCost: "",
+    landedCostIncl: "",
+    landedTip: "",
+    landedInclTip: "",
     lastRate: "",
     lastRateTip: "",
     stock: "",
@@ -652,19 +684,13 @@ export function canCalculate(draft: PoDraft): boolean {
   return draft.supplierId !== "" && open && itemLines(draft).length > 0 && draft.deviceId !== "";
 }
 
-/** Qt `paintCalc` — the server's line figures and totals, on the lines they were asked for. */
+/**
+ * Qt `paintCalc` — the server's line figures (the split, Amount, the landing
+ * costs: bcd844a) and totals, on the lines they were asked for; the charges'
+ * estimates and flags; the live estimate's muted cells are final again.
+ */
 export function applyCalc(draft: PoDraft, calc: PurchaseOrderCalc, keysByLineNo: ReadonlyMap<number, string>): PoDraft {
-  const byKey = new Map<string, PurchaseOrderCalc["lines"][number]>();
-  for (const row of calc.lines ?? []) {
-    const key = keysByLineNo.get(Number.parseInt(text(row.key), 10));
-    if (key) {
-      byKey.set(key, row);
-    }
-  }
-  const lines = draft.lines.map((line) => {
-    const row = byKey.get(line.key);
-    return row ? { ...line, taxable: num(row.taxable), gstPct: num(row.gstPct), tax: num(row.tax), total: num(row.total) } : line;
-  });
+  const lines = paintServerLines(draft.lines, calc.lines, keysByLineNo, true);
   const totals = calc.totals
     ? { taxable: num(calc.totals.taxable), tax: num(calc.totals.tax), net: num(calc.totals.net) }
     : draft.totals;
@@ -677,6 +703,7 @@ export function applyCalc(draft: PoDraft, calc: PurchaseOrderCalc, keysByLineNo:
     charges: applyChargeCalc(draft.charges, calc.charges),
     serverTotals: calc.totals ? { ...calc.totals } : (draft.serverTotals ?? null),
     agentName: agent,
+    awaitingServer: false,
   };
 }
 
@@ -700,6 +727,26 @@ export function saveProblem(draft: PoDraft): { title: string; message: string; f
     };
   }
   return null;
+}
+
+/**
+ * Esc / Close (Qt `closeEvent`, 90e5d36 + eee7936): what to ask before the
+ * order is thrown away, or null to close at once. A new order with lines, or a
+ * change not saved (`dirty`: user actions only, cleared on every load) — to a
+ * saved draft or in an amendment — asks; an untouched amendment closes.
+ */
+export function closeQuestion(draft: Pick<PoDraft, "poId" | "refno" | "amending" | "dirty" | "lines">): string | null {
+  const unsavedNew = !draft.poId && itemLines(draft).length > 0;
+  if (!unsavedNew && !draft.dirty) {
+    return null;
+  }
+  if (draft.amending) {
+    return "This amendment hasn't been saved. Close anyway?";
+  }
+  if (!draft.poId) {
+    return "This order hasn't been saved. Close anyway?";
+  }
+  return `The changes to ${draft.refno} haven't been saved. Close anyway?`;
 }
 
 /** Worth keeping in screen memory: unsaved keying on a draft or an amendment. */

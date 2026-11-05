@@ -15,7 +15,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
-import CrudMasterPage from "@/components/master/crud-master-page";
+import CrudMasterPage, { type CrudMasterPageController } from "@/components/master/crud-master-page";
 import type { MasterTableRow } from "@/components/master/crud-master-page.types";
 import type { ERPDynamicModalField } from "@/components/design-system/ui/dynamic-modal-form";
 import { useBusinessContext } from "@/components/layout/business-context";
@@ -126,7 +126,24 @@ function LockIcon() {
   );
 }
 
-export function PurchaseAgentMasterPage() {
+/**
+ * Opt-in (the PO / Purchase Entry Agent dropdown's Alt+C / Alt+A, Qt 6b81080
+ * COM-05): the master with its list hidden, opened by the controller, the saved
+ * agent reported back. Without these props it is the menu screen, unchanged.
+ */
+export type PurchaseAgentMasterPageProps = {
+  inlineModalOnly?: boolean;
+  onCrudControllerReady?: (controller: CrudMasterPageController | null) => void;
+  onModalOpenChange?: (open: boolean, variantKey: string | null) => void;
+  onAgentSaved?: (saved: { agentId: string; agentName: string }) => void;
+};
+
+export function PurchaseAgentMasterPage({
+  inlineModalOnly,
+  onCrudControllerReady,
+  onModalOpenChange,
+  onAgentSaved,
+}: PurchaseAgentMasterPageProps = {}) {
   const { activeCompany } = useBusinessContext();
   const companyId = activeCompany?.compId ?? activeCompany?.id ?? "";
   const { permissions } = usePagePermissions({ href: HREF });
@@ -314,7 +331,24 @@ export function PurchaseAgentMasterPage() {
             shouldUpdate && editingItemId !== null && editingItemId !== undefined ? String(editingItemId) : null,
         })
       }
-      afterSubmitSuccess={() => reloadSoon()}
+      afterSubmitSuccess={({ response, values, editingItemId }) => {
+        reloadSoon();
+        if (!onAgentSaved) {
+          return;
+        }
+        // /purchase/agents/save answers the agent's row (pag_* keys)
+        const outer = response && typeof response === "object" ? (response as Record<string, unknown>) : {};
+        const data = outer.data && typeof outer.data === "object" ? (outer.data as Record<string, unknown>) : outer;
+        const agentId =
+          String(data.pag_id ?? data.pagId ?? "").trim() ||
+          (editingItemId !== null && editingItemId !== undefined ? String(editingItemId) : "");
+        if (agentId) {
+          onAgentSaved({ agentId, agentName: String(data.pag_name ?? values?.name ?? "").trim() });
+        }
+      }}
+      hideListPage={inlineModalOnly}
+      onCrudControllerReady={onCrudControllerReady}
+      onModalOpenChange={onModalOpenChange}
     />
   );
 }

@@ -131,6 +131,11 @@ export const CONFIGURED_DROPDOWNS = {
   employeeByDesignation: { name: "EMPLOYEES BY DESIGNATION", fallbackId: "72", paramBound: true },
   /** Purchase Order's Terms (purchase.pur_terms). Binds a QUOTED `'icompany_id'` (shared rows always show). */
   poTerms: { name: "PO TERMS", fallbackId: "73", paramBound: true },
+  /**
+   * Purchase agents / brokers (purchase.pur_agent, server migration 20261030180000) — the PO's and Purchase
+   * Entry's Agent (Qt e782e59 `kAgentDropdownName`). Binds a QUOTED `'icompany_id'` (shared rows always show).
+   */
+  purchaseAgent: { name: "PURCHASE AGENTS", fallbackId: "74", paramBound: true },
 } as const;
 export type ConfiguredDropdownKey = keyof typeof CONFIGURED_DROPDOWNS;
 const ID_KEYS = ["dropdown_id", "dropdownId", "id"] as const;

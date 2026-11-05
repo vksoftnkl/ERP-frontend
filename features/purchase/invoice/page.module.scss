@@ -1,27 +1,38 @@
 /**
  * Purchase Entry — the screen's own skin, on top of the quotation shell's
  * page / title / fields / grid / buttons (imported where used). Lengths are
- * `u(n)` off the fluid unit the transaction screens share. The band and the
- * four-pairs-a-row header card follow Godown Transfer's.
+ * `u(n)` off the fluid unit the transaction screens share. The v2 layout
+ * (Qt NexERP 7d8c926 purchase_invoice_entry.ui, the 11-04 mockup): the title
+ * band, the 3 × 4 header with no vertical gap, the pill row, the lines taking
+ * every spare pixel, the money band (charges | totals, 50 : 50), the footer.
+ * The page never scrolls — the lines do (height:100% shell, no vh).
+ * Colours are design-system tokens only.
  */
 @function u($n) {
   @return calc(#{$n} * var(--erp-q-u, 1rem));
 }
 
-/* ------------------------------------------------------------- top band */
-.topBand {
+/* ------------------------------------------------------------ the page */
+/* `div.` outranks the quotation shell's own `.page` gap whatever order the two load in */
+div.page {
+  gap: u(0.25);
+  overflow: hidden;
+}
+
+/* --------------------------------------------- title band (frameHeader) */
+.titleBand {
   display: flex;
   flex: 0 0 auto;
-  flex-direction: column;
-  gap: u(0.45);
-  padding-bottom: u(0.35);
-  border-bottom: 3px solid var(--primary, #7b1515);
-}
-.titleRow {
-  display: flex;
-  gap: u(0.6);
+  gap: u(0.75);
   align-items: flex-start;
-  justify-content: space-between;
+  padding-bottom: u(0.3);
+  border-bottom: 2px solid var(--ds-primary);
+}
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.05);
+  min-width: 0;
 }
 .titleLine {
   display: flex;
@@ -29,16 +40,31 @@
   gap: u(0.5);
   align-items: baseline;
 }
-.docTitle {
-  color: var(--text-muted, #666666);
-  font-size: u(0.78);
-  font-weight: 600;
+.subtitle {
+  color: var(--ds-text-muted);
+  font-size: u(0.7);
 }
-.statusBlock {
+.quickBar {
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+}
+.auditBlock {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
-  gap: u(0.2);
+  gap: u(0.15);
   align-items: flex-end;
+  min-width: 0;
+}
+/* one line when the band has room, two when it has not (Qt flowAudit) */
+.audit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 u(0.9);
+  justify-content: flex-end;
+  color: var(--ds-text-muted);
+  font-size: u(0.66);
+  text-align: right;
 }
 .statusLine {
   display: flex;
@@ -49,21 +75,18 @@
   font-size: u(0.72);
 }
 .busy {
-  color: var(--text-muted, #666666);
+  color: var(--ds-text-muted);
   font-size: u(0.72);
 }
 
-/* ---------------------------------------------------- the header card */
-/* Four label / field pairs a row (Qt grid: columns 1, 4, 7, 10). DOM order is the tab order. */
-.headerCard {
+/* ------------------------------------- the header (gridFields, 3 × 4) */
+/* Four label / field pairs a row, no vertical gap (PE-08, PE-10). DOM order is the Enter / Tab order. */
+.headerGrid {
   display: grid;
+  flex: 0 0 auto;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: u(0.45) u(0.9);
+  gap: 0 u(0.9);
   align-items: center;
-  padding: u(0.55) u(0.75);
-  border: 1px solid var(--border, #c9c9c9);
-  border-radius: var(--erp-radius, 4px);
-  background: var(--card-bg, #ffffff);
 }
 .pair {
   display: grid;
@@ -72,31 +95,139 @@
   align-items: center;
   min-width: 0;
 }
+/* Remarks over the last two pairs: its box runs to the right edge */
+.pairWide {
+  grid-template-columns: u(6.5) minmax(0, 1fr);
+}
 .amountInput {
   text-align: right;
 }
+/* the mockup's "30 → due 24/11/2026" in ONE box: the due date rides inside Credit days, after the digits */
+.creditBox {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+.creditInput {
+  width: 100%;
+  padding-right: u(8);
+}
+.dueInBox {
+  position: absolute;
+  top: 50%;
+  left: u(3.4);
+  overflow: hidden;
+  max-width: calc(100% - #{u(3.6)});
+  transform: translateY(-50%);
+  color: var(--ds-text);
+  font-size: u(0.72);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+.ewbPair {
+  display: flex;
+  gap: u(0.4);
+  align-items: center;
+  min-width: 0;
+}
+.ewbPair > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* ----------------------------------------------- the pill row (framePills) */
+.pillRow {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: u(0.3);
+  align-items: center;
+  min-width: 0;
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: u(0.08) u(0.55);
+  border: 1px solid var(--ds-border);
+  border-radius: 999px;
+  background: var(--ds-surface-muted);
+  color: var(--ds-text);
+  font: inherit;
+  font-size: u(0.68);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.pillButton {
+  cursor: pointer;
+}
+.pillButton:hover:not(:disabled) {
+  border-color: var(--ds-primary);
+  color: var(--ds-primary);
+}
+.pillButton:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+.pillTeal {
+  border-color: color-mix(in srgb, var(--ds-success) 35%, transparent);
+  background: color-mix(in srgb, var(--ds-success) 8%, var(--ds-surface));
+}
+/* Source: the theme's soft primary (Qt) */
+.pillSource {
+  border-color: color-mix(in srgb, var(--ds-primary) 35%, transparent);
+  background: color-mix(in srgb, var(--ds-primary) 8%, var(--ds-surface));
+  color: var(--ds-primary);
+}
+.pillWarning {
+  border-color: color-mix(in srgb, var(--ds-warning) 45%, transparent);
+  background: color-mix(in srgb, var(--ds-warning) 12%, var(--ds-surface));
+  color: var(--ds-warning);
+}
+.pillGood {
+  border-color: color-mix(in srgb, var(--ds-success) 45%, transparent);
+  background: color-mix(in srgb, var(--ds-success) 10%, var(--ds-surface));
+  color: var(--ds-success);
+}
+.pillBad {
+  border-color: color-mix(in srgb, var(--ds-danger) 45%, transparent);
+  background: color-mix(in srgb, var(--ds-danger) 9%, var(--ds-surface));
+  color: var(--ds-danger);
+}
 
 /* ------------------------------------------------------------ the grid */
+/* PE-30: the lines take every spare pixel; the page never scrolls, they do */
 .gridShell {
-  flex: 1 1 auto;
-  min-height: u(12);
+  flex: 1 1 0;
+  min-height: u(7);
 }
 .gridViewport {
-  min-height: u(10);
-  max-height: calc(46vh / var(--erp-ui-scale, 1));
+  min-height: 0;
 }
 .gridViewport:focus {
   outline: none;
 }
+/* Each column at the pixels it needs (inline widths, Qt dd59c2c setPixelFloor); a wider viewport shares the spare out. */
 .lineGrid {
-  width: 100%;
-  min-width: u(64);
+  min-width: 100%;
+}
+/* Qt 15b54ca: this grid's rows are 24 px (the theme's rowHeight on tblLines only) */
+.lineGrid tbody td {
+  height: 24px;
+}
+/* Two-word headings on two lines (Qt layoutLoaded) — beats the shell's nowrap. */
+.lineGrid thead th.lineHead {
+  white-space: pre-line;
+  line-height: 1.15;
+  vertical-align: bottom;
 }
 .cellReadOnly {
   cursor: default;
 }
-.cellPlaceholder::placeholder {
-  color: #9ca3af;
+/* P7: a blank Disc % / Disc / Sch % / Sch shows what its pair comes to, muted. */
+.derivedCell::placeholder {
+  color: var(--ds-text-muted);
+  opacity: 1;
 }
 .upperCell {
   text-transform: uppercase;
@@ -114,48 +245,8 @@
   color: var(--ds-warning);
   font-weight: 700;
 }
-
-/* ------------------------------------------- item strip (Qt lblItemContext) */
-.itemStrip {
-  margin: 0;
-  padding: u(0.25) u(0.6);
-  overflow: hidden;
-  border: 1px solid var(--border, #c9c9c9);
-  border-left: 3px solid var(--primary, #7b1515);
-  border-radius: var(--erp-radius, 4px);
-  background: var(--card-bg, #ffffff);
-  font-size: u(0.72);
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  user-select: text;
-}
-.itemStripEmpty {
-  border-left-color: var(--border, #c9c9c9);
-  color: var(--text-muted, #666666);
-  font-weight: 500;
-}
-
-/* ---------------------------------------------------- hint and buttons */
-.hintLine {
-  min-height: u(1);
-  margin: 0;
-  color: #8b1a1a;
-  font-size: u(0.72);
-  white-space: pre-line;
-}
-.buttonBar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: u(0.35);
-  justify-content: flex-end;
-}
-.footerHint {
-  margin-right: auto;
-  align-self: center;
-  color: var(--text-muted, #666666);
-  font-size: u(0.7);
-  font-weight: 600;
+.toneMuted {
+  color: var(--ds-text-muted);
 }
 
 /* Check: the server's chips (callout 9) */
@@ -166,67 +257,146 @@
   align-items: center;
 }
 
-/* -------------------------------------------- 2026-10-29 rebuild frame */
-.titleBlock {
-  display: flex;
-  flex-direction: column;
-  gap: u(0.1);
-}
-.subtitle {
-  color: var(--ds-text-muted);
-  font-size: u(0.7);
-}
-.creditPair,
-.ewbPair,
-.irnPair {
-  display: flex;
-  gap: u(0.4);
-  align-items: center;
-  min-width: 0;
-}
-.creditInput {
-  flex: 0 0 u(4);
-  width: u(4);
-  text-align: right;
-}
-.dueText {
-  color: var(--ds-text);
+/* ------------------------------------------- item strip (Qt lblItemContext) */
+.itemStrip {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: u(0.2) u(0.6);
+  overflow: hidden;
+  border: 1px solid var(--ds-border);
+  border-left: 3px solid var(--ds-primary);
+  border-radius: var(--erp-radius, 4px);
+  background: var(--ds-surface);
   font-size: u(0.72);
+  font-weight: 600;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  user-select: text;
 }
-.ewbPair > * {
-  flex: 1 1 0;
-  min-width: 0;
-}
-.irnPair > * {
-  flex: 1 1 0;
-  min-width: 0;
+.itemStripEmpty {
+  border-left-color: var(--ds-border);
+  color: var(--ds-text-muted);
+  font-weight: 500;
 }
 .priceKept {
+  flex: 0 0 auto;
   margin: 0;
   color: var(--ds-warning);
   font-size: u(0.72);
 }
-/* F12 — BATCHES (left) and SERIALS (right), inline, while one is open (Qt m_allocArea) */
-.allocArea {
+
+/* --------------------------------------------- the money band (frameMoney) */
+.moneyBand {
   display: grid;
+  flex: 0 0 auto;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: u(1.2);
-  align-items: start;
-  margin-top: u(0.4);
+  gap: u(0.6);
+  align-items: stretch;
 }
-.sideBySide {
-  display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
-  gap: u(1.1);
-  align-items: start;
-}
-.chargesColumn,
-.totalsColumn {
+.moneyCharges {
   min-width: 0;
 }
-.buttonBarLeft {
+/* the charges: 3 rows by default, up to 6, then they scroll (§5.1 item 6) */
+.moneyCharges :global([class*="chargesViewport"]) {
+  max-height: u(9.5);
+}
+
+/* the totals frame (frameTotals): Net payable | the break-up, the ITC row under it */
+.totalsFrame {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: u(0.75);
+  min-width: 0;
+  padding: u(0.4) u(0.7);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--erp-radius, 4px);
+  background: var(--ds-surface);
+}
+.frameNet {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.2);
+  align-items: flex-start;
+  min-width: 0;
+  padding-right: u(0.6);
+  border-right: 1px solid var(--ds-border);
+}
+.frameNetValue {
+  color: var(--ds-text);
+  font-size: u(1.25);
+  font-weight: 800;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+.frameBreak {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 u(0.9);
+  align-content: start;
+  min-width: 0;
+}
+.frameColumn {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.frameCell {
+  display: flex;
+  gap: u(0.5);
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: u(1.25);
+}
+.frameCap {
+  color: var(--ds-text-muted);
+  font-size: u(0.68);
+  white-space: nowrap;
+}
+.frameValue {
+  font-size: u(0.74);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.frameTcs {
+  width: u(5.5);
+}
+.frameTcs input {
+  width: 100%;
+  padding-top: u(0.05);
+  padding-bottom: u(0.05);
+  text-align: right;
+}
+.frameItc {
   display: flex;
   flex-wrap: wrap;
+  grid-column: 1 / -1;
+  gap: u(0.3);
+  align-items: center;
+  padding-top: u(0.25);
+  border-top: 1px solid var(--ds-border);
+}
+.frameMuted {
+  color: var(--ds-text-muted);
+  font-size: u(0.66);
+}
+
+/* ------------------------------------------------- the footer (frameButtons) */
+.footer {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
   gap: u(0.35);
+  align-items: center;
+}
+.footerHint {
+  flex: 1 1 u(10);
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ds-danger);
+  font-size: u(0.72);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

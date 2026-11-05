@@ -1,91 +1,109 @@
 /**
- * The line grid's columns — ui_table 56's layout over the columns this screen
- * draws. Pure. The layout supplies titles, widths, order and visibility (an
- * admin may hide a column from the grid's right-click settings); WHICH columns
- * can show at all is `SHOWN_COLUMNS`, narrowed by the session's rules the way
- * Qt `applyTextileColumns` hides them: Sell A–D and Markup only while the bill
- * keys selling prices, Size / Colour / Model only while the company numbers its
- * own batches. Rows join on `ui_tbl_clm_no`, the column number the Qt grid
- * writes by.
+ * The line grid's columns — ui_table 56's layout (Qt NexERP dd59c2c P4,
+ * 1600680 Q2). Pure.
  *
- * `ui_tbl_clm_column_width` is a Qt fraction, not a percent (the visible
- * columns of table 56 sum to far more than 100): it is used as a weight, and
- * every column's share is its weight over the shown columns' total.
+ * - The LAYOUT decides which columns show, their titles and their order
+ *   (`ui_tbl_clm_column_position`); there is no "More columns" chooser any
+ *   more. The screen only takes away what its settings rule out: Markup A–D /
+ *   Sell A–D without the price policy, Model / Size / Colour without
+ *   stock.auto_batch_no (Qt `applyColumns`). Nothing forces a hidden column
+ *   back — Recd, Dmg, Short, Cost incl. and HSN are hidden by the registration
+ *   (server migration 20261102160000) and stay so.
+ * - Before (or without) the layout every drawn column shows, in the
+ *   registration's order (Qt: `m_layoutKnown` false).
+ * - Rows join on `ui_tbl_clm_no`, the column number the Qt grid writes by; a
+ *   number the screen does not draw (the technical ones) is never shown.
+ * - Widths are the pixels each column needs (Qt `ColumnWeights::setPixelFloor`,
+ *   `COLUMN_PX`); the grid draws them in the page unit and scrolls sideways
+ *   when they do not fit. A heading of two words or more and over 8 letters
+ *   breaks onto two lines near its middle (Qt `layoutLoaded`).
  */
 import type { UiTableColumnRow } from "@/features/sales/quotation/quotation.types";
 import {
   COL,
+  COLUMN_PX,
+  COLUMN_PX_FALLBACK,
+  COLUMN_PX_MIN,
+  DRAWN_COLUMNS,
   FALLBACK_COLUMN_TITLES,
-  FALLBACK_COLUMN_WIDTHS,
-  MOCKUP_COLUMN_TITLES,
-  MORE_COLUMN_NOS,
+  FALLBACK_ORDER,
   PRICE_COLUMNS,
-  SHOWN_COLUMNS,
   TEXTILE_COLUMNS,
 } from "./invoice.constants";
 import type { LineSettings } from "./invoice.types";
 
 export type LineColumn = {
   no: number;
+  /** The layout's title (or the registration's, before the layout). */
   header: string;
-  /** Share of the grid's width, in percent; the shown columns sum to 100. */
-  widthPct: number;
-  /** The layout's own weight — the grid's minimum width follows the total. */
-  weight: number;
+  /** The heading as drawn — two lines where Qt breaks it ("Chrg before\ntax"). */
+  heading: string;
+  /** The pixels the column needs (drawn in the page unit). */
+  px: number;
 };
 
 const NO_RULES: LineSettings = { priceUpdate: false, autoBatchNo: false };
 
-/**
- * `moreShown` = the column numbers picked under More columns (Qt `m_moreOn`):
- * Sch % / Extra disc / Cost incl. / PO / GRN ref and Sell B–D stay hidden
- * without it. The order is the mockup's (`SHOWN_COLUMNS`) — Qt moves the
- * sections there whatever the layout's positions say; the layout still
- * supplies widths and may hide a column.
- */
-export function resolveLineColumns(
-  rows: readonly UiTableColumnRow[] | undefined,
-  rules: LineSettings = NO_RULES,
-  moreShown: ReadonlySet<number> = new Set(),
-): LineColumn[] {
+/** Qt `layoutLoaded`: a heading with a space and over 8 letters takes two lines, broken at the space nearest its middle. */
+export function twoLineHeading(title: string): string {
+  if (!title.includes(" ") || title.length <= 8) {
+    return title;
+  }
+  const mid = Math.floor(title.length / 2);
+  let at = title.lastIndexOf(" ", mid);
+  const after = title.indexOf(" ", mid);
+  if (at < 0 || (after >= 0 && after - mid < mid - at)) {
+    at = after;
+  }
+  return at > 0 ? `${title.slice(0, at)}\n${title.slice(at + 1)}` : title;
+}
+
+/** Does a session rule take the column away (Qt `applyColumns`)? */
+function ruledOut(no: number, rules: LineSettings): boolean {
+  return (PRICE_COLUMNS.has(no) && !rules.priceUpdate) || (TEXTILE_COLUMNS.has(no) && !rules.autoBatchNo);
+}
+
+export function resolveLineColumns(rows: readonly UiTableColumnRow[] | undefined, rules: LineSettings = NO_RULES): LineColumn[] {
   const byNumber = new Map<number, UiTableColumnRow>();
   for (const row of rows ?? []) {
     const no = Number.parseInt(String(row.uiTblClmNo ?? ""), 10);
-    if (Number.isFinite(no) && !byNumber.has(no)) {
+    if (Number.isFinite(no) && DRAWN_COLUMNS.has(no) && !byNumber.has(no)) {
       byNumber.set(no, row);
     }
   }
-  const placed: { no: number; header: string; width: number; position: number }[] = [];
-  SHOWN_COLUMNS.forEach((no, index) => {
-    if ((PRICE_COLUMNS.has(no) && !rules.priceUpdate) || (TEXTILE_COLUMNS.has(no) && !rules.autoBatchNo)) {
-      return;
-    }
-    if (MORE_COLUMN_NOS.has(no) && !moreShown.has(no)) {
-      return;
+  const layoutKnown = byNumber.size > 0;
+  let order: number[];
+  if (layoutKnown) {
+    // The layout's positions; a drawn column the layout lacks a row for goes after them, in the registration's order.
+    const listed = [...byNumber.values()]
+      .map((row, index) => ({ no: Number.parseInt(String(row.uiTblClmNo), 10), position: Number(row.uiTblClmColumnPosition), index }))
+      .sort((left, right) => {
+        const a = Number.isFinite(left.position) ? left.position : Number.MAX_SAFE_INTEGER;
+        const b = Number.isFinite(right.position) ? right.position : Number.MAX_SAFE_INTEGER;
+        return a - b || left.index - right.index;
+      })
+      .map((entry) => entry.no);
+    order = [...listed, ...FALLBACK_ORDER.filter((no) => !byNumber.has(no))];
+  } else {
+    order = [...FALLBACK_ORDER];
+  }
+  const out: LineColumn[] = [];
+  for (const no of order) {
+    if (ruledOut(no, rules)) {
+      continue;
     }
     const row = byNumber.get(no);
-    // Item is how a line gets its item: it never hides.
+    // Item is how a line gets its item: it never hides (the web's own guard; Qt follows the layout here too).
     if (row && row.uiTblClmColumnVisibility === false && no !== COL.Item) {
-      return;
+      continue;
     }
-    const fallbackWidth = FALLBACK_COLUMN_WIDTHS[no] ?? 4;
-    const width =
-      row && typeof row.uiTblClmColumnWidth === "number" && row.uiTblClmColumnWidth > 0
-        ? row.uiTblClmColumnWidth
-        : fallbackWidth;
-    placed.push({
-      no,
-      header: MOCKUP_COLUMN_TITLES[no] || (row?.uiTblClmName ?? "").trim() || FALLBACK_COLUMN_TITLES[no] || "",
-      width,
-      position: index,
-    });
-  });
-  placed.sort((left, right) => left.position - right.position);
-  const total = placed.reduce((sum, column) => sum + column.width, 0) || 1;
-  return placed.map((column) => ({
-    no: column.no,
-    header: column.header,
-    widthPct: (column.width / total) * 100,
-    weight: column.width,
-  }));
+    const header = (row?.uiTblClmName ?? "").trim() || FALLBACK_COLUMN_TITLES[no] || "";
+    out.push({ no, header, heading: twoLineHeading(header), px: Math.max(COLUMN_PX_MIN, COLUMN_PX[no] ?? COLUMN_PX_FALLBACK) });
+  }
+  return out;
+}
+
+/** The grid's natural width (Σ the columns' pixels) — below it the lines scroll sideways. */
+export function lineColumnsPx(columns: readonly LineColumn[]): number {
+  return columns.reduce((sum, column) => sum + column.px, 0);
 }

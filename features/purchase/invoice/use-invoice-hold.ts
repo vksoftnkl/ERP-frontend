@@ -62,6 +62,11 @@ export type UseInvoiceHoldOptions = {
   open: (key: PurchaseDocKey) => Promise<boolean>;
   /** Offer an autosave back once, after the screen opens (false: it reopened remembered work, or a document). */
   offerOnOpen: boolean;
+  /**
+   * Qt a639bc6 (COM-12): Pick held asks ONCE, before the held list opens — the
+   * screen's "leave it?" (true without asking when nothing is unsaved).
+   */
+  confirmLeave: () => Promise<boolean>;
   /** False: no autosave ticks (rights, or a screen still loading). */
   enabled: boolean;
 };
@@ -250,15 +255,9 @@ export function useInvoiceHold(options: UseInvoiceHoldOptions) {
     if (working) {
       return;
     }
-    if (opts.draftRef.current.dirty && opts.isNewWithLines()) {
-      const yes = await confirm({
-        title: "Pick held",
-        message: "This purchase bill hasn't been saved. Discard it and pick a held one?",
-        confirmLabel: "Discard",
-      });
-      if (!yes) {
-        return;
-      }
+    // one question, before the list — not after the held bill became a draft (Qt a639bc6)
+    if (!(await opts.confirmLeave())) {
+      return;
     }
     setHeldOpen(true);
   }, [working]);

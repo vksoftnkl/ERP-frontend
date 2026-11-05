@@ -14,7 +14,18 @@
  *             in, Ctrl+A stays that field's select-all, as in Qt);
  *  - 7c809f9  Edit · F2 refusals, Previous / Next (Alt+PgUp / Alt+PgDn),
  *             History · Ctrl+H, Print · Ctrl+P (purpose PURCHASE_INVOICE);
- *  - 6e025ef  labels / Change Selling after a post.
+ *  - 6e025ef  labels / Change Selling after a post;
+ *  - dd59c2c / 1600680  a new bill takes the supplier's default godown, else
+ *             the branch's (`/branch-masters/get`, read once); E-way bill /
+ *             IRN / Ack are off the header (the view no longer places
+ *             `ewbField`; a loaded bill's numbers go back unchanged).
+ *  - 6b81080 / 7d8c926 / a639bc6  the v2 screen: the actions the quick bar
+ *             runs (no row of buttons any more), the doc-nav notices as
+ *             popups (Qt PurchaseDocNav::say), F2 on a draft into its first
+ *             blank line, Pick held asking once before its list, a recovered
+ *             hold as unsaved work, the bill just saved kept for Print once
+ *             the screen has cleared (D7, COM-10), the supplier's Ledger and
+ *             Supplier dues.
  *
  * The draft is still the one funnel (`api.dispatch`); this hook only adds the
  * requests and dialogs around it.
@@ -36,18 +47,25 @@ import { toast } from "@/lib/notify";
 import type { TxnKeyRow } from "@/lib/txn-keys";
 import { PurchaseAttachDialog } from "../shared/components/purchase-attach-dialog";
 import { usePurchaseAfterPost } from "../shared/components/purchase-labels-dialog";
-import { buildReturnAgainstBillHref } from "../shared/purchase-handoff";
+import { buildReturnAgainstBillHref, buildSupplierDuesHref, buildSupplierLedgerHref } from "../shared/purchase-handoff";
 import { purchaseRefusalText } from "../shared/purchase.format";
 import { STATUS } from "./invoice.constants";
 import { buildPayload, itemLines } from "./invoice.state";
 import { autoApplyCharges } from "./invoice-charges";
 import { useGetPurchaseChargeMasterQuery } from "../shared/purchase.api";
-import { usePurchaseInvoiceHoldMutation, usePurchaseInvoiceSupplierContextMutation } from "./invoice-header.api";
+import {
+  usePurchaseInvoiceBranchGodownMutation,
+  usePurchaseInvoiceHoldMutation,
+  usePurchaseInvoiceSupplierContextMutation,
+  type PurchaseBranchGodown,
+} from "./invoice-header.api";
 import type { SisterBillPull, SupplierContext } from "./invoice-header.types";
 import { isPurchaseBillHold, PURCHASE_HOLD_DOC_TYPE, PURCHASE_HOLD_KIND } from "./invoice-hold";
 import { noteToShowOnPick } from "./supplier-context";
 import { billFromOptions, pickBillFrom } from "./invoice-fidelity";
 import { useInvoiceHold } from "./use-invoice-hold";
+import { printLastSavedQuestion, type InvoiceSavedKey } from "./invoice-v2";
+import { confirm } from "@/lib/confirm";
 import type { PurchaseInvoiceDraftApi } from "./use-purchase-invoice-draft";
 import { isTypingTarget } from "../grn/grn.keys";
 import { PurchasePayeeDialog } from "../shared/components/purchase-payee-dialog";
@@ -69,6 +87,8 @@ const NOUN = "purchase invoice";
 export const SIDE_KEY_ROWS: readonly TxnKeyRow[] = [
   { label: "Hold this bill", keyText: "F9" },
   { label: "Pick a held bill", keyText: "F10" },
+  { label: "From GRN / PO", keyText: "Ctrl+L" },
+  { label: "Transport", keyText: "Alt+T" },
   { label: "Attachments", keyText: "Ctrl+A" },
   { label: "Return goods against this bill", keyText: "Ctrl+F11" },
   { label: "Pay this bill's supplier", keyText: "Ctrl+F8" },
@@ -126,8 +146,8 @@ export type UseInvoiceSideOptions = {
   api: PurchaseInvoiceDraftApi;
   /** A DRAFT open for keying. */
   editable: boolean;
-  /** Ask before throwing away unsaved work. */
-  guardDirty: (title: string, message: string, then: () => void) => void;
+  /** Ask before throwing away unsaved work (PE-15: one question, Qt's wording). */
+  guardDirty: (then: () => void) => void;
   /** The screen's own keys are live (no picker / settings overlay of its own open). */
   keysEnabled: boolean;
   /** The screen opened on a stored document or on remembered work — no autosave offered. */
@@ -137,6 +157,10 @@ export type UseInvoiceSideOptions = {
   /** Classes the view gives the TCS box (right-aligned) and the e-way bill pair. */
   amountClassName?: string;
   ewbClassName?: string;
+  /** PE-15: "leave it?" when the bill has unsaved changes (true at once when it has none). */
+  confirmLeave: () => Promise<boolean>;
+  /** F2 on a draft (COM-07): the cursor into the lines, on the first blank line. */
+  focusLines: () => void;
 };
 
 export function useInvoiceSide({
@@ -148,6 +172,8 @@ export function useInvoiceSide({
   mayStartNew,
   amountClassName,
   ewbClassName,
+  confirmLeave,
+  focusLines,
 }: UseInvoiceSideOptions) {
   const { draft, draftRef } = api;
   const router = useRouter();
@@ -156,6 +182,14 @@ export function useInvoiceSide({
   const saved = Boolean(draft.piId);
   const charges = useMemo(() => draft.charges ?? [], [draft.charges]);
   const { setHint: say } = api;
+  /** Qt PurchaseDocNav::say (COM-09, D6): a doc-nav notice is a popup, never the hint line. */
+  const notify = useCallback((text: string, warning = false) => {
+    if (warning) {
+      toast.warn(text, { title: DOC_LABEL });
+    } else {
+      toast.info(text, { title: DOC_LABEL });
+    }
+  }, []);
 
   // ------------------------------------------------------------ supplier
   const { context, markPicked } = useSupplierContext({
@@ -174,15 +208,46 @@ export function useInvoiceSide({
     [api, markPicked],
   );
 
-  // The supplier's context: its default credit days and Bill from (Qt fillBillFrom / creditDays).
+  // Qt 1600680 loadBranchGodown: the branch's default godown, read once per branch (no answer: the operator picks it).
+  const [fetchBranchGodown] = usePurchaseInvoiceBranchGodownMutation();
+  const [branchGodown, setBranchGodown] = useState<(PurchaseBranchGodown & { branchId: string }) | null>(null);
+  const branchId = draft.branchId;
+  useEffect(() => {
+    if (!branchId) {
+      return;
+    }
+    let live = true;
+    fetchBranchGodown({ brId: branchId })
+      .unwrap()
+      .then((godown) => {
+        if (live) {
+          setBranchGodown({ ...godown, branchId });
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [branchId, fetchBranchGodown]);
+
+  // The supplier's context: its default credit days and Bill from (Qt fillBillFrom / creditDays), and the
+  // godown of a new bill — the supplier's default first, then the branch's (Qt dd59c2c P11, 1600680 Q5).
   const billFrom = useMemo(() => billFromOptions(context), [context]);
+  const branchFallback = branchGodown && branchGodown.branchId === branchId && branchGodown.godownId ? branchGodown : null;
   useEffect(() => {
     if (!context || !editable) {
       return;
     }
     const days = typeof context.creditDays === "number" ? context.creditDays : null;
-    api.dispatch({ type: "supplierDefaults", creditDays: days, billFromGstin: pickBillFrom(billFrom, draftRef.current.ext.billFromGstin) });
-  }, [api, billFrom, context, draftRef, editable]);
+    const supplierGodown = (context.defaultGodownId ?? "").trim();
+    api.dispatch({
+      type: "supplierDefaults",
+      creditDays: days,
+      billFromGstin: pickBillFrom(billFrom, draftRef.current.ext.billFromGstin),
+      godownId: supplierGodown || branchFallback?.godownId || "",
+      godownName: supplierGodown ? (context.defaultGodownName ?? "") : (branchFallback?.godownName ?? ""),
+    });
+  }, [api, billFrom, branchFallback, context, draftRef, editable]);
 
   // ------------------------------------------------------------- charges
   const { data: masters = [], isLoading: mastersLoading } = useGetPurchaseChargeMasterQuery();
@@ -285,26 +350,34 @@ export function useInvoiceSide({
     },
     summary: () => ({ itemCount: itemLines(draftRef.current).length, netAmount: draftRef.current.totals?.netPayable ?? 0 }),
     reset: api.newDocument,
-    open: (key) => api.load(key, true),
+    // a held / autosaved bill comes back as unsaved work (Qt m_dirtyAfterLoad, §5.6), the cursor on its lines
+    open: async (key) => {
+      const ok = await api.load(key, true);
+      if (ok) {
+        api.markDirty();
+        api.requestFocus({ target: "entryStart" });
+      }
+      return ok;
+    },
+    confirmLeave,
     offerOnOpen: !openedOnWork,
     enabled: mayStartNew && Boolean(draft.companyId && draft.deviceId),
   });
 
   // ------------------------------------------------- after a save / post
   const afterPost = usePurchaseAfterPost({ companyId: draft.companyId, branchId: draft.branchId });
-  /** Call when `api.save(post)` resolved true. */
+  /** COM-10 (D7): the bill just saved — the screen has cleared, Print offers it. */
+  const [lastSaved, setLastSaved] = useState<InvoiceSavedKey | null>(null);
+  /** Call when `api.save(post)` saved the bill, before the screen clears (Qt saveDocument's success). */
   const afterSave = useCallback(
-    (post: boolean) => {
-      const current = draftRef.current;
-      if (!current.piId) {
-        return;
-      }
-      hold.documentSaved(current.piId, current.accYear, current.refno);
-      if (post && current.status === STATUS.posted) {
-        afterPost.run({ docType: "PURCHASE_BILL", docId: current.piId, accYear: current.accYear, refno: current.refno });
+    (saved: InvoiceSavedKey, post: boolean) => {
+      setLastSaved(saved);
+      hold.documentSaved(saved.id, saved.accYear, saved.refno);
+      if (post && saved.status === STATUS.posted) {
+        afterPost.run({ docType: "PURCHASE_BILL", docId: saved.id, accYear: saved.accYear, refno: saved.refno });
       }
     },
-    [afterPost, draftRef, hold],
+    [afterPost, hold],
   );
 
   // ---------------------------------------------------------- doc nav
@@ -314,10 +387,10 @@ export function useInvoiceSide({
     (previous: boolean) => {
       const current = draftRef.current;
       if (!current.piId && !previous) {
-        say(`A new ${NOUN} is the newest — nothing comes after it.`);
+        notify(`A new ${NOUN} is the newest — nothing comes after it.`);
         return;
       }
-      guardDirty("Leave this bill", "This bill has unsaved changes. Discard them?", () => {
+      guardDirty(() => {
         void (async () => {
           setStepping(true);
           try {
@@ -331,61 +404,75 @@ export function useInvoiceSide({
             }).unwrap();
             const doc = answer.doc;
             if (!doc) {
-              say(!current.piId ? `There is no ${NOUN} yet.` : previous ? `This is the oldest ${NOUN}.` : `This is the newest ${NOUN}.`);
+              notify(!current.piId ? `There is no ${NOUN} yet.` : previous ? `This is the oldest ${NOUN}.` : `This is the newest ${NOUN}.`);
               return;
             }
             if (current.dirty && !current.piId) {
               hold.dropAutosave();
             }
             api.forgetRemembered();
-            await api.load(
+            const opened = await api.load(
               { id: doc.docId, companyId: doc.companyId, branchId: doc.branchId, accYear: doc.accYear, refno: doc.refno ?? "", status: doc.status },
               false,
             );
+            if (opened) {
+              api.requestFocus({ target: "entryStart" });
+            }
           } catch (error) {
-            say(purchaseRefusalText(error));
+            toast.apiError(error, { title: "Cannot open" });
           } finally {
             setStepping(false);
           }
         })();
       });
     },
-    [adjacent, api, draftRef, guardDirty, hold, say],
+    [adjacent, api, draftRef, guardDirty, hold, notify],
   );
 
   const [historyTarget, setHistoryTarget] = useState<TxnHistoryTarget | null>(null);
   const openHistory = useCallback(() => {
     const current = draftRef.current;
     if (!current.piId) {
-      say(`Save the ${NOUN} first — a new one has no history yet.`);
+      notify(`Save the ${NOUN} first — a new one has no history yet.`);
       return;
     }
     setHistoryTarget({ docId: current.piId, companyId: current.companyId, accYear: current.accYear, refNo: current.refno });
-  }, [draftRef, say, setHistoryTarget]);
+  }, [draftRef, notify, setHistoryTarget]);
 
   const printer = useDocumentPrint({ companyId: draft.companyId || null, purposeCode: "PURCHASE_INVOICE" });
   const print = useCallback(() => {
     const current = draftRef.current;
     if (!current.piId) {
-      say(`Save the ${NOUN} first, then print it.`);
+      // COM-10: the screen cleared itself after a save — offer the one just saved
+      const saved = lastSaved;
+      if (saved) {
+        void confirm({ title: "Print", message: printLastSavedQuestion(saved), confirmLabel: "Print" }).then((yes) => {
+          if (yes) {
+            void printer.print({ docId: saved.id, companyId: saved.companyId, accYear: saved.accYear, branchId: saved.branchId });
+          }
+        });
+        return;
+      }
+      notify(`Save the ${NOUN} first, then print it.`);
       return;
     }
     void printer.print({ docId: current.piId, companyId: current.companyId, accYear: current.accYear, branchId: current.branchId });
-  }, [draftRef, printer, say]);
+  }, [draftRef, lastSaved, notify, printer]);
 
-  /** F2 where Edit is not offered: why (Qt PurchaseDocNav::edit). */
+  /** F2 where Edit is not offered (Qt PurchaseDocNav::edit): a draft open to change takes the cursor into its lines. */
   const explainEdit = useCallback(() => {
     const current = draftRef.current;
     if (!current.piId) {
-      say(`A new ${NOUN} — key it and Save Draft (Ctrl+S) or Post.`);
+      notify(`A new ${NOUN} — key it and Save Draft (Ctrl+S) or Post.`);
     } else if (current.status === STATUS.draft) {
-      say(`${current.refno} is a draft — change it, then Save Draft (Ctrl+S) or Post.`);
+      // COM-07: no popup — the first blank line, with a current cell
+      focusLines();
     } else if (current.status === STATUS.cancelled) {
-      say(`${current.refno} is cancelled — it cannot be changed. Enter a new one (Alt+N).`);
+      notify(`${current.refno} is cancelled — it cannot be changed. Enter a new one (Alt+N).`, true);
     } else {
-      say(`${current.refno} is posted — only a draft can be changed. Cancel it (Alt+X) and enter it again.`);
+      notify(`${current.refno} is posted — only a draft can be changed. Cancel it (Alt+X) and enter it again.`, true);
     }
-  }, [draftRef, say]);
+  }, [draftRef, focusLines, notify]);
 
   // ------------------------------------------------ sibling screens
   const returnFromBill = useCallback(() => {
@@ -417,6 +504,26 @@ export function useInvoiceSide({
     // The supplier is its own ledger (sup_id = led_id): Payment's party.
     router.push(buildPartyHandoffHref("/accounts/payment", { partyId: current.supplierId, partyName: current.supplierName }));
   }, [draftRef, router, say]);
+
+  /** COM-01: the supplier's ledger (Ledger Statement takes its ledger from the URL). */
+  const openLedger = useCallback(() => {
+    const current = draftRef.current;
+    if (!current.supplierId) {
+      notify("Pick the supplier first — its ledger opens then.");
+      return;
+    }
+    router.push(buildSupplierLedgerHref(current.supplierId));
+  }, [draftRef, notify, router]);
+
+  /** Supplier dues: claims, debit notes and replacements the supplier owes. */
+  const openSupplierDues = useCallback(() => {
+    const current = draftRef.current;
+    if (!current.supplierId) {
+      notify("Pick the supplier first — its dues open then.");
+      return;
+    }
+    router.push(buildSupplierDuesHref(current.supplierId, current.supplierName));
+  }, [draftRef, notify, router]);
 
   // ------------------------------------------------------------ keys
   const sideKeys = useRef({ keysEnabled, hold, editable, returnFromBill, payThisBill, openAttach: () => setAttachOpen(true) });
@@ -484,7 +591,10 @@ export function useInvoiceSide({
     />
   );
 
-  /** Header row 4: E-way bill "no · date" (two boxes in one cell). */
+  /**
+   * E-way bill "no · date" (two boxes in one cell). Off the header since Qt dd59c2c P2 (the view does not
+   * place it); kept, with its keys, for when it comes back — a loaded bill's numbers go back unchanged.
+   */
   const ewbField: ReactNode = (
     <Field label="E-way bill" htmlFor={IDS.ewbNo}>
       <span className={ewbClassName}>
@@ -526,45 +636,18 @@ export function useInvoiceSide({
   );
 
   const working = holding || stepping || hold.working;
-  /** Qt row 1 (after From GRN / PO and Batches / serials, which the view draws): Sister, Attach, Return, Pay, Payment hold. */
-  const row1Buttons: ReactNode = (
-    <>
-      <button
-        type="button"
-        className={quotationStyles.button}
-        disabled={!editable || working}
-        title="A sister company's sale bill raised on us becomes this purchase."
-        onClick={() => setSisterOpen(true)}
-      >
-        Sister company bill
-      </button>
-      <button
-        type="button"
-        className={quotationStyles.button}
-        title="The supplier's bill scan, damage photos — on the saved bill."
-        onClick={() => setAttachOpen(true)}
-      >
-        Attach · Ctrl+A
-      </button>
-      <button type="button" className={quotationStyles.button} disabled={working} title="Return goods against this posted bill." onClick={returnFromBill}>
-        Return from bill · Ctrl+F11
-      </button>
-      <button type="button" className={quotationStyles.button} disabled={working} title="Pay this bill's supplier (Payment)." onClick={payThisBill}>
-        Pay this bill · Ctrl+F8
-      </button>
-      {isPosted ? (
-        <button
-          type="button"
-          className={quotationStyles.button}
-          disabled={working}
-          title="Stop this bill being paid (or release it — releasing needs the Override right)"
-          onClick={toggleHold}
-        >
-          {draft.paymentHold ? "Release hold…" : "Payment hold…"}
-        </button>
-      ) : null}
-    </>
-  );
+  /** R19 — Payment hold… / Release hold… on a posted bill (Qt btnPaymentHold, left of the hint in the button row). */
+  const paymentHoldButton: ReactNode = isPosted ? (
+    <button
+      type="button"
+      className={quotationStyles.button}
+      disabled={working}
+      title="Stop this bill being paid (or release it — releasing needs the Override right)"
+      onClick={toggleHold}
+    >
+      {draft.paymentHold ? "Release hold…" : "Payment hold…"}
+    </button>
+  ) : null;
 
   /** Qt row 2's Hold · F9 (between New and Save Draft). F10 picks a held bill (key only, as in Qt). */
   const holdButton: ReactNode = (
@@ -576,12 +659,6 @@ export function useInvoiceSide({
       onClick={() => void hold.hold()}
     >
       Hold · F9
-    </button>
-  );
-
-  const navButtons: ReactNode = (
-    <button type="button" className={quotationStyles.button} disabled={!saved} title="Every status change of this bill." onClick={openHistory}>
-      History · Ctrl+H
     </button>
   );
 
@@ -650,15 +727,29 @@ export function useInvoiceSide({
     tcsInput,
     ewbField,
     chargesGrid,
-    row1Buttons,
+    paymentHoldButton,
     holdButton,
-    navButtons,
     dialogs,
     dialogOpen,
     working,
     onSupplierPicked,
     afterSave,
+    lastSaved,
     explainEdit,
+    /** The quick bar's actions (Qt 7d8c926 frameQuick). */
+    actions: {
+      sister: () => setSisterOpen(true),
+      pickHeld: () => void hold.pick(),
+      attach: () => setAttachOpen(true),
+      returnFromBill,
+      payThisBill,
+      ledger: openLedger,
+      supplierDues: openSupplierDues,
+      history: openHistory,
+      print,
+      previous: () => step(true),
+      next: () => step(false),
+    },
     /** For useTxnKeys. */
     keys: {
       previous: () => step(true),

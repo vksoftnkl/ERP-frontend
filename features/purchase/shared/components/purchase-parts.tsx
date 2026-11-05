@@ -6,7 +6,7 @@
  * NexERP 2026-10-29, to the approved mockups share/purchase/purchase_*_ui_mockup.png).
  * Look = design-system tokens only. Props are listed in ../README.md.
  */
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { cx } from "@/components/design-system/cx";
 import {
   purchaseIssueRows,
@@ -120,12 +120,26 @@ export type PurchaseStripCell = {
   title?: string;
 };
 
-export type PurchaseTotalsStripProps = { cells: readonly PurchaseStripCell[]; className?: string };
+export type PurchaseTotalsStripProps = {
+  cells: readonly PurchaseStripCell[];
+  className?: string;
+  /**
+   * Opt-in (Qt `PurchaseTotalsStrip::setGridColumns`, NexERP 721dabe): the cells
+   * `columns` to a row — a block beside the charges, the PO — instead of one
+   * row. Leave it out and the strip stays one row (the other purchase screens).
+   */
+  columns?: number;
+};
 
 /** Qt `PurchaseTotalsStrip`: one boxed row of cells, small grey caption over its figure. */
-export function PurchaseTotalsStrip({ cells, className }: PurchaseTotalsStripProps) {
+export function PurchaseTotalsStrip({ cells, className, columns }: PurchaseTotalsStripProps) {
+  const grid = columns !== undefined && columns > 0 ? Math.trunc(columns) : 0;
   return (
-    <div className={cx(styles.strip, className)} data-purchase-strip="">
+    <div
+      className={cx(styles.strip, grid > 0 && styles.stripGrid, className)}
+      style={grid > 0 ? ({ "--purchase-strip-columns": String(grid) } as CSSProperties) : undefined}
+      data-purchase-strip=""
+    >
       {cells.map((cell) => {
         const empty = cell.value === null || cell.value === undefined || cell.value === "";
         return (

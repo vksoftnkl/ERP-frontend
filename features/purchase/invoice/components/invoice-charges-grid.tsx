@@ -14,6 +14,9 @@
  * Keys in a cell: Enter commits and moves Rate → Amount → the next row's Rate;
  * Delete on the row's Charge cell (or the ✕) removes the charge. "Add charge"
  * (or Insert anywhere in the grid) opens the picker.
+ *
+ * Qt dd59c2c P5: no hint text in the cells — no "add charge…" row under the
+ * charges, no "—" for a charge with no GST of its own.
  */
 import { useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { cx } from "@/components/design-system/cx";
@@ -228,7 +231,7 @@ export function InvoiceChargesGrid({ rows, editable, masters, mastersLoading, on
       case CCOL.Gst:
         return (
           <td key={no} className={cx(styles.num, row.priced && row.gst === 0 ? purchaseFigureClass("muted") : undefined)}>
-            {row.priced ? (row.gst === 0 ? "—" : money(row.gst)) : ""}
+            {row.priced && row.gst !== 0 ? money(row.gst) : ""}
           </td>
         );
       case CCOL.Net:
@@ -292,17 +295,6 @@ export function InvoiceChargesGrid({ rows, editable, masters, mastersLoading, on
                 {columns.map((column) => cell(row, column.no, index))}
               </tr>
             ))}
-            <tr className={styles.addRow}>
-              <td colSpan={columns.length}>
-                {editable ? (
-                  <button type="button" className={styles.linkButton} onClick={() => setPickerOpen(true)}>
-                    + Add a charge
-                  </button>
-                ) : filled.length === 0 ? (
-                  "No charges on this bill."
-                ) : null}
-              </td>
-            </tr>
           </tbody>
         </table>
       </div>

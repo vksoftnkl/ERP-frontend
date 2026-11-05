@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   purchaseIssueRows,
+  purchaseNotesCount,
+  purchaseNotesOf,
+  purchaseNotesTitle,
   purchaseSourceRows,
   purchaseStatusLabel,
   purchaseStatusTone,
+  quickActionTitle,
   toggleMoreColumn,
   transportBandOf,
   transportFormOf,
@@ -84,5 +88,43 @@ describe("more columns / source rows", () => {
       { kind: "PO", id: "3", text: "PO 3" },
     ]);
     expect(rows.map((r) => r.type)).toEqual(["heading", "choice", "choice", "heading", "choice"]);
+  });
+});
+
+describe("quickActionTitle", () => {
+  it("the tip with its key; while disabled, why not", () => {
+    expect(quickActionTitle({ label: "Versions", keyHint: "F4" })).toBe("Versions  (F4)");
+    expect(quickActionTitle({ label: "Make GRN", tip: "Make GRN — goods came", keyHint: "Ctrl+G" })).toBe("Make GRN — goods came  (Ctrl+G)");
+    expect(quickActionTitle({ label: "Make GRN", tip: "Make GRN — goods came", keyHint: "Ctrl+G", disabled: true, disabledReason: "a posted order makes a GRN" })).toBe(
+      "Make GRN — a posted order makes a GRN  (Ctrl+G)",
+    );
+    expect(quickActionTitle({ label: "Print", disabled: true })).toBe("Print");
+  });
+});
+
+describe("COM-09 notes (Qt purchase_notes)", () => {
+  const warnings = [
+    { code: "PUR_RATE_ABOVE_PO", level: "WARN", lineNo: 4, message: "Line 4 Surf Excel 1kg: 118.00 is above the PO", needsRight: "OVERRIDE" },
+    { code: "PUR_SHORT_QTY", level: "WARN", field: "lines.1.receivedQty", message: "Line 2: 2 cases short" },
+  ];
+  const refusals = [{ code: "PUR_NO_GODOWN", message: "Pick the godown." }];
+
+  it("puts the refusals first, reads the line and drops the server's Line N", () => {
+    const out = purchaseNotesOf(warnings, refusals);
+    expect(out.notes.map((note) => [note.code, note.refuse, note.line, note.text, note.overridable])).toEqual([
+      ["PUR_NO_GODOWN", true, null, "Pick the godown.", false],
+      ["PUR_RATE_ABOVE_PO", false, 4, "Surf Excel 1kg: 118.00 is above the PO", true],
+      ["PUR_SHORT_QTY", false, 2, "2 cases short", false],
+    ]);
+    expect([out.refusals, out.warnings, out.overridable]).toEqual([1, 2, 1]);
+  });
+
+  it("counts for the footer and titles the popup", () => {
+    expect(purchaseNotesCount({ refusals: 0, warnings: 2 })).toBe("2 warnings");
+    expect(purchaseNotesCount({ refusals: 1, warnings: 1 })).toBe("1 refused · 1 warning");
+    expect(purchaseNotesCount({ refusals: 0, warnings: 0 })).toBe("");
+    expect(purchaseNotesTitle({ refusals: 0, warnings: 2 }, { verb: "post" })).toBe("Before you post — 2 warnings");
+    expect(purchaseNotesTitle({ refusals: 1, warnings: 0 }, { refused: "save" })).toBe("Not saved — 1 refusal");
+    expect(purchaseNotesTitle({ refusals: 0, warnings: 1 }, null)).toBe("Validation — 1 warning");
   });
 });

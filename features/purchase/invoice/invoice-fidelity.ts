@@ -103,7 +103,8 @@ export function headerExtDto(ext: InvoiceHeaderExt | undefined): HeaderExtDto {
   const e = ext ?? EMPTY_HEADER_EXT;
   const out: HeaderExtDto = {};
   if (e.goodsTyped && /^\d{4}-\d{2}-\d{2}$/.test(e.goodsReceivedOn)) out.goodsReceivedOn = e.goodsReceivedOn;
-  out.mode = e.mode || "CREDIT";
+  // D4 (Qt 7d8c926): the bill is credit — Cash purchase is not built; the Mode box is gone
+  out.mode = "CREDIT";
   const days = e.creditDays.trim();
   if (/^\d+$/.test(days)) out.creditDays = Number(days);
   if (e.irn.trim()) out.irn = e.irn.trim();

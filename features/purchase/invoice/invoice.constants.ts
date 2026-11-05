@@ -54,8 +54,9 @@ export const RECALC_DELAY_MS = 350;
 // ---------------------------------------------------------------------------
 
 /**
- * `PurchaseInvoiceCols` (NexERP e0c56ef) — ui_table 56's 45 columns. The
- * hidden ones (ItemId … CostTyped) are line fields here, never columns.
+ * `PurchaseInvoiceCols` (NexERP dd59c2c) — ui_table 56's 54 columns (45–53 by
+ * server migration 20261102140000). The hidden ones (ItemId … CostTyped) are
+ * line fields here, never columns.
  */
 export const COL = {
   Barcode: 0,
@@ -73,6 +74,7 @@ export const COL = {
   Taxable: 12,
   GstPct: 13,
   Tax: 14,
+  /** The server's `amount`: taxable + GST + the after-tax charge share (P10). */
   Total: 15,
   CostWot: 16,
   Mrp: 17,
@@ -95,22 +97,47 @@ export const COL = {
   ExtraDisc: 40,
   CostIncl: 41,
   // 42 CostTyped: a line field.
+  /** Markup A — Sell A's markup % on the cost without tax (ENT-18). */
   Markup: 43,
   Itc: 44,
+  // ── 2026-11-02 (Qt dd59c2c P7–P10) ──
+  /** Disc as an amount: typing it clears Disc %, and the other way round (P7). */
+  DiscAmt: 45,
+  /** Sch as an amount (P7). */
+  SchAmt: 46,
+  /** The item's HSN (the server's `hsn`; read-only, P9). */
+  Hsn: 47,
+  /** The line's MSP, sent as minPrice (P9). */
+  Msp: 48,
+  /** Sell B–D's markups, as Markup A (P8). */
+  MarkupB: 49,
+  MarkupC: 50,
+  MarkupD: 51,
+  /** The line's share of the bill's charges (the server's, P10). */
+  ChrgBeforeTax: 52,
+  ChrgAfterTax: 53,
 } as const;
 
 export type LineColumnNo = (typeof COL)[keyof typeof COL];
 
 /**
- * The columns this screen can draw, in the mockup's order (Qt `applyColumns`
- * moveSection list, 2026-10-29 rebuild): # Barcode Item Unit [Model Size Colour]
- * Batch/Serial Expiry Billed Recd Dmg Short Free Rate Disc [Sch% Extra disc]
- * Taxable GST% ITC Tax Total Cost w/o [Cost incl.] [Markup% Sell A Sell B–D]
- * MRP [PO / GRN ref] Check. Qt forces this order whatever the layout says.
+ * Every column this screen can draw. Which of them show, in what order and
+ * under what title is ui_table 56's (Qt dd59c2c P4: no "More columns" chooser) —
+ * the screen only takes away what its settings rule out (`PRICE_COLUMNS`,
+ * `TEXTILE_COLUMNS`). The technical columns (19–23, 25–27, 29, 31, 37, 38, 42)
+ * are never drawn.
  */
-export const SHOWN_COLUMNS: readonly LineColumnNo[] = [
+export const DRAWN_COLUMNS: ReadonlySet<number> = new Set<number>(Object.values(COL));
+
+/**
+ * The order before (or without) the layout — ui_table 56's own registration
+ * (server Ui_Table_Columns.sql, positions 0–40). Qt shows every column then
+ * (`m_layoutKnown` false), the rules aside.
+ */
+export const FALLBACK_ORDER: readonly LineColumnNo[] = [
   COL.Barcode,
   COL.Item,
+  COL.Hsn,
   COL.Unit,
   COL.Model,
   COL.Size,
@@ -124,76 +151,62 @@ export const SHOWN_COLUMNS: readonly LineColumnNo[] = [
   COL.Free,
   COL.Rate,
   COL.DiscPct,
+  COL.DiscAmt,
   COL.SchPct,
+  COL.SchAmt,
   COL.ExtraDisc,
+  COL.ChrgBeforeTax,
   COL.Taxable,
   COL.GstPct,
   COL.Itc,
   COL.Tax,
+  COL.ChrgAfterTax,
   COL.Total,
   COL.CostWot,
   COL.CostIncl,
+  COL.Mrp,
+  COL.Msp,
   COL.Markup,
+  COL.SellA,
+  COL.MarkupB,
+  COL.SellB,
+  COL.MarkupC,
+  COL.SellC,
+  COL.MarkupD,
+  COL.SellD,
+  COL.Check,
+  COL.Grn,
+];
+
+/** Sell A–D and their markups: shown and keyed only while the bill writes prices (purchase.allow_price_update + UPDATE_PRICES). */
+export const PRICE_COLUMNS: ReadonlySet<number> = new Set([
   COL.SellA,
   COL.SellB,
   COL.SellC,
   COL.SellD,
-  COL.Mrp,
-  COL.Grn,
-  COL.Check,
-];
-
-/**
- * "More columns" (mockup callout 10, Qt `moreColumns()`), in the mockup's
- * order. `column: null` = the mockup names it but ui_table 56 has no such
- * column yet — shown greyed, not pickable. Sell B–D only while the bill keys
- * selling prices.
- */
-export const MORE_COLUMNS: readonly { key: string; label: string; column: LineColumnNo | null }[] = [
-  { key: "gross", label: "Gross", column: null },
-  { key: "discAmt", label: "Disc ₹", column: null },
-  { key: "schPct", label: "Sch %", column: COL.SchPct },
-  { key: "extraDisc", label: "Extra disc", column: COL.ExtraDisc },
-  { key: "costIncl", label: "Cost incl.", column: COL.CostIncl },
-  { key: "cessPct", label: "Cess %", column: null },
-  { key: "cessUnit", label: "Cess / unit", column: null },
-  { key: "mfg", label: "Mfg date", column: null },
-  { key: "godown", label: "Godown", column: null },
-  { key: "weight", label: "Weight", column: null },
-  { key: "sellB", label: "Sell B", column: COL.SellB },
-  { key: "sellC", label: "Sell C", column: COL.SellC },
-  { key: "sellD", label: "Sell D", column: COL.SellD },
-  { key: "oldPrices", label: "Old prices", column: null },
-  { key: "poGrnRef", label: "PO / GRN ref", column: COL.Grn },
-  { key: "remarks", label: "Remarks", column: null },
-];
-
-/** The columns hidden until picked under More columns. */
-export const MORE_COLUMN_NOS: ReadonlySet<number> = new Set(
-  MORE_COLUMNS.map((m) => m.column).filter((c): c is LineColumnNo => c !== null),
-);
-
-/** Where the choice is kept (Qt QSettings purchaseInvoice/moreColumns/<user>). */
-export const MORE_COLUMNS_SCREEN_KEY = "purchaseInvoice";
-
-/**
- * The mockup's headings where ui_table 56 words them differently (Qt
- * `applyHeaderTitles` — these win over the registration's titles).
- */
-export const MOCKUP_COLUMN_TITLES: Readonly<Record<number, string>> = {
-  [COL.Batch]: "Batch / Serial",
-  [COL.DiscPct]: "Disc",
-  [COL.GstPct]: "GST%",
-  [COL.CostWot]: "Cost w/o",
-  [COL.Markup]: "Markup%",
-  [COL.Grn]: "PO / GRN ref",
-  [COL.Model]: "Model / design",
-};
-
-/** Shown only while the bill keys selling prices (Qt `applyTextileColumns`: `m_priceUpdate`). */
-export const PRICE_COLUMNS: ReadonlySet<number> = new Set([COL.SellA, COL.SellB, COL.SellC, COL.SellD, COL.Markup]);
+  COL.Markup,
+  COL.MarkupB,
+  COL.MarkupC,
+  COL.MarkupD,
+]);
 /** Shown only while the company numbers its own batches (`m_autoBatchNo`). */
 export const TEXTILE_COLUMNS: ReadonlySet<number> = new Set([COL.Size, COL.Colour, COL.Model]);
+
+export const SELL_COLUMNS: ReadonlySet<number> = new Set([COL.SellA, COL.SellB, COL.SellC, COL.SellD]);
+export const MARKUP_COLUMNS: ReadonlySet<number> = new Set([COL.Markup, COL.MarkupB, COL.MarkupC, COL.MarkupD]);
+
+/** One price level: its Sell and Markup columns and the keys the server answers / takes (Qt `paintServerLine` levels). */
+export type PriceLevel = {
+  level: "A" | "B" | "C" | "D";
+  sell: number;
+  markup: number;
+};
+export const PRICE_LEVELS: readonly PriceLevel[] = [
+  { level: "A", sell: COL.SellA, markup: COL.Markup },
+  { level: "B", sell: COL.SellB, markup: COL.MarkupB },
+  { level: "C", sell: COL.SellC, markup: COL.MarkupC },
+  { level: "D", sell: COL.SellD, markup: COL.MarkupD },
+];
 
 /**
  * `PurchaseInvoiceCols::isEditable` — the Item cell opens the item list, never
@@ -210,16 +223,16 @@ export const EDITABLE_COLUMNS: ReadonlySet<number> = new Set([
   COL.Free,
   COL.Rate,
   COL.DiscPct,
+  COL.DiscAmt,
   COL.Mrp,
+  COL.Msp,
   COL.Model,
-  COL.SellA,
-  COL.SellB,
-  COL.SellC,
-  COL.SellD,
+  ...SELL_COLUMNS,
+  ...MARKUP_COLUMNS,
   COL.SchPct,
+  COL.SchAmt,
   COL.ExtraDisc,
   COL.CostIncl,
-  COL.Markup,
 ]);
 
 /** What a GRN line still keys (Qt edit predicate on `rowFromGrn`): the supplier's figures only. */
@@ -227,14 +240,14 @@ export const GRN_LINE_COLUMNS: ReadonlySet<number> = new Set([
   COL.Billed,
   COL.Rate,
   COL.DiscPct,
+  COL.DiscAmt,
   COL.SchPct,
+  COL.SchAmt,
   COL.ExtraDisc,
   COL.CostIncl,
-  COL.Markup,
-  COL.SellA,
-  COL.SellB,
-  COL.SellC,
-  COL.SellD,
+  COL.Msp,
+  ...MARKUP_COLUMNS,
+  ...SELL_COLUMNS,
 ]);
 
 /** `PurchaseInvoiceCols::isNumber` — right-aligned. */
@@ -246,20 +259,22 @@ export const NUMBER_COLUMNS: ReadonlySet<number> = new Set([
   COL.Free,
   COL.Rate,
   COL.DiscPct,
+  COL.DiscAmt,
   COL.Taxable,
   COL.GstPct,
   COL.Tax,
   COL.Total,
   COL.CostWot,
   COL.Mrp,
-  COL.SellA,
-  COL.SellB,
-  COL.SellC,
-  COL.SellD,
+  COL.Msp,
+  ...SELL_COLUMNS,
+  ...MARKUP_COLUMNS,
   COL.SchPct,
+  COL.SchAmt,
   COL.ExtraDisc,
   COL.CostIncl,
-  COL.Markup,
+  COL.ChrgBeforeTax,
+  COL.ChrgAfterTax,
 ]);
 
 /**
@@ -270,19 +285,37 @@ export const EXPRESSION_COLUMNS: ReadonlySet<number> = new Set([
   COL.Rate,
   COL.CostIncl,
   COL.ExtraDisc,
+  COL.DiscAmt,
+  COL.SchAmt,
   COL.Mrp,
-  COL.SellA,
-  COL.SellB,
-  COL.SellC,
-  COL.SellD,
+  COL.Msp,
+  ...SELL_COLUMNS,
 ]);
 
-export const SELL_COLUMNS: ReadonlySet<number> = new Set([COL.SellA, COL.SellB, COL.SellC, COL.SellD]);
+/**
+ * `PurchaseInvoiceCols::isServerFigure` — the server's figures a line keeps from
+ * its last answer while an edit waits for the next one (muted meanwhile, P10 / P11).
+ */
+export const SERVER_FIGURE_COLUMNS: ReadonlySet<number> = new Set([COL.ChrgBeforeTax, COL.ChrgAfterTax, COL.CostWot]);
 
-/** Qt `setFocusStops({ Barcode, Item, Billed, Rate, DiscPct })` — where Enter stops. */
-export const FOCUS_STOPS: ReadonlySet<number> = new Set([COL.Barcode, COL.Item, COL.Billed, COL.Rate, COL.DiscPct]);
+/**
+ * Qt dd59c2c P15 `setFocusStops` — where Enter stops: Item → [Batch → Expiry]
+ * → Billed → Free → Rate → Disc % → Sch % → Extra disc → the next line
+ * (`lineStopOf` narrows it per line).
+ */
+export const FOCUS_STOPS: ReadonlySet<number> = new Set([
+  COL.Item,
+  COL.Batch,
+  COL.Expiry,
+  COL.Billed,
+  COL.Free,
+  COL.Rate,
+  COL.DiscPct,
+  COL.SchPct,
+  COL.ExtraDisc,
+]);
 
-/** Titles and Qt widths for a layout that has not arrived (or lacks a row). */
+/** Titles for a layout that has not arrived (or lacks a row) — ui_table 56's own. */
 export const FALLBACK_COLUMN_TITLES: Readonly<Record<number, string>> = {
   [COL.Barcode]: "Barcode",
   [COL.Item]: "Item",
@@ -297,16 +330,16 @@ export const FALLBACK_COLUMN_TITLES: Readonly<Record<number, string>> = {
   [COL.Rate]: "Rate",
   [COL.DiscPct]: "Disc %",
   [COL.Taxable]: "Taxable",
-  [COL.GstPct]: "GST %",
+  [COL.GstPct]: "GST%",
   [COL.Tax]: "Tax",
   [COL.Total]: "Total",
-  [COL.CostWot]: "Cost w/o tax",
+  [COL.CostWot]: "Cost w/o",
   [COL.Mrp]: "MRP",
   [COL.Check]: "Check",
-  [COL.Grn]: "PO / GRN",
+  [COL.Grn]: "PO / GRN ref",
   [COL.Size]: "Size",
   [COL.Colour]: "Colour",
-  [COL.Model]: "Model",
+  [COL.Model]: "Model / design",
   [COL.SellA]: "Sell A",
   [COL.SellB]: "Sell B",
   [COL.SellC]: "Sell C",
@@ -314,44 +347,72 @@ export const FALLBACK_COLUMN_TITLES: Readonly<Record<number, string>> = {
   [COL.SchPct]: "Sch %",
   [COL.ExtraDisc]: "Extra disc",
   [COL.CostIncl]: "Cost incl.",
-  [COL.Markup]: "Markup %",
+  [COL.Markup]: "Markup A",
   [COL.Itc]: "ITC",
+  [COL.DiscAmt]: "Disc",
+  [COL.SchAmt]: "Sch",
+  [COL.Hsn]: "HSN",
+  [COL.Msp]: "MSP",
+  [COL.MarkupB]: "Markup B",
+  [COL.MarkupC]: "Markup C",
+  [COL.MarkupD]: "Markup D",
+  [COL.ChrgBeforeTax]: "Chrg before tax",
+  [COL.ChrgAfterTax]: "Chrg after tax",
 };
 
-export const FALLBACK_COLUMN_WIDTHS: Readonly<Record<number, number>> = {
-  [COL.Barcode]: 4,
-  [COL.Item]: 9,
-  [COL.Unit]: 3,
-  [COL.Batch]: 5,
-  [COL.Expiry]: 4,
-  [COL.Billed]: 4,
-  [COL.Recd]: 3,
-  [COL.Dmg]: 3,
-  [COL.Short]: 3,
-  [COL.Free]: 3,
-  [COL.Rate]: 4,
-  [COL.DiscPct]: 4,
-  [COL.Taxable]: 5,
-  [COL.GstPct]: 3,
-  [COL.Tax]: 4,
-  [COL.Total]: 5,
-  [COL.CostWot]: 6,
-  [COL.Mrp]: 4,
-  [COL.Check]: 5,
-  [COL.Grn]: 4,
-  [COL.Size]: 3,
-  [COL.Colour]: 4,
-  [COL.Model]: 5,
-  [COL.SellA]: 5,
-  [COL.SellB]: 5,
-  [COL.SellC]: 5,
-  [COL.SellD]: 5,
-  [COL.SchPct]: 3,
-  [COL.ExtraDisc]: 5,
-  [COL.CostIncl]: 5,
-  [COL.Markup]: 5,
-  [COL.Itc]: 4,
+/**
+ * Qt dd59c2c `ColumnWeights` with `setPixelFloor`: the PIXELS each column needs
+ * (headings of two words on two lines). A grid wider than their sum shares the
+ * spare out by them; a narrower one keeps each column at its pixels and scrolls
+ * sideways. The layout's widths are not read — Qt's weights win.
+ */
+export const COLUMN_PX: Readonly<Record<number, number>> = {
+  [COL.Barcode]: 70,
+  [COL.Item]: 150,
+  [COL.Hsn]: 80,
+  [COL.Unit]: 58,
+  [COL.Model]: 80,
+  [COL.Size]: 48,
+  [COL.Colour]: 56,
+  [COL.Batch]: 86,
+  [COL.Expiry]: 78,
+  [COL.Billed]: 56,
+  [COL.Recd]: 50,
+  [COL.Dmg]: 48,
+  [COL.Short]: 50,
+  [COL.Free]: 48,
+  [COL.Rate]: 68,
+  [COL.DiscPct]: 50,
+  [COL.DiscAmt]: 60,
+  [COL.SchPct]: 50,
+  [COL.SchAmt]: 60,
+  [COL.ExtraDisc]: 56,
+  [COL.ChrgBeforeTax]: 78,
+  [COL.Taxable]: 80,
+  [COL.GstPct]: 48,
+  [COL.Itc]: 62,
+  [COL.Tax]: 70,
+  [COL.ChrgAfterTax]: 78,
+  [COL.Total]: 82,
+  [COL.CostWot]: 62,
+  [COL.CostIncl]: 62,
+  [COL.Mrp]: 58,
+  [COL.Msp]: 58,
+  [COL.Markup]: 56,
+  [COL.SellA]: 64,
+  [COL.MarkupB]: 56,
+  [COL.SellB]: 64,
+  [COL.MarkupC]: 56,
+  [COL.SellC]: 64,
+  [COL.MarkupD]: 56,
+  [COL.SellD]: 64,
+  [COL.Grn]: 72,
+  [COL.Check]: 96,
 };
+/** Qt's fallback weight for a column it names no pixels for. */
+export const COLUMN_PX_FALLBACK = 60;
+/** Qt `ColumnWeights` minW. */
+export const COLUMN_PX_MIN = 34;
 
 /** Qt `m_stripTimer->setInterval(200)` — the item strip follows the cursor this long after it settles. */
 export const ITEM_STRIP_DELAY_MS = 200;

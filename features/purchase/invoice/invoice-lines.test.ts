@@ -495,6 +495,12 @@ describe("textile — Size · Colour · Model (stock.auto_batch_no)", () => {
     expect(invoiceReducer(draft, { type: "pickChoice", key: "l1", field: "size", id: "sz-l", name: "L" })).toBe(draft);
   });
 
+  it("a picked Size / Colour is an edit: the bill is dirty (Qt a639bc6, PE-15)", () => {
+    const clean = { ...bill(TEXTILE, TEXTILE_ITEM), dirty: false };
+    expect(invoiceReducer(clean, { type: "pickChoice", key: "l1", field: "size", id: "sz-m", name: "M" }).dirty).toBe(true);
+    expect(invoiceReducer(clean, { type: "pickChoice", key: "l1", field: "colour", id: "cl-red", name: "RED" }).dirty).toBe(true);
+  });
+
   it("stays shut on a plain item, or with auto batch no off", () => {
     expect(whyNotEditable(bill(TEXTILE).lines[0], COL.Size, TEXTILE)).not.toBe("");
     expect(whyNotEditable(bill(PRICES, TEXTILE_ITEM).lines[0], COL.Model, PRICES)).not.toBe("");

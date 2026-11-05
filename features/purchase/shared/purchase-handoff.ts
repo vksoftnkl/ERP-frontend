@@ -5,6 +5,7 @@
  *
  * - Purchase Entry Ctrl+F11 → Purchase Return against the bill (`?againstBill=`);
  * - PO Make GRN · Ctrl+G → GRN from the PO (`?fromPo=`);
+ * - PO Make Purchase Invoice → Purchase Entry from the PO (`?fromPo=` on the bill's route);
  * - GRN Reject → Purchase Return against the GRN (`?againstGrn=`);
  * - GRN Make bill · Ctrl+B → Purchase Entry from the GRN (`?fromGrn=`).
  *
@@ -87,8 +88,8 @@ export type GrnFromPoHandoff = {
   godownName?: string;
 };
 
-export function buildGrnFromPoHref(handoff: GrnFromPoHandoff): string {
-  const query = new URLSearchParams({
+function poQuery(handoff: GrnFromPoHandoff): URLSearchParams {
+  return new URLSearchParams({
     [FROM_PO_MARKER]: handoff.poId,
     accYear: handoff.accYear,
     supplierId: handoff.supplierId,
@@ -96,7 +97,10 @@ export function buildGrnFromPoHref(handoff: GrnFromPoHandoff): string {
     refno: handoff.refno,
     ...(handoff.godownId ? { godownId: handoff.godownId, godownName: handoff.godownName ?? "" } : {}),
   });
-  return `${GRN_ROUTE}?${query.toString()}`;
+}
+
+export function buildGrnFromPoHref(handoff: GrnFromPoHandoff): string {
+  return `${GRN_ROUTE}?${poQuery(handoff).toString()}`;
 }
 
 export function parseGrnFromPo(params: Pick<URLSearchParams, "get"> | null | undefined): GrnFromPoHandoff | null {
@@ -114,6 +118,23 @@ export function parseGrnFromPo(params: Pick<URLSearchParams, "get"> | null | und
     refno: (params.get("refno") ?? "").trim(),
     ...(UUID.test(godownId) ? { godownId, godownName: (params.get("godownName") ?? "").trim() } : {}),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Make Purchase Invoice (Qt e782e59 `PurchaseOrderEntry::makeInvoice`): Purchase Entry (menu 24) opens a NEW
+// bill on the PO's supplier and godown and fills this PO's pending lines (its From-PO path, `fillFromPo`) —
+// `/purchase/purchase-entry?fromPo=<poId>&accYear&supplierId&supplierName&refno[&godownId&godownName]`.
+// The same query as Make GRN, on the bill's route. Purchase Entry reads it with `parseBillFromPo`.
+// ---------------------------------------------------------------------------
+
+export type BillFromPoHandoff = GrnFromPoHandoff;
+
+export function buildBillFromPoHref(handoff: BillFromPoHandoff): string {
+  return `${PURCHASE_ENTRY_ROUTE}?${poQuery(handoff).toString()}`;
+}
+
+export function parseBillFromPo(params: Pick<URLSearchParams, "get"> | null | undefined): BillFromPoHandoff | null {
+  return parseGrnFromPo(params);
 }
 
 // ---------------------------------------------------------------------------
@@ -182,4 +203,27 @@ export function buildBillFromGrnHref(handoff: GrnHandoff): string {
 }
 export function parseBillFromGrn(params: Pick<URLSearchParams, "get"> | null | undefined): GrnHandoff | null {
   return parseGrnHandoff(params, FROM_GRN_MARKER);
+}
+
+// ---------------------------------------------------------------------------
+// Purchase Entry's quick bar (Qt 6b81080 COM-01, 7d8c926): the supplier's
+// ledger and its dues — routes that already read their party from the URL.
+// ---------------------------------------------------------------------------
+
+export const LEDGER_STATEMENT_ROUTE = "/reports/ledger-statement";
+export const SUPPLIER_DUES_ROUTE = "/purchase/supplier-dues";
+
+/**
+ * Qt `PurchaseQuick::openLedger`: Ledger Statement (menu 258) on the supplier's
+ * ledger (supplier id = ledger id). Only `ledger` travels: the statement's own
+ * defaults give the year's start to today on the login branch, cancelled and
+ * bill refs shown — what Qt sends.
+ */
+export function buildSupplierLedgerHref(supplierId: string): string {
+  return `${LEDGER_STATEMENT_ROUTE}?${new URLSearchParams({ ledger: supplierId }).toString()}`;
+}
+
+/** Supplier dues on the supplier (`?supplierId=&supplierName=`, the page's own filter). */
+export function buildSupplierDuesHref(supplierId: string, supplierName: string): string {
+  return `${SUPPLIER_DUES_ROUTE}?${new URLSearchParams({ supplierId, supplierName }).toString()}`;
 }

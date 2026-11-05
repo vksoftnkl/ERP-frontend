@@ -131,10 +131,6 @@
 .payeeCellOff {
   color: var(--text-muted, #666666);
 }
-.addRow td {
-  color: var(--text-muted, #666666);
-  font-style: italic;
-}
 .linkButton {
   padding: 0;
   border: 0;
@@ -191,4 +187,25 @@
   display: flex;
   gap: u(0.35);
   justify-content: flex-end;
+}
+
+/* ------------------------------------------- GST break-up (Qt dd59c2c P12) */
+.gstTable {
+  min-width: u(34);
+}
+.gstTable th:first-child,
+.gstTable td:first-child {
+  width: u(5);
+}
+.gstTotalRow td {
+  border-top: 1px solid var(--ds-border);
+  border-bottom: 0;
+  background: var(--ds-surface-muted);
+  color: var(--ds-text);
+  font-weight: 700;
+}
+.gstSource {
+  margin: u(0.4) 0 0;
+  color: var(--ds-text-muted);
+  font-size: u(0.7);
 }

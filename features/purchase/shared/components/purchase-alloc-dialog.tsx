@@ -17,11 +17,19 @@
  * Keys: Enter walks the cells the layout flags (`ui_tbl_clm_column_focus`),
  * Ctrl+Delete removes the row the cursor is on, Ctrl+P ratio pack, Esc cancels.
  *
- * `embedded` (Qt `PurchaseAllocDialog(…, embedded = true)`, how GRN, Shortage
- * Receipt and Purchase Entry open it): an INLINE panel under the screen's lines —
- * no window and no OK; each edit that leaves the rows adding up goes straight back
- * to the line (`onEdited`), Esc closes the panel, the Σ check sits under the rows,
- * and the screen's own keys (Ctrl+P is its Print) stay live around it.
+ * `embedded` (Qt `PurchaseAllocDialog(…, embedded = true)`, how GRN and Shortage
+ * Receipt open it): an INLINE panel under the screen's lines — no window and no
+ * OK; each edit that leaves the rows adding up goes straight back to the line
+ * (`onEdited`), Esc closes the panel, the Σ check sits in the panel's head, and
+ * the screen's own keys (Ctrl+P is its Print) stay live around it.
+ *
+ * The popup (Qt c0dbff1 `openPopup`, Purchase Entry's F12): no sentence over the
+ * grid, the Σ in the footer beside OK / Cancel, OK only once the rows add up,
+ * Ctrl+Enter = OK (while the rows are off it says why, in a message), Esc =
+ * Cancel, Cancel out of the Enter / Tab walk (one Enter never drops the rows),
+ * a read-only line shows Close only, and the focus goes back to whatever had it
+ * when the popup opened. Both modes (COM-08): no date placeholder in a cell; a
+ * filled row's blank date reads "—".
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { DateInput } from "@/components/design-system/ui";
@@ -47,11 +55,10 @@ import {
   ALLOC_COL,
   allocCellEditable,
   allocEntriesOf,
-  allocHint,
-  allocPanelHint,
+  allocOffWarning,
   allocProblem,
   allocRowHas,
-  allocSumText,
+  allocSumLine,
   applyRatioPack,
   editAllocRow,
   initialAllocRows,
@@ -196,6 +203,22 @@ function OpenAllocDialog({
   }, []);
   /** An edit by the operator since the panel opened — only then do rows go back to the line. */
   const touched = useRef(false);
+  // The popup gives the focus back to whatever had it when it opened (Qt m_opener / hideEvent).
+  const [opener] = useState<HTMLElement | null>(() =>
+    !embedded && typeof document !== "undefined" && document.activeElement instanceof HTMLElement ? document.activeElement : null,
+  );
+  useEffect(() => {
+    if (!opener) {
+      return;
+    }
+    return () => {
+      window.setTimeout(() => {
+        if (opener.isConnected && !document.querySelector('[aria-modal="true"]')) {
+          opener.focus();
+        }
+      }, 0);
+    };
+  }, [opener]);
 
   // ------------------------------------------------------------ the lists
   const godownParams = useMemo(() => (branchId ? { ibranch_id: branchId } : null), [branchId]);
@@ -292,10 +315,15 @@ function OpenAllocDialog({
       return;
     }
     if (!canAccept) {
+      if (!embedded && problem) {
+        // Ctrl+Enter while the rows are off: say why (Qt tryAccept, D6 — a popup)
+        const off = allocOffWarning(need, problem);
+        toast.warn(off.message, { title: off.title });
+      }
       return;
     }
     onAccept(allocEntriesOf(rows, need));
-  }, [canAccept, need, onAccept, onClose, readOnly, rows]);
+  }, [canAccept, embedded, need, onAccept, onClose, problem, readOnly, rows]);
 
   // Embedded: an edit that adds up goes straight back to the line (Qt afterEdit → edited).
   const onEditedRef = useRef(onEdited);
@@ -312,6 +340,11 @@ function OpenAllocDialog({
   useEffect(() => {
     onProblemRef.current?.(problem);
   }, [problem]);
+
+  const acceptRef = useRef(accept);
+  useLayoutEffect(() => {
+    acceptRef.current = accept;
+  });
 
   // Ctrl+P (ratio pack) and Ctrl+Delete (remove the row) — only while this is
   // the topmost dialog. Ctrl+P is the browser's Print: always taken here.
@@ -333,6 +366,13 @@ function OpenAllocDialog({
         event.preventDefault();
         event.stopPropagation();
         openRatioPack();
+      } else if (event.key === "Enter") {
+        // Ctrl+Enter = OK (Qt c0dbff1); the cells write the rows as they are typed
+        event.preventDefault();
+        event.stopPropagation();
+        if (!event.repeat) {
+          acceptRef.current();
+        }
       } else if (event.key === "Delete") {
         event.preventDefault();
         event.stopPropagation();
@@ -402,39 +442,50 @@ function OpenAllocDialog({
     }
   };
 
+  // Qt paintSum: the Σ (or what does not add up), toned good / bad
+  const sumLine = allocSumLine(rows, need, problem);
+  const sumText = <span className={cx(styles.sumLine, sumLine.ok ? styles.ok : styles.problem)}>{sumLine.text}</span>;
+
   const footer = (
     <div className={styles.actions}>
+      {/* the mockup's footer: "Σ 52 = 46 received + 2 damaged + 4 free  ✓", then the buttons */}
+      <span className={styles.actionsLeft}>{readOnly ? <span className={styles.readOnlyNote}>{readOnlyReason ?? "Read only."}</span> : sumText}</span>
       {need.textile && !readOnly ? (
-        <button type="button" className={cx(quotationStyles.button, styles.actionsLeft)} tabIndex={-1} onClick={openRatioPack}>
+        <button type="button" className={quotationStyles.button} tabIndex={-1} onClick={openRatioPack}>
           Ratio pack · Ctrl+P
         </button>
       ) : null}
       {!readOnly ? (
         <button
           type="button"
-          className={cx(quotationStyles.button, !need.textile && styles.actionsLeft)}
+          className={quotationStyles.button}
           tabIndex={-1}
           disabled={!currentKey || !rows.some((row) => row.key === currentKey && allocRowHas(row))}
           onClick={removeCurrent}
         >
           Remove row · Ctrl+Del
         </button>
-      ) : (
-        <span className={styles.readOnlyNote}>{readOnlyReason ?? "Read only."}</span>
-      )}
+      ) : null}
       {!readOnly ? (
         <button
           ref={okRef}
           type="button"
           className={cx(quotationStyles.button, quotationStyles.buttonPrimary)}
           disabled={!canAccept}
-          title={problem || undefined}
+          title={problem || "OK — the rows go back to the line (Ctrl+Enter)"}
           onClick={accept}
         >
-          OK
+          OK · Ctrl+Enter
         </button>
       ) : null}
-      <button type="button" className={quotationStyles.button} onClick={onClose}>
+      {/* Esc or a click: Enter past the last row goes to OK, never onto Cancel (one Enter would drop the rows) */}
+      <button
+        type="button"
+        className={quotationStyles.button}
+        tabIndex={readOnly ? undefined : -1}
+        title={readOnly ? "Close (Esc)" : "Cancel — the line keeps what it had (Esc)"}
+        onClick={onClose}
+      >
         {readOnly ? "Close · Esc" : "Cancel · Esc"}
       </button>
     </div>
@@ -494,12 +545,7 @@ function OpenAllocDialog({
       </table>
     </div>
   );
-  const sum = (
-    <>
-      {notice ? <p className={styles.problem}>{notice}</p> : null}
-      {problem ? <p className={styles.problem}>{problem}</p> : <p className={styles.ok}>{allocSumText(need)} ✓</p>}
-    </>
-  );
+  const noticeLine = notice ? <p className={styles.problem}>{notice}</p> : null;
 
   return (
     <>
@@ -511,21 +557,24 @@ function OpenAllocDialog({
           onKeyDown={onPanelKeyDown}
           {...{ [ALLOC_PANEL_ATTR]: "" }}
         >
+          {/* Qt c0dbff1: the Σ sits in the panel's head, where the static hint was */}
           <PurchaseSectionHeading
             title={title}
-            hint={allocPanelHint(need)}
             actions={
-              need.textile && !readOnly ? (
-                <button type="button" className={quotationStyles.button} tabIndex={-1} onClick={openRatioPack}>
-                  Ratio pack
-                </button>
-              ) : undefined
+              <>
+                {sumText}
+                {need.textile && !readOnly ? (
+                  <button type="button" className={quotationStyles.button} tabIndex={-1} onClick={openRatioPack}>
+                    Ratio pack
+                  </button>
+                ) : null}
+              </>
             }
           />
           <div ref={setBody} className={styles.inlineBody}>
             {grid}
             <div className={styles.inlineFoot}>
-              {sum}
+              {noticeLine}
               <span className={styles.inlineKeys}>
                 {readOnly ? (readOnlyReason ?? "Read only.") : "Ctrl+Del removes a row · Esc closes"}
               </span>
@@ -534,10 +583,10 @@ function OpenAllocDialog({
         </section>
       ) : (
         <ModalShell title={title} isOpen fixedHeight panelClassName={styles.allocPanel} onClose={onClose} footer={footer}>
+          {/* no sentence over the grid (Qt PE-14): the title names the line, the footer has the Σ */}
           <div ref={setBody} className={styles.body}>
-            <p className={styles.hint}>{allocHint(need)}</p>
             {grid}
-            {sum}
+            {noticeLine}
           </div>
         </ModalShell>
       )}
@@ -703,6 +752,8 @@ function AllocCell({ row, column, need, readOnly, lists, onEdit, onAddNew }: All
         disabled={!editable}
         noPicker
         arrowStep={false}
+        // COM-08: no "dd/MM/yyyy" in the cell; a filled row's blank date reads "—"
+        placeholder={allocRowHas(row) ? "—" : ""}
         aria-label={label}
         onChange={(value) => onEdit(row.key, { [dateField]: value })}
         {...gridAttrs}

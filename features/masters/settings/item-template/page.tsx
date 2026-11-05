@@ -18,6 +18,7 @@ import { applyFormDefaults } from "@/features/masters/shared/apply-form-defaults
 import {
   buildSessionScopeOverride,
   describeSessionScope,
+  describeTemplateSaveScope,
   findEffectiveSettingValue,
   ITEM_FORM_DEFAULTS_SETTING_KEY,
   parseSettingObject,
@@ -474,6 +475,7 @@ export default function ItemTemplatePage() {
   }, [isOpen, scope, effectiveSettings, savedDefaults, prefillFromSavedTemplate]);
 
   const scopeLabel = describeSessionScope(session);
+  const scopeNotice = describeTemplateSaveScope(session, "item");
   const variant = useMemo<ERPDynamicModalVariant>(
     () => ({
       key: "itemTemplate",
@@ -481,7 +483,7 @@ export default function ItemTemplatePage() {
       cardDescription: "Set the default values applied to new items.",
       cardButtonLabel: "Open Template",
       modalTitle: "Item Template",
-      modalDescription: `Configure the default field values for new items. Saved for ${scopeLabel}.`,
+      modalDescription: `Configure the default field values for new items. ${scopeNotice}`,
       submitLabel: "Save Template",
       accent: "primary",
       fields: buildItemTemplateFields(
@@ -524,7 +526,7 @@ export default function ItemTemplatePage() {
       tax.handlers,
       branchOptions,
       hsnOptions,
-      scopeLabel,
+      scopeNotice,
     ],
   );
   return (

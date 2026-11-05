@@ -6,8 +6,9 @@
  * grows later) is never drawn, and the hidden carriers (14 ItemId, 15 UomId,
  * 16 LineId) are fields of the line, not columns.
  *
- * Widths: `ui_tbl_clm_column_width` is the Qt FRACTION, not a percent — the
- * visible ones are normalised to shares of 100.
+ * Widths: Qt's ColumnWeights (bcd844a: the pixels each column needs, 23 in
+ * 1560 px; 56 for one it has no weight for) normalised to shares of 100 — the
+ * layout's `ui_tbl_clm_column_width` is not read, as Qt's weights win.
  */
 import type { UiTableColumnRow } from "@/features/sales/quotation/quotation.types";
 import { PO_COLUMN_NUMBERS, PO_FALLBACK_COLUMNS } from "./purchase-order.constants";
@@ -15,6 +16,10 @@ import { PO_COLUMN_NUMBERS, PO_FALLBACK_COLUMNS } from "./purchase-order.constan
 export type PoGridColumn = {
   no: number;
   header: string;
+  /** The heading as drawn — two lines where Qt breaks it ("Chrg\nbefore tax"); else the header. */
+  heading: string;
+  /** The heading's tooltip (Qt bcd844a: what the split / landing columns are). */
+  tip: string;
   /** Share of the grid's width, in percent; the drawn columns sum to 100. */
   widthPct: number;
 };
@@ -27,20 +32,28 @@ export function resolvePoColumns(rows: readonly UiTableColumnRow[] | undefined):
       byNumber.set(no, row);
     }
   }
-  const placed: { no: number; header: string; width: number; position: number }[] = [];
+  const placed: { no: number; header: string; heading: string; tip: string; width: number; position: number }[] = [];
   for (const no of PO_COLUMN_NUMBERS) {
     const row = byNumber.get(no);
     const fallback = PO_FALLBACK_COLUMNS[no];
-    const stored = row && typeof row.uiTblClmColumnWidth === "number" && row.uiTblClmColumnWidth > 0 ? row.uiTblClmColumnWidth : 0;
     // Qt applyColumns: the mockup's titles, widths and order win over the layout's
+    const header = fallback?.title || (row?.uiTblClmName ?? "").trim() || "";
     placed.push({
       no,
-      header: fallback?.title || (row?.uiTblClmName ?? "").trim() || "",
-      width: fallback?.width || stored || 6,
+      header,
+      heading: fallback?.heading || header,
+      tip: fallback?.tip ?? "",
+      width: fallback?.width || 56,
       position: PO_COLUMN_NUMBERS.indexOf(no),
     });
   }
   placed.sort((left, right) => left.position - right.position);
   const total = placed.reduce((sum, column) => sum + column.width, 0) || 1;
-  return placed.map((column) => ({ no: column.no, header: column.header, widthPct: (column.width / total) * 100 }));
+  return placed.map((column) => ({
+    no: column.no,
+    header: column.header,
+    heading: column.heading,
+    tip: column.tip,
+    widthPct: (column.width / total) * 100,
+  }));
 }

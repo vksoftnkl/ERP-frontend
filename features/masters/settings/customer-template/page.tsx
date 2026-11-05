@@ -20,6 +20,7 @@ import {
   buildSessionScopeOverride,
   CUSTOMER_FORM_DEFAULTS_SETTING_KEY,
   describeSessionScope,
+  describeTemplateSaveScope,
   findEffectiveSettingValue,
   parseSettingObject,
   useSessionSettingContext,
@@ -510,6 +511,7 @@ export default function CustomerTemplatePage() {
   }, [isOpen, scope, effectiveSettings, savedDefaults, prefillFromSavedTemplate]);
 
   const scopeLabel = describeSessionScope(session);
+  const scopeNotice = describeTemplateSaveScope(session, "customer");
   const variant = useMemo<ERPDynamicModalVariant>(
     () => ({
       key: "customerTemplate",
@@ -517,7 +519,7 @@ export default function CustomerTemplatePage() {
       cardDescription: "Set the default values applied to new customers.",
       cardButtonLabel: "Open Template",
       modalTitle: "Customer Template",
-      modalDescription: `Configure the default field values for new customers. Saved for ${scopeLabel}.`,
+      modalDescription: `Configure the default field values for new customers. ${scopeNotice}`,
       submitLabel: "Save Template",
       accent: "primary",
       fields: buildCustomerTemplateFields(
@@ -542,7 +544,7 @@ export default function CustomerTemplatePage() {
       state.options,
       state.handlers,
       priceLevelOptions,
-      scopeLabel,
+      scopeNotice,
     ],
   );
   return (

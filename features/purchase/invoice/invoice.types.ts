@@ -15,6 +15,7 @@ import type {
   InvoiceServerTotals,
 } from "./invoice-fidelity";
 import type { PurchaseAllocEntry } from "../shared/purchase-dialogs.types";
+import type { InvoiceAuditStamps } from "./invoice-v2";
 import type { InvoiceChargeRow, PurchaseChargeCalc, PurchaseChargeDto, PurchaseChargeStored } from "./invoice-header.types";
 
 // ---------------------------------------------------------------------------
@@ -50,6 +51,8 @@ export type PurchaseInvoiceLineDto = {
   freeQty?: number;
   rate: number;
   discPct?: number;
+  /** P7: the Disc amount — the server takes it only without a disc %. */
+  discAmt?: number;
   mrp?: number;
   allocs?: PurchaseAllocDto[];
   // ── Qt 0fbe19c..e0c56ef line fields (PI-LINES) ─────────────────────────
@@ -66,6 +69,8 @@ export type PurchaseInvoiceLineDto = {
   costIncl?: number;
   /** ENT-06. */
   schPct?: number;
+  /** P7: the Sch amount — the server takes it only without a sch %. */
+  schAmt?: number;
   extraDiscAmt?: number;
   /** purchase.allow_price_update + UPDATE_PRICES: written on Post. */
   sellA?: number;
@@ -74,6 +79,16 @@ export type PurchaseInvoiceLineDto = {
   sellD?: number;
   /** ENT-18: with no sellA, the server prices Sell A from it. */
   markupAPct?: number;
+  /** P8: as markupAPct, for Sell B / C / D (used only when that sell is empty). */
+  markupBPct?: number;
+  markupCPct?: number;
+  markupDPct?: number;
+  /**
+   * P9: the line's MSP, sent only while the line owns it (typed here, or stored
+   * on the bill) — the server saves pii_min_price only when it is sent (a 0 =
+   * no MSP); omitted, /validate shows the item's current one (Qt 1600680 Q4).
+   */
+  minPrice?: number;
 };
 
 export type PurchaseInvoiceHeaderDto = {
@@ -153,6 +168,14 @@ export type PurchaseInvoiceLineRow = {
   piiFreeQty?: Wire;
   piiRate?: Wire;
   piiDiscPct?: Wire;
+  // ── Qt dd59c2c P7 / P9 / P10 ──
+  piiDiscAmt?: Wire;
+  piiSchAmt?: Wire;
+  piiGrossAmt?: Wire;
+  piiHsnCode?: string | null;
+  piiMinPrice?: Wire;
+  piiChrgBeforeTax?: Wire;
+  piiChrgAfterTax?: Wire;
   piiTaxableAmt?: Wire;
   piiGstPct?: Wire;
   piiCgstAmt?: Wire;
@@ -172,6 +195,9 @@ export type PurchaseInvoiceLineRow = {
   piiSchPct?: Wire;
   piiExtraDiscAmt?: Wire;
   piiMarkupAPct?: Wire;
+  piiMarkupBPct?: Wire;
+  piiMarkupCPct?: Wire;
+  piiMarkupDPct?: Wire;
   piiItcClass?: string | null;
   piiItcEligibleAmt?: Wire;
   piiItcPendingAmt?: Wire;
@@ -224,6 +250,13 @@ export type PurchaseInvoiceHeaderRow = {
   piHoldReason?: string | null;
   piChargesOnBill?: Wire;
   piOffbillCharges?: Wire;
+  // ── Qt 7d8c926 PE-27: the created / modified line (ISO UTC; names once the server sends them) ──
+  piCreatedBy?: string | null;
+  piCreatedOn?: string | null;
+  piModifiedBy?: string | null;
+  piModifiedOn?: string | null;
+  createdByName?: string | null;
+  modifiedByName?: string | null;
 };
 
 /** `GET /purchase/invoices/get` (and every write's answer). */
@@ -236,6 +269,19 @@ export type PurchaseInvoicePayload = {
   warnings?: { code: string; message: string; field: string; level?: string; lineNo?: number | null; needsRight?: string | null }[];
   refusals?: PurchaseIssue[];
   totals?: Record<string, unknown> | null;
+  /** P12: the bill's GST by rate, from the saved rows. */
+  gstBreakup?: GstBreakupWire[] | null;
+};
+
+/** One rate of the server's GST break-up (`gstBreakup`, Qt dd59c2c P12) — money as text. */
+export type GstBreakupWire = {
+  gstPct?: Wire;
+  taxable?: Wire;
+  cgst?: Wire;
+  sgst?: Wire;
+  igst?: Wire;
+  cess?: Wire;
+  total?: Wire;
 };
 
 /** One line of `POST /purchase/invoices/validate`. */
@@ -250,6 +296,14 @@ export type PurchaseCalcLine = {
   total?: Wire;
   landedCostWot?: Wire;
   pendingShortQty?: Wire;
+  // ── Qt dd59c2c P7 / P10 ──
+  gross?: Wire;
+  discAmt?: Wire;
+  schAmt?: Wire;
+  chrgBeforeTax?: Wire;
+  chrgAfterTax?: Wire;
+  /** P10: total + the after-tax charge share — the line's Total cell. */
+  amount?: Wire;
   // ── Qt 0fbe19c..e0c56ef (PI-LINES) ──────────────────────────────────────
   /** R18. */
   rejectedQty?: Wire;
@@ -265,6 +319,20 @@ export type PurchaseCalcLine = {
   sellA?: Wire;
   markupAPct?: string | null;
   marginAPct?: string | null;
+  // ── Qt dd59c2c P8 / P9 ──
+  sellB?: Wire;
+  markupBPct?: string | null;
+  marginBPct?: string | null;
+  sellC?: Wire;
+  markupCPct?: string | null;
+  marginCPct?: string | null;
+  sellD?: Wire;
+  markupDPct?: string | null;
+  marginDPct?: string | null;
+  /** item_master.item_hsn_code. */
+  hsn?: string | null;
+  /** Typed, else the item's current minimum here, else null. */
+  minPrice?: Wire;
   poRefno?: string | null;
   check?: InvoiceLineCheck | null;
 };
@@ -285,6 +353,8 @@ export type PurchaseCalcAnswer = {
     chargesOnBill?: Wire;
     offbillCharges?: Wire;
     tcs?: Wire;
+    /** The on-bill charges' own GST. */
+    chargeTax?: Wire;
   };
   /** In the order the charges were sent (PI-HEADER). */
   charges?: PurchaseChargeCalc[];
@@ -292,9 +362,13 @@ export type PurchaseCalcAnswer = {
   difference?: Wire;
   // ── rebuild 2026-10-29 ──
   interState?: boolean;
+  /** REGULAR / COMPOSITION / UNREGISTERED … — the latter two charge no GST (the estimate's rate is 0). */
+  supplierTaxMode?: string | null;
   header?: Record<string, unknown>;
   warnings?: PurchaseIssue[];
   refusals?: PurchaseIssue[];
+  /** P12: the bill's GST by rate (the lines and the taxed after-tax charges). */
+  gstBreakup?: GstBreakupWire[] | null;
 };
 
 /** `GET /stock/opening/item-lookup`. */
@@ -452,12 +526,20 @@ export type LineSettings = {
 // The screen's draft
 // ---------------------------------------------------------------------------
 
-/** The server's figures for one line — painted, never computed here. */
+/** The GST of a line as split — CGST, SGST, IGST, cess (Qt `kGstPartsRole`, the break-up groups them). */
+export type GstParts = { cgst: number; sgst: number; igst: number; cess: number };
+
+/** The server's figures for one line — its last answer, or what it stored. */
 export type LineCalc = {
   taxable: number;
   gstPct: number;
   tax: number;
+  /** The Total cell: the server's `amount` = taxable + GST + the after-tax charge share (P10). */
   total: number;
+  /** P10: the line's share of the bill's charges (0 = none). */
+  chrgBeforeTax: number;
+  chrgAfterTax: number;
+  gstParts: GstParts;
   costWot: number;
   shortQty: number;
   /** R18 — billed beyond what the GRN kept. */
@@ -467,6 +549,16 @@ export type LineCalc = {
   /** Callout 9 — the server's line judgement (`lines[].check`, rebuild 2026-10-29). */
   check?: InvoiceLineCheck | null;
 };
+
+/**
+ * Qt dd59c2c P11 `repriceRow`: the line's Taxable / Tax / Total worked out at
+ * once from what is typed (shared/purchase-line-math), the charge shares of the
+ * last answer kept — shown until the server's answer replaces it.
+ */
+export type LineEstimate = { taxable: number; tax: number; total: number; gstParts: GstParts };
+
+/** P7: what a blank Disc % / Disc / Sch % / Sch stands for — its pair worked out (shown muted). "" = nothing. */
+export type DerivedPairs = { discPct: string; discAmt: string; schPct: string; schAmt: string };
 
 export type InvoiceLine = {
   key: string;
@@ -539,6 +631,27 @@ export type InvoiceLine = {
   freeAuto: string;
   /** D16 on a posted line: a newer price change won (Check reads PRICE KEPT). */
   priceKept: boolean;
+  // ── Qt dd59c2c P7–P11 (PI-LINES) ───────────────────────────────────────
+  /** P7: Disc / Sch as amounts, as typed — a typed amount clears its %, and the other way round. */
+  discAmt: string;
+  schAmt: string;
+  /** P8: Sell B–D's markups (Markup A is `markup`), and their margins (tooltips). */
+  markupB: string;
+  markupC: string;
+  markupD: string;
+  marginBPct: string;
+  marginCPct: string;
+  marginDPct: string;
+  /** P9: the item's HSN, as the server names it. */
+  hsn: string;
+  /** P9: the MSP cell — typed, stored on the bill, or the item's current one the server shows. */
+  msp: string;
+  /** P9 / Q4: the line owns its MSP (typed here or stored on the bill) and sends it as minPrice until cleared. */
+  mspOwned: boolean;
+  /** P11: the client's estimate since the last answer (null = none; the server's `calc` stands). */
+  est: LineEstimate | null;
+  /** P7: the figures the blank Disc % / Disc / Sch % / Sch stand for. */
+  derived: DerivedPairs;
 };
 
 export type InvoiceTotals = {
@@ -581,7 +694,14 @@ export type InvoiceDraft = {
   hint: string;
   /** "browse" = read-only until Edit (F2). */
   viewMode: "browse" | "entry";
+  /**
+   * Qt 7d8c926 PE-15 `m_dirty`: set by the operator's own edits only (never by a
+   * server answer, a lookup or a default), cleared on load and on New. Every way
+   * off the bill asks while it is set.
+   */
   dirty: boolean;
+  /** Qt 7d8c926 PE-27: who entered / last changed the stored bill, and when. */
+  audit?: InvoiceAuditStamps;
   /** Line keys are `l<n>`; this is the next n. */
   nextKey: number;
   /** The session's line rules (purchase / stock settings) — carried across New and loads (PI-LINES). */
@@ -607,6 +727,18 @@ export type InvoiceDraft = {
   issues: InvoiceIssues;
   /** The server's totals object as sent (the boxed TOTALS). */
   serverTotals: InvoiceServerTotals | null;
+  // ── Qt dd59c2c P11 / P12 (PI-LINES) ──
+  /** An edit's estimate is on screen and the server's answer is not yet (Qt `m_awaitingServer`). */
+  awaitingServer: boolean;
+  /**
+   * P11 `paintLive`: the totals from the lines on screen while an edit waits —
+   * shown instead of `serverTotals`; null = none ({} = cleared, no line).
+   */
+  liveTotals: InvoiceServerTotals | null;
+  /** P12: the server's GST break-up of the last answer / load (null = group the lines). */
+  gstBreakup: GstBreakupWire[] | null;
+  /** The last answer's `supplierTaxMode` (COMPOSITION / UNREGISTERED: the estimate charges no GST). */
+  supplierTaxMode: string;
 };
 
 export type InvoiceScope = {

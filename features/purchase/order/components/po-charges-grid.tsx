@@ -7,14 +7,23 @@
  * total includes it; nothing posts. The last row picks a charge
  * ("add charge… (freight, coolie — an estimate in the PO total)"); − / Delete
  * on a row removes it.
+ *
+ * Rate / Amount hand their value over on Enter or on leaving the cell (Qt's
+ * delegate commit), so the live estimate (bcd844a) never rewrites a figure
+ * being typed; no input boxes are drawn in them (721dabe). The Basis cell's
+ * tooltip says how the charge lands on the lines (Qt `chargeNature`).
  */
 import { cx } from "@/components/design-system/cx";
 import quotationStyles from "@/features/sales/quotation/page.module.scss";
 import type { PurchaseChargeMasterRow } from "../../invoice/invoice-header.types";
+import { PurchaseChargeNumberCell } from "../../shared/components/purchase-charge-cell";
 import { purchaseFigureClass } from "../../shared/components/purchase-parts";
-import { chargeBasis } from "../po-fidelity";
+import { chargeBasis, chargeNature } from "../po-fidelity";
 import type { PoChargeLine } from "../purchase-order.types";
 import styles from "../page.module.scss";
+
+/** What a Rate / Amount cell takes (the hook's `editCharge` rule): a sign, digits, up to 4 places. */
+const CHARGE_NUMBER = /^-?\d*(\.\d{0,4})?$/;
 
 export function PoChargesGrid({
   rows,
@@ -82,16 +91,18 @@ export function PoChargesGrid({
                 <div className={cx(quotationStyles.cellText, purchaseFigureClass(row.onBill ? "good" : "warn"))}>{row.onBill ? "Yes" : "No"}</div>
               </td>
               <td>
-                <div className={quotationStyles.cellText}>{chargeBasis(row.method, row.onBill, row.type)}</div>
+                <div className={quotationStyles.cellText} title={chargeNature(row) || undefined}>
+                  {chargeBasis(row.method, row.onBill, row.type)}
+                </div>
               </td>
               <td>
                 {editable ? (
-                  <input
+                  <PurchaseChargeNumberCell
                     className={cx(quotationStyles.cellInput, quotationStyles.alignRight)}
                     value={row.rate}
-                    inputMode="decimal"
-                    aria-label={`${row.name} rate`}
-                    onChange={(event) => onEdit(row.key, "rate", event.target.value)}
+                    pattern={CHARGE_NUMBER}
+                    label={`${row.name} rate`}
+                    onCommit={(raw) => onEdit(row.key, "rate", raw)}
                   />
                 ) : (
                   <div className={cx(quotationStyles.cellText, quotationStyles.alignRight)}>{row.rate}</div>
@@ -99,13 +110,13 @@ export function PoChargesGrid({
               </td>
               <td>
                 {editable ? (
-                  <input
+                  <PurchaseChargeNumberCell
                     className={cx(quotationStyles.cellInput, quotationStyles.alignRight)}
                     value={row.amount}
-                    inputMode="decimal"
-                    aria-label={`${row.name} amount`}
+                    pattern={CHARGE_NUMBER}
+                    label={`${row.name} amount`}
                     title="A typed amount wins over the rate"
-                    onChange={(event) => onEdit(row.key, "amount", event.target.value)}
+                    onCommit={(raw) => onEdit(row.key, "amount", raw)}
                   />
                 ) : (
                   <div className={cx(quotationStyles.cellText, quotationStyles.alignRight)}>{row.amount}</div>

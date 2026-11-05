@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { UiTableColumnRow } from "@/features/sales/quotation/quotation.types";
-import { resolveLineColumns } from "./invoice.columns";
-import { COL, MORE_COLUMN_NOS, SHOWN_COLUMNS } from "./invoice.constants";
+import { COL } from "./invoice.constants";
 import {
   allocsOf,
   buildPayload,
@@ -382,32 +380,34 @@ describe("purchase invoice — small rules", () => {
   });
 });
 
-describe("purchase invoice — the line columns", () => {
-  it("falls back to the Qt columns, the price and textile ones only under their rules", () => {
-    const allRules = { priceUpdate: true, autoBatchNo: true };
-    expect(resolveLineColumns(undefined, allRules).map((column) => column.no)).toEqual(
-      SHOWN_COLUMNS.filter((no) => !MORE_COLUMN_NOS.has(no)),
+describe("v2 screen (Qt 7d8c926)", () => {
+  it("D4: the bill is always sent as credit — the Mode box is gone", () => {
+    const draft = keyedBill();
+    const { body } = buildPayload({ ...draft, ext: { ...draft.ext, mode: "CASH" } }, false, TODAY);
+    expect(body.header.mode).toBe("CREDIT");
+  });
+
+  it("PE-15: a recovered hold comes back as unsaved work; a load or New is clean", () => {
+    const loaded = draftFromPayload(STORED, "entry");
+    expect(loaded.dirty).toBe(false);
+    expect(invoiceReducer(loaded, { type: "markDirty" }).dirty).toBe(true);
+    const browse = draftFromPayload(STORED, "browse");
+    expect(invoiceReducer(browse, { type: "markDirty" })).toBe(browse);
+    expect(createDraft(SCOPE, TODAY).dirty).toBe(false);
+  });
+
+  it("PE-15: the server's answers and the supplier's defaults never mark the bill", () => {
+    const fresh = createDraft(SCOPE, TODAY);
+    const withDefaults = invoiceReducer(fresh, { type: "supplierDefaults", creditDays: 30, billFromGstin: "33A", godownId: "g1", godownName: "G" });
+    expect(withDefaults.dirty).toBe(false);
+    expect(invoiceReducer(fresh, { type: "hint", hint: "x" }).dirty).toBe(false);
+  });
+
+  it("PE-27: the stored bill's created / modified stamps", () => {
+    const draft = draftFromPayload(
+      { ...STORED, header: { ...STORED.header, piCreatedBy: "u1", piCreatedOn: "2026-11-04T04:42:00Z", modifiedByName: "RAVI" } },
+      "browse",
     );
-    const allMore = new Set(MORE_COLUMN_NOS);
-    expect(resolveLineColumns(undefined, allRules, allMore).map((column) => column.no)).toEqual([...SHOWN_COLUMNS]);
-    const rows: UiTableColumnRow[] = [
-      { uiTblClmId: "1", uiTblClmNo: "1", uiTblClmName: "Item", uiTblClmColumnWidth: 9, uiTblClmColumnVisibility: true, uiTblClmColumnFocus: false, uiTblClmColumnPosition: 10, uiTblClmColumnNecessity: false },
-      { uiTblClmId: "2", uiTblClmNo: "0", uiTblClmName: "Barcode", uiTblClmColumnWidth: 4, uiTblClmColumnVisibility: true, uiTblClmColumnFocus: false, uiTblClmColumnPosition: 20, uiTblClmColumnNecessity: false },
-      { uiTblClmId: "3", uiTblClmNo: "33", uiTblClmName: "Sell A", uiTblClmColumnWidth: 5, uiTblClmColumnVisibility: true, uiTblClmColumnFocus: false, uiTblClmColumnPosition: 15, uiTblClmColumnNecessity: false },
-      { uiTblClmId: "4", uiTblClmNo: "2", uiTblClmName: "Unit", uiTblClmColumnWidth: 3, uiTblClmColumnVisibility: false, uiTblClmColumnFocus: false, uiTblClmColumnPosition: 30, uiTblClmColumnNecessity: false },
-    ];
-    const columns = resolveLineColumns(rows);
-    // The mockup's order wins over the layout's positions (Qt moveSection).
-    expect(columns[0].no).toBe(COL.Barcode);
-    expect(columns[1].no).toBe(COL.Item);
-    // Sell A only while the bill keys selling prices.
-    expect(columns.some((column) => column.no === COL.SellA)).toBe(false);
-    expect(columns.some((column) => column.no === COL.Unit)).toBe(false);
-    const priced = resolveLineColumns(rows, { priceUpdate: true, autoBatchNo: false });
-    expect(priced.findIndex((column) => column.no === COL.SellA)).toBeGreaterThan(priced.findIndex((column) => column.no === COL.CostWot));
-    expect(priced.find((column) => column.no === COL.DiscPct)?.header).toBe("Disc");
-    expect(priced.some((column) => column.no === COL.Size)).toBe(false);
-    const total = columns.reduce((sum, column) => sum + column.widthPct, 0);
-    expect(Math.round(total)).toBe(100);
+    expect(draft.audit).toMatchObject({ createdBy: "u1", createdOn: "2026-11-04T04:42:00Z", modifiedByName: "RAVI" });
   });
 });

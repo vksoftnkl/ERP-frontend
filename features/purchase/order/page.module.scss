@@ -18,16 +18,12 @@
   padding-bottom: u(0.35);
   border-bottom: 3px solid var(--primary, #7b1515);
 }
-.titleBlock {
-  display: flex;
-  flex-direction: column;
-  gap: u(0.25);
-  min-width: 0;
-}
+/* Qt frameHeader (e782e59): title · company · branch on one line, the pills at the right. */
 .titleLine {
   display: flex;
-  gap: u(0.5);
+  gap: u(0.6);
   align-items: baseline;
+  min-width: 0;
 }
 .docTitle {
   color: var(--text-muted, #666666);
@@ -97,9 +93,10 @@
 .gridViewport:focus {
   outline: none;
 }
+/* 23 columns since bcd844a: wide enough that "1,450.00" and the two-line headings stay whole; sideways scroll below that. */
 .lineGrid {
   width: 100%;
-  min-width: u(52);
+  min-width: u(72);
 }
 .cellReadOnly {
   cursor: default;
@@ -116,11 +113,28 @@
 
 /* ----------------------------------------------------- hint and totals */
 .hintLine {
+  flex: 1 1 auto;
+  min-width: 0;
   min-height: u(1);
   margin: 0;
-  color: #8b1a1a;
+  align-self: center;
+  color: var(--ds-danger);
   font-size: u(0.72);
   white-space: pre-line;
+}
+/* who raised / last changed it (Qt lblAudit) */
+.audit {
+  color: var(--ds-text-muted);
+  font-size: u(0.68);
+  white-space: nowrap;
+}
+/* the REV n pill opens the versions (Qt lblRevision click) */
+.pillButton {
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
 }
 .totals {
   display: flex;
@@ -152,6 +166,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: u(0.35);
+  align-items: center;
   justify-content: flex-end;
 }
 /* Amend / Clone / Merge… / Approve / Versions… — Qt puts them left of the TxnKeys row. */
@@ -164,9 +179,7 @@
   border-right: 1px solid var(--border, #c9c9c9);
 }
 .footerHint {
-  margin-right: auto;
-  align-self: center;
-  color: var(--text-muted, #666666);
+  color: var(--ds-text-muted);
   font-size: u(0.7);
   font-weight: 600;
 }
@@ -178,23 +191,63 @@
   align-items: flex-start;
   justify-content: space-between;
 }
-.creditPair {
-  display: flex;
-  gap: u(0.4);
-  align-items: center;
+/* Credit days as wide as the other fields; "(supplier default)" inside the box, at its right end (Qt 721dabe). */
+.creditBox {
+  position: relative;
+  display: block;
   min-width: 0;
 }
 .creditInput {
-  flex: 0 0 u(4);
-  width: u(4);
-  text-align: right;
+  width: 100%;
+}
+.creditInput[data-noted="true"] {
+  padding-right: u(7.5);
+}
+.creditNote {
+  position: absolute;
+  top: 50%;
+  right: u(0.5);
+  transform: translateY(-50%);
+  color: var(--ds-text-muted);
+  font-size: u(0.7);
+  white-space: nowrap;
+  pointer-events: none;
 }
 .clickable {
   cursor: pointer;
 }
-.chargesBlock {
-  width: 60%;
-  min-width: u(30);
+/* Qt chargesBox (eee7936): the charges panel 3/5 beside the totals strip 2/5 (hboxCharges stretch 3,2, spacing 10). */
+.chargesBox {
+  display: flex;
+  flex: 0 0 auto;
+  gap: u(0.6);
+  align-items: flex-start;
+  min-width: 0;
+}
+.chargesPanel {
+  flex: 3 1 0;
+  min-width: 0;
+}
+.totalsBlock {
+  flex: 2 1 0;
+  min-width: 0;
+}
+/* Two-word headings on two lines (Qt bcd844a: 23 columns share the width) — beats the shell's nowrap. */
+.lineGrid thead th.poHead {
+  white-space: pre-line;
+  line-height: 1.15;
+  vertical-align: bottom;
+}
+/* The Σ row under the lines (Qt paintLinesFooter), pinned to the bottom of the viewport. */
+.footRow td {
+  position: sticky;
+  z-index: 1;
+  bottom: 0;
+  border-top: 1px solid var(--ds-border);
+  background: var(--ds-surface-muted);
+  color: var(--ds-text);
+  font-weight: 700;
+  white-space: nowrap;
 }
 .chargesViewport {
   max-height: calc(24vh / var(--erp-ui-scale, 1));
@@ -205,8 +258,4 @@
 .chargePick {
   color: var(--ds-text-muted);
 }
-.buttonBarLeft {
-  display: flex;
-  flex-wrap: wrap;
-  gap: u(0.35);
-}
+

@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   ALLOC_COL,
   allocEntriesOf,
+  allocOffWarning,
+  allocPopupTitle,
   allocProblem,
+  allocSumLine,
+  allocValidSerials,
   allocRowHas,
   applyRatioPack,
   blankAllocRow,
@@ -200,5 +204,33 @@ describe("resolveAllocColumns", () => {
     }));
     const serial = resolveAllocColumns(layout, { serial: true, textile: false });
     expect(serial.filter((c) => c.focus).map((c) => c.no)).toEqual([ALLOC_COL.serial]);
+  });
+});
+
+describe("F12 popup (Qt c0dbff1)", () => {
+  it("the Σ line reads the need, with a tick when the rows add up", () => {
+    expect(allocSumLine([], NEED, "")).toEqual({ text: "Σ 13 = 10 received + 2 damaged + 1 free  ✓", ok: true });
+    expect(allocSumLine([], NEED, "Row 1: no qty.")).toEqual({ text: "Row 1: no qty.", ok: false });
+  });
+
+  it("a serial line counts the distinct serials", () => {
+    const serial = { ...NEED, received: 3, damaged: 0, free: 0, serial: true };
+    const rows = [row({ serialNo: "a1" }), row({ serialNo: "A1" }), row({ serialNo: "b2" }), row({})];
+    expect(allocValidSerials(rows)).toBe(2);
+    expect(allocSumLine(rows, serial, "")).toEqual({ text: "2 of 3 serials  ✓", ok: true });
+    expect(allocSumLine(rows, serial, "Row 2: serial A1 is entered twice.").text).toBe("2 of 3 serials · Row 2: serial A1 is entered twice.");
+  });
+
+  it("titles the popup by the line and its item", () => {
+    expect(allocPopupTitle(4, " Surf Excel 1kg ", false)).toBe("Batches — line 4  Surf Excel 1kg");
+    expect(allocPopupTitle(2, "", true)).toBe("Serials — line 2");
+  });
+
+  it("says why Ctrl+Enter does nothing while the rows are off", () => {
+    expect(allocOffWarning({ serial: false }, "Row 1: no qty.")).toEqual({
+      title: "Batches do not add up",
+      message: "Row 1: no qty.\n\nFix the rows, or Cancel to leave the line as it was.",
+    });
+    expect(allocOffWarning({ serial: true }, "x").title).toBe("Serials not complete");
   });
 });

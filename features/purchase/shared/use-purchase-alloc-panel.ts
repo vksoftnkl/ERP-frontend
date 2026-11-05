@@ -2,7 +2,7 @@
 
 /**
  * The F12 inline panel's slot on a purchase screen (Qt `openAllocs` /
- * `closeAllocPanel` on GRN, Shortage Receipt and Purchase Entry): which line it
+ * `closeAllocPanel` on GRN and Shortage Receipt; Purchase Entry's F12 is a popup since Qt c0dbff1): which line it
  * is open on, and the rules for moving it —
  *
  * - F12 again on the same line puts the cursor back in the panel;

@@ -7,6 +7,11 @@
  * which the server stores on the document itself (pi_vehicle_no /
  * pi_driver_name). Enter walks the fields (house popup rule), Ctrl+Enter is OK,
  * Esc closes. Clear empties every field; OK with nothing left = remove the band.
+ *
+ * Qt 6b81080 (COM, PE-04 / PE-24): Enter and Tab walk Mode → … → Remarks and
+ * end on OK — Enter on Remarks IS OK, Tab from Remarks lands on OK; Clear is
+ * out of the walk (mouse only), so a keyboard pass never empties the band on
+ * its way to OK; the rows sit with no vertical gap.
  */
 import { useCallback, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { cx } from "@/components/design-system/cx";
@@ -108,7 +113,14 @@ function OpenTransportDialog({ band, companyId, readOnly, showCrew = true, onClo
   const footer = (
     <>
       {readOnly ? null : (
-        <button type="button" className={quotationStyles.button} onClick={() => setForm(EMPTY)}>
+        <button
+          type="button"
+          className={cx(quotationStyles.button, styles.quietButton)}
+          tabIndex={-1}
+          title="Clear — empties every field (mouse only)"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => setForm(EMPTY)}
+        >
           Clear
         </button>
       )}
@@ -125,7 +137,7 @@ function OpenTransportDialog({ band, companyId, readOnly, showCrew = true, onClo
 
   return (
     <ModalShell title="Transport" isOpen panelClassName={styles.transportPanel} onClose={onClose} footer={footer}>
-      <div ref={bodyRef} className={styles.form} onKeyDown={onKeyDown} data-purchase-transport="">
+      <div ref={bodyRef} className={cx(styles.form, styles.formTight)} onKeyDown={onKeyDown} data-purchase-transport="">
         <label className={styles.formLabel} htmlFor="purchase-transport-mode">
           Mode
         </label>

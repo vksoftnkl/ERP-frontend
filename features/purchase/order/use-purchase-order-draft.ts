@@ -5,9 +5,15 @@
  * (Qt `PurchaseOrderEntry`). Every change goes through `commit`, which also
  * writes screen memory, so unsaved keying survives a trip to another menu.
  *
- * The figures: an edit bumps `calcVersion`; 350 ms after the last one (Qt's
- * recalc timer) the PO is sent to /purchase/orders/validate, and the answer is
- * painted only if nothing changed meanwhile (Qt `m_calcSeq`).
+ * The figures: an edit works the line out at once (the live estimate, Qt
+ * bcd844a `repriceRow` / `paintLive`: the split / landing cells muted) and bumps
+ * `calcVersion`; 350 ms after the last one (Qt's recalc timer) the PO is sent to
+ * /purchase/orders/validate, and the answer is painted only if nothing changed
+ * meanwhile (Qt `m_calcSeq`). Every open (any status) asks /validate once more
+ * for the landing costs, which are not stored (Qt `validateLoaded`).
+ *
+ * `dirty` is the Qt `m_dirty` (eee7936): set by the operator's own changes
+ * only — a change that changes nothing leaves it — and cleared by every load.
  *
  * DOC-01 (Qt 6c6b5c2): amend a confirmed PO, clone, merge the supplier's
  * pending POs, approve / refuse, the saved versions; and Qt 7c809f9's
@@ -42,6 +48,7 @@ import {
   usePurchaseOrderSupplierContextMutation,
 } from "./order.api";
 import { chargeFromMaster, suggestionsOf, type ReorderSuggestion } from "./po-fidelity";
+import { paintLanding, withLiveEstimate } from "./po-landing";
 import { COL, PO_RECALC_DELAY_MS } from "./purchase-order.constants";
 import {
   amendProblem,
@@ -83,6 +90,9 @@ const STEP_NOTICES = {
   oldest: "This is the oldest purchase order.",
   newest: "This is the newest purchase order.",
 } as const;
+
+/** Qt `recalcNow` without a supplier: the live estimate stands until the server can confirm it. */
+const NO_SUPPLIER_HINT = "Pick the supplier to have the server confirm the figures.";
 
 /** Qt `saveDocument`: a PO above purchase.po_approval_above waits. */
 const WAITS_NOTE = " It is above the approval limit — it feeds no GRN or bill until approved.";
@@ -239,7 +249,7 @@ export function usePurchaseOrderDraft(memory: ScreenMemoryOption | undefined) {
   const setGodown = useCallback(
     (id: string, name: string) => {
       const current = draftRef.current;
-      if (!isEditable(current)) {
+      if (!isEditable(current) || id === current.godownId) {
         return;
       }
       commit({ ...current, godownId: id, godownName: name, dirty: true });
@@ -250,6 +260,11 @@ export function usePurchaseOrderDraft(memory: ScreenMemoryOption | undefined) {
     (patch: Partial<Pick<PoDraft, "docDate" | "expectedDate" | "contact" | "remarks" | "creditDays" | "creditTyped" | "creditNote" | "termsId" | "termsLabel" | "termsText">>) => {
       const current = draftRef.current;
       if (!isEditable(current)) {
+        return;
+      }
+      // a real change only (Qt marks it changed on the operator's edit, never on the screen's own write)
+      const changes = (Object.keys(patch) as (keyof typeof patch)[]).some((field) => patch[field] !== current[field]);
+      if (!changes) {
         return;
       }
       commit({ ...current, ...patch, dirty: true });
@@ -275,7 +290,8 @@ export function usePurchaseOrderDraft(memory: ScreenMemoryOption | undefined) {
       if (!isEditable(current)) {
         return;
       }
-      commit({ ...current, charges: change(current.charges ?? []), dirty: true, calcVersion: current.calcVersion + 1 });
+      // the estimate and the PO total move now; the server's answer follows (Qt paintLive + m_recalc)
+      commit(withLiveEstimate({ ...current, charges: change(current.charges ?? []), dirty: true, calcVersion: current.calcVersion + 1 }));
     },
     [commit],
   );
@@ -299,11 +315,23 @@ export function usePurchaseOrderDraft(memory: ScreenMemoryOption | undefined) {
   const removeCharge = useCallback((key: string) => changeCharges((charges) => charges.filter((c) => c.key !== key)), [changeCharges]);
 
   // ------------------------------------------------------------ the lines
+  /** Qt `onCellEdited`: the line works itself out at once (repriceRow + paintLive); the server confirms. */
   const editLine = useCallback(
-    (key: string, column: number, raw: string) => commit(editLineState(draftRef.current, key, column, raw)),
+    (key: string, column: number, raw: string) => {
+      const current = draftRef.current;
+      const next = editLineState(current, key, column, raw);
+      commit(next.calcVersion !== current.calcVersion ? withLiveEstimate(next, [key]) : next);
+    },
     [commit],
   );
-  const removeLine = useCallback((key: string) => commit(removeLineState(draftRef.current, key)), [commit]);
+  const removeLine = useCallback(
+    (key: string) => {
+      const current = draftRef.current;
+      const next = removeLineState(current, key);
+      commit(next.calcVersion !== current.calcVersion ? withLiveEstimate(next) : next);
+    },
+    [commit],
+  );
 
   /**
    * Qt `fetchItem`: the item's unit, GST % and MRP. `uomId` is the unit the
@@ -325,7 +353,10 @@ export function usePurchaseOrderDraft(memory: ScreenMemoryOption | undefined) {
           onDate: current.docDate || todayIso(),
           godownId: current.godownId || undefined,
         }).unwrap();
-        commit(applyItem(draftRef.current, key, lookup, item.itemName));
+        const picked = applyItem(draftRef.current, key, lookup, item.itemName);
+        // a reorder row came with its qty: it works itself out at once (Qt fetchItem → repriceRow + paintLive)
+        const line = picked.lines.find((candidate) => candidate.key === key);
+        commit(picked !== draftRef.current && line && line.qty.trim() !== "" ? withLiveEstimate(picked, [key]) : picked);
         requestFocus({ target: "cell", key, column: COL.Qty });
         // Qt fetchItemContext: Last rate (only in the line's unit) and SALEABLE stock
         void itemContextMutation({
@@ -436,7 +467,12 @@ export function usePurchaseOrderDraft(memory: ScreenMemoryOption | undefined) {
   const calcVersion = draft.calcVersion;
   const supplierId = draft.supplierId;
   useEffect(() => {
-    if (calcVersion === 0 || !canCalculate(draftRef.current)) {
+    const current = draftRef.current;
+    if (calcVersion !== 0 && !current.supplierId && isEditable(current) && itemLines(current).length > 0 && current.hint !== NO_SUPPLIER_HINT) {
+      // Qt recalcNow: the server's figures need the supplier (inter-state / tax mode); the grid's own estimate stands meanwhile
+      setHint(NO_SUPPLIER_HINT);
+    }
+    if (calcVersion === 0 || !canCalculate(current)) {
       return;
     }
     const timer = window.setTimeout(() => {
@@ -488,6 +524,40 @@ export function usePurchaseOrderDraft(memory: ScreenMemoryOption | undefined) {
     [commit, godownsMutation],
   );
 
+  /**
+   * Qt `validateLoaded` (bcd844a): after an open — a draft, a confirmed or a
+   * cancelled PO alike — one /validate for the landing costs (not stored) and
+   * the charges' flags. Writes nothing and never marks the PO changed; an edit
+   * or another PO since drops the answer.
+   */
+  const validateLoaded = useCallback(
+    (loaded: PoDraft) => {
+      if (!loaded.poId || !loaded.supplierId || !loaded.deviceId || itemLines(loaded).length === 0) {
+        return;
+      }
+      calcSeq.current += 1;
+      const seq = calcSeq.current;
+      const { body, keysByLineNo } = buildPayload(loaded, false);
+      validateMutation(body)
+        .unwrap()
+        .then((calc) => {
+          const now = draftRef.current;
+          if (seq !== calcSeq.current || now.poId !== loaded.poId || now.calcVersion !== loaded.calcVersion) {
+            return;
+          }
+          commit(paintLanding(now, calc, keysByLineNo));
+        })
+        .catch((error: unknown) => {
+          const now = draftRef.current;
+          if (seq !== calcSeq.current || now.poId !== loaded.poId || now.hint) {
+            return;
+          }
+          setHint(`Landing cost not worked out: ${purchaseRefusalText(error)}`);
+        });
+    },
+    [commit, setHint, validateMutation],
+  );
+
   /** A stored PO's answer on screen (Qt `applyLoaded`). */
   const show = useCallback(
     (payload: PurchaseOrderPayload, viewMode: "browse" | "entry") => {
@@ -495,9 +565,10 @@ export function usePurchaseOrderDraft(memory: ScreenMemoryOption | undefined) {
       const next = draftFromPayload(payload, draftRef.current, viewMode);
       commit(next);
       void nameGodown(next);
+      validateLoaded(next);
       return next;
     },
-    [commit, nameGodown],
+    [commit, nameGodown, validateLoaded],
   );
 
   const load = useCallback(

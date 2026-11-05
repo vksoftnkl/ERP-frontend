@@ -9,6 +9,7 @@ import {
   buildPayload,
   canCalculate,
   cancellable,
+  closeQuestion,
   createPoDraft,
   draftFromPayload,
   editLine,
@@ -152,6 +153,26 @@ describe("purchase order — payload and figures", () => {
     expect(painted.totals).toEqual({ taxable: 2900, tax: 522, net: 3422 });
   });
 
+  it("the server's split: Amount = amount, the shares and landing costs land, the muted estimate is final", () => {
+    const draft = { ...keyed(), awaitingServer: true };
+    const { keysByLineNo } = buildPayload(draft, false);
+    const painted = applyCalc(
+      draft,
+      {
+        lines: [
+          { key: "1", taxable: "942.86", gstPct: "18", tax: "169.72", total: "1112.58", chrgBeforeTax: "42.86", chrgAfterTax: "-18", amount: "1094.58", landedCost: "84.571667", landedCostIncl: "98.715" },
+          { key: "2", taxable: "2000", gstPct: "18", tax: "360", total: "2360", chrgBeforeTax: "0", chrgAfterTax: "0", amount: "2360" },
+        ],
+        totals: { taxable: "2942.86", tax: "529.72", net: "3472.58", offbill: "0.00" },
+      },
+      keysByLineNo,
+    );
+    expect(painted.lines[0]).toMatchObject({ total: 1094.58, lineTotal: 1112.58, chrgBeforeTax: 42.86, chrgAfterTax: -18, landedCost: "84.571667" });
+    expect(painted.lines[1]).toMatchObject({ total: 2360, chrgBeforeTax: null, chrgAfterTax: null, landedCost: "" });
+    expect(painted.awaitingServer).toBe(false);
+    expect(painted.serverTotals).toMatchObject({ offbill: "0.00" });
+  });
+
   it("asks the server only with a supplier, a line and a device", () => {
     const draft = keyed();
     expect(canCalculate(draft)).toBe(true);
@@ -243,6 +264,39 @@ describe("purchase order — a stored PO", () => {
     expect(draft.godownName).toBe("Coimbatore");
     expect(statusLabel(draft)).toBe("DRAFT");
   });
+
+  it("reads the charge split as saved: Amount = the line total + the after-tax share (Qt bcd844a)", () => {
+    const split: PurchaseOrderPayload = {
+      ...payload,
+      lines: [{ ...payload.lines[0], poiTaxableAmt: "942.86", poiTotalAmt: "1112.58", poiChrgBeforeTax: "42.86", poiChrgAfterTax: "-18" }],
+      charges: [
+        { chgId: "f", chgName: "Freight", type: "ADD", method: "FIXED", rate: "100", amount: "100", signedAmount: "100", onBill: true },
+        { chgId: "t", chgName: "Typed", type: "ADD", method: "FIXED", rate: "100", amount: "80", signedAmount: "80", onBill: true },
+      ],
+    };
+    const draft = draftFromPayload(split, { deviceId: "d1", godownId: "", godownName: "" }, "entry");
+    expect(draft.lines[0]).toMatchObject({ taxable: 942.86, lineTotal: 1112.58, total: 1094.58, chrgBeforeTax: 42.86, chrgAfterTax: -18, landedCost: "" });
+    expect(draft.charges?.map((c) => c.typed)).toEqual([false, true]);
+    expect(draft.awaitingServer).toBe(false);
+    expect(draft.dirty).toBe(false);
+  });
+});
+
+describe("purchase order — Esc (Qt closeEvent, 90e5d36 + eee7936)", () => {
+  it("asks for a new order with lines or a real change; an untouched amendment closes", () => {
+    const blank = createPoDraft(SCOPE, "2026-10-28");
+    expect(closeQuestion(blank)).toBeNull();
+    // a new order with only the supplier picked: changed, so it asks (plan decision 20)
+    const supplierOnly: PoDraft = { ...blank, supplierId: "s1", dirty: true };
+    expect(closeQuestion(supplierOnly)).toBe("This order hasn't been saved. Close anyway?");
+    expect(closeQuestion(keyed())).toBe("This order hasn't been saved. Close anyway?");
+    expect(closeQuestion({ ...keyed(), dirty: false })).toBe("This order hasn't been saved. Close anyway?");
+    const saved = { ...keyed(), poId: "po1", refno: "PO/2026-2027/D14/00107", dirty: false };
+    expect(closeQuestion(saved)).toBeNull();
+    expect(closeQuestion({ ...saved, dirty: true })).toBe("The changes to PO/2026-2027/D14/00107 haven't been saved. Close anyway?");
+    expect(closeQuestion({ ...saved, amending: true })).toBeNull();
+    expect(closeQuestion({ ...saved, amending: true, dirty: true })).toBe("This amendment hasn't been saved. Close anyway?");
+  });
 });
 
 describe("purchase order — columns", () => {
@@ -262,6 +316,27 @@ describe("purchase order — columns", () => {
     expect(numbers).not.toContain(14);
     expect(numbers).not.toContain(40);
     expect(columns.reduce((sum, column) => sum + column.widthPct, 0)).toBeCloseTo(100);
+  });
+
+  it("the split and landing columns sit around Tax and Amount, two-line headings with their tooltips (Qt bcd844a)", () => {
+    const columns = resolvePoColumns([]);
+    const numbers = columns.map((column) => column.no);
+    expect(numbers.slice(numbers.indexOf(COL.Mrp), numbers.indexOf(COL.Recd) + 1)).toEqual([
+      COL.Mrp,
+      COL.ChrgBeforeTax,
+      COL.Tax,
+      COL.ChrgAfterTax,
+      COL.Total,
+      COL.LandedCost,
+      COL.LandedCostIncl,
+      COL.Recd,
+    ]);
+    expect(numbers).toHaveLength(23);
+    const landed = columns.find((column) => column.no === COL.LandedCostIncl);
+    expect(landed?.header).toBe("Landing cost incl. GST");
+    expect(landed?.heading).toBe("Landing cost\nincl. GST");
+    expect(landed?.tip).toContain("GST is not recovered");
+    expect(columns.find((column) => column.no === COL.Total)?.tip).toContain("after-tax charge share");
   });
 });
 

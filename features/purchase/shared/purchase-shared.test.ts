@@ -13,11 +13,13 @@ import {
 import { shortRef } from "./purchase.format";
 import {
   buildBillFromGrnHref,
+  buildBillFromPoHref,
   buildGrnFromPoHref,
   buildReturnAgainstBillHref,
   buildReturnAgainstGrnHref,
   GRN_ROUTE,
   parseBillFromGrn,
+  parseBillFromPo,
   parseGrnFromPo,
   parseReturnAgainstBill,
   parseReturnAgainstGrn,
@@ -54,6 +56,14 @@ describe("purchase hand-offs (one module)", () => {
     expect(parseGrnFromPo(params(bare))).not.toHaveProperty("godownId");
     expect(parseGrnFromPo(params("/x?fromPo=nope&accYear=2026-2027"))).toBeNull();
     expect(parseGrnFromPo(null)).toBeNull();
+  });
+
+  it("PO Make Purchase Invoice → Purchase Entry ?fromPo= round-trips (Qt e782e59 makeInvoice)", () => {
+    const handoff = { poId: UUID(1), accYear: "2026-2027", supplierId: UUID(2), supplierName: "ZT-PUR Supplier", refno: "PO/1", godownId: UUID(3), godownName: "G" };
+    const href = buildBillFromPoHref(handoff);
+    expect(href.startsWith(`${PURCHASE_ENTRY_ROUTE}?fromPo=`)).toBe(true);
+    expect(parseBillFromPo(params(href))).toEqual(handoff);
+    expect(parseBillFromPo(params("/x?fromGrn=" + UUID(1)))).toBeNull();
   });
 
   it("GRN Make bill / Reject and the bill's Ctrl+F11 each land on their own route and marker", () => {
@@ -124,5 +134,15 @@ describe("shortRef (Shortage Receipt + Supplier Dues)", () => {
   it("keeps the type and the number", () => {
     expect(shortRef("PUR/2026-2027/D14/00623")).toBe("PUR/…/00623");
     expect(shortRef("X/1")).toBe("X/1");
+  });
+});
+
+describe("Purchase Entry quick bar hand-offs (2026-11-05)", () => {
+  it("opens the supplier's ledger and dues on the routes that read their party from the URL", async () => {
+    const { buildSupplierLedgerHref, buildSupplierDuesHref } = await import("./purchase-handoff");
+    expect(buildSupplierLedgerHref("11111111-2222-3333-4444-555555555555")).toBe(
+      "/reports/ledger-statement?ledger=11111111-2222-3333-4444-555555555555",
+    );
+    expect(buildSupplierDuesHref("sup-1", "ZT-PUR Supplier")).toBe("/purchase/supplier-dues?supplierId=sup-1&supplierName=ZT-PUR+Supplier");
   });
 });

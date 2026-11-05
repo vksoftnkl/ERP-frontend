@@ -35,14 +35,19 @@ section.labelsPanel {
 }
 .problem {
   margin: 0;
-  color: var(--danger, #b3261e);
+  color: var(--ds-danger, #b3261e);
   font-size: u(0.74);
 }
 .ok {
   margin: 0;
-  color: #15803d;
+  color: var(--ds-success, #15803d);
   font-size: u(0.74);
   font-weight: 600;
+}
+/* the Σ line (Qt lblAllocSum, c0dbff1): the popup's footer, the inline panel's head */
+.sumLine {
+  margin: 0;
+  min-width: 0;
 }
 .readOnlyNote {
   margin-right: auto;

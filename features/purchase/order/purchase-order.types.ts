@@ -66,6 +66,13 @@ export type PurchaseOrderChargeRow = {
   amount?: WireDecimal;
   signedAmount?: WireDecimal;
   onBill?: boolean | null;
+  // ── /validate since server bbef3f41 (the charges spread on the lines) ──
+  /** The master's flags: an on-bill charge before tax joins the lines' taxable (and GST). */
+  beforeTax?: boolean | null;
+  landingCost?: boolean | null;
+  taxPct?: WireDecimal;
+  /** The row's own GST (an after-tax, tax-applicable, on-bill charge only). */
+  tax?: WireDecimal;
 };
 
 /** POST /purchase/orders/validate — `key` is the line's `lineNo` as a string. */
@@ -77,7 +84,21 @@ export type PurchaseOrderCalc = {
     taxable: WireDecimal;
     gstPct: WireDecimal;
     tax: WireDecimal;
+    /** taxable + tax (poi_total_amt). */
     total: WireDecimal;
+    // ── server bbef3f41: the charges spread on the line, and its landed cost ──
+    /** The goods value: qty × rate less disc / sch. */
+    netGross?: WireDecimal;
+    chrgBeforeTax?: WireDecimal;
+    /** Signed: a deduction is minus. */
+    chrgAfterTax?: WireDecimal;
+    offbillShare?: WireDecimal;
+    /** total + chrgAfterTax — Sale Entry's line Total, the screen's Amount. */
+    amount?: WireDecimal;
+    landedValue?: WireDecimal;
+    /** Per unit of the line's own unit, 6 places, without GST. */
+    landedCost?: WireDecimal;
+    landedCostIncl?: WireDecimal;
   }[];
   totals: {
     gross?: WireDecimal;
@@ -88,6 +109,15 @@ export type PurchaseOrderCalc = {
     orderedValue?: WireDecimal;
     chargesEstimate?: WireDecimal;
     poTotal?: WireDecimal;
+    // ── server bbef3f41 ──
+    netGross?: WireDecimal;
+    chrgBeforeTax?: WireDecimal;
+    chrgAfterTax?: WireDecimal;
+    chargeTax?: WireDecimal;
+    offbill?: WireDecimal;
+    chargesTotal?: WireDecimal;
+    amount?: WireDecimal;
+    landedValue?: WireDecimal;
   };
   header?: { agentId?: string | null; agentName?: string | null };
   charges?: PurchaseOrderChargeRow[];
@@ -136,6 +166,11 @@ export type PurchaseOrderHeaderRow = {
   lastAmendReason?: string | null;
   /** CONFIRMED / PART_RECEIVED / RECEIVED / CLOSED / AWAITING_APPROVAL / NOT_APPROVED / DRAFT / CANCELLED. */
   docStatus?: string | null;
+  /** Who raised / last changed it (user ids) and when (ISO) — the title band's audit line (Qt paintAudit). */
+  poCreatedBy?: string | null;
+  poCreatedOn?: string | null;
+  poModifiedBy?: string | null;
+  poModifiedOn?: string | null;
 };
 
 export type PurchaseOrderLineRow = {
@@ -170,6 +205,11 @@ export type PurchaseOrderLineRow = {
   stockQty?: WireDecimal;
   reorderLevel?: WireDecimal;
   reorderQty?: WireDecimal;
+  // ── server bbef3f41: the split as saved (the landing costs are not stored — /validate brings them) ──
+  /** Inside poi_taxable_amt. */
+  poiChrgBeforeTax?: WireDecimal;
+  /** Signed; Amount = poi_total_amt + this. */
+  poiChrgAfterTax?: WireDecimal;
 };
 
 export type PurchaseOrderPayload = {
@@ -272,11 +312,28 @@ export type PoLine = {
   rate: string;
   discPct: string;
   mrp: string;
-  /** The SERVER's figures (validate / get); null = not figured yet. */
+  /**
+   * The figures: the SERVER's (validate / get), or the live estimate while an
+   * edit waits for its answer (Qt bcd844a); null = not figured yet. `total` is
+   * the Amount column — the server's `amount` (taxable + tax + the after-tax
+   * charge share); `lineTotal` the server's `total` (taxable + tax).
+   */
   taxable: number | null;
   gstPct: number | null;
   tax: number | null;
   total: number | null;
+  /** The server's line total, taxable + tax (Qt's hidden LineTotal column, poi_total_amt). */
+  lineTotal?: number | null;
+  /** The line's share of before-tax charges (inside taxable); null / 0 = blank. */
+  chrgBeforeTax?: number | null;
+  /** The line's share of after-tax on-bill charges (signed); null / 0 = blank. */
+  chrgAfterTax?: number | null;
+  /** The server's landing cost per unit, 6 places as sent ("" = none yet); shown with 2. */
+  landedCost?: string;
+  landedCostIncl?: string;
+  /** How it was reached (the cells' tooltips). */
+  landedTip?: string;
+  landedInclTip?: string;
   /** A loaded PO's progress (derived by the server from GRN / bill lines). */
   received: number | null;
   pending: number | null;
@@ -307,6 +364,15 @@ export type PoChargeLine = {
   amount: string;
   /** The amount was typed: sent as the amount (the rate is the server's). */
   typed: boolean;
+  // ── Qt bcd844a: the master's flags (from the master on add, from every /validate answer) ──
+  /** An on-bill charge before tax: its shares sit inside the lines' taxable. Unknown = after tax. */
+  beforeTax?: boolean;
+  /** Counts in the landing cost (off-bill always). */
+  landing?: boolean;
+  /** The flags are known (the Basis tooltip says how it lands). */
+  flagsKnown?: boolean;
+  /** The row's own GST, the last answer's (the live PO total adds it). */
+  gst?: number;
 };
 
 export type PoDraft = {
@@ -361,8 +427,19 @@ export type PoDraft = {
   lastAmendReason?: string;
   docStatus?: string;
   charges?: PoChargeLine[];
-  /** The server's totals object (validate / get): the strip's cells. */
+  /** The strip's totals: the server's (validate / get), or the live estimate while an edit waits. */
   serverTotals?: Record<string, unknown> | null;
+  /** The audit line (Qt e782e59 paintAudit): user ids and ISO stamps from /get. */
+  createdBy?: string;
+  createdOn?: string;
+  modifiedBy?: string;
+  modifiedOn?: string;
+  /**
+   * Qt `awaitingServer` (bcd844a): an edit's estimate is on screen and the
+   * server's answer has not come — the split / landing cells show the last
+   * server figures, muted.
+   */
+  awaitingServer?: boolean;
 };
 
 export type PoScope = { companyId: string; branchId: string; accYear: string; deviceId: string };

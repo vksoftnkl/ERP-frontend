@@ -89,6 +89,86 @@ export function purchaseIssueRows(
 }
 
 // ---------------------------------------------------------------------------
+// COM-09 — the notes as a popup at Save / Post (Qt purchase_notes, NexERP 6b81080)
+// ---------------------------------------------------------------------------
+
+export type PurchaseNote = PurchaseIssueRow & {
+  /** The bill's line (1-based), from `lineNo` or a `lines.3.rate` field; null = the document. */
+  line: number | null;
+  /** The message without the server's leading "Line 4 …" (the popup writes "line 4 — " itself). */
+  text: string;
+};
+
+export type PurchaseNotes = {
+  notes: PurchaseNote[];
+  refusals: number;
+  warnings: number;
+  /** WARN rows an Override tick can go past. */
+  overridable: number;
+};
+
+const LINE_FIELD = /^lines(?:\.|\[)(\d+)/;
+
+/**
+ * Qt `PurchaseUi::notesFrom`: the refusals first (they are why Post is off),
+ * then the warnings; a row /save repeats from /validate shows once (code +
+ * message); a refusal is never overridable.
+ */
+export function purchaseNotesOf(
+  warnings: readonly PurchaseIssue[] | null | undefined,
+  refusals: readonly PurchaseIssue[] | null | undefined,
+): PurchaseNotes {
+  const summary = purchaseIssueRows(warnings, refusals);
+  const notes = summary.rows.map((row): PurchaseNote => {
+    const fromField = LINE_FIELD.exec(row.field);
+    const line = row.lineNo !== null && row.lineNo > 0 ? row.lineNo : fromField ? Number(fromField[1]) + 1 : null;
+    let text = row.message;
+    if (line !== null) {
+      const stripped = text.replace(new RegExp(`^\\s*Line\\s+${line}\\b[\\s:,\\-—]*`, "i"), "");
+      text = stripped || text;
+    }
+    return { ...row, line, text };
+  });
+  const ordered = [...notes.filter((note) => note.refuse), ...notes.filter((note) => !note.refuse)];
+  return {
+    notes: ordered,
+    refusals: summary.refusals,
+    warnings: ordered.length - summary.refusals,
+    overridable: summary.overridable,
+  };
+}
+
+function counted(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+/** The footer's one-liner (mockup "2 warnings · View"): "1 refused · 2 warnings"; "" when there is nothing. */
+export function purchaseNotesCount(notes: Pick<PurchaseNotes, "refusals" | "warnings">): string {
+  const parts: string[] = [];
+  if (notes.refusals > 0) parts.push(`${notes.refusals} refused`);
+  if (notes.warnings > 0) parts.push(counted(notes.warnings, "warning", "warnings"));
+  return parts.join(" · ");
+}
+
+/**
+ * The popup's title: "Before you post — 2 warnings" when it asks before a verb,
+ * "Not saved — 1 refusal" after the server refused, else "Validation — …".
+ */
+export function purchaseNotesTitle(
+  notes: Pick<PurchaseNotes, "refusals" | "warnings">,
+  ask: { verb: "post" | "save" } | { refused: "post" | "save" } | null,
+): string {
+  const what = [
+    notes.refusals > 0 ? counted(notes.refusals, "refusal", "refusals") : "",
+    notes.warnings > 0 ? counted(notes.warnings, "warning", "warnings") : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const head = !ask ? "Validation" : "verb" in ask ? `Before you ${ask.verb}` : ask.refused === "post" ? "Not posted" : "Not saved";
+  return what ? `${head} — ${what}` : head;
+}
+
+// ---------------------------------------------------------------------------
 // Transport band (txn_transport_detail; vehicle / driver ride along)
 // ---------------------------------------------------------------------------
 
@@ -297,4 +377,32 @@ export function purchaseSourceRows(
     rows.push({ type: "choice", choice, index });
   });
   return rows;
+}
+
+// ---------------------------------------------------------------------------
+// The quick icon bar (Qt `frameQuick`: the PO's strip under the title, NexERP e782e59; Purchase Entry's P1)
+// ---------------------------------------------------------------------------
+
+/** What a quick button says — the fields `quickActionTitle` reads (the view's action carries more). */
+export type PurchaseQuickTitleParts = {
+  /** The short name ("Make GRN"): the accessible name, and the tooltip's start when disabled. */
+  label: string;
+  /** The tooltip while it can be used; default the label. */
+  tip?: string;
+  /** The key that does the same ("Ctrl+G"), shown at the tooltip's end. */
+  keyHint?: string;
+  disabled?: boolean;
+  /** Why it can't be used now. */
+  disabledReason?: string;
+};
+
+/**
+ * The button's tooltip (Qt sets a different one while a button is disabled):
+ * "Make GRN — goods came: …  (Ctrl+G)", or "Make GRN — <why not>  (Ctrl+G)".
+ * A click on a disabled button reports the same text as the screen's hint.
+ */
+export function quickActionTitle(action: PurchaseQuickTitleParts): string {
+  const reason = (action.disabledReason ?? "").trim();
+  const base = action.disabled && reason ? `${action.label} — ${reason}` : (action.tip ?? "").trim() || action.label;
+  return action.keyHint ? `${base}  (${action.keyHint})` : base;
 }

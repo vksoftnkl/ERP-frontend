@@ -369,6 +369,50 @@ export function allocSumText(need: PurchaseAllocNeed): string {
   return `Σ ${qtyText(want)} = ${qtyText(need.received)} received + ${qtyText(need.damaged)} damaged + ${qtyText(need.free)} free`;
 }
 
+/** Distinct serial numbers typed so far (Qt `validSerials`, NexERP c0dbff1). */
+export function allocValidSerials(rows: readonly AllocRow[]): number {
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const serial = row.serialNo.trim().toUpperCase();
+    if (serial) {
+      seen.add(serial);
+    }
+  }
+  return seen.size;
+}
+
+/**
+ * The Σ line (Qt `paintSum`, NexERP c0dbff1 COM-08) — in the popup's footer, in
+ * the inline panel's head: "Σ 52 = 46 received + 2 damaged + 4 free  ✓", a
+ * serial line "3 of 3 serials  ✓"; while the rows are off, what is wrong
+ * (a serial line keeps its count in front). `ok` = the rows add up (the theme's
+ * good tone; bad otherwise).
+ */
+export function allocSumLine(rows: readonly AllocRow[], need: PurchaseAllocNeed, problem: string): { text: string; ok: boolean } {
+  const ok = problem === "";
+  if (need.serial) {
+    const want = Math.round(need.received + need.damaged + need.free);
+    const count = `${allocValidSerials(rows)} of ${want} serials`;
+    return { text: ok ? `${count}  ✓` : `${count} · ${problem}`, ok };
+  }
+  return { text: ok ? `${allocSumText(need)}  ✓` : problem, ok };
+}
+
+/** The popup's title (Qt `popupTitle`): "Batches — line 4  Surf Excel 1kg" / "Serials — line 2  …". */
+export function allocPopupTitle(lineNo: number, itemName: string, serial: boolean): string {
+  const head = `${serial ? "Serials" : "Batches"} — line ${lineNo}`;
+  const item = itemName.trim();
+  return item ? `${head}  ${item}` : head;
+}
+
+/** Ctrl+Enter / OK while the rows are off (Qt `tryAccept`, popup only): the popup's title and text. */
+export function allocOffWarning(need: Pick<PurchaseAllocNeed, "serial">, problem: string): { title: string; message: string } {
+  return {
+    title: need.serial ? "Serials not complete" : "Batches do not add up",
+    message: `${problem}\n\nFix the rows, or Cancel to leave the line as it was.`,
+  };
+}
+
 /** The inline panel's grey hint beside its title (Qt constructor, embedded). */
 export function allocPanelHint(need: Pick<PurchaseAllocNeed, "serial" | "textile">): string {
   if (need.serial) {

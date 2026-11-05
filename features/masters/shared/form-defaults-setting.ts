@@ -167,13 +167,34 @@ export function buildSessionScopeOverride(
   return buildScopedOverride(key, value, scope, session);
 }
 
-/** Where a save from this session lands, for the screen to say so out loud. */
+/**
+ * Where a save from this session lands, for the screen to say so out loud. With a
+ * login branch the save writes the BRANCH layer, so it says "only": other branches
+ * keep their own template (Qt 81439f0 B3, same words).
+ */
 export function describeSessionScope(session: SessionContext): string {
   if (session.branchId) {
-    return "this branch";
+    return "this branch only";
   }
   if (session.companyId) {
     return "this company";
   }
   return "every company";
+}
+
+/**
+ * The template screen's line under its title, said before the operator saves
+ * (Qt `MasterTemplateEntry` lblScope + its tooltip). `noun` = "customer" / "item".
+ */
+export function describeTemplateSaveScope(session: SessionContext, noun: string): string {
+  if (session.branchId) {
+    return (
+      `Saves for THIS BRANCH only: other branches keep their own ${noun} template. ` +
+      `New ${noun}s at this branch start with these values; existing ${noun}s are not touched.`
+    );
+  }
+  return (
+    `Saves for ${describeSessionScope(session)}. ` +
+    `New ${noun}s here start with these values; existing ${noun}s are not touched.`
+  );
 }

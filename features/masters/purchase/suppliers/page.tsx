@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import CrudMasterPage from "@/components/master/crud-master-page";
+import CrudMasterPage, { type CrudMasterPageController } from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
 import InlineRelatedMasterModal from "@/features/masters/shared/inline-related-master";
 import { toast } from "@/lib/notify";
@@ -134,7 +134,36 @@ import { getDropdownId } from "@/lib/configured-dropdowns";
 const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(
   WIDGET_FIELD_NAME_BY_FORM_FIELD,
 );
-export default function SuppliersMasterPage() {
+/**
+ * Opt-in (Purchase Entry's Alt+C / Alt+A on its Supplier dropdown, Qt 6b81080
+ * COM-05): the master mounted with its list hidden — one popup, opened by the
+ * controller, and the saved supplier reported back so the field can select it.
+ * Without these props the page is the menu screen, unchanged.
+ */
+export type SuppliersMasterPageProps = {
+  inlineModalOnly?: boolean;
+  onCrudControllerReady?: (controller: CrudMasterPageController | null) => void;
+  onModalOpenChange?: (open: boolean, variantKey: string | null) => void;
+  onSupplierSaved?: (saved: { supplierId: string; supplierName: string }) => void;
+};
+
+function savedRecordId(response: unknown, keys: readonly string[]): string {
+  const outer = response && typeof response === "object" ? (response as Record<string, unknown>) : null;
+  const data = outer?.data;
+  const source = data && typeof data === "object" && !Array.isArray(data) ? (data as Record<string, unknown>) : outer;
+  for (const key of keys) {
+    const value = source?.[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+export default function SuppliersMasterPage({
+  inlineModalOnly,
+  onCrudControllerReady,
+  onModalOpenChange,
+  onSupplierSaved,
+}: SuppliersMasterPageProps = {}) {
   const stateModalControllerRef = useRef<ERPDynamicModalController | null>(null);
   const supplierGroupModalControllerRef =
     useRef<ERPDynamicModalController | null>(null);
@@ -1259,14 +1288,26 @@ export default function SuppliersMasterPage() {
         // refresh, with the key legend under the grid.
         enableListActionKeys
         deleteConfirmNote={deleteGuard.deleteConfirmNote}
-        afterSubmitSuccess={({ response }) => {
+        afterSubmitSuccess={({ response, payload, values, editingItemId }) => {
           // D4: the customer row of the same party changed too — say what.
           const syncLine = partySyncMessage(parsePartySync(response));
           if (syncLine) {
             // Same key as the shell's "Saved successfully.", which it replaces.
             toast.success(syncLine, { toastId: "success:Saved successfully.", autoClose: 5000 });
           }
+          if (onSupplierSaved) {
+            // an inline opening (Alt+C / Alt+A): the record the field should now select
+            const supplierId =
+              savedRecordId(response, LOOKUP_KEYS.id) ||
+              String((payload as Record<string, unknown>)?.supId ?? "").trim() ||
+              (editingItemId !== null && editingItemId !== undefined ? String(editingItemId) : "");
+            if (supplierId) {
+              onSupplierSaved({ supplierId, supplierName: String(values?.supName ?? "").trim() });
+            }
+          }
         }}
+        hideListPage={inlineModalOnly}
+        onCrudControllerReady={onCrudControllerReady}
         formTitle="Supplier Form"
         formDescription="Create and update suppliers."
         customFields={supplierFormFields}
@@ -1292,6 +1333,7 @@ export default function SuppliersMasterPage() {
             setBankAccounts([]);
             setLoadedSupplierId(null);
           }
+          onModalOpenChange?.(open, variantKey);
         }}
         mapFormValues={({ source, defaults }) => {
           const rowSource = (source ?? {}) as Record<string, unknown>;

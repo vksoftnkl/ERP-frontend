@@ -74,15 +74,28 @@ export const COL = {
   Stock: 20,
   Reorder: 21,
   Status: 22,
+  // 23.. the charge split and the landing costs (Qt bcd844a, user 2026-11-02 "like Sale Entry"): the SERVER's
+  // figures (/validate), read-only. Registered in the dev DB's ui_table 57 under the same numbers.
+  /** The line's share of before-tax charges — inside Taxable, so it carries GST. */
+  ChrgBeforeTax: 23,
+  /** The line's share of after-tax on-bill charges (signed) — added to Amount, no GST. */
+  ChrgAfterTax: 24,
+  /** Per unit of the line (the Rate's unit): landed value ÷ (qty + free), recoverable GST left out. */
+  LandedCost: 25,
+  /** The same with the line's GST in. */
+  LandedCostIncl: 26,
+  // 27 LineTotal is hidden in Qt (the server's `total`, taxable + tax); here it is `PoLine.lineTotal`.
 } as const;
 
 export type PoColumnNo = (typeof COL)[keyof typeof COL];
 
 /**
  * The columns this screen draws, in the mockup's order (Qt `applyColumns`
- * moveSection list, 2026-10-29): # Barcode Item Unit Ordered Free Rate Disc%
- * Sch% GST% MRP Tax Amount Received Short-closed Pending Last rate Stock
- * Reorder Status. Taxable is hidden (Amount = the line total).
+ * moveSection list, bcd844a): # Barcode Item Unit Ordered Free Rate Disc% Sch%
+ * GST% MRP — Chrg before tax · Tax · Chrg after tax · Amount · Landing cost ·
+ * Landing cost incl. GST — Received Short-closed Pending Last rate Stock
+ * Reorder Status. Taxable is hidden; Amount = the server's `amount` (line total
+ * + the after-tax share).
  */
 export const PO_COLUMN_NUMBERS: readonly PoColumnNo[] = [
   COL.Barcode,
@@ -95,8 +108,12 @@ export const PO_COLUMN_NUMBERS: readonly PoColumnNo[] = [
   COL.SchPct,
   COL.GstPct,
   COL.Mrp,
+  COL.ChrgBeforeTax,
   COL.Tax,
+  COL.ChrgAfterTax,
   COL.Total,
+  COL.LandedCost,
+  COL.LandedCostIncl,
   COL.Recd,
   COL.ShortClosed,
   COL.Pending,
@@ -136,33 +153,83 @@ export const PO_NUMBER_COLUMNS: ReadonlySet<number> = new Set([
   COL.LastRate,
   COL.Stock,
   COL.Reorder,
+  COL.ChrgBeforeTax,
+  COL.ChrgAfterTax,
+  COL.LandedCost,
+  COL.LandedCostIncl,
+]);
+
+/** Qt `isServerFigure` — the split / landing cells: muted while an edit waits for the server's answer. */
+export const PO_SERVER_FIGURE_COLUMNS: ReadonlySet<number> = new Set([
+  COL.ChrgBeforeTax,
+  COL.ChrgAfterTax,
+  COL.LandedCost,
+  COL.LandedCostIncl,
 ]);
 
 /** Qt `setFocusStops` — where Enter stops on a line. */
 export const PO_FOCUS_STOPS: ReadonlySet<number> = new Set([COL.Barcode, COL.Item, COL.Qty, COL.Rate, COL.DiscPct]);
 
-/** The mockup's titles (Qt applyColumns sets every one) and Qt ColumnWeights. */
-export const PO_FALLBACK_COLUMNS: Readonly<Record<number, { title: string; width: number }>> = {
-  [COL.Barcode]: { title: "Barcode", width: 7 },
-  [COL.Item]: { title: "Item", width: 15 },
-  [COL.Unit]: { title: "Unit", width: 6 },
-  [COL.Qty]: { title: "Ordered", width: 6 },
-  [COL.Free]: { title: "Free", width: 4 },
-  [COL.Rate]: { title: "Rate", width: 6 },
-  [COL.DiscPct]: { title: "Disc%", width: 5 },
-  [COL.SchPct]: { title: "Sch%", width: 5 },
-  [COL.Taxable]: { title: "Taxable", width: 8 },
-  [COL.GstPct]: { title: "GST%", width: 4 },
-  [COL.Mrp]: { title: "MRP", width: 5 },
-  [COL.Tax]: { title: "Tax", width: 6 },
-  [COL.Total]: { title: "Amount", width: 7 },
-  [COL.Recd]: { title: "Received", width: 6 },
-  [COL.ShortClosed]: { title: "Short-closed", width: 7 },
-  [COL.Pending]: { title: "Pending", width: 6 },
-  [COL.LastRate]: { title: "Last rate", width: 6 },
-  [COL.Stock]: { title: "Stock", width: 5 },
-  [COL.Reorder]: { title: "Reorder", width: 5 },
-  [COL.Status]: { title: "Status", width: 8 },
+/**
+ * The mockup's titles (Qt applyColumns sets every one), the two-line headings
+ * (`heading`, bcd844a: 23 columns share the width, a heading of two or more
+ * words takes two lines), the heading tooltips, and Qt's ColumnWeights — the
+ * pixels each needs at 1560 px; only the proportions matter here.
+ */
+export const PO_FALLBACK_COLUMNS: Readonly<Record<number, { title: string; width: number; heading?: string; tip?: string }>> = {
+  [COL.Barcode]: { title: "Barcode", width: 60 },
+  [COL.Item]: { title: "Item", width: 104 },
+  [COL.Unit]: { title: "Unit", width: 54 },
+  [COL.Qty]: { title: "Ordered", width: 66 },
+  [COL.Free]: { title: "Free", width: 42 },
+  [COL.Rate]: { title: "Rate", width: 62 },
+  [COL.DiscPct]: { title: "Disc%", width: 52 },
+  [COL.SchPct]: { title: "Sch%", width: 48 },
+  [COL.Taxable]: { title: "Taxable", width: 70 },
+  [COL.GstPct]: { title: "GST%", width: 50 },
+  [COL.Mrp]: { title: "MRP", width: 60 },
+  [COL.ChrgBeforeTax]: {
+    title: "Chrg before tax",
+    heading: "Chrg\nbefore tax",
+    width: 76,
+    tip: "This line's share of the before-tax charges (freight on the bill …).\nIt is inside Taxable, so it raises Taxable and GST.",
+  },
+  [COL.Tax]: { title: "Tax", width: 66, tip: "GST on the goods and on the before-tax charge share" },
+  [COL.ChrgAfterTax]: {
+    title: "Chrg after tax",
+    heading: "Chrg\nafter tax",
+    width: 70,
+    tip:
+      "This line's share of the after-tax charges on the bill (minus = a deduction, e.g. cash discount).\n" +
+      "Added to Amount; no GST on it.",
+  },
+  [COL.Total]: {
+    title: "Amount",
+    width: 78,
+    tip: "Taxable + GST + the after-tax charge share — what this line costs on the supplier's bill",
+  },
+  [COL.LandedCost]: {
+    title: "Landing cost",
+    heading: "Landing\ncost",
+    width: 66,
+    tip:
+      "Per unit of the line (the Rate's unit), free qty included:\n" +
+      "net + the landing charges (before tax, after tax and our own off-bill costs) ÷ (ordered + free).\n" +
+      "Recoverable GST left out. Charges marked not-landing in the charge master are left out.",
+  },
+  [COL.LandedCostIncl]: {
+    title: "Landing cost incl. GST",
+    heading: "Landing cost\nincl. GST",
+    width: 90,
+    tip: "Landing cost with the line's GST added — the cost per unit when the GST is not recovered",
+  },
+  [COL.Recd]: { title: "Received", width: 68 },
+  [COL.ShortClosed]: { title: "Short-closed", heading: "Short-\nclosed", width: 56 },
+  [COL.Pending]: { title: "Pending", width: 64 },
+  [COL.LastRate]: { title: "Last rate", heading: "Last\nrate", width: 60 },
+  [COL.Stock]: { title: "Stock", width: 50 },
+  [COL.Reorder]: { title: "Reorder", width: 62 },
+  [COL.Status]: { title: "Status", width: 90 },
 };
 
 /** Reorder suggestions = F7 (Qt; Ctrl+R is "change rate" on the sales screens — user 10-29). */

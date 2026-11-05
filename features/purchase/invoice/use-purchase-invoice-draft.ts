@@ -10,8 +10,14 @@
  * where a change to the figures schedules the server's calculation.
  *
  * The calculation is Qt's: 350 ms after the last change, `POST
- * /purchase/invoices/validate` with the whole bill; an answer that is not the
- * newest request's is dropped (`m_calcSeq`).
+ * /purchase/invoices/validate` with the whole bill (a line with no qty yet left
+ * out, Qt dd59c2c P11); an answer that is not the newest request's is dropped
+ * (`m_calcSeq`). Meanwhile the reducer's estimate stands (invoice-figures.ts).
+ *
+ * Qt 7d8c926 D7: a successful Save / Post does not leave the bill on screen —
+ * `save` answers with the saved bill's key and the view clears the screen after
+ * the after-post steps (the key is kept for Print). A refusal that names its rows
+ * goes to the COM-09 popup (the view opens it), not to a message box.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { todayIso } from "@/features/sales/quotation/quotation.utils";
@@ -32,6 +38,8 @@ import {
   usePurchaseInvoiceValidateMutation,
 } from "./invoice.api";
 import { COL, RECALC_DELAY_MS, STATUS } from "./invoice.constants";
+import { recalcBlockedHint } from "./invoice-figures";
+import { savedKeyOf, type InvoiceSavedKey } from "./invoice-v2";
 import {
   buildPayload,
   canRecalc,
@@ -51,9 +59,17 @@ import { useInvoiceLineSupport } from "./use-invoice-lines";
 
 export type Busy = "loading" | "saving" | "posting" | "cancelling" | null;
 
+/** What `save` answers: the bill saved (D7: the view then clears the screen), or why not. */
+export type SaveOutcome =
+  | { ok: true; saved: InvoiceSavedKey; post: boolean }
+  /** `refused`: the server named rows — they are on `draft.issues` for the COM-09 popup. */
+  | { ok: false; refused: boolean };
+
 /** Where the view should put the cursor next. */
 export type FocusTarget =
   | { target: "cell"; key: string; column: number }
+  /** Qt dd59c2c P15: the line's first typing cell after Item (Batch / Expiry for a tracked item, else Billed). */
+  | { target: "afterItem"; key: string }
   | { target: "supplier" | "entryStart" };
 export type FocusRequest = FocusTarget & { seq: number };
 
@@ -124,7 +140,15 @@ export function usePurchaseInvoiceDraft(memory: ScreenMemoryOption | undefined) 
       recalcTimer.current = null;
     }
     const current = draftRef.current;
-    if (!isEditable(current) || !canRecalc(current)) {
+    if (!isEditable(current)) {
+      return;
+    }
+    if (!canRecalc(current)) {
+      // the grid's own figures stand meanwhile (P11) — say what the server is waiting for
+      const why = recalcBlockedHint(current);
+      if (why && why !== current.hint) {
+        commit(invoiceReducer(current, { type: "hint", hint: why }));
+      }
       return;
     }
     const { body, sentKeys } = buildPayload(current, false, todayIso(), true);
@@ -226,7 +250,7 @@ export function usePurchaseInvoiceDraft(memory: ScreenMemoryOption | undefined) 
           return false;
         }
         run({ type: "applyItem", key, item, name: itemName });
-        requestFocus({ target: "cell", key, column: COL.Billed });
+        requestFocus({ target: "afterItem", key });
         afterItemPicked(key);
         return true;
       } catch (error) {
@@ -338,9 +362,9 @@ export function usePurchaseInvoiceDraft(memory: ScreenMemoryOption | undefined) 
 
   /** Qt `saveDocument`: Save Draft, or Save & Post in one transaction. */
   const save = useCallback(
-    async (post: boolean, override?: { reason: string }): Promise<boolean> => {
+    async (post: boolean, override?: { reason: string }): Promise<SaveOutcome> => {
       if (busyRef.current !== null) {
-        return false;
+        return { ok: false, refused: false };
       }
       const current = draftRef.current;
       const refusal = checkBeforeSave(current);
@@ -349,7 +373,7 @@ export function usePurchaseInvoiceDraft(memory: ScreenMemoryOption | undefined) 
         if (refusal.title === "Header incomplete") {
           requestFocus({ target: "supplier" });
         }
-        return false;
+        return { ok: false, refused: false };
       }
       dropCalc();
       const { body } = buildPayload(current, post, todayIso());
@@ -360,8 +384,17 @@ export function usePurchaseInvoiceDraft(memory: ScreenMemoryOption | undefined) 
       setBusy(post ? "posting" : "saving");
       try {
         const result = await saveMutation(body).unwrap();
-        const next = applyPayload(result.data, "entry");
-        const refno = next.refno;
+        const saved = savedKeyOf(result.data?.header, current);
+        if (!saved) {
+          // an answer without the bill: show what came back, as before
+          applyPayload(result.data, "entry");
+          toast.warn("The server saved the bill but did not send it back — open it from the list.", { title: post ? "Posted" : "Saved" });
+          return { ok: false, refused: false };
+        }
+        // D7: the answer is not painted — the view clears the screen once the after-post steps ran
+        dropCalc();
+        generation.current += 1;
+        const refno = saved.refno;
         const warnings = (result.data.warnings ?? []).map((warning) => warning.message).filter(Boolean);
         const fromGrn = String(result.data.header?.piSourceKind ?? "").toUpperCase() === "GRN";
         const said = post
@@ -377,23 +410,31 @@ export function usePurchaseInvoiceDraft(memory: ScreenMemoryOption | undefined) 
         } else {
           toast.success(said, { title: post ? "Posted" : "Saved" });
         }
-        return true;
+        return { ok: true, saved, post };
       } catch (error) {
         const refusals = refusalsOfError(error);
-        let next = invoiceReducer(draftRef.current, { type: "hint", hint: purchaseRefusalText(error) });
         if (refusals.length > 0) {
-          // the strip shows the server's rows (Qt showRefusal → m_warn->setIssues)
-          next = invoiceReducer(next, { type: "issues", issues: { warnings: next.issues?.warnings ?? [], refusals } });
+          // COM-09 (Qt showRefusal): the refused rows beside the warnings already known — the view pops them up
+          commit(
+            invoiceReducer(draftRef.current, {
+              type: "issues",
+              issues: { warnings: draftRef.current.issues?.warnings ?? [], refusals },
+            }),
+          );
+          return { ok: false, refused: true };
         }
-        commit(next);
-        toast.apiError(error, { title: "Not saved" });
-        return false;
+        commit(invoiceReducer(draftRef.current, { type: "hint", hint: purchaseRefusalText(error) }));
+        toast.apiError(error, { title: post ? "Not posted" : "Not saved" });
+        return { ok: false, refused: false };
       } finally {
         setBusy(null);
       }
     },
     [applyPayload, commit, dropCalc, requestFocus, saveMutation],
   );
+
+  /** Qt `m_dirtyAfterLoad`: a held / autosaved bill brought back is unsaved work (§5.6). */
+  const markDirty = useCallback(() => run({ type: "markDirty" }), [run]);
 
   /** Qt `cancelVoucher`: a posted bill nothing has paid — stock out, books reversed. */
   const cancelDocument = useCallback(
@@ -494,6 +535,7 @@ export function usePurchaseInvoiceDraft(memory: ScreenMemoryOption | undefined) 
     save,
     cancelDocument,
     newDocument,
+    markDirty,
     beginEdit,
     forgetRemembered,
     finishResume,
